@@ -52,10 +52,11 @@ To better support independent development cycles and contributor focus, we will 
    - Enables independent UI/UX evolution
 
 4. **muxi**: Main repository that depends on the above components
-   - May include these components as submodules or dependencies
+   - Include these components as submodules or dependencies
    - Provides integration examples and comprehensive documentation
 
 This organization supports:
+
 - Focused contribution workflows
 - Independent release cycles
 - Clearer component boundaries
@@ -162,18 +163,18 @@ A significant architectural improvement in this restructuring is the elimination
 
 3. **Developer Usage**:
 
-	**Programmatic way**
+    **Programmatic way**
 
-	```python
-   from muxi import Orchestrator, Agent, Server
+    ```python
+    from muxi import Orchestrator, Agent, Server
 
-   # Create orchestrator with agents
-   orchestrator = Orchestrator()
-   orchestrator.add_agent(Agent(...))
+    # Create orchestrator with agents
+    orchestrator = Orchestrator()
+    orchestrator.add_agent(Agent(...))
 
-   # Create and start server
-   server = Server(orchestrator)
-   server.run(host="0.0.0.0", port=8000)
+    # Create and start server
+    server = Server(orchestrator)
+    server.run(host="0.0.0.0", port=8000)
    ```
 
    **Declarative way**
@@ -240,11 +241,10 @@ A significant architectural improvement in this restructuring is the elimination
    - Set up tests, CI/CD, and documentation
    - Publish as a standalone package
 
-3. **Language-specific SDKs**
-   - Create initial language SDK packages (starting with Python and Node.js)
+3. **Client SDK**
+   - Create initial Python client package
    - Implement client libraries that communicate with the muxi server
-   - Provide language-specific convenience wrappers
-   - Set up tests, CI/CD, and documentation for each SDK
+   - Set up tests, CI/CD, and documentation for the Python client
 
 ### Phase 4: Integration and Verification
 
@@ -257,6 +257,14 @@ A significant architectural improvement in this restructuring is the elimination
 4. Update all documentation to reflect new architecture and repository organization
 5. Create migration guides for any early adopters
 6. Set up example projects demonstrating the new component-based approach
+
+### Phase 5: Language-specific SDKs
+
+1. **Language-specific SDKs**
+   - Create initial language SDK packages (starting with Node.js)
+   - Implement client libraries that communicate with the muxi server
+   - Provide language-specific convenience wrappers
+   - Set up tests, CI/CD, and documentation for each SDK
 
 ---
 
