@@ -11,5 +11,5 @@ setup(
         "muxi-core>=0.1.0",
         # Add server-specific dependencies here
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
 )

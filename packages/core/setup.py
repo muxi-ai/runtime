@@ -14,5 +14,5 @@ setup(
         "faiss-cpu",
         "numpy>=1.20.0",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.10",
 )
