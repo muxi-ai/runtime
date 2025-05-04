@@ -1,3 +1,6 @@
 [submodule "packages/studio"]
 	path = packages/studio
 	url = git@github.com:muxi-ai/studio.git
+[submodule "packages/cli"]
+	path = packages/cli
+	url = git@github.com:muxi-ai/cli.git
