@@ -7,3 +7,6 @@
 [submodule "packages/llm"]
 	path = packages/llm
 	url = git@github.com:muxi-ai/llm.git
+[submodule "packages/client"]
+	path = packages/client
+	url = git@github.com:muxi-ai/python-sdk.git
