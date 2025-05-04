@@ -4,3 +4,6 @@
 [submodule "packages/cli"]
 	path = packages/cli
 	url = git@github.com:muxi-ai/cli.git
+[submodule "packages/llm"]
+	path = packages/llm
+	url = git@github.com:muxi-ai/llm.git
