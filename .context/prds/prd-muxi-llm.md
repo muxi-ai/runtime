@@ -316,15 +316,15 @@ The implementation will follow an incremental approach with these phases:
 |----------|------|------------|-----------|-----------|-------------|--------------|----------|
 | OpenAI | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | P0 |
 | Azure OpenAI | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | P0 |
-| Together AI | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | P0 |
-| Groq | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | P0 |
-| OpenRouter | ✓ | ✓ | ✓ | ✓ | Partial | ✗ | P0 |
-| Anthropic | ✓ | ✓ | ✗ | ✓ | ✓ | Partial | P1 |
-| Ollama | ✓ | ✓ | ✓ | ✓ | Partial | ✗ | P1 |
-| HuggingFace | ✓ | ✓ | ✓ | Partial | Partial | ✗ | P1 |
-| Cohere | ✓ | ✓ | ✓ | ✓ | ✗ | ✗ | P1 |
-| Perplexity | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | P2 |
-| Mistral AI | ✓ | ✓ | ✗ | ✓ | ✗ | ✗ | P2 |
+| Together AI | ✓ | ✓ | ✓ | ✓ | — | — | P0 |
+| Groq | ✓ | ✓ | — | ✓ | — | — | P0 |
+| OpenRouter | ✓ | ✓ | ✓ | ✓ | Partial | — | P0 |
+| Anthropic | ✓ | ✓ | — | ✓ | ✓ | Partial | P1 |
+| Ollama | ✓ | ✓ | ✓ | ✓ | Partial | — | P1 |
+| HuggingFace | ✓ | ✓ | ✓ | Partial | Partial | — | P1 |
+| Cohere | ✓ | ✓ | ✓ | ✓ | — | — | P1 |
+| Perplexity | ✓ | ✓ | — | ✓ | — | — | P2 |
+| Mistral AI | ✓ | ✓ | — | ✓ | — | — | P2 |
 | Additional Providers | Varies | Varies | Varies | Varies | Varies | Varies | P3 |
 
 Priorities: P0 = Must have, P1 = Should have, P2 = Could have, P3 = Future consideration
