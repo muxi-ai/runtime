@@ -5,7 +5,7 @@ alwaysApply: false
 ---
 - Memory systems are initialized and managed at the orchestrator level, not at the agent level
 - Configure memory through the orchestrator constructor: `Orchestrator(buffer_memory=buffer, long_term_memory=long_term)`
-- For the muxi facade, configure memory in the constructor: `muxi(buffer_memory=50, long_term_memory="connection_string", config_file="config.yaml")`
+- For the muxi facade, configure memory in the constructor: `muxi(buffer_size=10, buffer_multiplier=10, long_term_memory="connection_string", config_file="config.yaml")`
 - Access memory through orchestrator methods: `orchestrator.search_memory()`, `orchestrator.add_to_buffer_memory()`
 - Agent constructor no longer accepts direct memory parameters
 - Memory is shared between agents through the orchestrator
@@ -20,7 +20,8 @@ alwaysApply: false
 - Memory is configured at initialization time, not through setup methods:
   ```python
   app = muxi(
-      buffer_memory=10,
+      buffer_size=10,             # Context window size (recent messages)
+      buffer_multiplier=10,       # Multiplier for total buffer capacity (default: 10)
       long_term_memory="postgresql://user:pass@localhost/db",
       config_file="configs/muxi_config.yaml"
   )
@@ -29,6 +30,11 @@ alwaysApply: false
 - Configuration files should define multiple agents in a single file:
   ```yaml
   # configs/muxi_config.yaml
+  memory:
+    buffer_size: 10               # Context window size
+    buffer_multiplier: 10         # Multiplier for total buffer capacity (default: 10)
+    long_term: "postgresql://user:pass@localhost/db"
+
   agents:
     - agent_id: assistant1
       description: "..."
@@ -42,18 +48,19 @@ alwaysApply: false
 - Initialize memory components first:
   ```python
   from muxi.core.models.providers.openai import OpenAIModel
-  from muxi.core.memory.buffer import SmartBufferMemory
+  from muxi.core.memory.buffer import BufferMemory
   from muxi.core.memory.long_term import LongTermMemory
 
   # Create embedding model for FAISS vector search
   embedding_model = OpenAIModel(model="text-embedding-ada-002")
 
   # Create smart buffer memory with FAISS
-  buffer = SmartBufferMemory(
-      max_size=100,                    # Maximum number of messages to store
-      model=embedding_model,           # Model for generating embeddings
-      vector_dimension=1536,           # Dimension for OpenAI embeddings
-      recency_bias=0.3                 # Balance between semantic (0.7) and recency (0.3)
+  buffer = BufferMemory(
+      max_size=10,                    # Context window size (recent messages)
+      buffer_multiplier=10,           # Multiplier for total buffer capacity (default: 10)
+      model=embedding_model,          # Model for generating embeddings
+      vector_dimension=1536,          # Dimension for OpenAI embeddings
+      recency_bias=0.3                # Balance between semantic (0.7) and recency (0.3)
   )
 
   # Create long-term memory
@@ -79,22 +86,58 @@ alwaysApply: false
 
 ## Smart Buffer Memory (Short-Term)
 
+### Buffer Size Concepts
+- BufferMemory introduces two distinct size-related parameters:
+  1. **Context Window Size** (`max_size`): The number of recent messages to include when retrieving by recency
+  2. **Buffer Multiplier** (`buffer_multiplier`): Multiplies the context window size to determine total buffer capacity
+  3. **Total Buffer Capacity** = max_size × buffer_multiplier (default: 10 × 10 = 100)
+
+- This design provides:
+  - A smaller focused window for recency-based retrieval (for immediate context)
+  - A larger capacity for semantic search (for finding relevant information regardless of recency)
+  - Better memory utilization without sacrificing context quality
+
+- Example configuration:
+  ```python
+  # Configure a buffer with 10-message window and 100-message total capacity
+  buffer = BufferMemory(
+      max_size=10,                # Context window size
+      buffer_multiplier=10,       # 10× multiplier for total capacity
+      model=embedding_model       # For vector similarity search
+  )
+
+  # For knowledge-intensive applications (more capacity)
+  buffer = BufferMemory(
+      max_size=10,
+      buffer_multiplier=20,       # 200 total messages
+      recency_bias=0.2            # Favor semantic similarity
+  )
+
+  # For conversational applications (smaller capacity)
+  buffer = BufferMemory(
+      max_size=10,
+      buffer_multiplier=5,        # 50 total messages
+      recency_bias=0.6            # Favor recency
+  )
+  ```
+
 ### Hybrid Search Architecture
-- SmartBufferMemory implements a hybrid approach combining:
+- BufferMemory implements a hybrid approach combining:
   1. Semantic search using FAISS vector similarity
   2. Recency-based retrieval using buffer positions
   3. Combined scoring with configurable weighting between the two
 
 - Example implementation:
   ```python
-  from muxi.core.memory.buffer import SmartBufferMemory
+  from muxi.core.memory.buffer import BufferMemory
   from muxi.core.models.providers.openai import OpenAIModel
 
   # Create buffer with FAISS-backed vector search
-  buffer = SmartBufferMemory(
-      max_size=100,
+  buffer = BufferMemory(
+      max_size=10,                # Context window size
+      buffer_multiplier=10,       # Total capacity (10 × 10 = 100)
       model=OpenAIModel(model="text-embedding-ada-002"),
-      recency_bias=0.3   # 30% weight for recency, 70% for semantic relevance
+      recency_bias=0.3            # 30% weight for recency, 70% for semantic relevance
   )
 
   # Add to buffer (through orchestrator)
@@ -137,6 +180,10 @@ alwaysApply: false
   - For human conversations (favor recency): 0.5-0.7
   - For factual queries (favor semantics): 0.1-0.3
   - Default (balanced approach): 0.3
+- Configure size parameters appropriately:
+  - Context window size (max_size): 5-20 messages
+  - Buffer multiplier: 5-20× (based on memory requirements)
+  - Total capacity: Typically 50-400 messages (balance between breadth and memory usage)
 - Benefit from graceful degradation to recency-only search when:
   - No model is provided for generating embeddings
   - Embedding generation fails
@@ -155,7 +202,7 @@ alwaysApply: false
 - Simple deque memory only retrieves based on recency
 - Smart buffer memory can find relevant information regardless of when it was added
 - Smart buffer supports metadata filtering for targeted retrieval
-- Use SmartBufferMemory whenever possible for improved information retrieval
+- Use BufferMemory whenever possible for improved information retrieval
 
 ## Long-Term Memory - Database Options
 
