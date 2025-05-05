@@ -208,14 +208,13 @@ Similar patterns will be implemented for `Completion` and `Embedding` classes.
 
 The implementation will follow an incremental approach with these phases:
 
-- **Phase 1:** Core Framework and OpenAI Support
+- **Phase 1:** Core Framework and Complete OpenAI Support
 - **Phase 2:** OpenAI-compatible Providers
 - **Phase 3:** Custom API Providers
-- **Phase 4:** Advanced Features and Polishing
 
 ### 4.2 Detailed Implementation Phases
 
-#### Phase 1: Core Framework and OpenAI Support
+#### Phase 1: Core Framework and Complete OpenAI Support
 
 **Core Architecture**
 - Define project structure and module layout
@@ -223,23 +222,30 @@ The implementation will follow an incremental approach with these phases:
 - Set up configuration system
 - Create basic error handling classes
 
-**OpenAI Implementation**
+**OpenAI Implementation - Basic Features**
 - Implement OpenAI provider adapter
 - Create ChatCompletion class with OpenAI support
 - Create Completion class with OpenAI support
 - Create Embedding class with OpenAI support
 - Implement basic file upload/download for OpenAI
 
-**Testing and Basic Functionality**
-- Add unit tests for core functionality
+**OpenAI Implementation - Multi-modal Features**
+- Implement vision model support for images in chat
+- Add audio transcription/translation capabilities
+- Implement text-to-speech functionality
+- Add DALL-E image generation support
+- Create comprehensive examples for multi-modal features
+
+**Testing and Documentation**
+- Add unit tests for all OpenAI functionality
 - Implement streaming support for OpenAI
 - Add basic retry mechanism
 - Create initial documentation
 
 **Deliverables:**
-- Working library with OpenAI support
-- Basic test suite
-- Initial documentation
+- Working library with complete OpenAI support (including all multi-modal features)
+- Comprehensive test suite for OpenAI provider
+- Initial documentation with multi-modal examples
 
 #### Phase 2: OpenAI-compatible Providers
 
@@ -293,43 +299,15 @@ The implementation will follow an incremental approach with these phases:
 - Comprehensive test suite for all providers
 - Enhanced documentation with examples
 
-#### Phase 4: Advanced Features and Polishing
-
-**Multi-modal Support**
-- Enhance providers with multi-modal capabilities
-- Implement image handling utilities
-- Add tests for multi-modal scenarios
-- Update documentation
-
-**Advanced Features**
-- Implement cost estimation utilities
-- Add optional caching layer
-- Enhance observability features
-- Performance optimizations
-- Implement advanced file handling features
-
-**Final Polishing**
-- Conduct final performance testing
-- Ensure 95%+ test coverage
-- Complete documentation
-- Create examples and tutorials
-- Prepare for initial release
-
-**Deliverables:**
-- Production-ready library
-- Comprehensive documentation
-- Examples and tutorials
-- Performance benchmarks
-
 ### 4.3 Milestones and Deliverables
 
 | Milestone | Deliverables |
 |-----------|--------------|
 | M1: Core Architecture | Project structure, interfaces, configuration system |
-| M2: OpenAI Support | Working library with OpenAI support, basic tests |
-| M3: Multiple Providers | Support for 5+ providers, robust error handling |
-| M4: Custom Providers | Support for non-OpenAI-compatible providers |
-| M5: Release Candidate | Feature-complete library with tests and docs |
+| M2: Basic OpenAI Support | Working library with basic OpenAI features, initial tests |
+| M3: Complete OpenAI Support | Full OpenAI feature support including multi-modal capabilities |
+| M4: Multiple Providers | Support for 5+ providers, robust error handling |
+| M5: Custom Providers | Support for non-OpenAI-compatible providers |
 | M6: Initial Release | Production-ready package published to PyPI |
 
 ## 5. Provider Support Matrix
