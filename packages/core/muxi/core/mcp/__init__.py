@@ -1,13 +1,13 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        MCP - Model Control Protocol Package
+# Title:        MCP - Model Context Protocol Package
 # Description:  Framework for integrating with external tools and models
 # Role:         Enables agent interactions with tools and external services
 # Usage:        Used by agents to perform actions beyond conversation
 # Author:       Muxi Framework Team
 #
-# The MCP (Model Control Protocol) package provides the infrastructure for
+# The MCP (Model Context Protocol) package provides the infrastructure for
 # agents to interact with external tools, services, and models. It includes:
 #
 # 1. Connection Management

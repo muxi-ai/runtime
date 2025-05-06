@@ -76,7 +76,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         port (int): Port number to bind the server to. Defaults to 5050.
         reload (bool): Whether to enable auto-reload for development mode, which
             automatically restarts the server when code changes. Defaults to True.
-        mcp (bool): Whether to enable Model Control Protocol (MCP) support for
+        mcp (bool): Whether to enable Model Context Protocol (MCP) support for
             tool calling and external integrations. Defaults to False.
 
     Returns:

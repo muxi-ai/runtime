@@ -2,13 +2,13 @@
 # FRONTMATTER
 # =============================================================================
 # Title:        MCP Message Models - JSON-RPC Message Definitions
-# Description:  Message models for the Model Control Protocol (MCP)
+# Description:  Message models for the Model Context Protocol (MCP)
 # Role:         Provides Pydantic models for all MCP message types
 # Usage:        Used for serializing and validating MCP messages
 # Author:       Muxi Framework Team
 #
 # The MCP Message module provides Pydantic models that define the structure
-# of messages used in the Model Control Protocol. These models ensure proper
+# of messages used in the Model Context Protocol. These models ensure proper
 # validation, serialization, and type safety for all MCP communications.
 #
 # Key components:

@@ -22,7 +22,7 @@
 #    - Information extraction and user profiling
 #
 # 3. External Tool Access
-#    - MCP (Model Control Protocol) server integration
+#    - MCP (Model Context Protocol) server integration
 #    - Tool registration and discovery
 #    - Secure API access management
 #
@@ -92,7 +92,7 @@ class Orchestrator:
         auto_extract_user_info (bool): Whether to automatically extract user information
         extraction_model (Optional[BaseModel]): Model used for information extraction
         is_multi_user (bool): Whether multi-user mode is enabled
-        mcp_service (MCPService): Service for managing Model Control Protocol servers
+        mcp_service (MCPService): Service for managing Model Context Protocol servers
         request_timeout (int): Default timeout for MCP requests in seconds
         user_api_key (str): API key for user-level access
         admin_api_key (str): API key for admin-level access
@@ -840,7 +840,7 @@ class Orchestrator:
             reload: Whether to enable auto-reload for development. When True, the
                 server will restart automatically when source files change.
             mcp: Whether to enable MCP server functionality. When True, enables
-                the Model Control Protocol server for tool integrations.
+                the Model Context Protocol server for tool integrations.
         """
         try:
             # Import here to avoid circular imports
@@ -1337,7 +1337,7 @@ Available agents:
         """
         Register an MCP server with the centralized MCP service.
 
-        This method adds a Model Control Protocol (MCP) server to the orchestrator,
+        This method adds a Model Context Protocol (MCP) server to the orchestrator,
         making its tools available to agents. MCP servers can be external HTTP services,
         local command-line tools, or other tool providers that implement the MCP protocol.
 

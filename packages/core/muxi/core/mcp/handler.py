@@ -1,13 +1,13 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        MCP Handler - Model Control Protocol Implementation
-# Description:  Core implementation of the Model Control Protocol (MCP)
+# Title:        MCP Handler - Model Context Protocol Implementation
+# Description:  Core implementation of the Model Context Protocol (MCP)
 # Role:         Enables agents to interact with external tools and services
 # Usage:        Used by Orchestrator to connect agents with external tools
 # Author:       Muxi Framework Team
 #
-# The MCP Handler provides a robust implementation of the Model Control Protocol,
+# The MCP Handler provides a robust implementation of the Model Context Protocol,
 # enabling agents to communicate with external tools and services. It includes:
 #
 # 1. Transport Layer

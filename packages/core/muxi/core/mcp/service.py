@@ -8,7 +8,7 @@
 # Author:       Muxi Framework Team
 #
 # The MCP Service provides a central registry and access point for interacting
-# with MCP (Model Control Protocol) servers and their tools. Key features include:
+# with MCP (Model Context Protocol) servers and their tools. Key features include:
 #
 # 1. Server Connection Management
 #    - Registration of HTTP and command-line MCP servers

@@ -15,7 +15,7 @@
 #    - Integrates with memory systems for contextual awareness
 #
 # 2. Tool Integration
-#    - Connects to external tools via MCP (Model Control Protocol)
+#    - Connects to external tools via MCP (Model Context Protocol)
 #    - Parses and processes tool calls from language model responses
 #    - Manages tool invocation and result incorporation
 #
@@ -54,7 +54,7 @@ class MCPServer:
     Represents a connected MCP server.
 
     This class encapsulates the configuration for connecting to an external MCP
-    (Model Control Protocol) server that provides tool functionality to agents.
+    (Model Context Protocol) server that provides tool functionality to agents.
     """
 
     def __init__(

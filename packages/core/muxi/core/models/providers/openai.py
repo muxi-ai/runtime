@@ -21,7 +21,7 @@
 #    - Handles proper error handling and logging
 #
 # 3. MCP Integration
-#    - Supports Model Control Protocol (MCP) messaging format
+#    - Supports Model Context Protocol (MCP) messaging format
 #    - Handles tool calls and tool responses
 #    - Provides JSON mode support for structured outputs
 #
@@ -247,7 +247,7 @@ class OpenAIModel(BaseModel):
         """
         Generate a response from the language model using the provided MCP messages.
 
-        This method handles the Model Control Protocol (MCP) message format,
+        This method handles the Model Context Protocol (MCP) message format,
         converting between MCP messages and OpenAI's format, including support
         for tool calls.
 
