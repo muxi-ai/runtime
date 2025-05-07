@@ -12,7 +12,7 @@ import json
 from dotenv import load_dotenv
 from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.agent import Agent
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 
 # Load environment variables from .env file
 load_dotenv()
@@ -104,9 +104,9 @@ def test_agent_creation():
     # Create test configuration files
     create_test_configs()
 
-    # Create an orchestrator
-    print("Creating orchestrator...")
-    orchestrator = Orchestrator()
+    # Create an overlord
+    print("Creating overlord...")
+    overlord = Overlord()
 
     # Create a model (we'll use this for testing)
     api_key = os.environ.get("OPENAI_API_KEY")
@@ -121,7 +121,7 @@ def test_agent_creation():
     Agent(
         model=model,
         system_message="You are a test assistant.",
-        orchestrator=orchestrator  # Pass the orchestrator
+        overlord=overlord  # Pass the overlord
     )
     print("Agent created successfully!\n")
 
@@ -140,7 +140,7 @@ def test_agent_creation():
     )
 
     # Create the agent
-    orchestrator.create_agent(
+    overlord.create_agent(
         agent_id="weather",
         model=weather_model,
         system_message=weather_config["system_message"],
@@ -168,7 +168,7 @@ def test_agent_creation():
     )
 
     # Create the agent
-    orchestrator.create_agent(
+    overlord.create_agent(
         agent_id="finance",
         model=finance_model,
         system_message=finance_config["system_message"],
@@ -182,9 +182,9 @@ def test_agent_creation():
     print("Finance agent created successfully!")
 
     # List all agents
-    print("\nAgents available in orchestrator:")
-    for agent_id in orchestrator.agents:
-        agent_desc = orchestrator.agent_descriptions[agent_id]
+    print("\nAgents available in overlord:")
+    for agent_id in overlord.agents:
+        agent_desc = overlord.agent_descriptions[agent_id]
         print(f"- {agent_id}: {agent_desc}")
 
     print("\n=== Test Completed ===")

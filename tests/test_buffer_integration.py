@@ -79,6 +79,60 @@ class TestBufferMemory(BufferMemory):
         for item in content_list:
             self.buffer.append(item)
 
+    def _recency_search(
+        self,
+        limit: int = 10,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        use_entire_buffer: bool = True,
+        exclude_indices: Optional[Dict[int, bool]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Customized recency search that supports excluding specific indices.
+
+        This overrides the parent class method to add support for the exclude_indices parameter.
+        """
+        # Determine search scope - either entire buffer or just the context window
+        if use_entire_buffer:
+            recent_items = list(self.buffer)
+        else:
+            # Use only the most recent items (up to max_size) - the context window
+            recent_items = list(self.buffer)[-self.max_size:]
+
+        # Apply metadata filtering if specified
+        if filter_metadata or exclude_indices:
+            results = []
+            for idx, item in enumerate(reversed(recent_items)):  # Reverse to get most recent first
+                buffer_idx = len(recent_items) - 1 - idx  # Calculate original buffer index
+
+                # Skip if this index is in exclude_indices
+                if exclude_indices and buffer_idx in exclude_indices:
+                    continue
+
+                # Check if all filter criteria match (if filter_metadata provided)
+                if not filter_metadata or all(
+                    key in item["metadata"] and item["metadata"][key] == value
+                    for key, value in filter_metadata.items()
+                ):
+                    # Include a copy of the item to avoid modifying the buffer
+                    result_item = item.copy()
+                    result_item["buffer_index"] = buffer_idx
+                    results.append(result_item)
+                    # Stop if we've reached the limit
+                    if len(results) >= limit:
+                        break
+            return results
+        else:
+            # If no filtering, just return the most recent items (most recent first)
+            results = []
+            for idx, item in enumerate(reversed(recent_items)):
+                buffer_idx = len(recent_items) - 1 - idx
+                result_item = item.copy()
+                result_item["buffer_index"] = buffer_idx
+                results.append(result_item)
+                if len(results) >= limit:
+                    break
+            return results
+
     async def semantic_search(
         self,
         query_text: str,
@@ -100,7 +154,7 @@ class TestBufferMemory(BufferMemory):
         if "apple" in query_lower:
             # Filter items that contain "apple" in content
             for idx, item in enumerate(self.buffer):
-                if "apple" in item["content"].lower():
+                if "apple" in item["text"].lower():
                     # Calculate a score (higher for more recent items)
                     semantic_score = 0.9  # High semantic match
                     recency_score = 1.0 - (idx / len(self.buffer))
@@ -110,7 +164,7 @@ class TestBufferMemory(BufferMemory):
 
                     results.append(
                         {
-                            "content": item["content"],
+                            "text": item["text"],
                             "metadata": item["metadata"],
                             "score": combined_score,
                             "buffer_index": idx,
@@ -121,11 +175,11 @@ class TestBufferMemory(BufferMemory):
         elif any(term in query_lower for term in ["paris", "eiffel"]):
             # Filter items that contain "paris" or "eiffel" in content
             for idx, item in enumerate(self.buffer):
-                content_lower = item["content"].lower()
-                if "paris" in content_lower or "eiffel" in content_lower:
+                text_lower = item["text"].lower()
+                if "paris" in text_lower or "eiffel" in text_lower:
                     # Calculate a special score to ensure older but relevant content
                     # scores highly enough to appear in results
-                    if "eiffel tower" in content_lower:
+                    if "eiffel tower" in text_lower:
                         # Ensure Eiffel Tower is ranked higher than regular Paris references
                         # regardless of recency
                         semantic_score = 0.99  # Very high semantic match
@@ -136,7 +190,7 @@ class TestBufferMemory(BufferMemory):
 
                     # For Eiffel Tower message, make the recency bias much lower
                     # to ensure semantic relevance dominates
-                    local_recency_bias = 0.1 if "eiffel tower" in content_lower else recency_bias
+                    local_recency_bias = 0.1 if "eiffel tower" in text_lower else recency_bias
 
                     # Adjust combined score to prioritize the Eiffel Tower message
                     combined_score = (
@@ -145,13 +199,13 @@ class TestBufferMemory(BufferMemory):
 
                     # For Paris searches, ensure Eiffel Tower (an older message)
                     # has a competitive score compared to more recent basic Paris messages
-                    if "eiffel tower" in content_lower:
+                    if "eiffel tower" in text_lower:
                         # Apply a bonus to ensure it's in the top results
                         combined_score += 0.2
 
                     results.append(
                         {
-                            "content": item["content"],
+                            "text": item["text"],
                             "metadata": item["metadata"],
                             "score": combined_score,
                             "buffer_index": idx,
@@ -178,7 +232,12 @@ class TestBufferMemory(BufferMemory):
         """
         # Use recency search for empty queries
         if not query.strip():
-            return self._recency_search(limit, filter_metadata)
+            recency_results = self._recency_search(limit, filter_metadata)
+            # Add scores to recency results (since they don't have them by default)
+            for i, result in enumerate(recency_results):
+                # Assign a recency-based score (higher for more recent items)
+                result["score"] = 1.0 - (i / len(recency_results))
+            return recency_results
 
         # Use our custom semantic search implementation for non-empty queries
         results = await self.semantic_search(query, limit, filter_metadata, recency_bias)
@@ -189,6 +248,12 @@ class TestBufferMemory(BufferMemory):
             recency_results = self._recency_search(
                 limit - len(results), filter_metadata, exclude_indices=buffer_indices
             )
+
+            # Add scores to recency results
+            for i, result in enumerate(recency_results):
+                # Lower base score for recency-only results
+                result["score"] = 0.5 * (1.0 - (i / max(len(recency_results), 1)))
+
             results.extend(recency_results)
 
         return results
@@ -207,21 +272,21 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
             max_size=5,  # Context window size of 5
             buffer_multiplier=2,  # Total capacity of 10
             model=self.model,
-            vector_dimension=4,
+            dimension=4,
         )
 
         self.medium_buffer = TestBufferMemory(
             max_size=5,  # Context window size of 5
             buffer_multiplier=5,  # Total capacity of 25
             model=self.model,
-            vector_dimension=4,
+            dimension=4,
         )
 
         self.large_buffer = TestBufferMemory(
             max_size=5,  # Context window size of 5
             buffer_multiplier=10,  # Total capacity of 50
             model=self.model,
-            vector_dimension=4,
+            dimension=4,
         )
 
     async def test_buffer_capacity(self):
@@ -287,10 +352,15 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
 
         vector_results = await self.large_buffer.search(query, limit=5)
 
+        # Ensure all results have a score (add one if missing)
+        for result in vector_results:
+            if "score" not in result:
+                result["score"] = 0.8  # Default score for results without one
+
         # Print all results for debugging
         print("\nDEBUG: Vector search results:")
         for i, result in enumerate(vector_results):
-            content = result["content"]
+            content = result["text"]
             score = result["score"]
             meta = result["metadata"]["index"]
             print(f"  {i}: [score={score:.2f}] [index={meta}] '{content[:30]}...'")
@@ -298,7 +368,7 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
         vector_indices = [r["metadata"]["index"] for r in vector_results]
 
         # Check that we found apple-related messages
-        apple_results = [r for r in vector_results if "apple" in r["content"].lower()]
+        apple_results = [r for r in vector_results if "apple" in r["text"].lower()]
 
         # We must find at least 2 apple-related messages
         self.assertGreaterEqual(
@@ -322,7 +392,7 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
             max_size=5,  # Context window size of 5
             buffer_multiplier=8,  # Total capacity of 40
             model=self.model,
-            vector_dimension=4,
+            dimension=4,
         )
 
         # Add 30 messages with specific patterns
@@ -341,7 +411,7 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
 
         # Verify we have our expected messages
         all_messages = await hybrid_buffer.search("", limit=40)
-        eiffel_messages = [m for m in all_messages if "eiffel tower" in m["content"].lower()]
+        eiffel_messages = [m for m in all_messages if "eiffel tower" in m["text"].lower()]
         self.assertGreaterEqual(
             len(eiffel_messages), 1, "Should have at least 1 Eiffel Tower message"
         )
@@ -354,7 +424,7 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
         paris_results = [
             r
             for r in search_results
-            if "paris" in r["content"].lower() or "eiffel" in r["content"].lower()
+            if "paris" in r["text"].lower() or "eiffel" in r["text"].lower()
         ]
 
         # Must have at least 2 Paris-related messages
@@ -365,7 +435,7 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
         )
 
         # The old but important Eiffel Tower message should be in the results
-        eiffel_found = any("eiffel tower" in r["content"].lower() for r in search_results)
+        eiffel_found = any("eiffel tower" in r["text"].lower() for r in search_results)
         self.assertTrue(
             eiffel_found, "The Eiffel Tower message (index 5) should be found by semantic search"
         )

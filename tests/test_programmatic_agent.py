@@ -11,7 +11,7 @@ import asyncio
 from dotenv import load_dotenv
 
 from muxi.core.models.providers.openai import OpenAIModel
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.mcp import MCPMessage
 
@@ -36,16 +36,16 @@ async def test_programmatic_agent():
         buffer_multiplier=10     # Total capacity = 10 × 10 = 100 messages
     )
 
-    # Create an orchestrator with memory
-    print("Creating orchestrator with memory...")
-    orchestrator = Orchestrator(buffer_memory=buffer_memory)
+    # Create an overlord with memory
+    print("Creating overlord with memory...")
+    overlord = Overlord(buffer_memory=buffer_memory)
 
     # Create a language model
     model = OpenAIModel(model="gpt-4o-mini", api_key=api_key)
 
     # Create an agent programmatically
     print("Creating agent programmatically...")
-    agent = orchestrator.create_agent(
+    agent = overlord.create_agent(
         agent_id="test_agent",
         model=model,
         system_message="You are a test assistant that responds with short answers.",
@@ -53,16 +53,16 @@ async def test_programmatic_agent():
     )
     print("Agent created successfully!")
 
-    # Test that the agent exists in the orchestrator
-    assert "test_agent" in orchestrator.agents
-    assert orchestrator.agents["test_agent"] == agent
-    print("Agent exists in orchestrator: ✓")
+    # Test that the agent exists in the overlord
+    assert "test_agent" in overlord.agents
+    assert overlord.agents["test_agent"] == agent
+    print("Agent exists in overlord: ✓")
 
     # Test that the agent has the correct configuration
     assert agent.system_message == "You are a test assistant that responds with short answers."
     print("Agent has correct system message: ✓")
 
-    # Verify that agent is using orchestrator's memory
+    # Verify that agent is using overlord's memory
     # Note: buffer_memory is no longer directly accessible on the Agent
     # Test a different attribute instead
     assert agent.agent_id == "test_agent"
@@ -83,17 +83,17 @@ async def test_programmatic_agent():
         print(f"Agent responded: '{response.content}'")
         print("Agent can process messages: ✓")
 
-        # Verify our orchestrator can route messages
-        print("\nTesting orchestrator chat routing...")
+        # Verify our overlord can route messages
+        print("\nTesting overlord chat routing...")
         try:
-            # Try to use the orchestrator's direct chat method
+            # Try to use the overlord's direct chat method
             # The parameter may be named differently, so adjust based on errors
-            orchestrator_response = await orchestrator.chat(
+            overlord_response = await overlord.chat(
                 "Tell me a fact",
                 agent_name="test_agent"
             )
-            print(f"Orchestrator got response: '{orchestrator_response.content}'")
-            print("Orchestrator can route messages: ✓")
+            print(f"Overlord got response: '{overlord_response.content}'")
+            print("Overlord can route messages: ✓")
         except TypeError as e:
             # If the parameter name is different, try an alternative
             error_msg = str(e)
@@ -101,8 +101,8 @@ async def test_programmatic_agent():
 
             # Use process_message directly on the agent as a fallback
             user_message = MCPMessage(role="user", content="Tell me a fact")
-            orchestrator_response = await agent.mcp_handler.process_message(user_message)
-            print(f"Direct agent response: '{orchestrator_response.content}'")
+            overlord_response = await agent.mcp_handler.process_message(user_message)
+            print(f"Direct agent response: '{overlord_response.content}'")
             print("Direct agent messaging works: ✓")
 
         # Test connecting to an MCP server (mock connection)

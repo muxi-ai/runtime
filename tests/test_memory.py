@@ -27,8 +27,8 @@ class TestBufferMemory(unittest.IsolatedAsyncioTestCase):
         # Check that content was added
         results = await self.memory.search("", limit=10)
         self.assertEqual(len(results), 2)
-        self.assertEqual(results[0]["content"], "This is a test.")
-        self.assertEqual(results[1]["content"], "Hello, world!")
+        self.assertEqual(results[0]["text"], "This is a test.")
+        self.assertEqual(results[1]["text"], "Hello, world!")
 
     async def test_add_with_metadata(self):
         """Test adding content with metadata."""
@@ -56,10 +56,10 @@ class TestBufferMemory(unittest.IsolatedAsyncioTestCase):
         # With buffer_multiplier=10, total capacity is 30, so all messages are kept
         # The buffer capacity is 3 (max_size) * 10 (buffer_multiplier) = 30
         self.assertEqual(len(results), 4, "Should contain all 4 messages within capacity")
-        self.assertEqual(results[0]["content"], "Fourth message", "Most recent message first")
-        self.assertEqual(results[1]["content"], "Third message")
-        self.assertEqual(results[2]["content"], "Second message")
-        self.assertEqual(results[3]["content"], "First message")
+        self.assertEqual(results[0]["text"], "Fourth message", "Most recent message first")
+        self.assertEqual(results[1]["text"], "Third message")
+        self.assertEqual(results[2]["text"], "Second message")
+        self.assertEqual(results[3]["text"], "First message")
 
     async def test_search_limit(self):
         """Test that search respects the limit parameter."""
@@ -71,8 +71,8 @@ class TestBufferMemory(unittest.IsolatedAsyncioTestCase):
         # Check that search respects the limit
         results = await self.memory.search("", limit=2)
         self.assertEqual(len(results), 2)
-        self.assertEqual(results[0]["content"], "Third message")
-        self.assertEqual(results[1]["content"], "Second message")
+        self.assertEqual(results[0]["text"], "Third message")
+        self.assertEqual(results[1]["text"], "Second message")
 
 
 class MockLLM(BaseModel):

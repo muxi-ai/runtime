@@ -186,10 +186,10 @@ class TestAgentToolIntegration(unittest.TestCase):
         self.mock_model = MagicMock()
         self.mock_model.chat = AsyncMock()
 
-        # Mock the orchestrator
-        self.mock_orchestrator = MagicMock()
-        self.mock_orchestrator.add_message_to_memory = AsyncMock()
-        self.mock_orchestrator.get_mcp_service = MagicMock(return_value=None)
+        # Mock the overlord
+        self.mock_overlord = MagicMock()
+        self.mock_overlord.add_message_to_memory = AsyncMock()
+        self.mock_overlord.get_mcp_service = MagicMock(return_value=None)
 
         # Mock the MCP service
         self.mock_mcp_service = MagicMock()
@@ -197,8 +197,8 @@ class TestAgentToolIntegration(unittest.TestCase):
             return_value={"result": "Tool result", "status": "success"}
         )
 
-        # Set up the orchestrator to return our mock MCP service
-        self.mock_orchestrator.get_mcp_service.return_value = self.mock_mcp_service
+        # Set up the overlord to return our mock MCP service
+        self.mock_overlord.get_mcp_service.return_value = self.mock_mcp_service
 
         # Patch the MCPService.get_instance method
         self.mcp_service_patcher = patch(
@@ -214,7 +214,7 @@ class TestAgentToolIntegration(unittest.TestCase):
 
         # Create an agent
         self.agent = Agent(
-            agent_id="test_agent", model=self.mock_model, orchestrator=self.mock_orchestrator
+            agent_id="test_agent", model=self.mock_model, overlord=self.mock_overlord
         )
 
         # Set request_timeout for testing
@@ -259,7 +259,7 @@ class TestAgentToolIntegration(unittest.TestCase):
     async def test_process_message_no_tool_calls(self, mock_parse):
         """Test processing a message without tool calls."""
         # Mock add_message_to_memory method to avoid "can't be used in await" error
-        self.mock_orchestrator.add_message_to_memory = AsyncMock()
+        self.mock_overlord.add_message_to_memory = AsyncMock()
 
         # Setup the model to return a simple response
         response_text = "The weather in New York is sunny."
@@ -278,7 +278,7 @@ class TestAgentToolIntegration(unittest.TestCase):
         self.mock_mcp_service.invoke_tool.assert_not_called()
 
         # Verify add_message_to_memory was called twice (once for user, once for assistant)
-        assert self.mock_orchestrator.add_message_to_memory.call_count >= 2
+        assert self.mock_overlord.add_message_to_memory.call_count >= 2
 
         # Check the response content
         self.assertEqual(response.content, response_text)

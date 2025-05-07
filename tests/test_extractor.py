@@ -18,10 +18,10 @@ class TestMemoryExtractor(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        # Create a mock orchestrator
-        self.mock_orchestrator = MagicMock()
-        self.mock_orchestrator.get_user_context_memory = AsyncMock(return_value={})
-        self.mock_orchestrator.add_user_context_memory = AsyncMock(return_value=["123"])
+        # Create a mock overlord
+        self.mock_overlord = MagicMock()
+        self.mock_overlord.get_user_context_memory = AsyncMock(return_value={})
+        self.mock_overlord.add_user_context_memory = AsyncMock(return_value=["123"])
 
         # Create a mock model that returns extraction results
         self.mock_model = MagicMock()
@@ -48,7 +48,7 @@ class TestMemoryExtractor(unittest.TestCase):
 
         # Create the extractor with mock dependencies
         self.extractor = MemoryExtractor(
-            orchestrator=self.mock_orchestrator,
+            overlord=self.mock_overlord,
             extraction_model=self.mock_model,
             confidence_threshold=0.7,
             auto_extract=True,
@@ -158,8 +158,8 @@ class TestMemoryExtractor(unittest.TestCase):
         self.extractor._process_extraction_results.assert_called_once_with(extracted_data, 123)
 
 
-class TestOrchestratorExtraction(unittest.TestCase):
-    """Test cases for the Orchestrator's extraction functionality."""
+class TestOverlordExtraction(unittest.TestCase):
+    """Test cases for the Overlord's extraction functionality."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -168,21 +168,21 @@ class TestOrchestratorExtraction(unittest.TestCase):
         self.mock_memory_extractor.process_conversation_turn = AsyncMock()
         self.mock_memory_extractor.extraction_model = MagicMock()
 
-        # Create a mock orchestrator with the mock extractor
-        from muxi.core.orchestrator import Orchestrator
+        # Create a mock overlord with the mock extractor
+        from muxi.core.overlord import Overlord
 
-        self.orchestrator = Orchestrator(
+        self.overlord = Overlord(
             buffer_memory=MagicMock(),
             long_term_memory=MagicMock(),
             auto_extract_user_info=True,
             extraction_model=MagicMock(),
         )
-        self.orchestrator.memory_extractor = self.mock_memory_extractor
-        self.orchestrator.is_multi_user = True
+        self.overlord.memory_extractor = self.mock_memory_extractor
+        self.overlord.is_multi_user = True
 
     @async_test
     async def test_handle_user_information_extraction(self):
-        """Test the orchestrator's extraction handling."""
+        """Test the overlord's extraction handling."""
         # Setup
         user_message = "Hi, I'm a test user"
         agent_response = "Hello test user"
@@ -190,7 +190,7 @@ class TestOrchestratorExtraction(unittest.TestCase):
         agent_id = "agent1"
 
         # Execute
-        await self.orchestrator.handle_user_information_extraction(
+        await self.overlord.handle_user_information_extraction(
             user_message=user_message,
             agent_response=agent_response,
             user_id=user_id,
@@ -201,7 +201,7 @@ class TestOrchestratorExtraction(unittest.TestCase):
         await asyncio.sleep(0.1)
 
         # Verify
-        self.assertEqual(self.orchestrator.message_counts.get(user_id, 0), 1)
+        self.assertEqual(self.overlord.message_counts.get(user_id, 0), 1)
         self.mock_memory_extractor.process_conversation_turn.assert_called_once_with(
             user_message=user_message,
             agent_response=agent_response,
@@ -219,7 +219,7 @@ class TestOrchestratorExtraction(unittest.TestCase):
         agent_id = "agent1"
 
         # Execute
-        await self.orchestrator.handle_user_information_extraction(
+        await self.overlord.handle_user_information_extraction(
             user_message=user_message,
             agent_response=agent_response,
             user_id=user_id,
@@ -243,7 +243,7 @@ class TestOrchestratorExtraction(unittest.TestCase):
         custom_model = MagicMock()
 
         # Execute
-        await self.orchestrator.handle_user_information_extraction(
+        await self.overlord.handle_user_information_extraction(
             user_message=user_message,
             agent_response=agent_response,
             user_id=user_id,
@@ -256,20 +256,20 @@ class TestOrchestratorExtraction(unittest.TestCase):
 
         # Verify that _run_extraction is called with the custom model
         # We can't directly verify this with mocks, but we can check the message count
-        self.assertEqual(self.orchestrator.message_counts.get(user_id, 0), 1)
+        self.assertEqual(self.overlord.message_counts.get(user_id, 0), 1)
 
     @async_test
     async def test_extraction_disabled(self):
         """Test that extraction is skipped when disabled."""
         # Setup
-        self.orchestrator.auto_extract_user_info = False
+        self.overlord.auto_extract_user_info = False
         user_message = "This should be ignored"
         agent_response = "Hello"
         user_id = 789
         agent_id = "agent1"
 
         # Execute
-        await self.orchestrator.handle_user_information_extraction(
+        await self.overlord.handle_user_information_extraction(
             user_message=user_message,
             agent_response=agent_response,
             user_id=user_id,
@@ -288,17 +288,17 @@ class TestAgentExtraction(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
-        # Create mock model and orchestrator
+        # Create mock model and overlord
         self.mock_model = MagicMock()
         self.mock_model.generate = AsyncMock(return_value="Test response")
         self.mock_model.chat = AsyncMock(return_value="Test response")
 
-        self.mock_orchestrator = MagicMock()
-        self.mock_orchestrator.handle_user_information_extraction = AsyncMock()
-        self.mock_orchestrator.add_to_buffer_memory = MagicMock()
-        self.mock_orchestrator.add_to_long_term_memory = AsyncMock()
-        self.mock_orchestrator.get_user_context_memory = AsyncMock(return_value={})
-        self.mock_orchestrator.add_message_to_memory = AsyncMock()
+        self.mock_overlord = MagicMock()
+        self.mock_overlord.handle_user_information_extraction = AsyncMock()
+        self.mock_overlord.add_to_buffer_memory = MagicMock()
+        self.mock_overlord.add_to_long_term_memory = AsyncMock()
+        self.mock_overlord.get_user_context_memory = AsyncMock(return_value={})
+        self.mock_overlord.add_message_to_memory = AsyncMock()
 
         # Create mock MCP server
         from muxi.core.agent import MCPServer
@@ -317,7 +317,7 @@ class TestAgentExtraction(unittest.TestCase):
 
             self.agent = Agent(
                 model=self.mock_model,
-                orchestrator=self.mock_orchestrator,
+                overlord=self.mock_overlord,
                 system_message="Test system message",
                 mcp_server=self.mock_mcp_server,
             )
@@ -327,7 +327,7 @@ class TestAgentExtraction(unittest.TestCase):
 
     @async_test
     async def test_agent_delegates_extraction(self):
-        """Test that the agent correctly delegates extraction to the orchestrator."""
+        """Test that the agent correctly delegates extraction to the overlord."""
         # Setup
         user_message = "Test user message"
         user_id = 123
@@ -338,8 +338,8 @@ class TestAgentExtraction(unittest.TestCase):
         # Allow any background tasks to complete
         await asyncio.sleep(0.1)
 
-        # Verify extraction was delegated to orchestrator
-        self.mock_orchestrator.handle_user_information_extraction.assert_called_once_with(
+        # Verify extraction was delegated to overlord
+        self.mock_overlord.handle_user_information_extraction.assert_called_once_with(
             user_message=user_message,
             agent_response="Test response",
             user_id=user_id,
@@ -360,7 +360,7 @@ class TestAgentExtraction(unittest.TestCase):
         await asyncio.sleep(0.1)
 
         # Verify extraction was not called
-        self.mock_orchestrator.handle_user_information_extraction.assert_not_called()
+        self.mock_overlord.handle_user_information_extraction.assert_not_called()
 
     @async_test
     async def test_extraction_with_custom_model(self):
@@ -369,8 +369,8 @@ class TestAgentExtraction(unittest.TestCase):
         user_message = "Message with custom extraction model"
         user_id = 456
 
-        # Mock the orchestrator's handle_user_information_extraction method
-        self.mock_orchestrator.handle_user_information_extraction.reset_mock()
+        # Mock the overlord's handle_user_information_extraction method
+        self.mock_overlord.handle_user_information_extraction.reset_mock()
 
         # Set up the model to return a custom response
         self.mock_model.chat.return_value = "Custom model response"
@@ -382,7 +382,7 @@ class TestAgentExtraction(unittest.TestCase):
         await asyncio.sleep(0.1)
 
         # Verify extraction was called with the right parameters
-        self.mock_orchestrator.handle_user_information_extraction.assert_called_once_with(
+        self.mock_overlord.handle_user_information_extraction.assert_called_once_with(
             user_message=user_message,
             agent_response="Custom model response",
             user_id=user_id,

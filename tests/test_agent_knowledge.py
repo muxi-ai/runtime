@@ -18,9 +18,9 @@ def agent_setup():
     mock_model = MagicMock()
     mock_buffer_memory = MagicMock()
 
-    # Create mock orchestrator
-    mock_orchestrator = MagicMock()
-    mock_orchestrator.buffer_memory = mock_buffer_memory
+    # Create mock overlord
+    mock_overlord = MagicMock()
+    mock_overlord.buffer_memory = mock_buffer_memory
 
     # Mock embedding functions
     mock_model.embed = AsyncMock()
@@ -32,7 +32,7 @@ def agent_setup():
     ]  # 3 mock embeddings
 
     # Create agent with mock dependencies
-    agent = Agent(model=mock_model, orchestrator=mock_orchestrator)
+    agent = Agent(model=mock_model, overlord=mock_overlord)
 
     # Create test file content
     test_file_content = (

@@ -4,7 +4,7 @@ Tests for buffer_multiplier parameter and API key handling
 
 This file contains tests for:
 1. BufferMemory with buffer_multiplier parameter
-2. API key provision to Orchestrator
+2. API key provision to Overlord
 3. API key provision to muxi facade
 """
 
@@ -21,7 +21,7 @@ import yaml
 
 # Use direct imports instead of from muxi import muxi
 from muxi.core.memory.buffer import BufferMemory
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 # Mock the muxi facade for testing
 # We'll patch its functionality directly in the test methods
 
@@ -43,14 +43,14 @@ class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
             max_size=3,
             buffer_multiplier=2,  # Total capacity = 6
             model=self.mock_model,
-            vector_dimension=5
+            dimension=5
         )
 
         large_buffer = BufferMemory(
             max_size=3,
             buffer_multiplier=10,  # Total capacity = 30
             model=self.mock_model,
-            vector_dimension=5
+            dimension=5
         )
 
         # Add 7 items to both buffers
@@ -62,17 +62,17 @@ class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
         small_results = await small_buffer.search("", limit=10)
         self.assertEqual(len(small_results), 6)
         # Messages 0 should be dropped (out of capacity)
-        self.assertNotIn("Message 0", [r["content"] for r in small_results])
+        self.assertNotIn("Message 0", [r["text"] for r in small_results])
         # Messages 1-6 should be present
         for i in range(1, 7):
-            self.assertIn(f"Message {i}", [r["content"] for r in small_results])
+            self.assertIn(f"Message {i}", [r["text"] for r in small_results])
 
         # Large buffer should contain all 7 items (capacity = 3 × 10 = 30)
         large_results = await large_buffer.search("", limit=10)
         self.assertEqual(len(large_results), 7)
         # All messages should be present
         for i in range(7):
-            self.assertIn(f"Message {i}", [r["content"] for r in large_results])
+            self.assertIn(f"Message {i}", [r["text"] for r in large_results])
 
     async def test_recency_search_window(self):
         """Test that _recency_search correctly limits its results."""
@@ -81,14 +81,14 @@ class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
             max_size=3,
             buffer_multiplier=2,  # Total capacity = 6
             model=self.mock_model,
-            vector_dimension=5
+            dimension=5
         )
 
         large_buffer = BufferMemory(
             max_size=3,
             buffer_multiplier=10,  # Total capacity = 30
             model=self.mock_model,
-            vector_dimension=5
+            dimension=5
         )
 
         # Add 7 items to both buffers
@@ -109,14 +109,14 @@ class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
 
         # Both should contain the most recent messages in the right order
         for i in range(1, 7):  # Messages 1-6 in small buffer
-            self.assertIn(f"Message {i}", [r["content"] for r in small_recency_results])
+            self.assertIn(f"Message {i}", [r["text"] for r in small_recency_results])
 
         for i in range(0, 7):  # Messages 0-6 in large buffer
-            self.assertIn(f"Message {i}", [r["content"] for r in large_recency_results])
+            self.assertIn(f"Message {i}", [r["text"] for r in large_recency_results])
 
 
 class TestAPIKeys(unittest.TestCase):
-    """Tests for API key provision to Orchestrator and muxi facade."""
+    """Tests for API key provision to Overlord and muxi facade."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -124,30 +124,30 @@ class TestAPIKeys(unittest.TestCase):
         self.user_api_key = "sk_muxi_user_12345"
         self.admin_api_key = "sk_muxi_admin_67890"
 
-    def test_orchestrator_api_keys(self):
-        """Test that API keys can be provided to the Orchestrator."""
-        # Create orchestrator with API keys
-        orchestrator = Orchestrator(
+    def test_overlord_api_keys(self):
+        """Test that API keys can be provided to the Overlord."""
+        # Create overlord with API keys
+        overlord = Overlord(
             user_api_key=self.user_api_key,
             admin_api_key=self.admin_api_key
         )
 
         # Check that keys were stored
-        self.assertEqual(orchestrator.user_api_key, self.user_api_key)
-        self.assertEqual(orchestrator.admin_api_key, self.admin_api_key)
+        self.assertEqual(overlord.user_api_key, self.user_api_key)
+        self.assertEqual(overlord.admin_api_key, self.admin_api_key)
 
     @patch("muxi.core.memory.buffer.BufferMemory")
     def test_muxi_facade_api_keys(self, mock_buffer):
         """Test that API keys can be provided to the muxi facade."""
         # Since we can't import muxi directly, we'll mock the core functionality
-        with patch("muxi.core.orchestrator.Orchestrator") as mock_orchestrator:
-            # Mock a muxi function that creates an orchestrator
+        with patch("muxi.core.overlord.Overlord") as mock_overlord:
+            # Mock a muxi function that creates an overlord
             def mock_muxi(buffer_size=10, buffer_multiplier=10,
                           user_api_key=None, admin_api_key=None):
                 # Create a BufferMemory instance to trigger the mock
                 BufferMemory(max_size=buffer_size, buffer_multiplier=buffer_multiplier)
-                # Return an orchestrator with the buffer
-                return mock_orchestrator(
+                # Return an overlord with the buffer
+                return mock_overlord(
                     buffer_memory=mock_buffer(),
                     user_api_key=user_api_key,
                     admin_api_key=admin_api_key)
@@ -160,9 +160,9 @@ class TestAPIKeys(unittest.TestCase):
                 admin_api_key=self.admin_api_key
             )
 
-            # Verify the orchestrator was created with the keys
-            mock_orchestrator.assert_called_once()
-            _, kwargs = mock_orchestrator.call_args
+            # Verify the overlord was created with the keys
+            mock_overlord.assert_called_once()
+            _, kwargs = mock_overlord.call_args
             self.assertEqual(kwargs.get("user_api_key"), self.user_api_key)
             self.assertEqual(kwargs.get("admin_api_key"), self.admin_api_key)
 
