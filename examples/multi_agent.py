@@ -3,7 +3,7 @@
 Multi-agent example with the MUXI Framework.
 
 This example demonstrates how to create multiple specialized agents and how
-the orchestrator automatically routes messages to the most appropriate agent.
+the overlord automatically routes messages to the most appropriate agent.
 """
 
 import asyncio
@@ -28,7 +28,7 @@ async def main():
     await app.add_agent("finance", "configs/finance_agent.json")
     await app.add_agent("travel", "configs/travel_agent.yaml")
 
-    # The orchestrator will automatically select the most appropriate agent
+    # The overlord will automatically select the most appropriate agent
     print("\n--- Weather Question ---")
     response = await app.chat("What's the weather forecast for Tokyo this weekend?")
     print(f"Selected Agent: {response.agent_id}")

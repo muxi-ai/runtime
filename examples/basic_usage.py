@@ -9,7 +9,7 @@ import os
 
 from dotenv import load_dotenv
 
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.providers.openai import OpenAIModel
 
 
@@ -25,25 +25,25 @@ async def main():
         temperature=0.7,
     )
 
-    # Create an orchestrator
-    orchestrator = Orchestrator()
+    # Create an overlord
+    overlord = Overlord()
 
     # Add a basic agent with default memory and no tools
-    orchestrator.add_agent(
+    overlord.add_agent(
         agent_id="basic_agent",
         system_message="You are a helpful AI assistant.",
         model=model,
     )
 
     # Chat with the agent
-    response = await orchestrator.process_message(
+    response = await overlord.process_message(
         "Hello, who are you?",
         agent_id="basic_agent",
     )
     print(f"Agent: {response.content}")
 
     # Continue the conversation
-    response = await orchestrator.process_message(
+    response = await overlord.process_message(
         "What can you tell me about the MUXI Framework?",
         agent_id="basic_agent",
     )

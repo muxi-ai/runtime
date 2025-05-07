@@ -53,7 +53,7 @@ The MCP server will be implemented as part of the server module in the API direc
 │  │ Agent 1 │◄─────┐│                         │  │
 │  └─────────┘      ││                         │  │
 │                   ││                         │  │
-│  ┌─────────┐      ││     Orchestrator        │  │
+│  ┌─────────┐      ││     Overlord        │  │
 │  │ Agent 2 │◄─────┘│                         │  │
 │  └─────────┘       │                         │  │
 │                    │                         │  │
@@ -113,7 +113,7 @@ A separate NPM package `@muxi/mcp-bridge` will be created to:
 
 ### Integration Points
 
-1. **Orchestrator**: Enhanced to support MCP request routing
+1. **Overlord**: Enhanced to support MCP request routing
 2. **Agent**: Capabilities exposed as MCP tools
 3. **API Server**: MCP server integrated as part of the API module
 4. **A2A Handler**: Leverage for complex multi-agent interactions
@@ -528,7 +528,7 @@ import logging
 from fastapi import FastAPI, Request, Response
 from sse_starlette.sse import EventSourceResponse
 
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 
 # Configure logging
 logger = logging.getLogger("mcp")
@@ -536,9 +536,9 @@ logger = logging.getLogger("mcp")
 class MCPServer:
     """MCP Server implementation using SSE."""
 
-    def __init__(self, app: FastAPI, orchestrator: Orchestrator, **options):
+    def __init__(self, app: FastAPI, overlord: Overlord, **options):
         self.app = app
-        self.orchestrator = orchestrator
+        self.overlord = overlord
         self.options = options
         self.register_routes()
 
@@ -572,7 +572,7 @@ def start_mcp(
 ) -> None:
     """Start the MCP server."""
     from muxi.server.api.app import create_app
-    from muxi.server import orchestrator
+    from muxi.server import overlord
 
     # Create FastAPI app
     app = create_app()
@@ -580,7 +580,7 @@ def start_mcp(
     # Initialize MCP server
     mcp_server = MCPServer(
         app=app,
-        orchestrator=orchestrator,
+        overlord=overlord,
         auth_required=auth_required,
         auth_scheme=auth_scheme,
         rate_limit=rate_limit,

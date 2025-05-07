@@ -25,7 +25,7 @@
 #    - Aggregates and merges results from different sources
 #    - Provides unified access to all knowledge sources
 #
-# Knowledge sources are typically integrated with agents through the Orchestrator,
+# Knowledge sources are typically integrated with agents through the Overlord,
 # which manages access and coordinates knowledge retrieval.
 #
 # Example usage:

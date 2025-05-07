@@ -4,7 +4,7 @@
 # Title:        Memobase - Multi-User Memory Management System
 # Description:  User-aware memory system for storing and retrieving information
 # Role:         Provides user-specific context and knowledge management
-# Usage:        Used by Orchestrator to maintain separate memory for each user
+# Usage:        Used by Overlord to maintain separate memory for each user
 # Author:       Muxi Framework Team
 #
 # The Memobase module provides a sophisticated memory management system that

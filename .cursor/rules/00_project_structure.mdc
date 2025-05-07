@@ -14,7 +14,7 @@ docs/                     # Documentation files
 src/                      # Source code
  └─ core/                 # Core components
    ├── agent.py           # Agent implementation
-   ├── orchestrator.py    # Orchestrator for managing multiple agents
+   ├── overlord.py    # Overlord for managing multiple agents
    └── config.py          # Configuration handling
  └─ models/               # LLM provider implementations
    ├── base.py            # Base LLM interface

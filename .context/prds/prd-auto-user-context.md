@@ -60,14 +60,14 @@ We will create a dedicated `MemoryExtractor` class responsible for:
 class MemoryExtractor:
     def __init__(
         self,
-        orchestrator,
+        overlord,
         extraction_model=None,
         confidence_threshold=0.7,
         auto_extract=True,
         extraction_interval=1,  # Process every n messages
         max_history_tokens=1000,
     ):
-        self.orchestrator = orchestrator
+        self.overlord = overlord
         self.extraction_model = extraction_model  # Model for extraction (may differ from agent model)
         self.confidence_threshold = confidence_threshold
         self.auto_extract = auto_extract
@@ -104,8 +104,8 @@ class MemoryExtractor:
 
     async def _extract_user_information(self, conversation):
         """Extract user information using the specified LLM."""
-        # Use the specified extraction model if available, otherwise use orchestrator's default
-        model = self.extraction_model or self.orchestrator.default_model
+        # Use the specified extraction model if available, otherwise use overlord's default
+        model = self.extraction_model or self.overlord.default_model
 
         # Create extraction prompt
         prompt = self._create_extraction_prompt(conversation)
@@ -155,7 +155,7 @@ class MemoryExtractor:
             return
 
         # Get existing user context memory
-        existing_context = await self.orchestrator.get_user_context_memory(user_id=user_id)
+        existing_context = await self.overlord.get_user_context_memory(user_id=user_id)
 
         # Process each extracted item
         knowledge_updates = {}
@@ -179,7 +179,7 @@ class MemoryExtractor:
 
         # Store updates in context memory if any exist
         if knowledge_updates:
-            await self.orchestrator.add_user_context_memory(
+            await self.overlord.add_user_context_memory(
                 user_id=user_id,
                 knowledge=knowledge_updates,
                 source="automatic_extraction",
@@ -249,7 +249,7 @@ class MemoryExtractor:
         return {"extracted_info": extracted_info}
 ```
 
-### 2. Integration with Agent & Orchestrator
+### 2. Integration with Agent & Overlord
 
 #### Agent Integration
 
@@ -281,16 +281,16 @@ class Agent:
         # Existing implementation...
 
         # Perform automatic extraction if enabled
-        if (self.orchestrator and
-            hasattr(self.orchestrator, 'memory_extractor') and
-            self.orchestrator.memory_extractor and
+        if (self.overlord and
+            hasattr(self.overlord, 'memory_extractor') and
+            self.overlord.memory_extractor and
             user_id is not None):
 
             # Increment message counter for this user
-            user_message_count = self.orchestrator.get_user_message_count(user_id)
+            user_message_count = self.overlord.get_user_message_count(user_id)
 
             # Process conversation turn for extraction
-            await self.orchestrator.memory_extractor.process_conversation_turn(
+            await self.overlord.memory_extractor.process_conversation_turn(
                 user_message=original_content,
                 agent_response=response.content,
                 user_id=user_id,
@@ -300,10 +300,10 @@ class Agent:
         return response
 ```
 
-#### Orchestrator Integration
+#### Overlord Integration
 
 ```python
-class Orchestrator:
+class Overlord:
     # Existing implementation...
 
     def __init__(
@@ -325,7 +325,7 @@ class Orchestrator:
         self.memory_extractor = None
         if auto_extract_context and self.is_multi_user and self.long_term_memory:
             self.memory_extractor = MemoryExtractor(
-                orchestrator=self,
+                overlord=self,
                 extraction_model=extraction_model,
                 confidence_threshold=extraction_confidence,
                 auto_extract=auto_extract_context,
@@ -359,8 +359,8 @@ def muxi(
     # Other existing parameters...
 ):
     """Initialize the MUXI Framework."""
-    # Create orchestrator with extraction settings
-    orchestrator = Orchestrator(
+    # Create overlord with extraction settings
+    overlord = Overlord(
         buffer_memory=buffer_memory,
         long_term_memory=long_term_memory,
         is_multi_user=is_multi_user,
@@ -487,7 +487,7 @@ async def process_important_conversation(app, conversation_history, user_id):
 
 1. **Phase 1: Core Implementation** (2-3 days)
    - Implement `MemoryExtractor` class
-   - Integrate with Agent and Orchestrator
+   - Integrate with Agent and Overlord
    - Add configuration options
    - Create basic tests
 
@@ -511,10 +511,10 @@ async def process_important_conversation(app, conversation_history, user_id):
 
 ## API Reference
 
-### Orchestrator Methods
+### Overlord Methods
 
 ```python
-class Orchestrator:
+class Overlord:
     # New methods
 
     async def extract_user_context(

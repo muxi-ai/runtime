@@ -1,8 +1,8 @@
 """
-Updated MUXI Framework Facade with orchestrator-level memory.
+Updated MUXI Framework Facade with overlord-level memory.
 
 This module provides a simplified interface for interacting with the MUXI Framework
-that initializes the orchestrator with memory systems.
+that initializes the overlord with memory systems.
 """
 
 import os
@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 
 from muxi.core.agent import Agent
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.memory.long_term import LongTermMemory
@@ -51,8 +51,8 @@ class Muxi:
         _buffer_memory = self._create_buffer_memory(buffer_memory)
         _long_term_memory = self._create_long_term_memory(long_term_memory)
 
-        # Initialize the orchestrator with memory components
-        self.orchestrator = Orchestrator(
+        # Initialize the overlord with memory components
+        self.overlord = Overlord(
             buffer_memory=_buffer_memory,
             long_term_memory=_long_term_memory
         )
@@ -285,8 +285,8 @@ class Muxi:
         # Extract description or use system message as fallback
         description = config.get("description", config.get("system_message", ""))
 
-        # Create the agent - use orchestrator directly with memory already configured
-        agent = self.orchestrator.create_agent(
+        # Create the agent - use overlord directly with memory already configured
+        agent = self.overlord.create_agent(
             agent_id=agent_name,
             model=model,
             system_message=config.get("system_message", ""),
@@ -388,8 +388,8 @@ class Muxi:
         Returns:
             The agent's response as a string
         """
-        # Process the message through the orchestrator
-        response = await self.orchestrator.chat(
+        # Process the message through the overlord
+        response = await self.overlord.chat(
             agent_name=agent_name,
             message=message,
             user_id=user_id
@@ -417,16 +417,16 @@ class Muxi:
             knowledge: Knowledge to add (any serializable object)
 
         Raises:
-            ValueError: If orchestrator doesn't have multi-user memory
+            ValueError: If overlord doesn't have multi-user memory
         """
-        # Use orchestrator's long-term memory if it's multi-user
-        if hasattr(self.orchestrator, "is_multi_user") and self.orchestrator.is_multi_user:
-            if hasattr(self.orchestrator.long_term_memory, "add_context_memory"):
-                self.orchestrator.long_term_memory.add_context_memory(user_id, knowledge)
+        # Use overlord's long-term memory if it's multi-user
+        if hasattr(self.overlord, "is_multi_user") and self.overlord.is_multi_user:
+            if hasattr(self.overlord.long_term_memory, "add_context_memory"):
+                self.overlord.long_term_memory.add_context_memory(user_id, knowledge)
                 return
 
         # Fallback to the original implementation - search through agents
-        for agent_id, agent in self.orchestrator.agents.items():
+        for agent_id, agent in self.overlord.agents.items():
             if hasattr(agent, "long_term_memory") and isinstance(
                 agent.long_term_memory, Memobase
             ):
@@ -484,4 +484,4 @@ class Muxi:
         Raises:
             ValueError: If no agent with the given ID exists.
         """
-        return self.orchestrator.get_agent(agent_id)
+        return self.overlord.get_agent(agent_id)

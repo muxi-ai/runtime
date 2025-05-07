@@ -5,7 +5,7 @@ muxi/core/__init__.py
 muxi/core/agent.py
 muxi/core/credential_manager.py
 muxi/core/facade.py
-muxi/core/orchestrator.py
+muxi/core/overlord.py
 muxi/core/reconnection.py
 muxi/core/run.py
 muxi/core/utils.py

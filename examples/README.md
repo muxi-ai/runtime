@@ -65,7 +65,7 @@ python examples/multi_agent.py
 
 This example demonstrates:
 - Creating multiple specialized agents
-- How the orchestrator routes messages to the appropriate agent
+- How the overlord routes messages to the appropriate agent
 - Handling different query types
 
 ### 5. WebSocket Client

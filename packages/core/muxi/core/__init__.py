@@ -12,7 +12,7 @@
 #
 # 1. High-Level Interfaces
 #    - Muxi facade for declarative framework usage
-#    - Orchestrator for direct agent and memory management
+#    - Overlord for direct agent and memory management
 #
 # 2. Utility Functions
 #    - Server startup functionality
@@ -24,7 +24,7 @@
 
 # Import facade classes for easy access
 from muxi.core.facade import Muxi
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.run import run_server, is_port_in_use
 
 # Current version of the Muxi Core framework
@@ -33,7 +33,7 @@ __version__ = "0.1.0"
 # Explicitly define what's available when using "from muxi.core import *"
 __all__ = [
     "Muxi",
-    "Orchestrator",
+    "Overlord",
     "run_server",
     "is_port_in_use",
 ]

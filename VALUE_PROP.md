@@ -104,7 +104,7 @@
 
 | Feature | MUXI | LangChain | LlamaIndex | Haystack |
 |---------|------|-----------|------------|----------|
-| **Core Architecture** | Orchestrator-based, YAML configuration | Modular chains and graph-based workflows | RAG-focused with agent extensions | Pipeline-based with component architecture |
+| **Core Architecture** | Overlord-based, YAML configuration | Modular chains and graph-based workflows | RAG-focused with agent extensions | Pipeline-based with component architecture |
 | **Declarative Configuration** | ✅ YAML-based agent definition | ❌ Code-first approach | ❌ Code-first approach | ❌ Code-first approach with visual tools |
 | **Model Integration** | ✅ Any provider with fallback | ✅ Multiple providers | ✅ Multiple providers | ✅ Multiple providers |
 | **Tool/Function Calling** | ✅ MCP standard with hundreds of tools | ✅ Extensive tool library | ✅ Growing tool support | ✅ Comprehensive tool support with MCP integration |
@@ -143,7 +143,7 @@ What truly sets MUXI apart from other frameworks:
 
 2. **MCP & A2A as First-Class Citizens**: Native support for Model Control Protocol and Agent-to-Agent communication creates unparalleled interoperability between agents and tools.
 
-3. **Smart Orchestration**: The intelligent orchestrator can manage multiple agents for completely different use cases in the same environment, automatically routing tasks based on context and capabilities without requiring complex manual configuration.
+3. **Smart Orchestration**: The intelligent overlord can manage multiple agents for completely different use cases in the same environment, automatically routing tasks based on context and capabilities without requiring complex manual configuration.
 
 4. **Enterprise-Grade Security**: Built-in authentication and access control for both end users and developers with granular permission management, eliminating the need for external security solutions.
 

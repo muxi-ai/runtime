@@ -1,13 +1,13 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Orchestrator - Central Coordination Component
+# Title:        Overlord - Central Coordination Component
 # Description:  Core component for managing agents, memory systems, and interactions
 # Role:         The backbone of the Muxi framework's multi-agent architecture
 # Usage:        Used to create, manage, and coordinate multiple AI agents
 # Author:       Muxi Framework Team
 #
-# The Orchestrator is the primary coordination component in the Muxi framework.
+# The Overlord is the primary coordination component in the Muxi framework.
 # It serves as the centralized manager for:
 #
 # 1. Agent Lifecycle Management
@@ -31,19 +31,19 @@
 #    - Multi-user support
 #    - User context management
 #
-# The Orchestrator can be used in two main ways:
+# The Overlord can be used in two main ways:
 #
 # Programmatic API:
-#   orchestrator = Orchestrator(buffer_memory=buffer, long_term_memory=ltm)
-#   agent = orchestrator.create_agent(agent_id="assistant", model=model)
-#   response = await orchestrator.chat("Hello, how can you help me?")
+#   overlord = Overlord(buffer_memory=buffer, long_term_memory=ltm)
+#   agent = overlord.create_agent(agent_id="assistant", model=model)
+#   response = await overlord.chat("Hello, how can you help me?")
 #
 # Configuration-based API (via muxi() function):
 #   app = muxi(buffer_size=10, long_term="sqlite:///data/memory.db")
 #   app.add_agent("assistant", "configs/assistant.yaml")
 #   response = await app.chat("Hello, how can you help me?")
 #
-# This file contains the core implementation of the Orchestrator class, which
+# This file contains the core implementation of the Overlord class, which
 # is the foundation of Muxi's agent coordination system.
 # =============================================================================
 
@@ -66,13 +66,13 @@ from muxi.core.models.base import BaseModel
 from muxi.core.models.providers.openai import OpenAIModel
 
 
-class Orchestrator:
+class Overlord:
     """
-    Orchestrator for managing agents, memory, and interactions.
+    Overlord for managing agents, memory, and interactions.
 
-    The Orchestrator serves as the central coordination component in the Muxi Framework.
+    The Overlord serves as the central coordination component in the Muxi Framework.
     It manages multiple agents, provides centralized memory access, handles message routing,
-    and coordinates user interactions. The Orchestrator maintains buffer and long-term memory
+    and coordinates user interactions. The Overlord maintains buffer and long-term memory
     systems that can be shared across agents, enabling coherent multi-agent conversations.
 
     Key responsibilities:
@@ -109,11 +109,11 @@ class Orchestrator:
         admin_api_key: Optional[str] = None,
     ):
         """
-        Initialize the orchestrator with optional centralized memory systems.
+        Initialize the overlord with optional centralized memory systems.
 
-        The constructor sets up the Orchestrator with the specified memory systems and
+        The constructor sets up the Overlord with the specified memory systems and
         configuration. It initializes agent storage, memory systems, extraction settings,
-        and API keys. If memory systems are not provided, the Orchestrator will still
+        and API keys. If memory systems are not provided, the Overlord will still
         function but with limited memory capabilities.
 
         Args:
@@ -165,7 +165,7 @@ class Orchestrator:
                     from muxi.core.memory.extractor import MemoryExtractor
 
                     self.memory_extractor = MemoryExtractor(
-                        orchestrator=self,
+                        overlord=self,
                         extraction_model=self.extraction_model,
                         auto_extract=self.auto_extract_user_info,
                     )
@@ -269,10 +269,10 @@ class Orchestrator:
         request_timeout: Optional[int] = None,
     ) -> Agent:
         """
-        Create a new agent that uses the orchestrator's memory systems.
+        Create a new agent that uses the overlord's memory systems.
 
         This method creates a new agent instance with the specified configuration and registers
-        it with the orchestrator. The created agent will have access to the orchestrator's
+        it with the overlord. The created agent will have access to the overlord's
         centralized memory systems, enabling it to maintain context across conversations.
 
         Args:
@@ -290,7 +290,7 @@ class Orchestrator:
             mcp_server: Optional MCP server for tool calling and external integrations.
                 Enables the agent to access external tools and services.
             request_timeout: Optional timeout in seconds for MCP requests.
-                If not provided, defaults to the orchestrator's timeout setting.
+                If not provided, defaults to the overlord's timeout setting.
 
         Returns:
             The created agent instance.
@@ -301,10 +301,10 @@ class Orchestrator:
         if agent_id in self.agents:
             raise ValueError(f"Agent with ID '{agent_id}' already exists")
 
-        # Create agent with reference to orchestrator for memory access
+        # Create agent with reference to overlord for memory access
         agent = Agent(
             model=model,
-            orchestrator=self,  # Pass reference to orchestrator
+            overlord=self,  # Pass reference to overlord
             system_message=system_message,
             agent_id=agent_id,
             mcp_server=mcp_server,
@@ -331,15 +331,15 @@ class Orchestrator:
         set_as_default: bool = False,
     ) -> Agent:
         """
-        Add an existing agent to the orchestrator.
+        Add an existing agent to the overlord.
 
-        This method registers a pre-constructed agent with the orchestrator. It's useful
+        This method registers a pre-constructed agent with the overlord. It's useful
         when you've created an agent instance directly and need to integrate it with
-        the orchestrator's management system.
+        the overlord's management system.
 
         Args:
             agent: The agent instance to add. Must have a unique agent_id not already
-                registered with this orchestrator.
+                registered with this overlord.
             set_as_default: Whether to set this agent as the default for unrouted messages.
                 If True, or if this is the first agent being added, it will become the default.
 
@@ -347,7 +347,7 @@ class Orchestrator:
             The added agent instance (same as input).
 
         Raises:
-            ValueError: If an agent with the same agent_id already exists in the orchestrator.
+            ValueError: If an agent with the same agent_id already exists in the overlord.
         """
         if agent.agent_id in self.agents:
             raise ValueError(f"Agent with ID '{agent.agent_id}' already exists")
@@ -375,7 +375,7 @@ class Orchestrator:
         agent_id: Optional[str] = None,
     ) -> bool:
         """
-        Add a message to the orchestrator's buffer memory.
+        Add a message to the overlord's buffer memory.
 
         This method stores a message in the short-term buffer memory, which maintains
         context for ongoing conversations. The buffer memory provides recent message
@@ -419,7 +419,7 @@ class Orchestrator:
         user_id: Optional[int] = None,
     ) -> Optional[str]:
         """
-        Add content to the orchestrator's long-term memory.
+        Add content to the overlord's long-term memory.
 
         This method stores information in the persistent long-term memory system,
         which maintains knowledge across sessions. Content added to long-term memory
@@ -483,7 +483,7 @@ class Orchestrator:
         filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Search the orchestrator's memory systems for relevant information.
+        Search the overlord's memory systems for relevant information.
 
         This method performs a semantic search across available memory systems to find
         information relevant to the provided query. It can search both buffer memory
@@ -647,7 +647,7 @@ class Orchestrator:
 
     def register_agent(self, agent):
         """
-        Register an existing agent with the orchestrator.
+        Register an existing agent with the overlord.
 
         This method is a legacy compatibility method that registers an agent that
         uses the older API format (with 'name' attribute instead of 'agent_id').
@@ -693,7 +693,7 @@ class Orchestrator:
 
         Args:
             agent_id: The ID of the agent to use for processing the message.
-                Must refer to an agent that has been registered with this orchestrator.
+                Must refer to an agent that has been registered with this overlord.
             message: The MCPMessage object containing the message to process.
                 This is the standard message format used by the MCP protocol.
 
@@ -746,7 +746,7 @@ class Orchestrator:
 
     def remove_agent(self, agent_id: str) -> bool:
         """
-        Remove an agent from the orchestrator.
+        Remove an agent from the overlord.
 
         This method unregisters an agent and updates the default agent if necessary.
 
@@ -776,14 +776,14 @@ class Orchestrator:
 
     def set_default_agent(self, agent_id: str) -> None:
         """
-        Set the default agent for the orchestrator.
+        Set the default agent for the overlord.
 
         The default agent is used when no specific agent is specified for a message,
         or when agent routing fails.
 
         Args:
             agent_id: The ID of the agent to set as default.
-                Must refer to an agent that has been registered with this orchestrator.
+                Must refer to an agent that has been registered with this overlord.
 
         Raises:
             ValueError: If no agent with the given ID exists.
@@ -807,7 +807,7 @@ class Orchestrator:
             input_text: The input text to process. This is the user's message
                 or query that will be sent to the agent.
             agent_id: Optional ID of the agent to use. If None, the default agent will be used.
-                Must refer to an agent registered with this orchestrator.
+                Must refer to an agent registered with this overlord.
             use_memory: Whether to use memory for context. If True, the agent will
                 have access to relevant memories when processing the message.
 
@@ -826,10 +826,10 @@ class Orchestrator:
 
     def run(self, host="0.0.0.0", port=5050, reload=True, mcp=False) -> None:
         """
-        Start the MUXI server with the current orchestrator.
+        Start the MUXI server with the current overlord.
 
         This method launches the MUXI web server, which provides a REST API for
-        interacting with the orchestrator and its agents. The server includes
+        interacting with the overlord and its agents. The server includes
         API documentation and endpoints for chat, memory management, and agent
         operations.
 
@@ -882,10 +882,10 @@ class Orchestrator:
 
         Returns:
             The ID of the selected agent. This will always be a valid agent ID
-            registered with this orchestrator.
+            registered with this overlord.
 
         Raises:
-            ValueError: If no agents are available in the orchestrator.
+            ValueError: If no agents are available in the overlord.
         """
         # If there's only one agent, use it
         if len(self.agents) == 1:
@@ -993,7 +993,7 @@ Available agents:
         Returns:
             The ID of the selected agent if successfully parsed, or None if parsing failed.
             A successful return value will be one of the agent IDs registered with this
-            orchestrator.
+            overlord.
         """
         # If the response is empty, return None
         if not response:
@@ -1031,7 +1031,7 @@ Available agents:
         Chat with an agent, automatically routing if no specific agent is specified.
 
         This is a high-level method that handles agent selection and message processing
-        in a single call, making it easy to use the orchestrator for chat applications.
+        in a single call, making it easy to use the overlord for chat applications.
         If no agent is specified, it will use intelligent routing to select the most
         appropriate agent based on the message content.
 
@@ -1059,7 +1059,7 @@ Available agents:
         """
         List all registered agents and their descriptions.
 
-        This method provides information about all available agents in the orchestrator,
+        This method provides information about all available agents in the overlord,
         including their descriptions and whether they are set as the default agent.
         It's useful for displaying agent options in user interfaces or for debugging.
 
@@ -1337,7 +1337,7 @@ Available agents:
         """
         Register an MCP server with the centralized MCP service.
 
-        This method adds a Model Context Protocol (MCP) server to the orchestrator,
+        This method adds a Model Context Protocol (MCP) server to the overlord,
         making its tools available to agents. MCP servers can be external HTTP services,
         local command-line tools, or other tool providers that implement the MCP protocol.
 
@@ -1353,7 +1353,7 @@ Available agents:
             model: Optional model to use for this MCP handler. Some MCP servers
                 require a model for processing tool invocations.
             request_timeout: Optional timeout in seconds for requests to this server.
-                Defaults to the orchestrator's global timeout setting if not specified.
+                Defaults to the overlord's global timeout setting if not specified.
 
         Returns:
             The server_id of the registered server, confirming successful registration.
@@ -1362,7 +1362,7 @@ Available agents:
             ValueError: If neither url nor command is provided, or if both are provided.
             ConnectionError: If the MCP server cannot be contacted during registration.
         """
-        # Use orchestrator's default timeout if none specified
+        # Use overlord's default timeout if none specified
         timeout = request_timeout if request_timeout is not None else self.request_timeout
 
         # Register the server with the MCP service
@@ -1418,7 +1418,7 @@ Available agents:
         manages all MCP servers and tool invocations.
 
         Returns:
-            The MCPService instance used by this orchestrator.
+            The MCPService instance used by this overlord.
         """
         return self.mcp_service
 
@@ -1434,7 +1434,7 @@ Available agents:
         Add a message to appropriate memory stores based on configuration.
 
         This method centralizes all memory operations that were previously split between
-        Agent and Orchestrator classes. It handles adding messages to both buffer memory
+        Agent and Overlord classes. It handles adding messages to both buffer memory
         and long-term memory, with special handling for user context in multi-user mode.
 
         Args:

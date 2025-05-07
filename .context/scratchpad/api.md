@@ -398,7 +398,7 @@ event: message_end
 data: {"id":"msg_12345"}
 ```
 
-#### Chat with Orchestrator (Auto-Route)
+#### Chat with Overlord (Auto-Route)
 
 ```http
 POST /chat
@@ -418,7 +418,7 @@ The response format is the same as `POST /agents/{agent_id}/messages` but includ
 ```json
 {
   "id": "msg_12345",
-  "agent_id": "weather_expert",  // The agent selected by the orchestrator
+  "agent_id": "weather_expert",  // The agent selected by the overlord
   "routing_confidence": 0.92,    // Confidence score for routing decision
   "user_id": "user123",
   "user_message": {
@@ -433,7 +433,7 @@ The response format is the same as `POST /agents/{agent_id}/messages` but includ
 }
 ```
 
-#### Stream Chat with Orchestrator (Auto-Route)
+#### Stream Chat with Overlord (Auto-Route)
 
 ```http
 POST /chat/stream
@@ -1023,7 +1023,7 @@ All WebSocket messages use the following format:
   "type": "chat",
   "id": "req_12345",
   "data": {
-    "agent_id": "assistant",  // Optional, will use orchestrator if omitted
+    "agent_id": "assistant",  // Optional, will use overlord if omitted
     "user_id": "user123",     // Optional
     "content": "Tell me about this image",
     "attachments": [

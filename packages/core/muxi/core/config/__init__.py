@@ -39,8 +39,8 @@
 #
 #   buffer_size = memory_config.buffer_size
 #
-#   # Accessing from the Orchestrator:
-#   buffer_size = orchestrator.config.memory.buffer_size
+#   # Accessing from the Overlord:
+#   buffer_size = overlord.config.memory.buffer_size
 #
 # The configuration is typically loaded once at application startup and then
 # accessed throughout the framework as needed. Any component that requires

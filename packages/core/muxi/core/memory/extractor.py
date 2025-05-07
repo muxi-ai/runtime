@@ -4,7 +4,7 @@
 # Title:        Memory Extractor - Automatic Information Extraction
 # Description:  System for automatically extracting and storing user information
 # Role:         Analyzes conversations to build persistent user context
-# Usage:        Used by Orchestrator to maintain user knowledge over time
+# Usage:        Used by Overlord to maintain user knowledge over time
 # Author:       Muxi Framework Team
 #
 # The Memory Extractor module provides an intelligent system for automatically
@@ -49,7 +49,7 @@ class MemoryExtractor:
 
     def __init__(
         self,
-        orchestrator,
+        overlord,
         extraction_model=None,
         confidence_threshold=0.7,
         auto_extract=True,
@@ -64,7 +64,7 @@ class MemoryExtractor:
         Initialize the MemoryExtractor.
 
         Args:
-            orchestrator: The MUXI orchestrator that manages memory
+            overlord: The MUXI overlord that manages memory
             extraction_model: Model for extraction (may differ from agent model)
             confidence_threshold: Minimum confidence level (0.0-1.0) to store info
             auto_extract: Whether to automatically extract after conversations
@@ -75,7 +75,7 @@ class MemoryExtractor:
             blacklist_users: These users will be excluded from extraction
             retention_days: Number of days to retain extracted information
         """
-        self.orchestrator = orchestrator
+        self.overlord = overlord
         self.extraction_model = extraction_model
         self.confidence_threshold = confidence_threshold
         self.auto_extract = auto_extract
@@ -205,7 +205,7 @@ class MemoryExtractor:
             return True
 
         # Get existing context to find auto-extracted entries
-        context = await self.orchestrator.get_user_context_memory(user_id=user_id)
+        context = await self.overlord.get_user_context_memory(user_id=user_id)
 
         # Look for keys that were created by automatic extraction
         to_delete = []
@@ -216,7 +216,7 @@ class MemoryExtractor:
 
         # Clear these specific keys
         if to_delete:
-            return await self.orchestrator.clear_user_context_memory(
+            return await self.overlord.clear_user_context_memory(
                 user_id=user_id, keys=to_delete
             )
 
@@ -235,8 +235,8 @@ class MemoryExtractor:
         Returns:
             A dictionary of extracted information with confidence scores
         """
-        # Use the specified extraction model if available, otherwise use orchestrator's default
-        model = self.extraction_model or self.orchestrator.default_model
+        # Use the specified extraction model if available, otherwise use overlord's default
+        model = self.extraction_model or self.overlord.default_model
 
         # Create extraction prompt
         prompt = self._create_extraction_prompt(conversation)
@@ -316,7 +316,7 @@ class MemoryExtractor:
             return
 
         # Get existing user context memory
-        existing_context = await self.orchestrator.get_user_context_memory(user_id=user_id)
+        existing_context = await self.overlord.get_user_context_memory(user_id=user_id)
 
         # Process each extracted item
         knowledge_updates = {}
@@ -350,7 +350,7 @@ class MemoryExtractor:
 
         # Store updates in context memory if any exist
         if knowledge_updates:
-            await self.orchestrator.add_user_context_memory(
+            await self.overlord.add_user_context_memory(
                 user_id=user_id,
                 knowledge=knowledge_updates,
                 source="automatic_extraction",

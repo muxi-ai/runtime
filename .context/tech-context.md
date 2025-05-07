@@ -46,7 +46,7 @@ The MUXI Framework is structured around several key components:
 
 Core orchestration and agent management system:
 
-- **Orchestrator**: Central component managing agents and memory
+- **Overlord**: Central component managing agents and memory
 - **Agent System**: Implementation of agent capabilities
 - **Memory Management**: Short-term and long-term memory systems
 - **Knowledge Integration**: Domain knowledge integration
@@ -151,7 +151,7 @@ The monorepo contains multiple packages:
 # LLM API Keys
 OPENAI_API_KEY=your_openai_key_here
 
-# Memory Configuration (Orchestrator Level)
+# Memory Configuration (Overlord Level)
 # Buffer memory size (integer)
 BUFFER_MEMORY_SIZE=50
 
@@ -244,8 +244,8 @@ python -m pytest --cov=muxi
 ### Scalability Constraints
 
 1. **Stateful Components**:
-   - Orchestrator manages memory centrally for all agents
-   - Memory is shared between agents through the orchestrator
+   - Overlord manages memory centrally for all agents
+   - Memory is shared between agents through the overlord
    - SQLite is suitable for single-instance deployments
    - PostgreSQL with Memobase is recommended for multi-user and multi-instance deployments
 
@@ -260,9 +260,9 @@ python -m pytest --cov=muxi
 
 ## Memory Architecture
 
-The MUXI Framework uses an orchestrator-level memory architecture, where:
+The MUXI Framework uses an overlord-level memory architecture, where:
 
-1. **Memory Management**: All memory systems (buffer and long-term) are initialized and managed at the orchestrator level, not at the agent level.
+1. **Memory Management**: All memory systems (buffer and long-term) are initialized and managed at the overlord level, not at the agent level.
 
 2. **Memory Types**:
    - **Buffer Memory**: Short-term memory for recent conversations, implemented with FAISS.
@@ -275,7 +275,7 @@ The MUXI Framework uses an orchestrator-level memory architecture, where:
 
 4. **Configuration**:
    - Memory is configured during initialization: `app = muxi(buffer_memory=50, long_term_memory="connection_string")`
-   - Configuration files define agents in an array, with memory configured at the orchestrator level
+   - Configuration files define agents in an array, with memory configured at the overlord level
 
 5. **Multi-User Support**:
    - Multi-user capabilities through Memobase: `memobase = Memobase(long_term_memory=long_term)`

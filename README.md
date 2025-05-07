@@ -20,7 +20,7 @@ MUXI Framework is a powerful platform for building AI agents with memory, MCP se
   - Automatic extraction of user information from conversations and storing it in context memory
 - 🔌 **MCP Client Integration**: Connect to external services via Model Context Protocol servers
   - Centralized MCPService singleton for thread-safe operations
-  - Configurable timeouts at orchestrator, agent, and per-request levels
+  - Configurable timeouts at overlord, agent, and per-request levels
   - Support for HTTP+SSE transport for web-based MCP servers
   - Support for Command-line transport for local executable servers
   - Robust reconnection mechanism with exponential backoff
@@ -76,7 +76,7 @@ MUXI has a flexible, service-oriented approach:
 │         │    MUXI Server (Local/Remote)             │
 │         │                                           │
 │         │        ┌───────────────┐                  │   ┌──────────────────┐
-│         └───────>│  Orchestrator │----------------------│ Buffer/LT Memory │
+│         └───────>│    Overlord   │----------------------│ Buffer/LT Memory │
 │                  └───────┬───────┘                  │   └──────────────────┘
 │         ┌────────────────┼────────────────┐         │
 │         │                │                │         │
@@ -136,7 +136,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Initialize MUXI with memory configuration at the orchestrator level
+# Initialize MUXI with memory configuration at the overlord level
 app = muxi(
     buffer_size=10,  # Context window size of 10 messages
     buffer_multiplier=10,  # Total buffer capacity will be 10x context window (default: 10)
@@ -190,16 +190,16 @@ agents:
 
 ### Programmatic Approach
 
-You can also create agents programmatically using the Orchestrator interface:
+You can also create agents programmatically using the Overlord interface:
 
 ```python
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.memory.long_term import LongTermMemory
 from muxi.core.knowledge.base import FileKnowledge
 
-# Create an orchestrator with memory configuration
+# Create an overlord with memory configuration
 buffer_memory = BufferMemory(
     max_size=10,                    # Context window size
     buffer_multiplier=10,           # Total capacity = 10 × 10 = 100 messages
@@ -207,13 +207,13 @@ buffer_memory = BufferMemory(
 )
 long_term_memory = LongTermMemory("postgresql://user:password@localhost:5432/muxi")
 
-orchestrator = Orchestrator(
+overlord = Overlord(
     buffer_memory=buffer_memory,
     long_term_memory=long_term_memory
 )
 
-# Create a basic agent (memory is provided by the orchestrator)
-agent = orchestrator.create_agent(
+# Create a basic agent (memory is provided by the overlord)
+agent = overlord.create_agent(
     agent_id="assistant",
     model=OpenAIModel(model="gpt-4o", api_key="your_api_key"),
     system_message="You are a helpful AI assistant.",
@@ -228,14 +228,14 @@ product_knowledge = FileKnowledge(
 await agent.add_knowledge(product_knowledge)
 
 # Create additional specialized agents
-orchestrator.create_agent(
+overlord.create_agent(
     agent_id="researcher",
     model=OpenAIModel(model="gpt-4o", api_key="your_api_key"),
     system_message="You are a helpful research assistant.",
     description="Specialized in research tasks, data analysis, and information retrieval."
 )
 
-orchestrator.create_agent(
+overlord.create_agent(
     agent_id="local_assistant",
     model=OpenAIModel(model="gpt-4o", api_key="your_api_key"),
     system_message="You are a helpful personal assistant.",
@@ -243,26 +243,26 @@ orchestrator.create_agent(
 )
 
 # Add MCP server to the agent
-await orchestrator.agents["assistant"].connect_mcp_server(
+await overlord.agents["assistant"].connect_mcp_server(
     name="web_search",
     url="http://localhost:5001",
     credentials={"api_key": "your_search_api_key"}
 )
 
 # Chat with an agent (automatic routing based on query)
-response = await orchestrator.chat("Tell me about quantum physics")
+response = await overlord.chat("Tell me about quantum physics")
 print(response.content)
 
 # Chat with a specific agent
-response = await orchestrator.chat("Tell me about quantum physics", agent_name="researcher")
+response = await overlord.chat("Tell me about quantum physics", agent_name="researcher")
 print(response.content)
 
 # Chat with multi-user support
-response = await orchestrator.chat("Remember my name is Alice", user_id="user123")
+response = await overlord.chat("Remember my name is Alice", user_id="user123")
 print(response.content)
 
 # Run the server
-# orchestrator.run()
+# overlord.run()
 ```
 
 ### Using the CLI
@@ -428,7 +428,7 @@ This allows other MCP clients (like Claude, Cursor, or other AI assistants) to c
 The FAISS-backed smart buffer memory system provides powerful semantic search capabilities:
 
 ```python
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.models.providers.openai import OpenAIModel
 
@@ -444,26 +444,26 @@ buffer = BufferMemory(
     recency_bias=0.3              # Balance between semantic (0.7) and recency (0.3)
 )
 
-# Create orchestrator with the smart buffer memory
-orchestrator = Orchestrator(
+# Create overlord with the smart buffer memory
+overlord = Overlord(
     buffer_memory=buffer,
     long_term_memory=LongTermMemory(connection_string="postgresql://user:pass@localhost/muxi")
 )
 
 # Add a message to the buffer
-await orchestrator.add_to_buffer_memory(
+await overlord.add_to_buffer_memory(
     "Important information about quantum computing algorithms",
     metadata={"topic": "quantum computing", "importance": "high"}
 )
 
 # Search the memory (semantically similar content)
-results = await orchestrator.search_memory(
+results = await overlord.search_memory(
     "Tell me about quantum algorithms",
     k=5
 )
 
 # Search with metadata filtering
-results = await orchestrator.search_memory(
+results = await overlord.search_memory(
     "Tell me about important concepts",
     filter_metadata={"importance": "high"},
     k=5
@@ -471,14 +471,14 @@ results = await orchestrator.search_memory(
 
 # Adjust recency bias for different use cases
 # For human conversations (favor recent)
-results = await orchestrator.search_memory(
+results = await overlord.search_memory(
     "What did I just talk about?",
     recency_bias=0.7,             # Higher value favors recency
     k=5
 )
 
 # For factual queries (favor semantic)
-results = await orchestrator.search_memory(
+results = await overlord.search_memory(
     "Tell me about quantum entanglement",
     recency_bias=0.1,             # Lower value favors semantic relevance
     k=5
@@ -512,7 +512,7 @@ response = await app.chat("Should I invest in tech stocks right now?")  # Financ
 response = await app.chat("What are the best attractions in Barcelona?")  # Travel agent
 ```
 
-The orchestrator analyzes the content of each message and intelligently routes it to the most suitable agent based on their specializations and descriptions. This means you don't need to specify which agent should handle each request - the system figures it out automatically.
+The overlord analyzes the content of each message and intelligently routes it to the most suitable agent based on their specializations and descriptions. This means you don't need to specify which agent should handle each request - the system figures it out automatically.
 
 Configure the routing system through environment variables:
 
@@ -586,7 +586,7 @@ knowledge = {
 await app.add_user_context_memory(user_id, knowledge)
 
 # Chat with personalized context
-# Note: No need to specify agent_id - the orchestrator will select the appropriate agent
+# Note: No need to specify agent_id - the overlord will select the appropriate agent
 response = await app.chat(
     "What's the weather like in my city?",
     user_id=user_id
@@ -667,7 +667,7 @@ MUXI implements a hybrid protocol approach for optimal performance and flexibili
 
 - **HTTP**: For standard API requests like configuration and management
 - **Server-Sent Events (SSE)**: For streaming responses token-by-token
-- **WebSockets**: For multi-modal capabilities with bi-directional communication
+- **WebRTC**: For multi-modal capabilities with bi-directional audio/video communication
 
 ### Package Structure
 
@@ -679,7 +679,7 @@ muxi-framework/
 │   ├── core/          # Core components: agents, memory, MCP interface
 │   │   ├── muxi/core/
 │   │   │   ├── agent.py        # Agent implementation
-│   │   │   ├── orchestrator.py # Orchestrator with centralized memory
+│   │   │   ├── overlord.py # Overlord with centralized memory
 │   │   │   ├── memory/         # Memory subsystems
 │   │   │   │   ├── buffer.py   # FAISS-backed smart buffer memory
 │   │   │   │   └── long_term.py # Vector storage with PostgreSQL/SQLite
@@ -712,19 +712,16 @@ MUXI Framework will provide client libraries for popular programming languages:
 
 The MUXI Framework development is focused on the following priorities:
 
-1. **Smart Buffer Memory Optimization** - ✅ Implemented FAISS-backed memory with hybrid retrieval; ongoing optimization
-2. **REST API & MCP Server Implementation** - ✅ Implemented centralized MCP service; in progress: REST API endpoints
-3. **WebSocket API Implementation** - Enhancing real-time communication with multi-modal message support
-4. **CLI Interfaces** - Improving command-line interface with support for all API operations
-5. **Web UI** - Developing a responsive web interface with real-time updates
-6. **Agent-to-Agent Communication** - Implementing the A2A protocol for inter-agent communication
-7. **Vector Database Enhancements** - Optimizing vector operations and supporting additional databases
-8. **LLM Providers** - Expanding support for various LLM providers (Anthropic, Gemini, Grok, local models)
-9. **Testing and Documentation** - Comprehensive testing and documentation for all components
-10. **Deployment & Package Distribution** - Docker containerization, Kubernetes deployment, and CI/CD pipelines
-11. **Language-Specific SDKs** - Developing client libraries for TypeScript, Go, Java/Kotlin, Rust, and C#/.NET
-12. **Multi-Modal Capabilities** - Adding support for document, image, and audio processing
-13. **Security Enhancements** - Implementing advanced security features for enterprise-grade deployments
+1. **Complete MUXI LLM Implementation** - Develop a unified interface for all LLM providers with consistent handling, streaming, retries, and fallbacks
+2. **Replace Provider Model with MUXI LLM** - Refactor existing provider code to use the new MUXI LLM package as a dependency
+3. **Multi-Modal Capabilities** - Add support for document, image, and audio processing with tight integration into MUXI LLM
+4. **Agent-to-Agent Communication (A2A)** - Implement structured communication protocol between agents with capability discovery
+5. **Overlord Overlord** - Transform the current overlord into an advanced system with automatic task decomposition and workflow management
+6. **API & Interface Development** - Implement comprehensive REST API, SSE streaming, WebRTC, CLI, and web UI for interacting with MUXI
+7. **MUXI as a Service** - Create Docker-based deployment with unified YAML configuration and language-agnostic APIs
+8. **Language-Specific SDKs** - Develop client libraries for TypeScript, Go, Java/Kotlin, Rust, and C#/.NET
+9. **Memory System Enhancements** - Further optimize vector operations and support additional database backends
+10. **Security & Performance** - Implement advanced security features and optimize for scale
 
 The [roadmap](docs/roadmap.md) file provides more detailed information about the project roadmap.
 

@@ -1,8 +1,8 @@
 """
-Updated Agent implementation that uses orchestrator-level memory.
+Updated Agent implementation that uses overlord-level memory.
 
 This module provides the Agent class, which represents an agent in the
-MUXI Framework that utilizes orchestrator-level memory instead of per-agent memory.
+MUXI Framework that utilizes overlord-level memory instead of per-agent memory.
 """
 
 import asyncio
@@ -23,13 +23,13 @@ from muxi.utils.id_generator import get_default_nanoid
 
 class Agent:
     """
-    Agent class that combines language model and MCP servers, using orchestrator-level memory.
+    Agent class that combines language model and MCP servers, using overlord-level memory.
     """
 
     def __init__(
         self,
         model: BaseModel,
-        orchestrator=None,  # Reference to parent orchestrator for memory access
+        overlord=None,  # Reference to parent overlord for memory access
         system_message: Optional[str] = None,
         name: Optional[str] = None,
         agent_id: Optional[str] = None,
@@ -43,7 +43,7 @@ class Agent:
 
         Args:
             model: The language model to use for generating responses.
-            orchestrator: Reference to parent orchestrator for memory access.
+            overlord: Reference to parent overlord for memory access.
             system_message: Optional system message to set agent's behavior.
             name: Optional name for the agent.
             agent_id: Optional unique identifier for the agent.
@@ -54,16 +54,16 @@ class Agent:
         self.model = model
         self.name = name or "AI Assistant"
         self.agent_id = agent_id or get_default_nanoid()
-        self.orchestrator = orchestrator  # Store reference to orchestrator
+        self.overlord = overlord  # Store reference to overlord
 
         # Log warning if legacy memory parameters are used
         if buffer_memory is not None or long_term_memory is not None:
             logger.warning(
                 "Memory parameters provided directly to Agent are deprecated. "
-                "Memory should be configured at the Orchestrator level."
+                "Memory should be configured at the Overlord level."
             )
 
-        # For backward compatibility, store legacy memory if orchestrator not available
+        # For backward compatibility, store legacy memory if overlord not available
         self._buffer_memory = buffer_memory
         self._long_term_memory = long_term_memory
 
@@ -86,27 +86,27 @@ class Agent:
         # Keep track of connected MCP servers
         self.mcp_servers = {}
 
-    # Compatibility properties to provide access to orchestrator memory
+    # Compatibility properties to provide access to overlord memory
 
     @property
     def buffer_memory(self):
-        """Compatibility property that returns orchestrator's buffer memory."""
-        if self.orchestrator and hasattr(self.orchestrator, "buffer_memory"):
-            return self.orchestrator.buffer_memory
+        """Compatibility property that returns overlord's buffer memory."""
+        if self.overlord and hasattr(self.overlord, "buffer_memory"):
+            return self.overlord.buffer_memory
         return self._buffer_memory  # Fallback to legacy memory
 
     @property
     def long_term_memory(self):
-        """Compatibility property that returns orchestrator's long-term memory."""
-        if self.orchestrator and hasattr(self.orchestrator, "long_term_memory"):
-            return self.orchestrator.long_term_memory
+        """Compatibility property that returns overlord's long-term memory."""
+        if self.overlord and hasattr(self.overlord, "long_term_memory"):
+            return self.overlord.long_term_memory
         return self._long_term_memory  # Fallback to legacy memory
 
     @property
     def is_multi_user(self):
         """Compatibility property that returns whether long-term memory is multi-user."""
-        if self.orchestrator and hasattr(self.orchestrator, "is_multi_user"):
-            return self.orchestrator.is_multi_user
+        if self.overlord and hasattr(self.overlord, "is_multi_user"):
+            return self.overlord.is_multi_user
         # Legacy behavior
         has_memory = self._long_term_memory is not None
         is_memobase = isinstance(self._long_term_memory, Memobase)
@@ -126,10 +126,10 @@ class Agent:
         # Store the message in memory
         timestamp = datetime.datetime.now().timestamp()
 
-        # Add message to memory systems - use orchestrator if available
-        if self.orchestrator and hasattr(self.orchestrator, "add_to_buffer_memory"):
-            # Use orchestrator's memory methods
-            self.orchestrator.add_to_buffer_memory(
+        # Add message to memory systems - use overlord if available
+        if self.overlord and hasattr(self.overlord, "add_to_buffer_memory"):
+            # Use overlord's memory methods
+            self.overlord.add_to_buffer_memory(
                 message=message,
                 metadata={"role": "user", "timestamp": timestamp},
                 agent_id=self.agent_id
@@ -140,9 +140,9 @@ class Agent:
 
         # If using multi-user memory, also store there with user context
         if self.is_multi_user and user_id is not None:
-            if self.orchestrator and hasattr(self.orchestrator, "add_to_long_term_memory"):
-                # Use orchestrator's memory methods
-                await self.orchestrator.add_to_long_term_memory(
+            if self.overlord and hasattr(self.overlord, "add_to_long_term_memory"):
+                # Use overlord's memory methods
+                await self.overlord.add_to_long_term_memory(
                     content=message,
                     metadata={"role": "user", "timestamp": timestamp},
                     agent_id=self.agent_id,
@@ -168,9 +168,9 @@ class Agent:
 
         # Store assistant response in memory if using multi-user support
         if self.is_multi_user and user_id is not None:
-            if self.orchestrator and hasattr(self.orchestrator, "add_to_long_term_memory"):
-                # Use orchestrator's memory methods
-                await self.orchestrator.add_to_long_term_memory(
+            if self.overlord and hasattr(self.overlord, "add_to_long_term_memory"):
+                # Use overlord's memory methods
+                await self.overlord.add_to_long_term_memory(
                     content=response.content,
                     metadata={"role": "assistant", "timestamp": timestamp},
                     agent_id=self.agent_id,
@@ -207,19 +207,19 @@ class Agent:
             "type": "conversation",
         }
 
-        # Use orchestrator's memory if available
-        if self.orchestrator:
-            # Store in orchestrator's buffer memory
-            if hasattr(self.orchestrator, "add_to_buffer_memory"):
-                self.orchestrator.add_to_buffer_memory(
+        # Use overlord's memory if available
+        if self.overlord:
+            # Store in overlord's buffer memory
+            if hasattr(self.overlord, "add_to_buffer_memory"):
+                self.overlord.add_to_buffer_memory(
                     message=embedding,
                     metadata=metadata,
                     agent_id=self.agent_id
                 )
 
-            # Store in orchestrator's long-term memory
-            if hasattr(self.orchestrator, "add_to_long_term_memory"):
-                await self.orchestrator.add_to_long_term_memory(
+            # Store in overlord's long-term memory
+            if hasattr(self.overlord, "add_to_long_term_memory"):
+                await self.overlord.add_to_long_term_memory(
                     content=combined_text,
                     embedding=embedding,
                     metadata=metadata,
@@ -263,9 +263,9 @@ class Agent:
         Returns:
             A list of relevant memory items.
         """
-        # Use orchestrator's search_memory if available
-        if self.orchestrator and hasattr(self.orchestrator, "search_memory"):
-            return await self.orchestrator.search_memory(
+        # Use overlord's search_memory if available
+        if self.overlord and hasattr(self.overlord, "search_memory"):
+            return await self.overlord.search_memory(
                 query=query,
                 agent_id=self.agent_id,
                 k=k,
@@ -331,9 +331,9 @@ class Agent:
             clear_long_term: Whether to clear long-term memory as well.
             user_id: Optional user ID for multi-user support.
         """
-        # Use orchestrator's clear_memory if available
-        if self.orchestrator and hasattr(self.orchestrator, "clear_memory"):
-            self.orchestrator.clear_memory(
+        # Use overlord's clear_memory if available
+        if self.overlord and hasattr(self.overlord, "clear_memory"):
+            self.overlord.clear_memory(
                 clear_long_term=clear_long_term,
                 agent_id=self.agent_id,
                 user_id=user_id
@@ -382,7 +382,7 @@ class Agent:
 
         try:
             # Get context memory for the user - api remains the same whether using
-            # orchestrator's memory or direct access
+            # overlord's memory or direct access
             knowledge = await self.long_term_memory.get_user_context_memory(user_id=user_id)
 
             # If no knowledge found, return original message

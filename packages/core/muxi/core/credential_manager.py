@@ -4,7 +4,7 @@
 # Title:        Credential Manager - Secure Credential Handling
 # Description:  Utilities for managing secure credentials across the framework
 # Role:         Provides secure access to API keys and authentication tokens
-# Usage:        Used by Orchestrator and MCP components to retrieve credentials
+# Usage:        Used by Overlord and MCP components to retrieve credentials
 # Author:       Muxi Framework Team
 #
 # The CredentialManager is responsible for handling secure credentials in the

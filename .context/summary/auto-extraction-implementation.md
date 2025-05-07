@@ -24,9 +24,9 @@ We'll enhance the MUXI Framework with automatic user information extraction capa
    - Implement model selection support
    - Add confidence scoring
 
-2. Integrate with Agent & Orchestrator
+2. Integrate with Agent & Overlord
    - Update `Agent.process_message()` to trigger extraction
-   - Modify Orchestrator to support extraction configuration
+   - Modify Overlord to support extraction configuration
    - Implement user message counter for extraction intervals
 
 3. Update MUXI Facade

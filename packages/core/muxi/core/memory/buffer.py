@@ -4,7 +4,7 @@
 # Title:        Buffer Memory - Smart Context Window Implementation
 # Description:  Hybrid recency and semantic search memory buffer implementation
 # Role:         Provides temporary conversation memory with semantic search
-# Usage:        Used by the Orchestrator to maintain conversation context
+# Usage:        Used by the Overlord to maintain conversation context
 # Author:       Muxi Framework Team
 #
 # The Buffer Memory is a sophisticated short-term memory system that combines:
@@ -228,6 +228,7 @@ class BufferMemory:
         self,
         limit: int = 10,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        use_entire_buffer: bool = True,
     ) -> List[Dict[str, Any]]:
         """
         Search the buffer based on recency only.
@@ -240,14 +241,19 @@ class BufferMemory:
             limit: Maximum number of results to return. Default is 10.
             filter_metadata: Optional dictionary of metadata for filtering.
                 Only items with matching metadata values will be included.
+            use_entire_buffer: Whether to search the entire buffer or just the context window
+                (max_size most recent items).
 
         Returns:
             List of buffer items (dictionaries) with matching metadata,
             ordered by recency (most recent first).
         """
-        # Start with the most recent items (up to max_size)
-        # This implements the concept of a smaller context window within the larger buffer
-        recent_items = list(self.buffer)[-self.max_size:]
+        # Determine search scope - either entire buffer or just the context window
+        if use_entire_buffer:
+            recent_items = list(self.buffer)
+        else:
+            # Use only the most recent items (up to max_size) - the context window
+            recent_items = list(self.buffer)[-self.max_size:]
 
         # Apply metadata filtering if specified
         if filter_metadata:
@@ -303,7 +309,7 @@ class BufferMemory:
         # If we don't have vector search capability, return most recent messages
         if not self.has_vector_search or not self.model:
             logger.debug("Using recency-only search (vector search not available)")
-            return self._recency_search(limit, filter_metadata)
+            return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
         # Rebuild index if needed
         if self.needs_rebuild:
@@ -316,11 +322,11 @@ class BufferMemory:
             except Exception as e:
                 logger.error(f"Error generating query embedding: {e}")
                 # Fallback to recency search if embedding generation fails
-                return self._recency_search(limit, filter_metadata)
+                return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
         # If we have no embeddings in the index, use recency search
         if self.index_count == 0:
-            return self._recency_search(limit, filter_metadata)
+            return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
         try:
             # Convert query vector to numpy array
@@ -370,7 +376,7 @@ class BufferMemory:
 
             # If we don't have enough results, try recency search
             if not results:
-                return self._recency_search(limit, filter_metadata)
+                return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Sort by combined score (descending)
             results.sort(key=lambda x: x["score"], reverse=True)
@@ -379,7 +385,7 @@ class BufferMemory:
         except Exception as e:
             # Handle FAISS search errors gracefully
             logger.error(f"Error in vector search: {e}")
-            return self._recency_search(limit, filter_metadata)
+            return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
     def get_recent_items(
         self, limit: int = 10, filter_metadata: Optional[Dict[str, Any]] = None
@@ -399,7 +405,7 @@ class BufferMemory:
         Returns:
             List of the most recent items matching the filter criteria.
         """
-        return self._recency_search(limit, filter_metadata)
+        return self._recency_search(limit, filter_metadata, use_entire_buffer=False)
 
     def clear(self) -> None:
         """

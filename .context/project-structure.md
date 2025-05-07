@@ -40,7 +40,7 @@ muxi-framework/
 │   │   ├── muxi/
 │   │   │   └── core/          # Core package source code
 │   │   │       ├── agent.py   # Agent implementation
-│   │   │       ├── orchestrator.py  # Orchestrator with centralized memory and API keys
+│   │   │       ├── overlord.py  # Overlord with centralized memory and API keys
 │   │   │       ├── mcp/       # Model Context Protocol implementation
 │   │   │       │   ├── service.py   # Centralized MCPService singleton
 │   │   │       │   ├── handler.py   # MCP Handler
@@ -73,7 +73,7 @@ muxi-framework/
 ├── scripts/                   # Utility scripts for project management
 ├── tests/                     # Test files and directories
 │   ├── test_agent.py          # Tests for agent functionality
-│   ├── test_orchestrator.py   # Tests for orchestrator functionality
+│   ├── test_overlord.py   # Tests for overlord functionality
 │   ├── test_mcp.py            # Tests for MCP functionality
 │   ├── test_memory.py         # Tests for memory systems
 │   └── [various test files]   # Other tests
@@ -133,7 +133,7 @@ muxi-framework/
 - `.cursor/` - Contains configuration for the Cursor editor and development guidelines:
 	- `rules/` directory contains MDC files with coding patterns and best practices
 	- Rules document important architectural patterns like the centralized MCP service
-	- Memory system guidelines explain the orchestrator-level memory architecture
+	- Memory system guidelines explain the overlord-level memory architecture
 	- Detailed guidelines for different components of the framework
 - `.github/` - GitHub-specific files for actions, workflows, and issue templates.
 - `.git/` - Git repository data.
@@ -166,13 +166,13 @@ muxi-framework/
 ### Package Structure
 - `packages/` - Modular monorepo structure:
   	- `core/` - Core functionality including:
-		- Orchestrator with centralized memory management and API key handling
-		- Agent implementation that delegates to the orchestrator for memory access
+		- Overlord with centralized memory management and API key handling
+		- Agent implementation that delegates to the overlord for memory access
 		- Centralized MCPService as a singleton for thread-safe MCP server interaction
 		- FAISS-backed smart buffer memory with hybrid semantic+recency retrieval
 		- Memory systems with PostgreSQL and SQLite vector database support
 		- Multi-user support through Memobase memory partitioning
-		- Configurable timeout settings at orchestrator, agent, and per-request levels
+		- Configurable timeout settings at overlord, agent, and per-request levels
 		- LLM provider implementations with standardized interfaces
 		- Knowledge integration components
   	- `server/` - Server implementation with API endpoints and WebSocket:
@@ -198,7 +198,7 @@ muxi-framework/
 - `scripts/` - Utility scripts for project management and automation.
 - `tests/` - Test files and directories for unit and integration tests:
 	  - Tests for agent functionality
-	  - Tests for orchestrator with centralized memory
+	  - Tests for overlord with centralized memory
 	  - Tests for MCPService and tool invocation
 	  - Tests for FAISS-backed buffer memory
 	  - Tests for SQLite and PostgreSQL vector database integrations

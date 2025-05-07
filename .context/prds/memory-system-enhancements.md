@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document outlines the planned enhancements to the memory systems in the MUXI Framework. While the core memory architecture has been successfully implemented with centralized orchestrator-level memory management, support for PostgreSQL with pgvector and SQLite with sqlite-vec, and multi-user support through Memobase, several additional features and optimizations are required to fully realize the framework's capabilities.
+This document outlines the planned enhancements to the memory systems in the MUXI Framework. While the core memory architecture has been successfully implemented with centralized overlord-level memory management, support for PostgreSQL with pgvector and SQLite with sqlite-vec, and multi-user support through Memobase, several additional features and optimizations are required to fully realize the framework's capabilities.
 
 ## Goals
 
@@ -128,7 +128,7 @@ This document outlines the planned enhancements to the memory systems in the MUX
 **Description:** Enhance and optimize the already implemented MemoryExtractor system that automatically identifies and stores important user information from conversations.
 
 **Requirements:**
-- Improve performance of the existing MemoryExtractor integration with Agent and Orchestrator classes
+- Improve performance of the existing MemoryExtractor integration with Agent and Overlord classes
 - Enhance entity recognition accuracy for various information types
 - Implement more sophisticated confidence scoring and conflict resolution for contradictory information
 - Add configurable extraction thresholds and sensitivity controls

@@ -36,7 +36,7 @@ The MUXI Framework exists to solve the complexity of building AI agent systems b
 
 1. **Agent-Based Design**: The system is built around the concept of "agents" - specialized AI entities that can process requests, maintain memory, and utilize tools.
 
-2. **Orchestration**: An orchestrator manages multiple agents, routing requests to the most appropriate agent based on the content.
+2. **Orchestration**: An overlord manages multiple agents, routing requests to the most appropriate agent based on the content.
 
 3. **Memory Systems**: Both short-term (buffer) and long-term memory systems retain context for meaningful interactions.
 

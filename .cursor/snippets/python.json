@@ -2,16 +2,16 @@
   "Agent initialization": {
     "prefix": "aiagent",
     "body": [
-      "from src.core.orchestrator import Orchestrator",
+      "from src.core.overlord import Overlord",
       "from src.models.openai import OpenAIModel",
       "from src.memory.buffer import BufferMemory",
       "from src.memory.long_term import LongTermMemory",
       "",
-      "# Create an orchestrator to manage agents",
-      "orchestrator = Orchestrator()",
+      "# Create an overlord to manage agents",
+      "overlord = Overlord()",
       "",
       "# Create an agent with memory",
-      "orchestrator.create_agent(",
+      "overlord.create_agent(",
       "    agent_id=\"${1:assistant}\",",
       "    model=OpenAIModel(model=\"${2:gpt-4o}\"),",
       "    buffer_memory=BufferMemory(),",
@@ -20,7 +20,7 @@
       ")",
       "",
       "# Chat with the agent",
-      "response = orchestrator.chat(\"${1:assistant}\", \"${4:Hello, can you help me?}\")",
+      "response = overlord.chat(\"${1:assistant}\", \"${4:Hello, can you help me?}\")",
       "print(response)"
     ],
     "description": "Initialize an AI agent"
@@ -138,13 +138,13 @@
   "Basic MUXI Application": {
     "prefix": "muxi-app",
     "body": [
-      "from muxi.core.orchestrator import Orchestrator",
+      "from muxi.core.overlord import Overlord",
       "from muxi.core.models.openai import OpenAIModel",
       "from muxi.core.memory.buffer import BufferMemory",
       "from muxi.core.memory.long_term import LongTermMemory",
       "",
-      "# Initialize the orchestrator",
-      "orchestrator = Orchestrator()",
+      "# Initialize the overlord",
+      "overlord = Overlord()",
       "",
       "# Create a model",
       "model = OpenAIModel(",
@@ -158,7 +158,7 @@
       "long_term = LongTermMemory()",
       "",
       "# Create an agent",
-      "agent = orchestrator.add_agent(",
+      "agent = overlord.add_agent(",
       "    name=\"${4:Assistant}\",",
       "    model=model,",
       "    buffer_memory=buffer,",
@@ -168,7 +168,7 @@
       "# Example interaction",
       "response = agent.generate(\"${5:Hello, how can you help me today?}\")"
     ],
-    "description": "Creates a basic MUXI application with an orchestrator, agent, model, and memory systems"
+    "description": "Creates a basic MUXI application with an overlord, agent, model, and memory systems"
   },
   "MUXI Tool Definition": {
     "prefix": "muxi-tool",

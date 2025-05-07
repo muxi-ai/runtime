@@ -13,7 +13,7 @@ The MUXI Framework follows a modular architecture with several key components:
 │                      MUXI Framework Components                     │
 ├───────────────┬───────────────┬───────────────┬────────────────────┤
 │   MUXI Core   │    MUXI API   │   MUXI CLI    │   MUXI Web UI      │
-│ (Orchestrator,│  (REST, SSE,  │ (Command-line │  (React-based user │
+│ (Overlord,│  (REST, SSE,  │ (Command-line │  (React-based user │
 │ Agents, Memory│   MCP, WebRTC)│  interface)   │  interface)        │
 └───────┬───────┴───────┬───────┴───────┬───────┴────────┬───────────┘
         │               │               │                │
@@ -131,7 +131,7 @@ The framework implements a hybrid protocol approach:
 
 ### 3. Configuration-Driven Development
 
-The framework emphasizes configuration over code, allowing users to define agents and their capabilities through YAML or JSON files, with centralized memory configuration at the orchestrator level.
+The framework emphasizes configuration over code, allowing users to define agents and their capabilities through YAML or JSON files, with centralized memory configuration at the overlord level.
 
 ### 4. LLM Provider Abstraction
 
@@ -146,15 +146,15 @@ The framework uses a centralized approach for MCP integration through the MCPSer
   - Command-line transport for local executable servers
 - **Thread-safe Operations**: Locks for concurrent access to MCP servers
 - **Unified Error Handling**: Consistent error handling across all MCP interactions
-- **Configurable Timeouts**: Timeout configuration at orchestrator, agent, or per-request level
+- **Configurable Timeouts**: Timeout configuration at overlord, agent, or per-request level
 
 ### 6. Memory Architecture
 
-The memory system is centralized at the orchestrator level:
+The memory system is centralized at the overlord level:
 - **Buffer Memory**: Short-term memory for immediate context (using FAISS for vector similarity)
 - **Long-Term Memory**: Persistent storage using PostgreSQL with pgvector or SQLite with sqlite-vec
 - **Memobase**: Memory partitioning system for multi-user support
-- **Shared Access**: All agents access memory through the orchestrator
+- **Shared Access**: All agents access memory through the overlord
 - **Unified Configuration**: Memory is configured in a single place at initialization
 
 ## Design Patterns in Use
@@ -220,8 +220,8 @@ class muxi:
         _buffer_memory = self._create_buffer_memory(buffer_memory)
         _long_term_memory = self._create_long_term_memory(long_term_memory)
 
-        # Initialize orchestrator with memory
-        self.orchestrator = Orchestrator(
+        # Initialize overlord with memory
+        self.overlord = Overlord(
             buffer_memory=_buffer_memory,
             long_term_memory=_long_term_memory
         )
@@ -250,7 +250,7 @@ Used for operation encapsulation:
 
 ## Component Relationships
 
-### Orchestrator Relationships
+### Overlord Relationships
 
 - **Owns** multiple Agent instances
 - **Routes** messages to appropriate Agents
@@ -264,22 +264,22 @@ Used for operation encapsulation:
 ### Agent Relationships
 
 - **Uses** a Model for LLM interaction
-- **Accesses** memory through the Orchestrator
+- **Accesses** memory through the Overlord
 - **Does not own** memory systems directly
 - **Connects to** MCP Servers via MCP Service
 - **Maintains** a Knowledge Base for domain knowledge
-- **Stores** reference to the parent Orchestrator for memory access
+- **Stores** reference to the parent Overlord for memory access
 
 ### Memory System Relationships
 
-- **Exclusively owned by** the Orchestrator, not individual Agents
-- **Initialized during** Orchestrator construction
-- **Configured via** the Muxi facade constructor or directly in Orchestrator
-- **Buffer Memory provides** immediate context to all Agents via the Orchestrator
-- **Long-Term Memory stores** historical context accessed through the Orchestrator
-- **Shared efficiently** across all Agents managed by the Orchestrator
+- **Exclusively owned by** the Overlord, not individual Agents
+- **Initialized during** Overlord construction
+- **Configured via** the Muxi facade constructor or directly in Overlord
+- **Buffer Memory provides** immediate context to all Agents via the Overlord
+- **Long-Term Memory stores** historical context accessed through the Overlord
+- **Shared efficiently** across all Agents managed by the Overlord
 - **Partitioned by** user_id for multi-user support via Memobase
-- **Memory operations** (add, search, clear) are exposed via Orchestrator methods
+- **Memory operations** (add, search, clear) are exposed via Overlord methods
 - **Agent-specific data** maintained through metadata filtering (using agent_id)
 
 ### MCP Service Relationships
@@ -300,11 +300,11 @@ Used for operation encapsulation:
 
 1. **Message Reception**: Client sends message through an interface
 2. **Orchestration**: Message is routed to the appropriate agent
-3. **Context Enhancement**: Orchestrator's memory systems provide relevant context
+3. **Context Enhancement**: Overlord's memory systems provide relevant context
 4. **Processing**: Agent processes message with LLM and tools
 5. **Tool Usage**: External tools are invoked via MCP if needed
 6. **Response Generation**: Agent generates a response
-7. **Memory Update**: Conversation is stored in orchestrator's memory systems
+7. **Memory Update**: Conversation is stored in overlord's memory systems
 8. **Response Delivery**: Response is returned to the client
 
 This architecture allows for flexibility, extensibility, and maintainability while providing a powerful foundation for AI agent development.

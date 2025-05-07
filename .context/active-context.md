@@ -51,7 +51,7 @@ Additional priority areas include:
    - Added server_id to MCPServer for consistent identification
    - Implemented thread-safe tool invocation with locks for concurrent access
    - Improved error handling with consistent patterns throughout MCP interactions
-   - Added the ability to customize request timeout at various levels: Orchestrator, Agent, and per-request
+   - Added the ability to customize request timeout at various levels: Overlord, Agent, and per-request
    - Added comprehensive documentation in `.cursor/rules/mcp_service.mdc`
 
 4. **Package Structure Updates**:
@@ -63,14 +63,14 @@ Additional priority areas include:
    - Updated directory references in all MDC rule files
 
 5. **Memory Architecture Migration**:
-   - Moved memory systems from agent level to orchestrator level for centralized management
-   - Orchestrator now owns and manages all memory systems (buffer and long-term)
+   - Moved memory systems from agent level to overlord level for centralized management
+   - Overlord now owns and manages all memory systems (buffer and long-term)
    - Agent constructor no longer accepts direct memory parameters
    - Simplified memory configuration in muxi constructor: `muxi(buffer_memory=50, long_term_memory="connection_string")`
-   - Memory operations now exposed through orchestrator: `orchestrator.search_memory()`, `orchestrator.add_to_buffer_memory()`
+   - Memory operations now exposed through overlord: `overlord.search_memory()`, `overlord.add_to_buffer_memory()`
    - Support for Postgres and SQLite via direct connection strings: `"postgresql://..."` or `"sqlite:///..."`
    - Default SQLite database in app's root directory when using `long_term_memory=True`
-   - Enhanced support for multi-user environments with `is_multi_user=True` parameter at orchestrator level
+   - Enhanced support for multi-user environments with `is_multi_user=True` parameter at overlord level
    - Improved memory sharing across multiple agents for better context consistency
    - Simplified configuration files by moving memory to top-level parameters
 
@@ -196,7 +196,7 @@ Based on the updated priority list, the following tasks have been prioritized:
 
 9. **Logging and Tracing System**:
    - Implement comprehensive tracing system with unique trace IDs
-   - Add component-level tracing (user, orchestrator, agent, MCP)
+   - Add component-level tracing (user, overlord, agent, MCP)
    - Support multiple output formats (stdout, file logs)
    - Enable integration with external services (Papertrail, Kafka)
    - Create CLI tools for trace viewing and analysis
@@ -264,8 +264,8 @@ Based on performance evaluation showing PostgreSQL with pgvector performing well
    - FAISS index rebuilding handled safely
    - Concurrent reads supported without blocking
 
-4. **Centralized Memory Access**: All memory operations are now handled at the orchestrator level:
-   - Agents delegate memory operations to the orchestrator
+4. **Centralized Memory Access**: All memory operations are now handled at the overlord level:
+   - Agents delegate memory operations to the overlord
    - Consistent memory access patterns across the framework
    - Simplified configuration and management
 
@@ -326,14 +326,14 @@ Based on performance evaluation showing PostgreSQL with pgvector performing well
 
 ## Refactoring Approach
 
-1. **Orchestrator-Centered Design**:
-   - Extraction logic is now centralized in the Orchestrator
+1. **Overlord-Centered Design**:
+   - Extraction logic is now centralized in the Overlord
    - Added `handle_user_information_extraction` method to coordinate extraction
    - Implemented `_run_extraction` for the actual extraction processing
    - Maintained backward compatibility with existing `extract_user_information` method
 
 2. **Agent Design Changes**:
-   - Agent now delegates extraction to Orchestrator
+   - Agent now delegates extraction to Overlord
    - Removed message counting and extraction handling from Agent
    - Simplified Agent implementation while preserving functionality
    - Maintains `auto_extract_user_info` and `extraction_model` parameters for backward compatibility
@@ -365,7 +365,7 @@ Based on performance evaluation showing PostgreSQL with pgvector performing well
 - **Smart Buffer Memory Implementation**: Using FAISS for vector similarity search with hybrid retrieval approach
 - **MCP Service Architecture**: Implementing as a singleton with thread-safe operations
 - **Package Structure Standardization**: Moving from src/muxi to direct muxi directories
-- **Centralization of Memory Logic**: Memory operations are now primarily handled by the Orchestrator
+- **Centralization of Memory Logic**: Memory operations are now primarily handled by the Overlord
 - **User ID Treatment**: Anonymous users (user_id=0) are consistently handled with early returns
 - **Error Isolation**: Extraction errors are caught and logged but don't disrupt core functionality
 - **Testing Approach**: Created comprehensive tests for both memory systems and MCP functionality
@@ -378,7 +378,7 @@ Based on performance evaluation showing PostgreSQL with pgvector performing well
    - Implements hybrid retrieval combining semantic relevance and recency
    - Provides graceful degradation to recency-only when needed
    - Thread-safe operations for concurrent access
-   - Full integration with orchestrator memory management
+   - Full integration with overlord memory management
 
 2. **MCPService**:
    - Implemented in `packages/core/muxi/core/mcp/service.py`
@@ -389,8 +389,8 @@ Based on performance evaluation showing PostgreSQL with pgvector performing well
 
 3. **Automatic Information Extraction**:
    - MemoryExtractor class in packages/core/muxi/core/memory/extractor.py handles actual extraction
-   - Orchestrator in packages/core/muxi/core/orchestrator.py manages the extraction process
-   - Agent in packages/core/muxi/core/agent.py delegates extraction to Orchestrator
+   - Overlord in packages/core/muxi/core/overlord.py manages the extraction process
+   - Agent in packages/core/muxi/core/agent.py delegates extraction to Overlord
    - Tests in tests/test_extractor.py verify functionality
 
 ## Documentation Updates

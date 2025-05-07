@@ -12,7 +12,7 @@
 #
 # 1. Simplified Initialization
 #    - Creates memory systems from configuration
-#    - Sets up orchestrator with memory integration
+#    - Sets up overlord with memory integration
 #    - Handles environment variable integration
 #
 # 2. Configuration-Based Agent Creation
@@ -53,7 +53,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 
 from muxi.core.agent import Agent
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.memory.long_term import LongTermMemory
@@ -84,7 +84,7 @@ class Muxi:
         """
         Initialize the declarative interface for Muxi Framework.
 
-        Creates memory systems and an orchestrator based on the provided configuration.
+        Creates memory systems and an overlord based on the provided configuration.
         This constructor handles the various ways memory can be specified, creating
         appropriate memory systems based on the input types.
 
@@ -115,8 +115,8 @@ class Muxi:
             }
         )
 
-        # Create orchestrator with memory systems
-        self.orchestrator = Orchestrator(
+        # Create overlord with memory systems
+        self.overlord = Overlord(
             buffer_memory=buffer_mem,
             long_term_memory=long_term_mem,
             user_api_key=user_api_key,
@@ -322,7 +322,7 @@ class Muxi:
         Add an agent from a configuration file.
 
         This method loads agent configuration from a YAML or JSON file, creates the
-        specified model, and registers the agent with the orchestrator. It also
+        specified model, and registers the agent with the overlord. It also
         handles connecting MCP servers if specified in the configuration.
 
         Args:
@@ -360,7 +360,7 @@ class Muxi:
         description = config.get("description", config.get("system_message", ""))
 
         # Create the agent
-        agent = self.orchestrator.create_agent(
+        agent = self.overlord.create_agent(
             agent_id=name,
             model=model,
             system_message=config.get("system_message", ""),
@@ -370,11 +370,11 @@ class Muxi:
         # If we have buffer memory and it doesn't have a model set,
         # set the model to enable vector search capabilities
         if (
-            self.orchestrator.buffer_memory
-            and hasattr(self.orchestrator.buffer_memory, "model")
-            and self.orchestrator.buffer_memory.model is None
+            self.overlord.buffer_memory
+            and hasattr(self.overlord.buffer_memory, "model")
+            and self.overlord.buffer_memory.model is None
         ):
-            self.orchestrator.buffer_memory.model = model
+            self.overlord.buffer_memory.model = model
             logger.info(f"Enabled vector search in buffer memory using {model.__class__.__name__}")
 
         # Connect MCP servers if specified
@@ -514,7 +514,7 @@ class Muxi:
         It handles message routing, processing, and response extraction.
 
         Args:
-            agent_name: Optional name of the agent to use. If None, the orchestrator
+            agent_name: Optional name of the agent to use. If None, the overlord
                 will select the most appropriate agent for the message.
             message: The message to send to the agent.
             user_id: Optional user ID for multi-user support. Enables user-specific
@@ -523,8 +523,8 @@ class Muxi:
         Returns:
             The agent's response as a string, extracted from the MCPMessage.
         """
-        # Process the message through the orchestrator
-        response = await self.orchestrator.chat(
+        # Process the message through the overlord
+        response = await self.overlord.chat(
             agent_name=agent_name, message=message, user_id=user_id
         )
 
@@ -551,14 +551,14 @@ class Muxi:
                 contains user preferences, facts, and other contextual information.
 
         Raises:
-            ValueError: If orchestrator doesn't have multi-user memory support.
+            ValueError: If overlord doesn't have multi-user memory support.
         """
-        # Use orchestrator's long-term memory if it's multi-user
-        if hasattr(self.orchestrator, "is_multi_user") and self.orchestrator.is_multi_user:
-            if hasattr(self.orchestrator.long_term_memory, "add_user_context_memory"):
+        # Use overlord's long-term memory if it's multi-user
+        if hasattr(self.overlord, "is_multi_user") and self.overlord.is_multi_user:
+            if hasattr(self.overlord.long_term_memory, "add_user_context_memory"):
                 # Assuming add_context_memory is async now based on Memobase
                 asyncio.create_task(
-                    self.orchestrator.long_term_memory.add_user_context_memory(user_id, knowledge)
+                    self.overlord.long_term_memory.add_user_context_memory(user_id, knowledge)
                 )
                 return
 
@@ -592,7 +592,7 @@ class Muxi:
         Start the MUXI server with the current configuration.
 
         This method is a convenient shorthand for starting the server through
-        the orchestrator, which handles displaying a splash screen and API keys.
+        the overlord, which handles displaying a splash screen and API keys.
 
         Args:
             **kwargs: Additional arguments to pass to the server
@@ -601,14 +601,14 @@ class Muxi:
                 - reload: Whether to enable auto-reload for development (default: True)
                 - mcp: Whether to enable MCP functionality (default: False)
         """
-        # Start the server using the orchestrator's run method
-        self.orchestrator.run(**kwargs)
+        # Start the server using the overlord's run method
+        self.overlord.run(**kwargs)
 
     def get_agent(self, agent_id: str) -> Agent:
         """
         Get an agent by ID.
 
-        This method retrieves a specific agent from the orchestrator.
+        This method retrieves a specific agent from the overlord.
 
         Args:
             agent_id: The ID of the agent to get.
@@ -619,4 +619,4 @@ class Muxi:
         Raises:
             ValueError: If no agent with the given ID exists.
         """
-        return self.orchestrator.get_agent(agent_id)
+        return self.overlord.get_agent(agent_id)

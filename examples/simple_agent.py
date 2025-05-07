@@ -10,7 +10,7 @@ import os
 
 from dotenv import load_dotenv
 
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.models.providers.openai import OpenAIModel
 
@@ -32,11 +32,11 @@ async def main():
         buffer_multiplier=10,      # Total capacity = 10 × 10 = 100 messages
     )
 
-    # Create an orchestrator (manages agents)
-    orchestrator = Orchestrator()
+    # Create an overlord (manages agents)
+    overlord = Overlord()
 
     # Add an agent
-    agent = orchestrator.create_agent(
+    agent = overlord.create_agent(
         agent_id="assistant",
         system_message="You are a helpful assistant.",
         memory=memory,

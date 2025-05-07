@@ -13,7 +13,7 @@ alwaysApply: false
 ## Centralized MCP Service Architecture
 
 - Always use the MCPService singleton for all MCP server interactions
-- Access the service through the orchestrator: `await orchestrator.get_mcp_service()`
+- Access the service through the overlord: `await overlord.get_mcp_service()`
 - Never create multiple instances of MCPService - use the singleton pattern
 - The singleton ensures thread-safe operations with proper locking
 - MCPService handles connection management, tool parsing, and invocation
@@ -25,7 +25,7 @@ alwaysApply: false
 Example usage:
 ```python
 # Get the shared MCPService instance
-mcp_service = await orchestrator.get_mcp_service()
+mcp_service = await overlord.get_mcp_service()
 
 # Connect to an MCP server through an agent
 await agent.connect_mcp_server(

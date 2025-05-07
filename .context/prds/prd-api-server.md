@@ -112,7 +112,7 @@ The MUXI API will be implemented as a unified module that internally contains lo
 │                         MUXI Core                           │
 │                              ↓                              │
 │                      ┌────────────────┐                     │
-│                      │  Orchestrator  │                     │
+│                      │    Overlord    │                     │
 │                      └───────┬────────┘                     │
 │             ┌────────────────┼────────────────┐             │
 │      ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐      │
@@ -144,11 +144,11 @@ async def get_resource():
     # Implementation
 ```
 
-At initialization, the MUXI Core (Orchestrator) and declarative API (muxi) will accept API keys as parameters:
+At initialization, the MUXI Core (Overlord) and declarative API (muxi) will accept API keys as parameters:
 
 ```python
-# For the Orchestrator approach
-orchestrator = Orchestrator(user_api_key="your_user_key", admin_api_key="your_admin_key")
+# For the Overlord approach
+overlord = Overlord(user_api_key="your_user_key", admin_api_key="your_admin_key")
 
 # For the declarative approach
 app = muxi(user_api_key="your_user_key", admin_api_key="your_admin_key")
@@ -221,8 +221,8 @@ The MUXI API will logically separate endpoints into two categories:
 
 Accessible with User/Interface key or Administrative key:
 
-- `/api/v1/chat` - Send messages to the orchestrator
-- `/api/v1/chat/stream` - Stream chat with the orchestrator (SSE)
+- `/api/v1/chat` - Send messages to the overlord
+- `/api/v1/chat/stream` - Stream chat with the overlord (SSE)
 - `/api/v1/agents/{agent_id}/chat` - Send messages to a specific agent
 - `/api/v1/agents/{agent_id}/chat/stream` - Stream chat with a specific agent (SSE)
 
@@ -290,7 +290,7 @@ The REST API will follow the specifications outlined in the API specification do
 #### User/Interface Endpoints
 
 ```
-# Chat with orchestrator
+# Chat with overlord
 POST /api/v1/chat
 POST /api/v1/chat/stream (SSE)
 
@@ -482,7 +482,7 @@ The MUXI API will leverage the API keys set at the MUXI Core level. These keys w
 1. Cryptographically secure random strings
 2. When auto-generated, prefixed with `sk_muxi_user_` or `sk_muxi_admin_` to indicate scope
 3. Validated on every request across all protocols
-4. Accessible to the MUXI API through the MUXI orchestrator
+4. Accessible to the MUXI API through the MUXI overlord
 
 ### API Key Header Format
 
@@ -511,7 +511,7 @@ Every endpoint will explicitly specify the required access level using either de
 
 ```python
 # Decorator method
-@app.post("/api/v1/chat", operation_id="chat_with_orchestrator")
+@app.post("/api/v1/chat", operation_id="chat_with_overlord")
 @app.verify_user_key  # or @app.verify_admin_key
 async def chat():
     # Implementation

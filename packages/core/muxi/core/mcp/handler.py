@@ -4,7 +4,7 @@
 # Title:        MCP Handler - Model Context Protocol Implementation
 # Description:  Core implementation of the Model Context Protocol (MCP)
 # Role:         Enables agents to interact with external tools and services
-# Usage:        Used by Orchestrator to connect agents with external tools
+# Usage:        Used by Overlord to connect agents with external tools
 # Author:       Muxi Framework Team
 #
 # The MCP Handler provides a robust implementation of the Model Context Protocol,

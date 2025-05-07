@@ -6,7 +6,7 @@ This document outlines the implementation of the Agent-to-Agent (A2A) protocol w
 
 ## Problem Statement
 
-Currently, agents in the MUXI Framework operate independently. While the orchestrator can route messages to appropriate agents, there's no standardized way for agents to:
+Currently, agents in the MUXI Framework operate independently. While the overlord can route messages to appropriate agents, there's no standardized way for agents to:
 1. Discover other agents' capabilities
 2. Delegate tasks to specialized agents
 3. Share context and collaborate on complex tasks
@@ -72,14 +72,14 @@ A2A capabilities will be integrated by default in the MUXI Framework to provide 
 ### A2A Handler Class
 
 The A2A protocol will be implemented through a new `A2AHandler` class that:
-1. Registers with the orchestrator
+1. Registers with the overlord
 2. Maintains agent capability registry
 3. Routes A2A requests between agents
 4. Manages conversation state
 
 ### Integration Points
 
-1. **Orchestrator**: Enhanced to support A2A message routing
+1. **Overlord**: Enhanced to support A2A message routing
 2. **Agent**: Extended with A2A capability declaration and handling
 3. **API Server**: New endpoints for A2A interactions
 4. **MCP Handler**: Leverage for executing delegated tasks

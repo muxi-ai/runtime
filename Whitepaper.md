@@ -103,7 +103,7 @@ flowchart TB
         SDKs["SDKs"]
     end
 
-    subgraph Orchestrator
+    subgraph Overlord
         direction LR
         subgraph Right ["Actions"]
             direction LR
@@ -138,8 +138,8 @@ flowchart TB
         end
     end
 
-    Interfaces --- Orchestrator
-    Orchestrator --- Third_Party_Services
+    Interfaces --- Overlord
+    Overlord --- Third_Party_Services
     Right --- Left
     A2A --- Agents --- MCP_Handler
     Memory --- Security --- Observability
@@ -167,7 +167,7 @@ The Model Context Protocol (MCP), developed by Anthropic, has emerged as a stand
 
 The A2A protocol, introduced by Google, defines standardized communication between agents, enabling collaboration and specialization. The protocol implements three primary functions:
 
-1.  **Capability Registration**: Agents register their specialized capabilities with the orchestrator
+1.  **Capability Registration**: Agents register their specialized capabilities with the overlord
 2.  **Task Delegation**: Structured requests between agents with context sharing
 3.  **Response Integration**: Aggregation of multi-agent contributions into cohesive responses
 
@@ -202,7 +202,7 @@ The full-stack architecture integrates multiple client interfaces through standa
 │         │    MUXI Server (Local/Remote)             │
 │         │                                           │
 │         │        ┌───────────────┐                  │   ┌──────────────────┐
-│         └───────>│  Orchestrator │----------------------│ Buffer/LT Memory │
+│         └───────>│  Overlord │----------------------│ Buffer/LT Memory │
 │                  └───────┬───────┘                  │   └──────────────────┘
 │                          │                          │
 │         ┌────────────────┼────────────────┐         │
@@ -242,11 +242,11 @@ Figure 2: Detailed full-stack architecture diagram
 
 ## 3.2 Core Components
 
-#### 3.2.1 Orchestrator
+#### 3.2.1 Overlord
 
-The orchestrator is the central coordination mechanism, implementing intelligent message routing based on agent capabilities and specializations. The routing algorithm utilizes a lightweight LLM to analyze message content and select the most appropriate agent(s) based on their registered descriptions.
+The overlord is the central coordination mechanism, implementing intelligent message routing based on agent capabilities and specializations. The routing algorithm utilizes a lightweight LLM to analyze message content and select the most appropriate agent(s) based on their registered descriptions.
 
-The orchestrator also implements caching mechanisms to improve performance for similar queries and maintains session context across multiple interactions.
+The overlord also implements caching mechanisms to improve performance for similar queries and maintains session context across multiple interactions.
 
 ```mermaid
 flowchart TD
@@ -315,7 +315,7 @@ Agent-specific information stores are implemented using vector retrieval techniq
 ```mermaid
 flowchart TB
     %%{init: {'flowchart': {'defaultRenderer': 'elk'}}}%%
-    UserQuery([User Query]) -- "Fwd by Orchestrator" --> Agent[Agent Processing]
+    UserQuery([User Query]) -- "Fwd by Overlord" --> Agent[Agent Processing]
 
     subgraph "Memory Architecture"
         subgraph BM["Buffer&nbsp;Memory&nbsp;(Short&nbsp;term)"]
@@ -390,7 +390,7 @@ Figure 5: Interaction flow sequence diagram
 
 The A2A protocol defines standardized communication between agents, enabling collaboration and specialization. The protocol implements three primary functions:
 
--   **Capability Registration**: Agents register their specialized capabilities with the orchestrator
+-   **Capability Registration**: Agents register their specialized capabilities with the overlord
 -   **Task Delegation**: Structured requests between agents with context sharing
 -   **Response Integration**: Aggregation of multi-agent contributions into cohesive responses
 
@@ -637,12 +637,12 @@ Inter-agent communication occurs over multiple transport options, including in-m
 
 The implementation utilizes a message-passing architecture with capability registration and discovery. Each message is uniquely identified and contains structured metadata to facilitate routing and processing.
 
-The A2A protocol provides capability registration, discovery, and task delegation methods through a centralized orchestrator.
+The A2A protocol provides capability registration, discovery, and task delegation methods through a centralized overlord.
 
 ```mermaid
 flowchart TD
-    User([User]) -- "Complex Query" --> Orchestrator
-    Orchestrator -- "Checks" --> CapabilityRegistry
+    User([User]) -- "Complex Query" --> Overlord
+    Overlord -- "Checks" --> CapabilityRegistry
     PrimaryAgent --> Response
     Response --> User
 
@@ -656,7 +656,7 @@ flowchart TD
     end
 
     subgraph "MUXI Server"
-        Orchestrator[Orchestrator]
+        Overlord[Overlord]
         CapabilityRegistry[Capability Registry]
         Response[Integrated Response]
     end
@@ -665,8 +665,8 @@ flowchart TD
     ResearchAgent -- "Register" --> CapabilityRegistry
     WriterAgent -- "Register" --> CapabilityRegistry
 
-    CapabilityRegistry -- "Informs" --> Orchestrator
-    Orchestrator -- "Routes" --> PrimaryAgent
+    CapabilityRegistry -- "Informs" --> Overlord
+    Overlord -- "Routes" --> PrimaryAgent
 ```
 
 Figure 8: Inter-agent communication diagram
@@ -713,7 +713,7 @@ Figure 9: MUXI security layer
 I conducted several experiments to evaluate the performance and effectiveness of the MUXI framework across four key dimensions:
 
 1.  **Memory Retention**: Measuring the framework's ability to maintain context across multiple interactions
-2.  **Routing Accuracy**: Evaluating the orchestrator's ability to route messages to appropriate specialized agents
+2.  **Routing Accuracy**: Evaluating the overlord's ability to route messages to appropriate specialized agents
 3.  **A2A Communication Efficiency**: Assessing the overhead and effectiveness of the A2A protocol
 4.  **Vector Database Performance**: Comparing PostgreSQL and SQLite implementations across various workloads
 
@@ -798,11 +798,11 @@ The framework enables collaborative agent networks for research:
 ```mermaid
 flowchart LR
     User([Researcher]) --> Query[Research Query]
-    Query --> Orchestrator[Orchestrator]
+    Query --> Overlord[Overlord]
 
-    Orchestrator --> ResearchLead[Research Lead Agent]
-    Orchestrator -.-> Agent2[Agent 2]
-    Orchestrator -.-> Agent3[Agent N]
+    Overlord --> ResearchLead[Research Lead Agent]
+    Overlord -.-> Agent2[Agent 2]
+    Overlord -.-> Agent3[Agent N]
 
     subgraph "Research Workflow"
         ResearchLead -- "1\. Literature Search" --> LitAgent[Literature Agent]

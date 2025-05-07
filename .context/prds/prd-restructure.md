@@ -102,7 +102,7 @@ flowchart TB
             Security
         end
         subgraph Core
-            Orchestrator
+            Overlord
             Observability
             subgraph Memory
                 direction TB
@@ -130,10 +130,10 @@ flowchart TB
     end
 
     Clients <---> Server
-    Server <---> Orchestrator
-    Orchestrator <---> Brain
-    Orchestrator <---> Memory
-    Orchestrator ---> Observability
+    Server <---> Overlord
+    Overlord <---> Brain
+    Overlord <---> Memory
+    Overlord ---> Observability
     Observability ---> Server
 
     Agents -.- A2A -.- Agents
@@ -145,20 +145,20 @@ flowchart TB
 
 ## Key Architectural Changes
 
-### Server and Orchestrator Integration
+### Server and Overlord Integration
 
 A significant architectural improvement in this restructuring is the elimination of redundant server components:
 
 1. **Single Server Architecture**:
-   - In the current architecture, `orchestrator.run()` and `muxi.run()` start their own server, and a separate API server connects to it
-   - In the new architecture, there will be a single server that directly uses the orchestrator as a component
+   - In the current architecture, `overlord.run()` and `muxi.run()` start their own server, and a separate API server connects to it
+   - In the new architecture, there will be a single server that directly uses the overlord as a component
    - The server layer will handle authentication, API keys, and user context
 
 2. **Component-Based Integration**:
-   - The server directly instantiates and uses the orchestrator object
-   - No more client-server relationship between server and orchestrator
+   - The server directly instantiates and uses the overlord object
+   - No more client-server relationship between server and overlord
    - Cleaner separation of concerns:
-     - Orchestrator focuses on agent coordination, memory, etc.
+     - Overlord focuses on agent coordination, memory, etc.
      - Server handles HTTP/WebSocket concerns and authentication
 
 3. **Developer Usage**:
@@ -166,14 +166,14 @@ A significant architectural improvement in this restructuring is the elimination
     **Programmatic way**
 
     ```python
-    from muxi import Orchestrator, Agent, Server
+    from muxi import Overlord, Agent, Server
 
-    # Create orchestrator with agents
-    orchestrator = Orchestrator()
-    orchestrator.add_agent(Agent(...))
+    # Create overlord with agents
+    overlord = Overlord()
+    overlord.add_agent(Agent(...))
 
     # Create and start server
-    server = Server(orchestrator)
+    server = Server(overlord)
     server.run(host="0.0.0.0", port=8000)
    ```
 
@@ -219,7 +219,7 @@ A significant architectural improvement in this restructuring is the elimination
    - Integrate server functionality (from current server package)
    - Replace direct LLM implementations with muxi-llm dependency
    - Move authentication and API key management to server layer
-   - Remove redundant server in orchestrator
+   - Remove redundant server in overlord
    - Set up tests, CI/CD, and documentation
 2. Migrate test suites to match new package boundaries
 
@@ -331,12 +331,12 @@ embedding = await llm.embed("Some text to embed")
 - Create separate repositories for muxi-llm, muxi-cli, and muxi-studio
 - Set up Apache 2.0 license for muxi-llm
 - Develop and release an initial version of muxi-llm
-- Design the new integrated server-orchestrator architecture
+- Design the new integrated server-overlord architecture
 - Begin restructuring core functionality into the new muxi package
 
 ### Milestone 2: Core Development
 - Complete muxi package restructuring
-- Implement the integrated server that directly uses orchestrator as a component
+- Implement the integrated server that directly uses overlord as a component
 - Move authentication and API key management to server layer
 - Develop and test muxi-cli package
 

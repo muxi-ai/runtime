@@ -180,12 +180,12 @@ With the new implementation:
 - More nuanced retrieval for better contextual understanding
 - Separate control of context window size and total buffer capacity
 
-## Integration with Orchestrator
+## Integration with Overlord
 
-- The BufferMemory is initialized by the Orchestrator:
+- The BufferMemory is initialized by the Overlord:
 
 ```python
-# In Orchestrator.__init__
+# In Overlord.__init__
 self.buffer_memory = buffer_memory or BufferMemory(
     max_size=config.memory.buffer_size,
     buffer_multiplier=config.memory.buffer_multiplier,
@@ -193,22 +193,22 @@ self.buffer_memory = buffer_memory or BufferMemory(
 )
 ```
 
-- All buffer memory access happens through the Orchestrator:
+- All buffer memory access happens through the Overlord:
 
 ```python
-# In Orchestrator
+# In Overlord
 async def add_to_buffer_memory(self, message, metadata=None, agent_id=None):
     # ... implementation ...
     await self.buffer_memory.add(message, metadata)
 ```
 
-- Agents do not directly access buffer memory, but instead go through the Orchestrator:
+- Agents do not directly access buffer memory, but instead go through the Overlord:
 
 ```python
 # In Agent
 async def add_to_memory(self, message):
     # ... implementation ...
-    await self.orchestrator.add_to_buffer_memory(message, metadata=metadata, agent_id=self.agent_id)
+    await self.overlord.add_to_buffer_memory(message, metadata=metadata, agent_id=self.agent_id)
 ```
 
 ## Example Usage
@@ -216,8 +216,8 @@ async def add_to_memory(self, message):
 ### Basic Usage
 
 ```python
-# Create an orchestrator with smart buffer memory
-from muxi.core.orchestrator import Orchestrator
+# Create an overlord with smart buffer memory
+from muxi.core.overlord import Overlord
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.models.providers.openai import OpenAIModel
 
@@ -231,15 +231,15 @@ buffer = BufferMemory(
     model=model                # Model for generating embeddings
 )
 
-# Create orchestrator with buffer
-orchestrator = Orchestrator(buffer_memory=buffer)
+# Create overlord with buffer
+overlord = Overlord(buffer_memory=buffer)
 ```
 
 ### Adding Content
 
 ```python
 # Add content to buffer
-await orchestrator.add_to_buffer_memory(
+await overlord.add_to_buffer_memory(
     "Important information about the project",
     metadata={"topic": "project", "importance": "high"}
 )
@@ -249,7 +249,7 @@ await orchestrator.add_to_buffer_memory(
 
 ```python
 # Search with semantic capability
-results = await orchestrator.search_memory(
+results = await overlord.search_memory(
     "Tell me about the project status",
     k=5,
     use_long_term=False  # Only search buffer memory
@@ -262,7 +262,7 @@ results = await orchestrator.search_memory(
 # Within an agent method
 async def process_message(self, message):
     # Search memory for relevant context
-    memory_results = await self.orchestrator.search_memory(
+    memory_results = await self.overlord.search_memory(
         query=message.content,
         agent_id=self.agent_id,
         k=5
@@ -275,13 +275,13 @@ async def process_message(self, message):
     response = await self.model.chat(message.content, context=context)
 
     # Add message and response to memory
-    await self.orchestrator.add_to_buffer_memory(
+    await self.overlord.add_to_buffer_memory(
         message.content,
         metadata={"role": "user", "timestamp": time.time()},
         agent_id=self.agent_id
     )
 
-    await self.orchestrator.add_to_buffer_memory(
+    await self.overlord.add_to_buffer_memory(
         response,
         metadata={"role": "assistant", "timestamp": time.time()},
         agent_id=self.agent_id

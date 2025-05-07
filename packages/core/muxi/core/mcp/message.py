@@ -196,21 +196,28 @@ class ContentItem(BaseModel):
         """
         if kwargs.get('mode') == 'json':
             # For JSON output
+            has_tool_calls = self.type == "tool_calls" and self.tool_calls
+            tool_calls_json = None
+            if has_tool_calls:
+                tool_calls_json = [
+                    tc.model_dump(mode='json') for tc in self.tool_calls
+                ]
+
             return {
                 "type": self.type,
-                **({"text": self.text} if self.text is not None else {}),
-                **({"tool_calls": [tc.model_dump(mode='json') for tc in self.tool_calls
-                                   ]} if self.tool_calls is not None else {})
+                "text": self.text if self.type == "text" else None,
+                "tool_calls": tool_calls_json
             }
-        return {
-            "type": self.type,
-            **({"text": self.text} if self.text is not None else {}),
-            **({"tool_calls": [tc.model_dump() for tc in self.tool_calls
-                               ]} if self.tool_calls is not None else {})
-        }
+        # For regular dict output
+        result = {"type": self.type}
+        if self.type == "text":
+            result["text"] = self.text
+        elif self.type == "tool_calls":
+            result["tool_calls"] = [tc.model_dump() for tc in self.tool_calls] if self.tool_calls else None
+        return result
 
 
-class Message(BaseModel):
+class MCPMessage(BaseModel):
     """
     Model representing a complete message with mixed content.
 
@@ -221,29 +228,44 @@ class Message(BaseModel):
     """
     role: str = Field(..., description="Message role (user, assistant, system, etc.)")
     content: Union[str, List[ContentItem]] = Field(
-        ..., description="Message content (text or content items)")
+        ..., description="Message content (string or content items)")
 
     def model_dump(self, **kwargs):
         """
         Convert model to dictionary with custom handling.
 
         This method provides a custom serialization for Message objects,
-        with special handling for the content field to ensure proper
-        translation to the expected format.
+        which ensures proper translation between the Pydantic model and
+        the format expected by clients.
 
         Returns:
             Dict[str, Any]: Dictionary representation of the message
         """
+        result = {"role": self.role}
+
+        # Handle different content types
         if isinstance(self.content, str):
-            return {
-                "role": self.role,
-                "content": self.content
-            }
+            result["content"] = self.content
         else:
-            return {
-                "role": self.role,
-                "content": [item.model_dump(mode='json') for item in self.content]
-            }
+            mode = 'json' if kwargs.get('mode') == 'json' else None
+            result["content"] = [item.model_dump(mode=mode) for item in self.content]
+
+        return result
+
+
+# Alias Message as MCPMessage for backward compatibility
+# Message = MCPMessage
+
+
+class MCPToolCall(FunctionCallModel):
+    """
+    Model representing a tool call in the MCP protocol.
+
+    This is a specialized version of FunctionCallModel specifically for
+    MCP tool calls. It provides the same structure with a more specific
+    name that aligns with the MCP protocol terminology.
+    """
+    pass
 
 
 class MCPToolCallRequest(JSONRPCRequest):

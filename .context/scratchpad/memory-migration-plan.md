@@ -1,8 +1,8 @@
-# Memory Migration Plan: Agent to Orchestrator Level
+# Memory Migration Plan: Agent to Overlord Level
 
 ## Overview
 
-This document outlines the plan to move memory management from the Agent level to the Orchestrator level in the MUXI Framework. This architectural change will:
+This document outlines the plan to move memory management from the Agent level to the Overlord level in the MUXI Framework. This architectural change will:
 
 - Centralize memory management
 - Prevent inconsistent database configurations between agents
@@ -11,9 +11,9 @@ This document outlines the plan to move memory management from the Agent level t
 
 ## Implementation Tasks
 
-### 1. Update Orchestrator Class
+### 1. Update Overlord Class
 
-1. Modify `Orchestrator.__init__()` to accept memory parameters
+1. Modify `Overlord.__init__()` to accept memory parameters
    ```python
    def __init__(self, buffer_memory=None, long_term_memory=None):
        # Existing initialization code...
@@ -21,7 +21,7 @@ This document outlines the plan to move memory management from the Agent level t
        self.long_term_memory = long_term_memory
    ```
 
-2. Update `Orchestrator.create_agent()` to pass a reference to the orchestrator instead of memory objects
+2. Update `Overlord.create_agent()` to pass a reference to the overlord instead of memory objects
    ```python
    def create_agent(
        self,
@@ -31,10 +31,10 @@ This document outlines the plan to move memory management from the Agent level t
        description: Optional[str] = None,
        set_as_default: bool = False,
    ):
-       # Create agent with reference to orchestrator for memory access
+       # Create agent with reference to overlord for memory access
        agent = Agent(
            model=model,
-           orchestrator=self,  # Pass self instead of memory objects
+           overlord=self,  # Pass self instead of memory objects
            system_message=system_message,
        )
        # Existing code...
@@ -68,7 +68,7 @@ This document outlines the plan to move memory management from the Agent level t
        # Implementation details...
    ```
 
-4. Update memory-related orchestrator methods to use the centralized memory
+4. Update memory-related overlord methods to use the centralized memory
    ```python
    def clear_all_memories(self, clear_long_term=False):
        # Clear centralized memory instead of per-agent memory
@@ -82,12 +82,12 @@ This document outlines the plan to move memory management from the Agent level t
 
 ### 2. Update Agent Class
 
-1. Modify `Agent.__init__()` to store a reference to the orchestrator
+1. Modify `Agent.__init__()` to store a reference to the overlord
    ```python
    def __init__(
        self,
        model: BaseModel,
-       orchestrator=None,  # New parameter
+       overlord=None,  # New parameter
        system_message: Optional[str] = None,
        name: Optional[str] = None,
        agent_id: Optional[str] = None,
@@ -97,21 +97,21 @@ This document outlines the plan to move memory management from the Agent level t
        self.model = model
        self.name = name or "AI Assistant"
        self.agent_id = agent_id or get_default_nanoid()
-       self.orchestrator = orchestrator  # Store reference to orchestrator
+       self.overlord = overlord  # Store reference to overlord
        # Rest of existing initialization...
    ```
 
-2. Update all memory access methods in the Agent to use the orchestrator's memory
+2. Update all memory access methods in the Agent to use the overlord's memory
    ```python
    async def _store_in_memory(self, input_text: str, response_text: str) -> None:
-       if not self.orchestrator:
+       if not self.overlord:
            return
 
        # Get embedding
        embedding = await self.model.embed(f"User: {input_text}\nAssistant: {response_text}")
 
-       # Store in orchestrator's buffer memory
-       self.orchestrator.add_to_buffer_memory(
+       # Store in overlord's buffer memory
+       self.overlord.add_to_buffer_memory(
            message=embedding,
            metadata={
                "input": input_text,
@@ -121,8 +121,8 @@ This document outlines the plan to move memory management from the Agent level t
            agent_id=self.agent_id
        )
 
-       # Store in orchestrator's long-term memory
-       await self.orchestrator.add_to_long_term_memory(
+       # Store in overlord's long-term memory
+       await self.overlord.add_to_long_term_memory(
            content=f"User: {input_text}\nAssistant: {response_text}",
            metadata={
                "input": input_text,
@@ -144,8 +144,8 @@ This document outlines the plan to move memory management from the Agent level t
        _buffer_memory = self._create_buffer_memory(buffer_memory)
        _long_term_memory = self._create_long_term_memory(long_term_memory)
 
-       # Initialize the orchestrator with memory components
-       self.orchestrator = Orchestrator(
+       # Initialize the overlord with memory components
+       self.overlord = Overlord(
            buffer_memory=_buffer_memory,
            long_term_memory=_long_term_memory
        )
@@ -176,20 +176,20 @@ This document outlines the plan to move memory management from the Agent level t
    # In Agent class:
    @property
    def buffer_memory(self):
-       """Compatibility property that returns orchestrator's buffer memory."""
-       if self.orchestrator:
-           return self.orchestrator.buffer_memory
+       """Compatibility property that returns overlord's buffer memory."""
+       if self.overlord:
+           return self.overlord.buffer_memory
        return None
 
    @property
    def long_term_memory(self):
-       """Compatibility property that returns orchestrator's long-term memory."""
-       if self.orchestrator:
-           return self.orchestrator.long_term_memory
+       """Compatibility property that returns overlord's long-term memory."""
+       if self.overlord:
+           return self.overlord.long_term_memory
        return None
    ```
 
-2. Ensure all memory-related methods on Agent proxy to orchestrator correctly
+2. Ensure all memory-related methods on Agent proxy to overlord correctly
 
 ### 5. Tests and Documentation
 
@@ -201,9 +201,9 @@ This document outlines the plan to move memory management from the Agent level t
 
 We'll implement the changes in the following order:
 
-1. Add memory to Orchestrator without removing from Agent
-2. Update Agent to use Orchestrator's memory when available
-3. Update Muxi facade to initialize Orchestrator with memory
+1. Add memory to Overlord without removing from Agent
+2. Update Agent to use Overlord's memory when available
+3. Update Muxi facade to initialize Overlord with memory
 4. Add compatibility layer for existing code
 5. Update tests and documentation
 6. Remove memory parameters from Agent (with deprecation warnings)
@@ -221,7 +221,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# Initialize MUXI with orchestrator-level memory
+# Initialize MUXI with overlord-level memory
 app = muxi(
     buffer_memory=10,
     long_term_memory="postgresql://user:password@localhost:5432/muxi"
@@ -230,7 +230,7 @@ app = muxi(
 # Add agent from configuration
 app.add_agent("configs/buffer_memory_agent.json")
 
-# The agent will use the orchestrator's memory
+# The agent will use the overlord's memory
 response1 = await app.chat("assistant", "My name is Alice.")
 print(response1)  # The agent acknowledges and remembers the name
 
@@ -242,7 +242,7 @@ print(response2)  # The agent should respond with "Alice"
 
 ```python
 import os
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.openai import OpenAIModel
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.memory.long_term import LongTermMemory
@@ -251,8 +251,8 @@ from muxi.core.memory.long_term import LongTermMemory
 buffer = BufferMemory(15)
 long_term_memory = LongTermMemory(connection_string="sqlite:///data/memory.db")
 
-# Initialize orchestrator with memory
-orchestrator = Orchestrator(
+# Initialize overlord with memory
+overlord = Overlord(
     buffer_memory=buffer,
     long_term_memory=long_term_memory
 )
@@ -263,13 +263,13 @@ model = OpenAIModel(
     model="gpt-4o"
 )
 
-# Create an agent that uses the orchestrator's memory
-orchestrator.create_agent(
+# Create an agent that uses the overlord's memory
+overlord.create_agent(
     agent_id="assistant",
     description="A helpful assistant with both short-term and long-term memory capabilities.",
     model=model
 )
 
-# The agent will use the orchestrator's memory
-orchestrator.chat("assistant", "Remember that my favorite color is blue.")
+# The agent will use the overlord's memory
+overlord.chat("assistant", "Remember that my favorite color is blue.")
 ```

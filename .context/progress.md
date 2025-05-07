@@ -13,7 +13,7 @@ The following components of the MUXI Framework have been successfully implemente
    - ✅ Agent-level knowledge base
 
 2. **Memory Systems**:
-   - ✅ Orchestrator-level memory management (buffer and long-term)
+   - ✅ Overlord-level memory management (buffer and long-term)
    - ✅ Buffer memory using FAISS for short-term context
    - ✅ Long-term memory using PostgreSQL with pgvector
    - ✅ Long-term memory using SQLite with sqlite-vec for local deployments
@@ -22,7 +22,7 @@ The following components of the MUXI Framework have been successfully implemente
    - ✅ Default SQLite database in app's root directory when using `long_term_memory: true`
    - ✅ Memobase system for multi-user memory partitioning
    - ✅ Context memory for user-specific structured information
-   - ✅ Centralized memory access through orchestrator methods
+   - ✅ Centralized memory access through overlord methods
    - ✅ Memory sharing between multiple agents
    - ✅ Removal of agent-level memory parameters and properties
 
@@ -30,14 +30,14 @@ The following components of the MUXI Framework have been successfully implemente
    - ✅ Centralized MCPService for managing all MCP server communications
    - ✅ Thread-safe tool invocation with locks for concurrent access
    - ✅ ToolParser for extracting tool calls from LLM responses in various formats
-   - ✅ Configurable request timeouts at orchestrator, agent, and per-request levels
+   - ✅ Configurable request timeouts at overlord, agent, and per-request levels
    - ✅ Multiple transport types (HTTP+SSE, Command-line)
    - ✅ Reconnection with exponential backoff
    - ✅ Cancellation support for in-progress operations
    - ✅ Error handling and diagnostics
    - ✅ Integration with the official MCP Python SDK
 
-4. **Orchestrator**:
+4. **Overlord**:
    - ✅ Multi-agent management
    - ✅ Intelligent message routing
    - ✅ Agent description handling
@@ -51,7 +51,7 @@ The following components of the MUXI Framework have been successfully implemente
    - ✅ YAML and JSON configuration files
    - ✅ Environment variable substitution
    - ✅ Validation of configuration parameters
-   - ✅ Orchestrator-level memory configuration
+   - ✅ Overlord-level memory configuration
 
 6. **Communication**:
    - ✅ Basic REST API for agent interactions
@@ -351,18 +351,18 @@ SQLite vector support has been added, providing a simpler deployment option for 
 
 ## Recent Progress
 
-1. **Documentation Alignment**: Updated all memory-related documentation to reflect the orchestrator-level memory architecture:
+1. **Documentation Alignment**: Updated all memory-related documentation to reflect the overlord-level memory architecture:
    - Updated `docs/agents/memory.md` with correct examples for both declarative and programmatic memory configuration
-   - Updated `docs/intro/quick-start.md` to show proper agent configuration with memory at the orchestrator level
+   - Updated `docs/intro/quick-start.md` to show proper agent configuration with memory at the overlord level
    - Ensured consistency in examples between code and documentation
    - Fixed code snippets to accurately reflect the current architecture
 
 2. **Memory Architecture Migration**:
-   - Migrated memory systems from agent level to orchestrator level for centralized management
+   - Migrated memory systems from agent level to overlord level for centralized management
    - Updated all tests to reflect the new architecture
    - Implemented backward compatibility layers
    - Added full PostgreSQL and SQLite support with simplified configuration
-   - Added multi-user memory support with Memobase at the orchestrator level
+   - Added multi-user memory support with Memobase at the overlord level
 
 3. **SQLite Vector Integration**:
    - Added support for sqlite-vec Python package for vector similarity search
@@ -390,11 +390,11 @@ SQLite vector support has been added, providing a simpler deployment option for 
 - Automatic user information extraction
   - Implemented MemoryExtractor class to analyze conversations for user information
   - Created privacy controls (anonymous user handling, opt-out, sensitive information detection)
-  - Refactored to centralize extraction logic at Orchestrator level
+  - Refactored to centralize extraction logic at Overlord level
   - Added asyncronous processing to avoid blocking conversation flow
   - Created comprehensive tests for memory extraction functionality
   - Updated documentation in .cursor/rules/ for memory-related operations
-- Orchestrator implementation
+- Overlord implementation
 - Multi-user support
 - Long-term memory
 

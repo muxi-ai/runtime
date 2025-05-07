@@ -1,8 +1,8 @@
-# PRD: Orchestrator Overlord
+# PRD: A better Overlord
 
 ## Overview
 
-This PRD outlines the implementation strategy for transforming MUXI's current orchestrator into an advanced "Overlord" system with sophisticated task decomposition, workflow management, and self-correction capabilities. The enhanced orchestrator will automatically create and manage complex multi-agent workflows without requiring manual workflow definition.
+This PRD outlines the implementation strategy for transforming MUXI's current overlord into an advanced "Overlord" system with sophisticated task decomposition, workflow management, and self-correction capabilities. The enhanced overlord will automatically create and manage complex multi-agent workflows without requiring manual workflow definition.
 
 ## Objectives
 
@@ -14,9 +14,9 @@ This PRD outlines the implementation strategy for transforming MUXI's current or
 
 ## Background & Strategic Rationale
 
-The current MUXI orchestrator primarily functions as a router, directing single tasks to the most appropriate agent. This approach is insufficient for complex requests that naturally decompose into multi-step workflows involving several specialized agents. Without an intelligent task decomposition and workflow management system, MUXI cannot deliver the human-like experience that users expect.
+The current MUXI overlord primarily functions as a router, directing single tasks to the most appropriate agent. This approach is insufficient for complex requests that naturally decompose into multi-step workflows involving several specialized agents. Without an intelligent task decomposition and workflow management system, MUXI cannot deliver the human-like experience that users expect.
 
-By enhancing the orchestrator into an "Overlord" system, we can:
+By enhancing the overlord into an "Overlord" system, we can:
 
 1. Create a truly autonomous multi-agent ecosystem that mirrors human collaboration
 2. Allow natural interaction without requiring users to explicitly define workflows
@@ -146,7 +146,7 @@ By enhancing the orchestrator into an "Overlord" system, we can:
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
-│                         Orchestrator Overlord                     │
+│                         overlord Overlord                     │
 ├───────────────────────────────────────────────────────────────────┤
 │                                                                   │
 │  ┌───────────────┐      ┌──────────────────┐     ┌──────────────┐ │
@@ -385,7 +385,7 @@ class AgentCapabilityProfile(BaseModel):
 2. Develop quality scoring for agent outputs
 3. Create optimization algorithms for workflow efficiency
 4. Implement learning systems for improving future task planning
-5. Build advanced analytics for orchestrator performance
+5. Build advanced analytics for overlord performance
 
 ## Task Decomposition Examples
 
@@ -399,7 +399,7 @@ class AgentCapabilityProfile(BaseModel):
 # This example shows the internal task representation that will be used by the Overlord
 # This is NOT directly exposed to users but represents the internal data model
 
-orchestrator:
+overlord:
   workflow:
     name: "Butterfly Article Creation"
     description: "Create a comprehensive article about butterflies"
@@ -486,7 +486,7 @@ orchestrator:
 # This example shows the internal task representation that will be used by the Overlord
 # This is NOT directly exposed to users but represents the internal data model
 
-orchestrator:
+overlord:
   workflow:
     name: "File Upload Crash Troubleshooting"
     description: "Diagnose and resolve application crash during large file uploads"
@@ -686,13 +686,13 @@ def select_agent_for_task(task, available_agents, capability_registry):
 ### Workflow Execution Algorithm
 
 ```python
-async def execute_workflow(workflow, orchestrator):
+async def execute_workflow(workflow, overlord):
     """
     Execute a workflow by running tasks in the correct order.
 
     Args:
         workflow: The workflow object containing tasks
-        orchestrator: The orchestrator instance
+        overlord: The overlord instance
 
     Returns:
         The completed workflow with results
@@ -716,7 +716,7 @@ async def execute_workflow(workflow, orchestrator):
             task_inputs = gather_task_inputs(task, workflow)
 
             # Select appropriate agent
-            agent, confidence = orchestrator.select_agent_for_task(task)
+            agent, confidence = overlord.select_agent_for_task(task)
 
             if agent:
                 # Assign and execute task

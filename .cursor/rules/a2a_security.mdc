@@ -63,7 +63,7 @@ The A2A security layer is a critical component of the MUXI Framework as outlined
 1. **All A2A Communications Must Be Authorized**
    - Every inter-agent request must pass through permission system
    - Default deny policy (only allow explicitly permitted communications)
-   - Permissions should be configurable at orchestrator level
+   - Permissions should be configurable at overlord level
 
 2. **Context Sharing Must Be Controlled**
    - Only share minimum required context between agents
@@ -88,12 +88,12 @@ The A2A security layer is a critical component of the MUXI Framework as outlined
 - **Penetration Testing**: Attempt to bypass security controls from within agents
 - **Audit Analysis**: Verify logging captures all necessary information for security analysis
 
-## Integration with Orchestrator
+## Integration with Overlord
 
-The security layer should be tightly integrated with the orchestrator:
+The security layer should be tightly integrated with the overlord:
 
 ```python
-class Orchestrator:
+class Overlord:
     def __init__(self, ...):
         # Initialize the A2A security layer
         self.a2a_security = A2ASecurity(

@@ -188,20 +188,20 @@ if __name__ == "__main__":
 ```python
 import os
 import asyncio
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.openai import OpenAIModel
 from muxi.knowledge.base import FileKnowledge
 
 async def main():
     # Initialize components
-    orchestrator = Orchestrator()
+    overlord = Overlord()
     model = OpenAIModel(
         api_key=os.getenv("OPENAI_API_KEY"),
         model="gpt-4o"
     )
 
     # Create an agent
-    agent = orchestrator.create_agent(
+    agent = overlord.create_agent(
         agent_id="product_assistant",
         description="A helpful assistant with knowledge about our products.",
         model=model
@@ -216,7 +216,7 @@ async def main():
     await agent.add_knowledge(product_knowledge)
 
     # The agent can now answer questions based on the knowledge sources
-    response = await orchestrator.chat("product_assistant", "What products do you offer?")
+    response = await overlord.chat("product_assistant", "What products do you offer?")
     print(response)
 
 if __name__ == "__main__":

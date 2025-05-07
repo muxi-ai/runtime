@@ -22,39 +22,39 @@ The MUXI framework includes automatic extraction of important user information f
 
 The automatic extraction system follows a centralized approach:
 
-1. **Orchestrator-Centered**: The extraction logic is centralized in the Orchestrator, which manages the process for all agents
-2. **Agent Delegation**: Agents delegate extraction to their parent Orchestrator through the `handle_user_information_extraction` method
+1. **Overlord-Centered**: The extraction logic is centralized in the Overlord, which manages the process for all agents
+2. **Agent Delegation**: Agents delegate extraction to their parent Overlord through the `handle_user_information_extraction` method
 3. **Asynchronous Processing**: Extraction runs asynchronously to avoid blocking conversation flow
 
 This design ensures consistent extraction behavior across all agents and simplifies maintenance.
 
 ### Recent Refactoring
 
-A key refactoring was made to fully centralize extraction logic in the Orchestrator:
+A key refactoring was made to fully centralize extraction logic in the Overlord:
 
 1. Extraction parameters are no longer needed in Agent constructor
-2. The Agent only needs a reference to the Orchestrator that handles extraction
-3. The Agent delegates extraction to the Orchestrator, passing only the necessary conversation data
-4. Extraction-specific privacy checks (e.g., for anonymous users) happen at both Agent and Orchestrator levels
-5. The Orchestrator processes extraction asynchronously to avoid impacting conversation performance
+2. The Agent only needs a reference to the Overlord that handles extraction
+3. The Agent delegates extraction to the Overlord, passing only the necessary conversation data
+4. Extraction-specific privacy checks (e.g., for anonymous users) happen at both Agent and Overlord levels
+5. The Overlord processes extraction asynchronously to avoid impacting conversation performance
 
 Benefits of this approach:
-- Cleaner separation of concerns (Agent focuses on conversation, Orchestrator on extraction)
+- Cleaner separation of concerns (Agent focuses on conversation, Overlord on extraction)
 - Centralized implementation reduces code duplication
 - Consistent application of privacy rules
-- Extraction behavior can be modified at the orchestrator level without changing agents
+- Extraction behavior can be modified at the overlord level without changing agents
 - Better testability and easier maintenance
 
 ### Extraction Triggers
 
-- Check `auto_extract_user_info` flag in the Orchestrator
+- Check `auto_extract_user_info` flag in the Overlord
 - Extraction is triggered after completing a conversation turn
 - For performance reasons, extraction can be set to run only after every N messages
 - Set extraction_interval in MemoryExtractor to control frequency (default: 1)
 
 ### Privacy Settings
 
-- Anonymous users (user_id = 0) are automatically excluded from extraction (both at Agent and Orchestrator levels)
+- Anonymous users (user_id = 0) are automatically excluded from extraction (both at Agent and Overlord levels)
 - Users can opt out of extraction via the `opt_out_user` method
 - Sensitive information keywords are automatically detected and excluded
 - Whitelist/blacklist functionality allows site-wide control
@@ -62,11 +62,11 @@ Benefits of this approach:
 
 ### Implementation
 
-#### Orchestrator Configuration
+#### Overlord Configuration
 
 ```python
-# Initialize Orchestrator with extraction settings
-orchestrator = Orchestrator(
+# Initialize Overlord with extraction settings
+overlord = Overlord(
     buffer_memory=buffer_memory,
     long_term_memory=long_term_memory,
     auto_extract_user_info=True,
@@ -80,7 +80,7 @@ orchestrator = Orchestrator(
 # Initialize Agent - no extraction settings needed
 agent = Agent(
     model=model,
-    orchestrator=orchestrator,
+    overlord=overlord,
     system_message="You are a helpful assistant...",
     is_multi_user=True
 )
@@ -89,8 +89,8 @@ agent = Agent(
 ### Information Flow
 
 1. Agent processes user message
-2. Agent delegates extraction to Orchestrator via `handle_user_information_extraction`
-3. Orchestrator runs extraction asynchronously via `_run_extraction`
+2. Agent delegates extraction to Overlord via `handle_user_information_extraction`
+3. Overlord runs extraction asynchronously via `_run_extraction`
 4. MemoryExtractor analyzes conversation and identifies key information
 5. Extracted information is stored in the user's context memory
 6. Subsequent conversations have access to this context memory
@@ -99,14 +99,14 @@ agent = Agent(
 
 The key methods involved in the extraction process:
 
-1. **Agent.process_message**: After processing a conversation, delegates extraction to the Orchestrator.
-2. **Orchestrator.handle_user_information_extraction**: Centralized entry point for extraction, handles message counting and runs extraction asynchronously.
-3. **Orchestrator._run_extraction**: Internal method that performs the actual extraction, using the specified extraction model.
+1. **Agent.process_message**: After processing a conversation, delegates extraction to the Overlord.
+2. **Overlord.handle_user_information_extraction**: Centralized entry point for extraction, handles message counting and runs extraction asynchronously.
+3. **Overlord._run_extraction**: Internal method that performs the actual extraction, using the specified extraction model.
 4. **MemoryExtractor.process_conversation_turn**: Analyzes the conversation and extracts relevant information.
 
 ### Extraction Model
 
-Extraction model is configured at the Orchestrator level:
+Extraction model is configured at the Overlord level:
 
 ```python
 # Using a specialized model for extraction
@@ -116,8 +116,8 @@ extraction_model = OpenAIModel(
     max_tokens=1024
 )
 
-# Configure the orchestrator with extraction model
-orchestrator = Orchestrator(
+# Configure the overlord with extraction model
+overlord = Overlord(
     buffer_memory=buffer_memory,
     long_term_memory=long_term_memory,
     auto_extract_user_info=True,
@@ -143,10 +143,10 @@ Extracted information is automatically included in future conversations:
 
 ```python
 # Get all context memory for a user
-user_context = await orchestrator.get_user_context_memory(user_id=123)
+user_context = await overlord.get_user_context_memory(user_id=123)
 
 # Add or update specific information
-await orchestrator.add_user_context_memory(
+await overlord.add_user_context_memory(
     user_id=123,
     knowledge={
         "preferred_language": {
@@ -164,7 +164,7 @@ await orchestrator.add_user_context_memory(
 The implementation includes comprehensive tests for:
 
 1. Extraction functionality in the MemoryExtractor
-2. Orchestrator's extraction handling
+2. Overlord's extraction handling
 3. Agent's extraction delegation
 4. Anonymous user handling
 5. Opt-out mechanisms
@@ -210,5 +210,5 @@ knowledge_updates[key] = {
 4. **Provide clear opt-out mechanisms** for privacy-conscious users
 5. **Consider using simpler models** for extraction to optimize costs
 6. **Implement retention policies** to automatically age out older information
-7. **Centralize extraction logic** in the Orchestrator for better maintainability
+7. **Centralize extraction logic** in the Overlord for better maintainability
 8. **Run extraction asynchronously** to avoid impacting conversation performance

@@ -2,7 +2,7 @@
 
 ## 1. Introduction
 
-This PRD defines the requirements and design for a comprehensive tracing system in the MUXI Framework. The tracing system will provide detailed visibility into the flow of communication between users, the orchestrator, agents, and MCP servers, enabling debugging, auditing, and performance analysis.
+This PRD defines the requirements and design for a comprehensive tracing system in the MUXI Framework. The tracing system will provide detailed visibility into the flow of communication between users, the overlord, agents, and MCP servers, enabling debugging, auditing, and performance analysis.
 
 ### 1.1 Background
 
@@ -49,7 +49,7 @@ The current system uses Loguru for general-purpose logging but does not:
 
 2. **Component Tracing**
    - Track user messages and their source
-   - Record orchestrator routing decisions
+   - Record overlord routing decisions
    - Log agent processing steps and thinking
    - Capture MCP server tool calls and results
    - Trace final responses back to the user
@@ -109,7 +109,7 @@ The tracing system will consist of:
 Each trace event will include:
 - Timestamp (with millisecond precision)
 - Trace ID (unique per conversation)
-- Component ID (user, orchestrator, agent name, etc.)
+- Component ID (user, overlord, agent name, etc.)
 - Operation (message, route, process, tool_call, etc.)
 - Descriptive message
 - Additional context data (structured)
@@ -122,8 +122,8 @@ The tracing system will integrate at these key points:
    - When user messages are received (API, CLI, WebSocket)
    - When responses are sent back to users
 
-2. **Orchestrator**
-   - When the orchestrator receives messages
+2. **Overlord**
+   - When the overlord receives messages
    - When routing decisions are made
    - When messages are forwarded to agents
    - When responses are received from agents
@@ -216,8 +216,8 @@ class Tracer:
         """Trace a user message."""
         # Implementation
 
-    def orchestrator_route(self, message, agent_id, trace_id=None):
-        """Trace an orchestrator routing decision."""
+    def overlord_route(self, message, agent_id, trace_id=None):
+        """Trace an overlord routing decision."""
         # Implementation
 
     def agent_processing(self, agent_id, trace_id=None):
@@ -236,8 +236,8 @@ class Tracer:
         """Trace an agent sending a response."""
         # Implementation
 
-    def orchestrator_response(self, response, trace_id=None):
-        """Trace the orchestrator sending a response to the user."""
+    def overlord_response(self, response, trace_id=None):
+        """Trace the overlord sending a response to the user."""
         # Implementation
 ```
 
@@ -266,7 +266,7 @@ def trace(file, follow, component, operation, trace_id):
    - Add tracing config to core configuration
    - Update environment variable handling
 
-2. **Orchestrator Modifications**
+2. **Overlord Modifications**
    - Add trace ID generation in chat method
    - Add tracing points in routing logic
    - Pass trace context to agents
@@ -306,12 +306,12 @@ For a user message "Tell me about climate change", the trace might look like:
 
 ```
 [2023-05-15 10:15:22.123] | TRACE    | 6f8d9e2a | user:message - User sent: Tell me about climate change
-[2023-05-15 10:15:22.145] | TRACE    | 6f8d9e2a | orchestrator:route - Routing message to agent 'research_agent'
+[2023-05-15 10:15:22.145] | TRACE    | 6f8d9e2a | overlord:route - Routing message to agent 'research_agent'
 [2023-05-15 10:15:22.156] | TRACE    | 6f8d9e2a | agent:process_start - Agent 'research_agent' processing message
 [2023-05-15 10:15:22.789] | TRACE    | 6f8d9e2a | agent:tool_call - Agent 'research_agent' calling tool 'web_search' on server 'search_server'
 [2023-05-15 10:15:23.456] | TRACE    | 6f8d9e2a | agent:tool_result - Agent 'research_agent' received result from tool 'web_search'
 [2023-05-15 10:15:24.123] | TRACE    | 6f8d9e2a | agent:response - Agent 'research_agent' responded: Climate change refers to long-term shifts in temperatures...
-[2023-05-15 10:15:24.145] | TRACE    | 6f8d9e2a | orchestrator:response - Orchestrator responding to user: Climate change refers to long-term shifts...
+[2023-05-15 10:15:24.145] | TRACE    | 6f8d9e2a | overlord:response - Overlord responding to user: Climate change refers to long-term shifts...
 ```
 
 ## 8. Conclusion

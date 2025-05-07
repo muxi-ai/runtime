@@ -10,7 +10,7 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from muxi.core.orchestrator import Orchestrator
+from muxi.core.overlord import Overlord
 from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.knowledge.base import FileKnowledge
 
@@ -19,8 +19,8 @@ async def main():
     # Load environment variables
     load_dotenv()
 
-    # Initialize the orchestrator
-    orchestrator = Orchestrator()
+    # Initialize the overlord
+    overlord = Overlord()
 
     # Create an OpenAI model
     model = OpenAIModel(
@@ -29,7 +29,7 @@ async def main():
     )
 
     # Create an agent with knowledge capabilities
-    knowledge_agent = orchestrator.create_agent(
+    knowledge_agent = overlord.create_agent(
         agent_id="knowledge_assistant",
         description="An assistant with knowledge about the MUXI Framework",
         model=model,
@@ -64,14 +64,14 @@ async def main():
 
     # Chat with the agent using knowledge
     print("\nChatting with knowledge-enabled agent...")
-    response = await orchestrator.chat(
+    response = await overlord.chat(
         "knowledge_assistant",
         "What are the key features of the MUXI Framework?"
     )
     print(f"\nAgent response:\n{response}")
 
     # Another query using knowledge
-    response = await orchestrator.chat(
+    response = await overlord.chat(
         "knowledge_assistant",
         "How can I use memory in the MUXI Framework?"
     )

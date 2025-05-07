@@ -59,7 +59,7 @@ By offering MUXI as a containerized service with declarative configuration, we c
 - Design a comprehensive YAML schema that describes an entire MUXI application
 - Include sections for:
   - Global settings
-  - Orchestrator configuration
+  - Overlord configuration
   - Memory settings (buffer, long-term)
   - Agent definitions
   - Authentication and access control
@@ -115,7 +115,7 @@ By offering MUXI as a containerized service with declarative configuration, we c
 - Include endpoints for:
   - Creating/updating/deleting agents
   - Modifying agent configurations
-  - Managing orchestrator settings
+  - Managing overlord settings
   - Monitoring agent status
   - User management
 
@@ -200,7 +200,7 @@ By offering MUXI as a containerized service with declarative configuration, we c
 │         ▼                             ▼              │
 │  ┌──────────────┐        ┌────────────────────────┐  │
 │  │              │        │                        │  │
-│  │ Orchestrator │◄─────►│  Persistence Service   │  │
+│  │ Overlord │◄─────►│  Persistence Service   │  │
 │  │              │        │                        │  │
 │  └──────┬───────┘        └────────────┬───────────┘  │
 │         │                             │              │
@@ -228,7 +228,7 @@ By offering MUXI as a containerized service with declarative configuration, we c
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │             │     │             │     │             │
-│  YAML File  │────►│ Config      │────►│ Orchestrator│
+│  YAML File  │────►│ Config      │────►│ Overlord│
 │             │     │ Service     │     │             │
 └─────────────┘     └──────┬──────┘     └─────────────┘
                            │                   │
@@ -260,8 +260,8 @@ app:
   version: "1.0.0"
   description: "A multi-agent system for customer support"
 
-# Orchestrator configuration
-orchestrator:
+# Overlord configuration
+overlord:
   default_agent: "general-assistant"
   routing_strategy: "capability-match"  # or "round-robin", "direct", etc.
   task_delegation: true
@@ -420,8 +420,8 @@ POST   /api/v1/config/validate        # Validate configuration without applying
 POST   /api/v1/config/export          # Export configuration
 POST   /api/v1/config/import          # Import configuration
 
-GET    /api/v1/orchestrator/status    # Get orchestrator status
-POST   /api/v1/orchestrator/restart   # Restart the orchestrator
+GET    /api/v1/overlord/status    # Get overlord status
+POST   /api/v1/overlord/restart   # Restart the overlord
 
 POST   /api/v1/auth/users             # Create a user
 GET    /api/v1/auth/users             # List users
@@ -453,8 +453,8 @@ muxi-cli agents update <name>        # Update an agent
 muxi-cli agents delete <name>        # Delete an agent
 muxi-cli agents restart <name>       # Restart an agent
 
-muxi-cli orchestrator status         # Get orchestrator status
-muxi-cli orchestrator restart        # Restart the orchestrator
+muxi-cli overlord status         # Get overlord status
+muxi-cli overlord restart        # Restart the overlord
 
 muxi-cli users list                  # List users
 muxi-cli users create                # Create a user

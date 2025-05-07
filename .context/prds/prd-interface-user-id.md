@@ -268,8 +268,8 @@ Update the REST API router:
 
 ```python
 class MuxiAPIRouter:
-    def __init__(self, orchestrator, config=None):
-        self.orchestrator = orchestrator
+    def __init__(self, overlord, config=None):
+        self.overlord = overlord
         self.config = config or {}
         self.user_identifier = RestUserIdentifier(
             session_cookie_name=self.config.get("session_cookie_name", "muxi_session")
@@ -286,7 +286,7 @@ class MuxiAPIRouter:
         agent_id = data.get("agent_id", "default")
 
         # Get agent
-        agent = self.orchestrator.get_agent(agent_id)
+        agent = self.overlord.get_agent(agent_id)
 
         # Process message with proper user ID
         response = await agent.process_message(message, user_id=user_id)
@@ -302,8 +302,8 @@ Update the WebSocket handler:
 
 ```python
 class MuxiWebSocketHandler:
-    def __init__(self, orchestrator, config=None):
-        self.orchestrator = orchestrator
+    def __init__(self, overlord, config=None):
+        self.overlord = overlord
         self.config = config or {}
         self.user_identifier = WebSocketUserIdentifier()
 
@@ -326,7 +326,7 @@ class MuxiWebSocketHandler:
 
                 # Get agent
                 agent_id = data.get("agent_id", "default")
-                agent = self.orchestrator.get_agent(agent_id)
+                agent = self.overlord.get_agent(agent_id)
 
                 # Process with proper user ID
                 response = await agent.process_message(
@@ -390,8 +390,8 @@ def muxi(
     # User ID configuration defaults
     user_id_config = user_id_config or {}
 
-    # Create orchestrator
-    orchestrator = Orchestrator(
+    # Create overlord
+    overlord = Overlord(
         buffer_memory=buffer_memory,
         long_term_memory=long_term_memory,
         is_multi_user=is_multi_user,
@@ -402,7 +402,7 @@ def muxi(
     )
 
     # Create facade with config
-    facade = MuxiFacade(orchestrator)
+    facade = MuxiFacade(overlord)
 
     # Configure API with user ID settings if needed
     if hasattr(facade, "configure_api"):

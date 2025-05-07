@@ -20,7 +20,7 @@ Based on the revised approach for API key handling, here's the updated plan for 
 
 The simplified approach will handle API keys entirely in memory during runtime:
 
-1. **Update Orchestrator and muxi Constructor**:
+1. **Update Overlord and muxi Constructor**:
    - Add parameters to accept API keys at initialization time:
      ```python
      def __init__(self, user_api_key=None, admin_api_key=None, ...):
@@ -68,8 +68,8 @@ Update the existing API endpoints to use the new authentication system:
 
    - Ensure all routes have at least `@requires_user_key` by default
 
-2. **Orchestrator.run_agent() Method**:
-   - Add a new `run_agent()` method to the Orchestrator class to match the functionality of `muxi.run()`
+2. **Overlord.run_agent() Method**:
+   - Add a new `run_agent()` method to the Overlord class to match the functionality of `muxi.run()`
    - Display auto-generated API keys (if any) during this startup process
 
 ### 4. Testing and Documentation
@@ -92,14 +92,14 @@ Update the existing API endpoints to use the new authentication system:
 Here are the specific files that will need to be created or modified:
 
 ### Modified Files:
-1. `packages/core/src/muxi/core/orchestrator.py` - Add API key parameters and `run_agent()` method
+1. `packages/core/src/muxi/core/overlord.py` - Add API key parameters and `run_agent()` method
 2. `packages/server/src/muxi/api/app.py` - Apply authentication decorators to routes
 3. `packages/muxi/__init__.py` - Update the `muxi` class constructor to accept API keys
 4. `docs/reference/api.md` - Update API documentation
 
 ## Next Steps
 
-1. Update the Orchestrator and muxi constructors to accept API keys
+1. Update the Overlord and muxi constructors to accept API keys
 2. Implement key validation logic
 3. Create the authentication decorators
 4. Add the key display functionality to `run_agent()` methods

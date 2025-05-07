@@ -59,12 +59,12 @@ class MCPService:
 
 5. **Proper Error Handling**: Standardized error handling and propagation throughout the system.
 
-## Integration with Orchestrator
+## Integration with Overlord
 
-The Orchestrator is responsible for initializing and accessing the MCPService:
+The Overlord is responsible for initializing and accessing the MCPService:
 
 ```python
-# In Orchestrator
+# In Overlord
 async def initialize(self):
     self.mcp_service = await MCPService.get_instance(
         api_key=self.config.api_key,
@@ -82,12 +82,12 @@ async def invoke_tool(self, tool_name, params):
 
 ## Integration with Agent
 
-Agents access MCP functionality through the Orchestrator:
+Agents access MCP functionality through the Overlord:
 
 ```python
 # In Agent
 async def invoke_tool(self, tool_name, params):
-    return await self.orchestrator.invoke_tool(
+    return await self.overlord.invoke_tool(
         tool_name=tool_name,
         params=params,
         agent_id=self.agent_id
@@ -263,14 +263,14 @@ final_text = ToolParser.replace_tool_calls_with_results(raw_response, tool_calls
 
 The MCP service implements a multi-level timeout configuration system that allows developers to set timeouts at different levels of granularity:
 
-1. **Orchestrator Level**: Default timeout for all MCP requests from all agents
+1. **Overlord Level**: Default timeout for all MCP requests from all agents
    ```python
-   orchestrator = Orchestrator(request_timeout=60)  # 60 seconds default
+   overlord = Overlord(request_timeout=60)  # 60 seconds default
    ```
 
-2. **Agent Level**: Override the orchestrator's default for a specific agent
+2. **Agent Level**: Override the overlord's default for a specific agent
    ```python
-   agent = orchestrator.create_agent(
+   agent = overlord.create_agent(
        agent_id="weather-agent",
        model=weather_model,
        system_message="You're a weather assistant.",
@@ -280,7 +280,7 @@ The MCP service implements a multi-level timeout configuration system that allow
 
 3. **Server Registration Level**: Set a default for a specific MCP server
    ```python
-   server_id = await orchestrator.register_mcp_server(
+   server_id = await overlord.register_mcp_server(
        server_id="weather-api",
        url="https://api.weather.com",
        credentials={"api_key": "key"},
@@ -302,18 +302,18 @@ The system uses the most specific timeout configuration available, falling back 
 1. Per-request timeout (if specified)
 2. Agent's timeout (if specified)
 3. Server's registration timeout (if specified)
-4. Orchestrator's default timeout
+4. Overlord's default timeout
 5. Global default (60 seconds)
 
 ## Implementation Flow
 
 1. **Initialization**:
-   - The Orchestrator initializes the MCPService singleton during its own initialization
+   - The Overlord initializes the MCPService singleton during its own initialization
    - Agents access the MCPService via the `get_mcp_service()` method
 
 2. **Server Registration**:
    - MCP servers are registered with the MCPService either:
-     - Directly through the Orchestrator's `register_mcp_server` method
+     - Directly through the Overlord's `register_mcp_server` method
      - Via configuration at startup
 
 3. **Tool Invocation Flow**:
@@ -351,7 +351,7 @@ The system uses the most specific timeout configuration available, falling back 
 
 ```python
 # 1. Register an MCP server during application startup
-server_id = await orchestrator.register_mcp_server(
+server_id = await overlord.register_mcp_server(
     server_id="weather-api",
     url="https://api.weather.com",
     credentials={"api_key": os.getenv("WEATHER_API_KEY")},
@@ -359,7 +359,7 @@ server_id = await orchestrator.register_mcp_server(
 )
 
 # 2. Create an agent that can use this server
-agent = orchestrator.create_agent(
+agent = overlord.create_agent(
     agent_id="weather-agent",
     model=weather_model,
     system_message="You're a weather assistant. Use tools when needed.",
@@ -396,7 +396,7 @@ async def process_message(self, message):
 
 Before the centralized MCPService:
 - Each Agent had its own MCP handler instance
-- The Orchestrator had to manage and distribute MCP handlers
+- The Overlord had to manage and distribute MCP handlers
 - Duplication of connection management and handler logic
 - Inconsistent error handling and connection state across agents
 

@@ -4,7 +4,7 @@
 # Title:        Agent - AI Agent Implementation
 # Description:  Core implementation of AI agents with memory and tool use
 # Role:         Primary interface for language model interactions
-# Usage:        Created and managed by the Orchestrator to process user messages
+# Usage:        Created and managed by the Overlord to process user messages
 # Author:       Muxi Framework Team
 #
 # The Agent class is a fundamental component in the Muxi framework that:
@@ -20,14 +20,14 @@
 #    - Manages tool invocation and result incorporation
 #
 # 3. Memory Usage
-#    - Delegates memory storage to the orchestrator
+#    - Delegates memory storage to the overlord
 #    - Retrieves relevant context from memory systems
-#    - Works with orchestrator for information extraction
+#    - Works with overlord for information extraction
 #
-# Agents are typically created and managed by the Orchestrator:
+# Agents are typically created and managed by the Overlord:
 #
 # Programmatic creation:
-#   agent = orchestrator.create_agent(
+#   agent = overlord.create_agent(
 #       agent_id="assistant",
 #       model=model,
 #       system_message="You are a helpful assistant."
@@ -88,14 +88,14 @@ class Agent:
     An agent that interacts with users and tools.
 
     The Agent class manages interactions between users and language models,
-    using its orchestrator's memory systems for context retention and retrieval.
+    using its overlord's memory systems for context retention and retrieval.
     It can process messages, invoke tools via MCP, and maintain conversation state.
     """
 
     def __init__(
         self,
         model: BaseModel,
-        orchestrator: Any,  # Forward reference to Orchestrator
+        overlord: Any,  # Forward reference to Overlord
         system_message: Optional[str] = None,
         agent_id: Optional[str] = None,
         name: Optional[str] = None,
@@ -103,12 +103,12 @@ class Agent:
         request_timeout: Optional[int] = None,
     ):
         """
-        Initialize the agent with a model, orchestrator, and optional parameters.
+        Initialize the agent with a model, overlord, and optional parameters.
 
         Args:
             model: The language model for the agent to use. This model handles
                 the core intelligence of the agent.
-            orchestrator: The orchestrator that manages this agent. Provides
+            overlord: The overlord that manages this agent. Provides
                 access to memory systems and coordinates multi-agent systems.
             system_message: Optional system message to set the agent's behavior
                 and persona. Defines the agent's role and capabilities.
@@ -119,10 +119,10 @@ class Agent:
             mcp_server: Optional MCP server for tool calling and external integrations.
                 Enables the agent to use external tools.
             request_timeout: Optional timeout in seconds for MCP requests.
-                Defaults to orchestrator's timeout if not specified.
+                Defaults to overlord's timeout if not specified.
         """
         self.model = model
-        self.orchestrator = orchestrator
+        self.overlord = overlord
 
         # Set up agent identification
         self.agent_id = agent_id or str(uuid.uuid4())
@@ -137,11 +137,11 @@ class Agent:
         # Set up MCP integration
         self.mcp_server = mcp_server
 
-        # Set request timeout (use orchestrator's if not specified)
+        # Set request timeout (use overlord's if not specified)
         if request_timeout is not None:
             self.request_timeout = request_timeout
-        elif hasattr(orchestrator, "request_timeout"):
-            self.request_timeout = orchestrator.request_timeout
+        elif hasattr(overlord, "request_timeout"):
+            self.request_timeout = overlord.request_timeout
         else:
             self.request_timeout = 60  # Default fallback
 
@@ -171,7 +171,7 @@ class Agent:
 
         This method handles:
         1. Converting input to MCPMessage format
-        2. Adding the message to memory via the orchestrator
+        2. Adding the message to memory via the overlord
         3. Updating conversation context
         4. Processing the message with the model
         5. Handling any tool calls in the response
@@ -194,10 +194,10 @@ class Agent:
             content = message.content
             message_obj = message
 
-        # Let orchestrator handle memory management
+        # Let overlord handle memory management
         timestamp = datetime.datetime.now().timestamp()
-        if self.orchestrator and hasattr(self.orchestrator, "add_message_to_memory"):
-            await self.orchestrator.add_message_to_memory(
+        if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
+            await self.overlord.add_message_to_memory(
                 content=content,
                 role="user",
                 timestamp=timestamp,
@@ -256,10 +256,10 @@ class Agent:
         # Add response to conversation context
         self._messages.append({"role": "assistant", "content": response.content})
 
-        # Let orchestrator handle memory management for the response
-        if self.orchestrator and hasattr(self.orchestrator, "add_message_to_memory"):
+        # Let overlord handle memory management for the response
+        if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
             timestamp = datetime.datetime.now().timestamp()
-            await self.orchestrator.add_message_to_memory(
+            await self.overlord.add_message_to_memory(
                 content=response.content,
                 role="assistant",
                 timestamp=timestamp,
@@ -267,15 +267,15 @@ class Agent:
                 user_id=user_id,
             )
 
-        # User information extraction is handled by the orchestrator
+        # User information extraction is handled by the overlord
         if (
             user_id is not None
             and user_id != 0  # Skip extraction for anonymous users
-            and self.orchestrator
-            and hasattr(self.orchestrator, "handle_user_information_extraction")
+            and self.overlord
+            and hasattr(self.overlord, "handle_user_information_extraction")
         ):
             # Process this conversation turn for user information extraction
-            await self.orchestrator.handle_user_information_extraction(
+            await self.overlord.handle_user_information_extraction(
                 user_message=content,
                 agent_response=response.content,
                 user_id=user_id,
@@ -321,7 +321,7 @@ class Agent:
 
     async def get_relevant_memories(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
-        Get relevant memories for a user query from the orchestrator's memory systems.
+        Get relevant memories for a user query from the overlord's memory systems.
 
         Args:
             query: The user query to find relevant memories for. Used for semantic
@@ -333,10 +333,10 @@ class Agent:
             A list of relevant memories, each as a dictionary with metadata.
             Returns an empty list if memory retrieval is not available.
         """
-        if not self.orchestrator or not hasattr(self.orchestrator, "search_buffer_memory"):
+        if not self.overlord or not hasattr(self.overlord, "search_buffer_memory"):
             return []
 
-        memories = self.orchestrator.search_buffer_memory(
+        memories = self.overlord.search_buffer_memory(
             query=query, limit=limit, agent_id=self.agent_id
         )
 

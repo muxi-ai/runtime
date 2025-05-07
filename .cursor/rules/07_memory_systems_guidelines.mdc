@@ -3,15 +3,15 @@ description:
 globs:
 alwaysApply: false
 ---
-- Memory systems are initialized and managed at the orchestrator level, not at the agent level
-- Configure memory through the orchestrator constructor: `Orchestrator(buffer_memory=buffer, long_term_memory=long_term)`
+- Memory systems are initialized and managed at the overlord level, not at the agent level
+- Configure memory through the overlord constructor: `Overlord(buffer_memory=buffer, long_term_memory=long_term)`
 - For the muxi facade, configure memory in the constructor: `muxi(buffer_size=10, buffer_multiplier=10, long_term_memory="connection_string", config_file="config.yaml")`
-- Access memory through orchestrator methods: `orchestrator.search_memory()`, `orchestrator.add_to_buffer_memory()`
+- Access memory through overlord methods: `overlord.search_memory()`, `overlord.add_to_buffer_memory()`
 - Agent constructor no longer accepts direct memory parameters
-- Memory is shared between agents through the orchestrator
-- Multi-user support is configured at the orchestrator level with Memobase
+- Memory is shared between agents through the overlord
+- Multi-user support is configured at the overlord level with Memobase
 - Configuration files should have agents in an array at the top level, not as separate files
-- Agent instances access memory indirectly through their orchestrator reference
+- Agent instances access memory indirectly through their overlord reference
 - All memory operations should include agent_id when filtering is needed
 
 ## Memory Configuration
@@ -67,17 +67,17 @@ alwaysApply: false
   long_term = LongTermMemory(connection_string="...")
   ```
 
-- Create orchestrator with memory:
+- Create overlord with memory:
   ```python
-  orchestrator = Orchestrator(
+  overlord = Overlord(
       buffer_memory=buffer,
       long_term_memory=long_term
   )
   ```
 
-- Create agents through orchestrator:
+- Create agents through overlord:
   ```python
-  orchestrator.create_agent(
+  overlord.create_agent(
       agent_id="assistant",
       description="...",
       model=model  # No memory parameters
@@ -140,34 +140,34 @@ alwaysApply: false
       recency_bias=0.3            # 30% weight for recency, 70% for semantic relevance
   )
 
-  # Add to buffer (through orchestrator)
-  await orchestrator.add_to_buffer_memory(
+  # Add to buffer (through overlord)
+  await overlord.add_to_buffer_memory(
       "Important information about quantum computing",
       metadata={"topic": "science", "importance": "high"}
   )
 
   # Search with default parameters (balances semantic and recency)
-  results = await orchestrator.search_memory(
+  results = await overlord.search_memory(
       "Tell me about quantum computing",
       k=5
   )
 
   # Search with higher recency bias (favor recent messages)
-  results = await orchestrator.search_memory(
+  results = await overlord.search_memory(
       "What did we just talk about?",
       recency_bias=0.7,  # 70% weight for recency, 30% for semantic
       k=3
   )
 
   # Search with lower recency bias (favor semantic relevance)
-  results = await orchestrator.search_memory(
+  results = await overlord.search_memory(
       "Tell me about quantum theory",
       recency_bias=0.1,  # 10% weight for recency, 90% for semantic
       k=5
   )
 
   # Filter by metadata
-  results = await orchestrator.search_memory(
+  results = await overlord.search_memory(
       "Tell me important science facts",
       filter_metadata={"topic": "science", "importance": "high"},
       k=5
@@ -268,8 +268,8 @@ alwaysApply: false
   long_term_memory = LongTermMemory(connection_string="postgresql://...")
   memobase = Memobase(long_term_memory=long_term_memory)
 
-  # Initialize orchestrator with multi-user memory
-  orchestrator = Orchestrator(
+  # Initialize overlord with multi-user memory
+  overlord = Overlord(
       buffer_memory=buffer,
       long_term_memory=memobase
   )
@@ -280,7 +280,7 @@ alwaysApply: false
 - Consider data retention policies for user-specific memories
 
 ## Memobase (User-Aware Memory)
-- Configure multi-user support at orchestrator level: `orchestrator = Orchestrator(long_term_memory=memobase, is_multi_user=True)`
+- Configure multi-user support at overlord level: `overlord = Overlord(long_term_memory=memobase, is_multi_user=True)`
 - Properly partition memories by user_id
 - Implement access control for memories
 - Support cross-user memory sharing when appropriate
@@ -312,18 +312,18 @@ alwaysApply: false
 - Prefer using standardized Python packages over custom binary extensions
 
 ## Memory Retrieval
-- Access memory through orchestrator: `orchestrator.search_memory(agent_id="assistant", query="...", k=3, threshold=0.7)`
+- Access memory through overlord: `overlord.search_memory(agent_id="assistant", query="...", k=3, threshold=0.7)`
 - For smart buffer memory, tune recency_bias to prioritize semantic or recency:
   ```python
   # For recent conversations (favor recency)
-  results = await orchestrator.search_memory(
+  results = await overlord.search_memory(
       "What did we just talk about?",
       recency_bias=0.7,
       k=5
   )
 
   # For factual information (favor semantics)
-  results = await orchestrator.search_memory(
+  results = await overlord.search_memory(
       "Tell me about quantum physics",
       recency_bias=0.1,
       k=5
