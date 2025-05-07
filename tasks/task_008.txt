@@ -5,7 +5,7 @@
 # Priority: high
 # Description: Enhance and optimize the existing MemoryExtractor system for automatic user information extraction from conversations.
 # Details:
-The core MemoryExtractor implementation and integration with Agent and Orchestrator classes is already functional. This task focuses on enhancing and optimizing the existing implementation with the following improvements:
+The core MemoryExtractor implementation and integration with Agent and Overlord classes is already functional. This task focuses on enhancing and optimizing the existing implementation with the following improvements:
 
 1. Improve entity recognition for various information types
 2. Add or refine confidence scoring and conflict resolution for contradictory information
