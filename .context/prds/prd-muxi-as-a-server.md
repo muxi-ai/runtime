@@ -1,28 +1,34 @@
-# PRD: MUXI as a Service
+# PRD: MUXI - The First Server for AI Agents
 
 ## Overview
 
-This PRD outlines the implementation strategy for transforming MUXI from primarily a Python framework into a full-fledged service that can be consumed by developers of any language background. This initiative will make MUXI accessible to a much broader audience while maintaining its power and flexibility for Python developers.
+This PRD outlines the implementation strategy for positioning MUXI as the first dedicated "AI Server" - a complete server for AI agents that can be consumed by developers of any language background. By transforming MUXI from primarily a Python framework into a full-fledged server solution, we create a category-defining product that makes sophisticated AI agent capabilities accessible to a much broader audience while maintaining power and flexibility for advanced users. The server will ship bundled with Ollama and our own phi-3 based fine-tuned Overlord model, enabling powerful local AI capabilities out-of-the-box without requiring external API dependencies.
 
 ## Objectives
 
-1. Lower the barrier to entry for non-Python developers
-2. Provide a Docker-based ready-to-use deployment option
-3. Enable fully declarative application configuration
-4. Implement persistence for agent configurations
-5. Support language-agnostic interaction through SDKs
-6. Create a clear migration path to potential cloud offerings
+1. Establish MUXI as the first and leading "Server for AI Agents" in the market
+2. Lower the barrier to entry for all developers regardless of language background
+3. Provide a Docker-based ready-to-use deployment option with minimal configuration
+4. Enable fully declarative application configuration
+5. Implement persistence for agent configurations
+6. Support language-agnostic interaction through SDKs
+7. Create a clear migration path to potential cloud offerings
 
 ## Background & Strategic Rationale
 
-Currently, MUXI requires Python knowledge to use effectively, limiting adoption to developers familiar with Python ecosystems. Many potential users who could benefit from MUXI's capabilities but work primarily in JavaScript, Go, Java, or other languages face significant adoption barriers.
+Currently, MUXI requires Python knowledge to use effectively, limiting adoption to developers familiar with Python ecosystems. Many potential users who could benefit from MUXI's capabilities but work primarily in JavaScript, Go, Java, or other languages face significant adoption barriers. The market lacks a true "AI Server" solution that makes agent capabilities available as a service.
 
-By offering MUXI as a containerized service with declarative configuration, we can:
+By positioning MUXI as the first dedicated "Server for AI Agents" with a containerized deployment model and declarative configuration, we can:
 
-1. Expand our user base to include all developers, regardless of language preference
-2. Follow industry-standard patterns (Docker, K8s) that developers already understand
-3. Enable easier integration into existing technology stacks
-4. Create a foundation for potential managed cloud offerings in the future
+1. Create a new product category where MUXI is the pioneer
+2. Expand our user base to include all developers, regardless of language preference
+3. Follow industry-standard patterns (Docker, K8s) that developers already understand
+4. Enable easier integration into existing technology stacks
+5. Prioritize a "get-things-done" approach with simplified adoption
+6. Create a foundation for potential managed cloud offerings in the future
+7. Broaden adoption by allowing developers to focus on what matters most - configuring agents through YAML files, using language-specific SDKs, and creating compelling user experiences - rather than implementing complex AI orchestration and workflow management
+
+We will focus primarily on the server-based approach in marketing and documentation, with customization via the underlying code as a secondary option for advanced users.
 
 ## Detailed Requirements
 
@@ -32,6 +38,8 @@ By offering MUXI as a containerized service with declarative configuration, we c
 
 - Create an official Docker image containing the complete MUXI framework
 - Include all core dependencies pre-installed
+- Bundle Ollama for local LLM capabilities with zero setup
+- Include a custom phi-3 based fine-tuned Overlord model optimized for agent orchestration
 - Configure sensible defaults for memory settings, logging, etc.
 - Expose necessary ports for HTTP API, WebRTC, and web UI
 - Support volume mounts for configuration and persistence
@@ -165,22 +173,35 @@ By offering MUXI as a containerized service with declarative configuration, we c
 
 ### 6. Documentation & Examples
 
-#### 6.1 Dual-path Documentation
+#### 6.1 Server-First Documentation Structure
 
-- Restructure documentation homepage to offer two clear paths:
-  1. Python Developer (Library Approach)
-  2. Service-based Approach (Any Language)
+- Restructure documentation homepage to prioritize the AI Server approach:
+  1. **Primary Path: AI Server Approach** - For all developers, regardless of language
+     - Quick start with Docker deployment
+     - SDK usage guides by language
+     - Configuration reference
+     - Management interfaces
+  2. **Secondary Path: Library Approach** - For Python developers who need deep customization
+     - Advanced usage patterns
+     - Component-level documentation
+     - Customization guides
 
 #### 6.2 Tutorials & Examples
 
 - Create language-specific tutorials for all supported SDKs
 - Provide Docker deployment examples for various environments
+  - Single-server deployment
+  - Multi-container setups
+  - Cloud provider specific guidance (AWS, GCP, Azure)
 - Include configuration examples for common use cases
+- Create end-to-end application examples in multiple languages
 
-#### 6.3 Migration Guides
+#### 6.3 Deployment & Scaling Guides
 
-- Document migration from library to service approaches
+- Document server deployment best practices
 - Provide guidance on scaling from development to production
+- Include optimization strategies for different use cases
+- Create migration guides for moving from library to server approach
 
 ## Technical Architecture
 
@@ -188,47 +209,71 @@ By offering MUXI as a containerized service with declarative configuration, we c
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                MUXI Docker Container                 │
+│            MUXI Server (Docker Container)            │
 ├──────────────────────────────────────────────────────┤
 │                                                      │
 │  ┌──────────────┐        ┌────────────────────────┐  │
 │  │              │        │                        │  │
-│  │  MUXI Core   │◄─────►│  Configuration Service  │  │
+│  │   MUXI Core  │◄──────►│ Configuration Service  │  │
 │  │              │        │                        │  │
 │  └──────┬───────┘        └────────────┬───────────┘  │
 │         │                             │              │
 │         ▼                             ▼              │
 │  ┌──────────────┐        ┌────────────────────────┐  │
 │  │              │        │                        │  │
-│  │ Overlord │◄─────►│  Persistence Service   │  │
+│  │   Overlord   │◄──────►│  Persistence Service   │  │
 │  │              │        │                        │  │
 │  └──────┬───────┘        └────────────┬───────────┘  │
 │         │                             │              │
 │         ▼                             ▼              │
 │  ┌──────────────┐        ┌────────────────────────┐  │
 │  │              │        │                        │  │
-│  │  HTTP API    │◄─────►│      PostgreSQL        │  │
+│  │  API/RTC/MCP │◄──────►│   SQLite / PostgreSQL  │  │
 │  │              │        │                        │  │
 │  └──────┬───────┘        └────────────────────────┘  │
 │         │                                            │
-│         ▼                                            │
-│  ┌──────────────┐        ┌────────────────────────┐  │
-│  │              │        │                        │  │
-│  │   Web UI     │        │  Volume Mounts:        │  │
-│  │              │        │  - Configuration       │  │
-│  └──────────────┘        │  - Persistence         │  │
-│                          │                        │  │
-│                          └────────────────────────┘  │
+│         ▼                             ┌────────────┐ │
+│  ┌──────────────┐        ┌───────────►│ Llama.cpp  │ │
+│  │              │        │            │            │ │
+│  │    Web UI    │        │   ┌────────┴────────┐   │ │
+│  │              │        │   │ Fine-tuned      │   │ │
+│  └──────────────┘        │   │ Phi-3 Overlord  │   │ │
+│                          │   │ Model           │   │ │
+│                          │   └─────────────────┘   │ │
+│                          │                         │ │
+│                          └─────────────────────────┘ │
 │                                                      │
 └──────────────────────────────────────────────────────┘
 ```
+
+### Integrated Local AI Capabilities
+
+The MUXI server comes pre-configured with powerful local AI capabilities:
+
+1. **Bundled Ollama**: The container includes a pre-configured Ollama installation, allowing users to run local LLMs without external API dependencies:
+   - Automatic initialization and configuration
+   - Pre-downloaded model(s) for immediate use
+   - API-compatible with hosted services for easy switching
+   - Support for loading custom models
+
+2. **Custom Phi-3 Overlord Model**:
+   - Fine-tuned on Microsoft's phi-3 architecture
+   - Specifically optimized for agent orchestration and task decomposition
+   - Runs efficiently on consumer hardware
+   - Optimized for low latency and deterministic planning
+   - Can operate completely offline, enhancing privacy and reducing costs
+
+3. **Hybrid Operation Mode**:
+   - Seamless switching between local and cloud LLMs
+   - Automatic fallback configurations
+   - Capability-based routing between local and remote models
 
 ### Configuration Flow
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
 │             │     │             │     │             │
-│  YAML File  │────►│ Config      │────►│ Overlord│
+│  YAML File  │────►│ Config      │────►│   Overlord  │
 │             │     │ Service     │     │             │
 └─────────────┘     └──────┬──────┘     └─────────────┘
                            │                   │
@@ -399,6 +444,7 @@ knowledge_bases:
 3. **Marketplace**: A repository of pre-configured agents that can be imported
 4. **Observability**: Integration with popular monitoring tools
 5. **Scaling**: Automatic scaling based on traffic patterns
+6. **Standalone Executables**: For enterprise customers with Docker restrictions, develop a compilation process to package the containerized application as standalone executables for various platforms
 
 ## Appendix
 
@@ -420,8 +466,8 @@ POST   /api/v1/config/validate        # Validate configuration without applying
 POST   /api/v1/config/export          # Export configuration
 POST   /api/v1/config/import          # Import configuration
 
-GET    /api/v1/overlord/status    # Get overlord status
-POST   /api/v1/overlord/restart   # Restart the overlord
+GET    /api/v1/overlord/status        # Get overlord status
+POST   /api/v1/overlord/restart       # Restart the overlord
 
 POST   /api/v1/auth/users             # Create a user
 GET    /api/v1/auth/users             # List users
@@ -453,8 +499,8 @@ muxi-cli agents update <name>        # Update an agent
 muxi-cli agents delete <name>        # Delete an agent
 muxi-cli agents restart <name>       # Restart an agent
 
-muxi-cli overlord status         # Get overlord status
-muxi-cli overlord restart        # Restart the overlord
+muxi-cli overlord status             # Get overlord status
+muxi-cli overlord restart            # Restart the overlord
 
 muxi-cli users list                  # List users
 muxi-cli users create                # Create a user
