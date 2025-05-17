@@ -10,7 +10,7 @@ import os
 import asyncio
 from dotenv import load_dotenv
 
-from muxi.core.models.providers.openai import OpenAIModel
+from muxi.core.llm import LLM
 from muxi.core.overlord import Overlord
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.mcp import MCPMessage
@@ -40,8 +40,8 @@ async def test_programmatic_agent():
     print("Creating overlord with memory...")
     overlord = Overlord(buffer_memory=buffer_memory)
 
-    # Create a language model
-    model = OpenAIModel(model="gpt-4o-mini", api_key=api_key)
+    # Create a language model using the new LLM class
+    model = LLM(model="openai/gpt-4o-mini", api_key=api_key)
 
     # Create an agent programmatically
     print("Creating agent programmatically...")

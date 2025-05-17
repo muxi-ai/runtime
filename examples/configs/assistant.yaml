@@ -2,10 +2,9 @@
 name: assistant
 description: "General-purpose AI assistant that can answer questions, assist with tasks, and provide information on a wide range of topics."
 system_message: You are a helpful AI assistant. You can provide information, answer questions, and assist with various tasks.
-model:
-  provider: openai
+llm:
+  model: openai/gpt-4o
   api_key: "${OPENAI_API_KEY}"
-  model: gpt-4o
   temperature: 0.7
 memory:
   buffer_size: 10

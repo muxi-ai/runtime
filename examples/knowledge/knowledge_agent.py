@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 
 from muxi.core.overlord import Overlord
-from muxi.core.models.providers.openai import OpenAIModel
+from muxi.core.llm import LLM, set_llm_api_key
 from muxi.core.knowledge.base import FileKnowledge
 
 
@@ -19,13 +19,15 @@ async def main():
     # Load environment variables
     load_dotenv()
 
+    # Set API key for OpenAI provider
+    set_llm_api_key(os.getenv("OPENAI_API_KEY", ""), "openai")
+
     # Initialize the overlord
     overlord = Overlord()
 
-    # Create an OpenAI model
-    model = OpenAIModel(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        model="gpt-4o"
+    # Create a language model
+    model = LLM(
+        model="openai/gpt-4o"
     )
 
     # Create an agent with knowledge capabilities

@@ -1,10 +1,9 @@
 ---
 agent_id: assistant
 description: A helpful assistant with Postgres-based long-term memory
-model:
-  provider: openai
+llm:
+  model: openai/gpt-4o
   api_key: ${OPENAI_API_KEY}
-  model: gpt-4o
   temperature: 0.2
 memory:
   buffer: 15

@@ -10,9 +10,9 @@ import os
 import yaml
 import json
 from dotenv import load_dotenv
-from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.agent import Agent
 from muxi.core.overlord import Overlord
+from muxi.core.llm import LLM
 
 # Load environment variables from .env file
 load_dotenv()
@@ -30,10 +30,9 @@ def create_test_configs():
 name: weather_assistant
 description: "Specialized in providing weather forecasts and meteorological information."
 system_message: You are a weather assistant that provides forecasts.
-model:
-  provider: openai
+llm:
+  model: openai/gpt-4o-mini
   api_key: "${OPENAI_API_KEY}"
-  model: gpt-4o-mini
   temperature: 0.2
 memory:
   buffer_size: 5
@@ -56,10 +55,9 @@ mcp_servers:
     "name": "finance_assistant",
     "description": "Expert in financial analysis and investment strategies.",
     "system_message": "You are a finance assistant.",
-    "model": {
-        "provider": "openai",
+    "llm": {
+        "model": "openai/gpt-4o-mini",
         "api_key": "${OPENAI_API_KEY}",
-        "model": "gpt-4o-mini",
         "temperature": 0.2
     },
     "memory": {
@@ -114,7 +112,11 @@ def test_agent_creation():
         print("No OpenAI API key found in environment. Set OPENAI_API_KEY.")
         return
 
-    model = OpenAIModel(model="gpt-4o-mini", api_key=api_key)
+    model = LLM(
+        model="gpt-4o-mini",
+        temperature=0.2,
+        api_key=api_key
+    )
 
     # Create an agent programmatically (baseline test)
     print("Creating agent programmatically...")
@@ -130,12 +132,12 @@ def test_agent_creation():
 
     # 1. Load the configuration
     weather_config = load_yaml_config(f"{CONFIGS_DIR}/weather_agent.yaml")
-    weather_config["model"]["api_key"] = api_key  # Ensure we use the actual API key
+    weather_config["llm"]["api_key"] = api_key  # Ensure we use the actual API key
 
-    # 2. Create the weather agent
-    weather_model = OpenAIModel(
-        model=weather_config["model"]["model"],
-        temperature=weather_config["model"]["temperature"],
+    # 2. Create the weather agent using the LLM class
+    weather_model = LLM(
+        model=weather_config["llm"]["model"],
+        temperature=weather_config["llm"]["temperature"],
         api_key=api_key
     )
 
@@ -158,12 +160,12 @@ def test_agent_creation():
 
     # 1. Load the configuration
     finance_config = load_json_config(f"{CONFIGS_DIR}/finance_agent.json")
-    finance_config["model"]["api_key"] = api_key  # Ensure we use the actual API key
+    finance_config["llm"]["api_key"] = api_key  # Ensure we use the actual API key
 
     # 2. Create the finance agent
-    finance_model = OpenAIModel(
-        model=finance_config["model"]["model"],
-        temperature=finance_config["model"]["temperature"],
+    finance_model = LLM(
+        model=finance_config["llm"]["model"],
+        temperature=finance_config["llm"]["temperature"],
         api_key=api_key
     )
 

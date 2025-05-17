@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 
 from muxi.core.memory.buffer import BufferMemory
-from muxi.core.models.base import BaseModel
+from muxi.core.llm import LLM
 
 
 class TestBufferMemory(unittest.IsolatedAsyncioTestCase):
@@ -75,7 +75,7 @@ class TestBufferMemory(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(results[1]["text"], "Second message")
 
 
-class MockLLM(BaseModel):
+class MockLLM(LLM):
     """Mock LLM for testing."""
 
     async def chat(self, messages, **kwargs):

@@ -10,18 +10,20 @@ import os
 from dotenv import load_dotenv
 
 from muxi.core.overlord import Overlord
-from muxi.core.models.providers.openai import OpenAIModel
+from muxi.core.llm import LLM, set_llm_api_key
 
 
 # Load environment variables
 load_dotenv()
 
+# Set API key for OpenAI provider
+set_llm_api_key(os.getenv("OPENAI_API_KEY", ""), "openai")
+
 
 async def main():
-    # Create an OpenAI model
-    model = OpenAIModel(
-        api_key=os.getenv("OPENAI_API_KEY"),
-        model="gpt-4o",
+    # Create a language model
+    model = LLM(
+        model="openai/gpt-4o",
         temperature=0.7,
     )
 
@@ -29,26 +31,23 @@ async def main():
     overlord = Overlord()
 
     # Add a basic agent with default memory and no tools
-    overlord.add_agent(
+    overlord.create_agent(
         agent_id="basic_agent",
-        system_message="You are a helpful AI assistant.",
         model=model,
+        system_message="You are a helpful AI assistant.",
+        set_as_default=True
     )
 
-    # Chat with the agent
-    response = await overlord.process_message(
-        "Hello, who are you?",
-        agent_id="basic_agent",
+    # Process a message with the agent
+    response = await overlord.run_agent(
+        input_text="Hello, what capabilities does the MUXI Framework have?",
+        agent_id="basic_agent"
     )
-    print(f"Agent: {response.content}")
 
-    # Continue the conversation
-    response = await overlord.process_message(
-        "What can you tell me about the MUXI Framework?",
-        agent_id="basic_agent",
-    )
-    print(f"Agent: {response.content}")
+    # Print the response
+    print(f"Agent response: {response}")
 
 
+# Run the example
 if __name__ == "__main__":
     asyncio.run(main())
