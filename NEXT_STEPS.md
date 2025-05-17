@@ -111,100 +111,18 @@ Core components of the muxi framework now implemented:
 
 Things to do next to enhance the framework, ordered by priority:
 
-### 1. Complete MUXI LLM Implementation
+### 1. Replace Provider Model with MUXI LLM
 
-- [ ] Complete core MUXI LLM functionality
-  - [ ] Standardized interface for all LLM providers
-  - [ ] Support for streaming responses
-  - [ ] Optimized token handling and counting
-  - [ ] Automatic retries with exponential backoff
-  - [ ] Comprehensive error handling with fallbacks
-  - [ ] Model-specific parameter validation
-  - [ ] Caching mechanism for identical requests
-- [ ] Implement provider-specific adaptations
-  - [ ] OpenAI (already implemented)
-  - [ ] Anthropic
-  - [ ] Gemini/VertexAI (Google)
-  - [ ] xAI (Grok)
-  - [ ] Azure OpenAI
-  - [ ] HuggingFace
-  - [ ] Openrouter
-  - [ ] Local models (via Ollama)
-  - [ ] Amazon Bedrock (Claude, Titan, etc.)
-  - [ ] NVIDIA
-- [ ] Create model router for fallback and cost optimization
-  - [ ] Priority-based routing logic
-  - [ ] Cost-aware model selection
-  - [ ] Error-triggered fallback chains
-  - [ ] Usage metrics and quotas
+- [ ] Integrate muxi-llm package as the standardized interface for all LLM providers
+  - [ ] Incorporate muxi-llm (already created with initial OpenAI support)
+  - [ ] Update all code references to use the new MUXI LLM interfaces
+  - [ ] Create backward compatibility layer if needed
+  - [ ] Test all existing functionality with new implementation
+  - [ ] Optimize performance for common operations
+- [ ] Implement standard retry mechanisms and error handling
+- [ ] Support multi-modal capabilities through MUXI LLM
 
-### 2. Replace Provider Model with MUXI LLM
-
-- [ ] Refactor existing model providers to use MUXI LLM
-- [ ] Update all code references to use the new MUXI LLM interfaces
-- [ ] Create backward compatibility layer if needed
-- [ ] Update documentation to reflect new model handling
-- [ ] Test all existing functionality with new implementation
-- [ ] Optimize performance for common operations
-
-### 3. Multi-Modal Capabilities
-
-Transform agents into omni agents capable of handling various media types:
-
-#### Document Processing
-- [ ] PDF processing and text extraction
-- [ ] Support for Office documents (Word, Excel, etc.)
-- [ ] OCR for scanned documents
-- [ ] Document summarization tools
-
-#### Image Processing
-- [ ] Extend MCPMessage to support image attachments
-- [ ] Create image preprocessing pipeline
-  - [ ] Resize and optimize images for models
-  - [ ] Format conversion utilities
-  - [ ] Metadata extraction
-- [ ] Integrate with vision-capable models
-  - [ ] OpenAI GPT-4V
-  - [ ] Anthropic Claude 3
-  - [ ] Google Gemini
-  - [ ] Local models with vision capabilities
-- [ ] Update API endpoints to handle image uploads
-
-#### Audio Processing
-- [ ] Audio file handling and processing
-  - [ ] Support various audio formats (MP3, WAV, etc.)
-  - [ ] Audio normalization and enhancement
-- [ ] Speech-to-text integration
-  - [ ] OpenAI Whisper integration
-  - [ ] Other speech recognition options
-- [ ] Text-to-speech for agent responses
-  - [ ] Voice selection options
-  - [ ] Emotion/tone control
-- [ ] Streaming audio capabilities
-  - [ ] Design protocol for audio streaming via SSE/WebRTC
-  - [ ] Implement real-time audio processing
-
-### 4. Agent-to-Agent (A2A) Communication
-
-Based on prd-a2a.md specifications:
-
-- [ ] Implement the A2A protocol for inter-agent communication
-  - [ ] Capability discovery mechanism
-  - [ ] Task delegation between agents
-  - [ ] Context sharing with proper isolation
-  - [ ] Conversation lifecycle management
-  - [ ] External agent integration
-  - [ ] Security and authentication
-- [ ] Enhance MCP Server Interface
-  - [ ] SSE-based MCP server implementation
-  - [ ] Automatic tool discovery from agent capabilities
-  - [ ] NPX bridge package for non-SSE clients
-  - [ ] Streaming response handling
-  - [ ] Authentication shared with REST API
-
-### 5. Implement Overlord Overlord
-
-Based on prd-overlord-overlord.md specifications:
+### 2. Implement a Better Overlord and A2A Communication
 
 - [ ] Implement task decomposition mechanism
   - [ ] Automated parsing of complex requests into subtasks
@@ -223,121 +141,84 @@ Based on prd-overlord-overlord.md specifications:
   - [ ] Execution path monitoring
   - [ ] Error detection and recovery
   - [ ] Dynamic workflow adjustment
-- [ ] Implement reasoning engine
-  - [ ] Prompt engineering for effective task decomposition
-  - [ ] Integration with high-quality reasoning models
-  - [ ] Contextual adaptation of task execution
-- [ ] Create A2A Integration
-  - [ ] Leverage A2A capability discovery for orchestration
-  - [ ] Delegate subtasks via A2A communication
-  - [ ] Manage context across agent boundaries
+- [ ] Implement A2A protocol for inter-agent communication
+  - [ ] Capability discovery mechanism
+  - [ ] Task delegation between agents
+  - [ ] Context sharing with proper isolation
+  - [ ] Conversation lifecycle management
+  - [ ] External agent integration
+  - [ ] Security and authentication
 
-### 6. REST API & Interface Implementation
+### 3. MUXI as a Server
 
-Based on the prd-api-server.md specifications, implement the unified MUXI API Server:
-
-- [x] Implement centralized MCPService as a singleton for MCP server interactions
-- [ ] Implement unified API Server architecture
-  - [ ] Core API server with shared components (auth, logging, rate limiting)
-  - [ ] Configuration system with environment variable support
-  - [ ] Structured error handling and response format
-  - [ ] Consistent response structure across all endpoints
-- [ ] Implement REST API endpoints
-  - [ ] User/Interface endpoints for agent interaction
-    - [ ] Agent chat endpoints (POST /api/v1/agents/{agent_id}/chat)
-    - [ ] Overlord chat endpoints (POST /api/v1/chat)
-    - [ ] Conversation history endpoints (GET /api/v1/conversations)
-  - [ ] Developer/Management endpoints
-    - [ ] Agent management (GET/POST/PATCH/DELETE /api/v1/agents)
-    - [ ] Memory operations (GET/DELETE /api/v1/agents/{agent_id}/memory)
-    - [ ] Context memory CRUD operations
-    - [ ] MCP server management
-    - [ ] Knowledge management
-    - [ ] System information and monitoring
-- [ ] Implement dual-key authentication system
-  - [ ] User/Interface API keys for client access (sk_muxi_user_*)
-  - [ ] Administrative API keys for system management (sk_muxi_admin_*)
-  - [ ] Automatic key generation mechanism
-  - [ ] Secure key storage and validation
-- [ ] Add SSE streaming support
-  - [ ] Stream agent responses in real-time
-  - [ ] Event-based streaming format
-  - [ ] Connection recovery mechanism
-  - [ ] Tool call event streaming
-- [ ] Implement MCP protocol support
-  - [ ] Integrate FastMCP or similar library
-  - [ ] Tool definition discovery and exposure
-  - [ ] Request routing to appropriate agents
-  - [ ] Streaming MCP responses
-- [ ] Set up WebRTC signaling server for multi-modal
-  - [ ] Session management endpoints
-  - [ ] Signaling protocol implementation
-  - [ ] Integration with agent message processing
-- [ ] Add security features
-  - [ ] CORS configuration
-  - [ ] Security headers
-  - [ ] Input validation
-  - [ ] Rate limiting per endpoint and per key
-- [ ] Create OpenAPI/Swagger documentation
-  - [ ] Document all endpoints with examples
-  - [ ] Create interactive API playground
-  - [ ] Include authentication instructions
-
-### 7. CLI Interfaces
-
-- [ ] Enhance CLI interface
-  - [ ] Add support for all API operations
-  - [ ] Improve user experience with better formatting and colors
-  - [ ] Add multi-modal interaction support
-  - [ ] Implement configuration management commands
-- [ ] Improve API server
-  - [ ] Implement all endpoints described in the spec
-  - [ ] Add comprehensive test coverage
-
-### 8. Web UI
-
-- [ ] Develop web interface
-  - [ ] Create responsive UI for mobile and desktop
-  - [ ] Implement real-time updates using SSE
-  - [ ] Add support for multi-modal interactions
-  - [ ] Build user-friendly configuration interface
-  - [ ] Create agent management dashboard
-
-### 9. MUXI as a Service
-
-Based on prd-muxi-as-a-service.md specifications:
-
-- [ ] Create Docker container with pre-configured MUXI
-  - [ ] Pre-installed dependencies and optimized configuration
-  - [ ] Environment variable configuration system
-  - [ ] Volume mounting for persistent storage
-  - [ ] Health checks and monitoring
 - [ ] Implement unified YAML configuration
   - [ ] Configuration parser for application-level YAML
   - [ ] Schema validation for configuration files
   - [ ] Environment variable substitution
   - [ ] Default configuration templates
-- [ ] Build persistence layer for configurations
-  - [ ] Storage system for agent configurations
-  - [ ] Change tracking and versioning
-  - [ ] Backup and restore functionality
-- [ ] Create language-agnostic APIs
-  - [ ] RESTful API for configuration management
-  - [ ] SDK generator for multiple languages
-  - [ ] Real-time interface for interaction via SSE
-  - [ ] MCP server interface for tool integration
-- [ ] Implement CLI tooling
-  - [ ] Agent management commands
-  - [ ] Configuration validation
-  - [ ] Remote server management
-  - [ ] Authentication handling
-- [ ] Build administrative web interface
-  - [ ] Agent management dashboard
-  - [ ] Configuration editor
-  - [ ] Monitoring and analytics
-  - [ ] User management
+- [ ] Build comprehensive API
+  - [ ] Core API server with shared components
+  - [ ] REST API endpoints for agent interaction
+  - [ ] SSE streaming support
+  - [ ] MCP protocol support
+  - [ ] Authentication and security layers
+- [ ] Create Docker container with pre-configured MUXI
+  - [ ] Bundle with Ollama and phi-3 based fine-tuned Overlord model
+  - [ ] Pre-installed dependencies and optimized configuration
+  - [ ] Environment variable configuration system
+  - [ ] Volume mounting for persistent storage
+  - [ ] Health checks and monitoring
 
-### 10. Language-Specific SDKs
+### 4. End-to-End Examples and User Experience
+
+- [ ] Develop comprehensive demos showcasing the AI Server approach
+- [ ] Create sample client applications in multiple languages
+- [ ] Enhance CLI interface
+  - [ ] Add support for all API operations
+  - [ ] Improve user experience with better formatting and colors
+  - [ ] Add multi-modal interaction support
+  - [ ] Implement configuration management commands
+- [ ] Develop administrative Web UI
+  - [ ] Create responsive UI for mobile and desktop
+  - [ ] Implement real-time updates using SSE
+  - [ ] Build user-friendly configuration interface
+  - [ ] Create agent management dashboard
+
+### 5. Extend MUXI LLM with Additional Providers
+
+- [ ] Implement additional LLM provider integrations
+  - [ ] Anthropic
+  - [ ] Gemini/VertexAI (Google)
+  - [ ] xAI (Grok)
+  - [ ] Azure OpenAI
+  - [ ] HuggingFace
+  - [ ] Openrouter
+  - [ ] Local models (via Ollama)
+  - [ ] Amazon Bedrock (Claude, Titan, etc.)
+  - [ ] NVIDIA
+- [ ] Create model router for fallback and cost optimization
+  - [ ] Priority-based routing logic
+  - [ ] Cost-aware model selection
+  - [ ] Error-triggered fallback chains
+  - [ ] Usage metrics and quotas
+
+### 6. Multi-Modal Capabilities
+
+These will largely come from MUXI LLM support, but may need additional infrastructure:
+
+- [ ] Document processing enhancements
+  - [ ] PDF processing and text extraction
+  - [ ] Support for Office documents (Word, Excel, etc.)
+  - [ ] OCR for scanned documents
+  - [ ] Document summarization tools
+- [ ] Image processing specific infrastructure
+  - [ ] Image preprocessing pipeline
+  - [ ] Metadata extraction
+- [ ] Audio processing specific infrastructure
+  - [ ] Audio file handling and processing
+  - [ ] Streaming audio capabilities
+
+### 7. Language-Specific SDKs
 
 - [ ] TypeScript/JavaScript SDK
 - [ ] Language-specific SDKs
@@ -356,44 +237,78 @@ Based on prd-muxi-as-a-service.md specifications:
 
 Based on current progress and updated priorities:
 
-### Phase 1: Core Foundation & Multi-Modal
-- [ ] Complete MUXI LLM Implementation with unified model interface
-- [ ] Replace current provider model module with MUXI LLM
-- [ ] Add multi-modal capabilities (image, audio, document processing)
-- [ ] Create standardized retry mechanisms and error handling
-- [ ] Support multiple LLM providers with consistent interfaces
-- [ ] Implement cost-aware model routing and fallbacks
+### Phase 1: Core Foundation (Current Focus)
+- [ ] Replace current provider model with MUXI LLM
+  - [ ] Integrate muxi-llm package as the standardized interface (already created with OpenAI support)
+  - [ ] Update all code references to use the new MUXI LLM interfaces
+  - [ ] Create backward compatibility layer if needed
+  - [ ] Test all existing functionality with new implementation
+  - [ ] Optimize performance for common operations
+- [ ] Implement standard retry mechanisms and error handling
+- [ ] Support multi-modal capabilities through MUXI LLM (images, audio, document processing)
 
-### Phase 2: Advanced Agent Capabilities
+### Phase 2: Advanced Orchestration
+- [ ] Implement a Better Overlord system
+  - [ ] Create automatic task decomposition
+  - [ ] Develop capability-based agent selection
+  - [ ] Build workflow management for dependencies
+  - [ ] Add self-correction mechanisms
 - [ ] Implement A2A Communication Protocol
-- [ ] Create capability discovery mechanism
-- [ ] Build context sharing with proper isolation
-- [ ] Add security layer for inter-agent communication
-- [ ] Develop task delegation system
+  - [ ] Create capability discovery mechanism
+  - [ ] Add context sharing with proper isolation
+  - [ ] Build security layer for inter-agent communication
+  - [ ] Develop task delegation system
 
-### Phase 3: Enhanced Orchestration
-- [ ] Transform overlord into "Overlord" system
-- [ ] Implement automatic task decomposition
-- [ ] Create capability-based agent selection
-- [ ] Build workflow management for dependencies
-- [ ] Develop self-correction mechanisms
-- [ ] Integrate with A2A communication
+### Phase 3: MUXI as an AI Server
+- [ ] Implement unified YAML configuration
+  - [ ] Create configuration parser for application-level YAML
+  - [ ] Add schema validation for configuration files
+  - [ ] Implement environment variable substitution
+  - [ ] Develop default configuration templates
+- [ ] Build comprehensive API
+  - [ ] Implement RESTful API endpoints
+  - [ ] Add SSE for streaming
+  - [ ] Create MCP server endpoints
+  - [ ] Implement authentication and security layers
+- [ ] Create Docker container with pre-configured MUXI
+  - [ ] Bundle with Ollama and phi-3 based fine-tuned Overlord model
+  - [ ] Pre-install dependencies and optimize configuration
+  - [ ] Add environment variable configuration system
+  - [ ] Implement volume mounting for persistent storage
 
-### Phase 4: Interface & API Development
-- [ ] Complete RESTful API implementation
-- [ ] Implement SSE for streaming
-- [ ] Create MCP server endpoints
-- [ ] Add WebRTC support for multi-modal
+### Phase 4: User Experience & SDKs
+- [ ] Develop end-to-end examples
+  - [ ] Create comprehensive demos showcasing the AI Server approach
+  - [ ] Develop sample client applications in multiple languages
 - [ ] Enhance CLI interface
+  - [ ] Add support for all API operations
+  - [ ] Improve user experience with better formatting and colors
 - [ ] Develop administrative Web UI
-- [ ] Add authentication and security layers
+  - [ ] Create agent management dashboard
+  - [ ] Build configuration editor
+- [ ] Create language-specific SDKs
+  - [ ] TypeScript/JavaScript SDK
+  - [ ] PHP, Go, Java/Kotlin, etc.
 
-### Phase 5: Service & SDK Development
-- [ ] Create Docker-based MUXI as a Service
-- [ ] Build unified YAML configuration system
-- [ ] Develop language-agnostic SDK generators
-- [ ] Add persistence for agent configurations
-- [ ] Implement language-specific SDKs
+### Phase 5: Expansion & Optimization
+- [ ] Extend MUXI LLM with additional providers
+  - [ ] Anthropic
+  - [ ] Gemini/VertexAI (Google)
+  - [ ] xAI (Grok)
+  - [ ] Azure OpenAI
+  - [ ] HuggingFace
+  - [ ] Openrouter
+  - [ ] Local models (via Ollama)
+  - [ ] Amazon Bedrock
+  - [ ] NVIDIA
+- [ ] Create model router for fallback and cost optimization
+  - [ ] Priority-based routing logic
+  - [ ] Cost-aware model selection
+  - [ ] Error-triggered fallback chains
+- [ ] Implement advanced deployment options
+  - [ ] Kubernetes deployment configurations
+  - [ ] Cloud deployment guides
+  - [ ] Monitoring and logging integration
 
 ## Contribution Guidelines
 

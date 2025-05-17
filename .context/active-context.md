@@ -2,25 +2,38 @@
 
 ## Current Work Focus
 
-The current development focus is on implementing the complete REST API as defined in the `.context/scratchpad/api.md` specification file. This involves standardizing all API endpoints, implementing authentication, error handling, and ensuring proper documentation. This work is considered high priority as it forms the foundation for client applications to interact with the MUXI Framework.
+The current development focus has shifted to position MUXI as "The First Server for AI Agents" - a complete server solution that makes sophisticated AI agent capabilities accessible to developers of any language background. This involves several key priorities:
 
-Additional priority areas include:
-- Improving and optimizing the FAISS-backed smart buffer memory system
-- Enhancing the centralized MCPService singleton architecture
-- Refining the automatic user information extraction system
+1. **Replace Provider Model with MUXI LLM**: Integrate the newly created muxi-llm package (currently with OpenAI support) to standardize all LLM provider interactions.
+   - Update all code references to use the new interfaces
+   - Create backward compatibility layer if needed
+   - Test existing functionality with the new implementation
+   - Support multi-modal capabilities through MUXI LLM
+
+2. **Implement a Better Overlord**: Transform the current overlord into an advanced orchestration system with automatic task decomposition and workflow management.
+   - Develop capability-based agent selection
+   - Implement Agent-to-Agent (A2A) Communication Protocol
+   - Create context sharing with proper isolation
+   - Add security layer for inter-agent communication
+
+3. **MUXI as a Server**: After the core components are ready, focus on the server aspect with these sub-steps:
+   - First, implement a comprehensive unified YAML configuration system
+   - Next, develop a full-featured API
+   - Finally, create the Docker container with Ollama and phi-3 Overlord model
+
+Additional priorities include:
+- Documentation updates to reflect the "AI Server" positioning
+- End-to-end examples demonstrating the AI Server approach with different languages
+- Preparing the Architecture for the next phase of SDKs in multiple languages
 
 ### Primary Areas of Focus
 
-1. **API Implementation**: Implementing the full set of REST endpoints defined in the API specification
-2. **Authentication System**: Implementing a robust API key authentication system
-3. **Error Handling**: Standardizing error responses across all endpoints
-4. **Streaming Support**: Enhancing SSE streaming for chat responses
-5. **Documentation**: Creating comprehensive API documentation with Swagger/OpenAPI
-6. **SQLite Vector Integration**: Enhancing local deployment capabilities with sqlite-vec extension
-7. **Agent-to-Agent Protocol**: Implementing the A2A protocol for inter-agent communication
-8. **MCP Server Interface**: Creating an SSE-based MCP server endpoint for MCP host integration
-9. **Memory Optimization**: Fine-tuning the FAISS-backed smart buffer memory for improved performance
-10. **Automatic Information Extraction**: Implementing a system to automatically identify and store important user information from conversations
+1. **MUXI LLM Integration**: Replace the provider model module with the new MUXI LLM package
+2. **Overlord Enhancements**: Transform the current overlord into a more capable system
+3. **A2A Protocol**: Implement agent-to-agent communication with capability discovery
+4. **YAML Configuration**: Create comprehensive configuration system for the entire project
+5. **API Implementation**: Develop a robust API that works with any programming language
+6. **Docker Integration**: Create containerized deployment with Ollama and fine-tuned model
 
 ## Recent Changes
 
@@ -462,32 +475,74 @@ These components will interact with the existing **MUXI Core** (previously refer
 
 ## Architecture Evolution
 
-The MUXI Framework architecture is evolving to support a more modular and distributed deployment model:
+The MUXI Framework architecture is evolving to support a server-first approach, positioning MUXI as "The First Server for AI Agents":
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    MUXI CLI     │────▶│    MUXI API     │────▶│    MUXI Core    │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │
-        │                       │                       │
-        ▼                       ▼                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Deployment Options                          │
-├─────────────────┬─────────────────┬─────────────────────────────┤
-│ Single Machine  │ Same Network    │ Distributed (Cross-Network) │
-└─────────────────┴─────────────────┴─────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                      Client Applications                    │
+│ (Any Language: JS, Python, PHP, Go, Java, Ruby, Rust, etc) │
+└─────────────────────────────┬────────────────────────────┬─┘
+                              │                            │
+                  ┌───────────▼──────────┐        ┌────────▼────────┐
+                  │    REST API/SSE      │        │ MCP Integration  │
+                  │ (Agent Interaction)  │        │ (Tool Access)    │
+                  └───────────┬──────────┘        └────────┬────────┘
+                              │                            │
+┌─────────────────────────────▼────────────────────────────▼─────────────────────────────┐
+│                                MUXI AI Server                                           │
+│                                                                                         │
+│  ┌──────────────────┐    ┌────────────────┐    ┌────────────────┐    ┌────────────────┐│
+│  │ Ollama          │    │                │    │                │    │                ││
+│  │ Local Models    │    │    MUXI Core   │    │  Memory System │    │ Configuration  ││
+│  └──────┬──────────┘    │                │    │                │    │   Manager      ││
+│         │               │    ┌─────────┐ │    │    ┌────────┐  │    │                ││
+│         ▼               │    │Overlord │ │    │    │Buffer  │  │    │  ┌────────────┐││
+│  ┌──────────────────┐   │    │ Agents  │◄├────┼───►│Long-term│  │    │  │YAML Config│││
+│  │ Fine-tuned       │   │    └─────────┘ │    │    └────────┘  │    │  └────────────┘││
+│  │ Overlord Model   │◄──┼────────────────┼────┼────────────────┼────┼────────────────┘│
+│  └──────────────────┘   └────────────────┘    └────────────────┘    │                  │
+│                                                                      │                  │
+│  ┌──────────────────┐   ┌────────────────┐    ┌────────────────┐    │                  │
+│  │ MCP Handler      │   │A2A Communication│   │ Knowledge Base │    │                  │
+│  └─────────┬────────┘   └────────────────┘    └────────────────┘    │                  │
+└───────────┬┼────────────────────────────────────────────────────────┘                  │
+            ││                                                                            │
+┌───────────▼┼────────────────────────────────────────────────────────────────────────┐  │
+│            ▼                   External MCP Servers                                  │  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │  │
+│  │ Search Engine   │  │ File Operations │  │ Weather API     │  │ Custom Services │ │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘ │  │
+└────────────────────────────────────────────────────────────────────────────────────┘  │
+                                                                                         │
+┌────────────────────────────────────────────────────────────────────────────────────────┘
+│
+│                            Deployment Options
+├───────────────────────┬───────────────────────┬──────────────────────────────┐
+│   Local Development   │    Docker Container   │   Production Deployment      │
+│   • Single machine    │    • Pre-configured   │   • High-availability        │
+│   • Quick start       │    • Portable         │   • Horizontal scaling       │
+│   • Easy setup        │    • Reproducible     │   • Load balancing           │
+└───────────────────────┴───────────────────────┴──────────────────────────────┘
 ```
 
-Each component can be deployed on the same machine, within the same network, or in a fully distributed setup across different networks, providing flexibility for various deployment scenarios.
+This updated architecture emphasizes:
+
+1. **Language-Agnostic Access**: Clients in any programming language can access MUXI functionality
+2. **Server-First Design**: All components are organized around the central AI Server concept
+3. **Bundled Local AI**: Ollama integration with a fine-tuned Overlord model reduces API dependencies
+4. **Declarative Configuration**: YAML-based configuration for easier setup and management
+5. **Flexible Deployment**: Options from single-machine development to production-scale clusters
 
 ## Considerations and Next Steps
 
 1. **Package Alignment**:
    - The new terminology aligns with the existing package structure:
      - `core`: MUXI Core implementation
-     - `server`: MUXI API implementation
+     - `server`: MUXI AI Server implementation
      - `cli`: MUXI CLI implementation
      - `meta`: Meta-package that installs everything
+   - Add new packages:
+     - `llm`: MUXI LLM package for standardized provider interfaces
 
 2. **Authentication Flow**:
    - Implementing the dual API key system (user and admin keys) at the MUXI Core level
@@ -495,5 +550,6 @@ Each component can be deployed on the same machine, within the same network, or 
    - MUXI CLI will store and manage keys in profile configurations
 
 3. **Deployment Configuration**:
-   - MUXI API needs to be configured with the URI of MUXI Core (defaults to localhost:3000)
-   - Documentation for deploying each component independently with appropriate configuration
+   - Docker deployment with pre-configured Ollama and phi-3 Overlord model
+   - Comprehensive YAML configuration for easy setup
+   - Language-specific examples for client applications

@@ -1,14 +1,17 @@
-# MUXI Framework
+# MUXI Framework - The First Server for AI Agents
 
-> The MUXI Framework is a versatile Python framework for building AI agents and Multi-Agent systems.
+> MUXI is a dedicated server for AI agents that makes sophisticated agent capabilities accessible to developers of any language background.
 
-MUXI Framework is a powerful platform for building AI agents with memory, MCP server integration, and real-time communication capabilities. It provides a solid foundation for creating advanced AI applications through a unified architecture that integrates multiple interfaces.
+MUXI is a powerful AI Server that enables you to deploy, manage, and orchestrate AI agents with memory, tool integration, and real-time communication capabilities. It provides a complete server solution through a unified architecture that works with any programming language or framework.
 
 > [!WARNING]
 > This project is a work in progress and is not yet ready for production use. I'm actively developing the framework and adding new features. Please refer to the [roadmap](docs/roadmap.md) for information about the current state of the project and where it's headed.
 
 ## Features
 
+- 🖥️ **Complete AI Server**: Deploy as a dedicated server accessible from any programming language
+- 🐳 **Docker-Ready**: Run as a containerized application with Ollama and a fine-tuned Overlord model included
+- 🛠️ **Language-Agnostic**: Use REST APIs, SDKs, and configuration files without Python knowledge
 - 🤖 **Multi-Agent Support**: Create and manage multiple AI agents with different capabilities
 - 🧠 **Memory Systems**: Short-term and long-term memory for contextual interactions
   - FAISS-backed smart buffer memory with hybrid semantic+recency retrieval
@@ -62,49 +65,70 @@ MUXI Framework is a powerful platform for building AI agents with memory, MCP se
 
 ## Architecture
 
-MUXI has a flexible, service-oriented approach:
+MUXI follows a server-oriented architecture designed for flexibility and broad accessibility:
 
 ```
-┌───────────────────┐
-│      Clients      │
-│ (CLI/MCP/Web/SDK) │
-└─────────┬─────────┘
-          │
-          │  (API/SSE/WS)
-          │
-┌─────────│───────────────────────────────────────────┐
-│         │    MUXI Server (Local/Remote)             │
-│         │                                           │
-│         │        ┌───────────────┐                  │   ┌──────────────────┐
-│         └───────>│    Overlord   │----------------------│ Buffer/LT Memory │
-│                  └───────┬───────┘                  │   └──────────────────┘
-│         ┌────────────────┼────────────────┐         │
-│         │                │                │         │
-│  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐  │   ┌──────────────────┐
-│  │   Agent 1   │  │   Agent 2   │  │   Agent N   │------│ Domain Knowledge │
-│  └───┬─────↑───┘  └──────↑──────┘  └───↑─────┬───┘  │   └──────────────────┘
-│      │     │             │             │     │      │
-│      │     │             ↓             │     │      │
-│      │     └─────────> (A2A) <─────────┘     │      │
-│      │                                       │      │
-│      │            ┌─────────────┐            │      │
-│      └───────────>│ MCP Handler │<───────────┘      │
-│                   └──────┬──────┘                   │
-└──────────────────────────│──────────────────────────┘
-                           │
-                           │ (gRPC/HTTP/Command)
-                           │
-┌──────────────────────────▼──────────────────────────┐
-│                     MCP Servers                     │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  │
-│  │   Weather   │  │  Web Search │  │     ....    │  │
-│  └─────────────┘  └─────────────┘  └─────────────┘  │
-└─────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                      Client Applications                    │
+│ (Any Language: JS, Python, PHP, Go, Java, Ruby, Rust, etc) │
+└─────────────────────────────┬────────────────────────────┬─┘
+                              │                            │
+                  ┌───────────▼──────────┐        ┌────────▼────────┐
+                  │    REST API/SSE      │        │ MCP Integration  │
+                  │ (Agent Interaction)  │        │ (Tool Access)    │
+                  └───────────┬──────────┘        └────────┬────────┘
+                              │                            │
+┌─────────────────────────────▼────────────────────────────▼─────────────────────────────┐
+│                                MUXI AI Server                                           │
+│                                                                                         │
+│  ┌──────────────────┐    ┌────────────────┐    ┌────────────────┐    ┌────────────────┐│
+│  │ Ollama          │    │                │    │                │    │                ││
+│  │ Local Models    │    │    MUXI Core   │    │  Memory System │    │ Configuration  ││
+│  └──────┬──────────┘    │                │    │                │    │   Manager      ││
+│         │               │    ┌─────────┐ │    │    ┌────────┐  │    │  ┌────────────┐││
+│         ▼               │    │Overlord │ │    │    │Buffer  │  │    │  │YAML Config│││
+│  ┌──────────────────┐   │    │ Agents  │◄├────┼───►│Long-term│  │    │  └────────────┘││
+│  │ Fine-tuned       │   │    └─────────┘ │    │    └────────┘  │    │                  ││
+│  │ Overlord Model   │◄──┼────────────────┼────┼────────────────┼────┼────────────────┘│
+│  └──────────────────┘   └────────────────┘    └────────────────┘    │                  │
+│                                                                      │                  │
+│  ┌──────────────────┐   ┌────────────────┐    ┌────────────────┐    │                  │
+│  │ MCP Handler      │   │A2A Communication│   │ Knowledge Base │    │                  │
+│  └─────────┬────────┘   └────────────────┘    └────────────────┘    │                  │
+└───────────┬┼────────────────────────────────────────────────────────┘                  │
+            ││                                                                            │
+            ││                                                                            │
+┌───────────▼┼────────────────────────────────────────────────────────────────────────┐  │
+│            ▼                   External MCP Servers                                  │  │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐ │  │
+│  │ Search Engine   │  │ File Operations │  │ Weather API     │  │ Custom Services │ │  │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘ │  │
+└────────────────────────────────────────────────────────────────────────────────────┘  │
+                                                                                         │
+┌────────────────────────────────────────────────────────────────────────────────────────┘
+│
+│                            Deployment Options
+├───────────────────────┬───────────────────────┬──────────────────────────────┐
+│   Local Development   │    Docker Container   │   Production Deployment      │
+│   • Single machine    │    • Pre-configured   │   • High-availability        │
+│   • Quick start       │    • Portable         │   • Horizontal scaling       │
+│   • Easy setup        │    • Reproducible     │   • Load balancing           │
+└───────────────────────┴───────────────────────┴──────────────────────────────┘
 ```
 
 For more details, see [Architecture Documentation](docs/intro/architecture.md).
 
 ## Installation
+
+### Using Docker (Recommended)
+
+```bash
+# Pull the MUXI AI Server image
+docker pull muxiframework/muxi-server:latest
+
+# Run with default configuration
+docker run -p 3000:3000 muxiframework/muxi-server:latest
+```
 
 ### For Development
 
@@ -125,40 +149,12 @@ pip install muxi
 
 ## Quick Start
 
-### Configuration-based Approach
+### Using MUXI as an AI Server
 
-The simplest way to get started is with the configuration-based approach:
-
-```python
-from muxi import muxi
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Initialize MUXI with memory configuration at the overlord level
-app = muxi(
-    buffer_size=10,  # Context window size of 10 messages
-    buffer_multiplier=10,  # Total buffer capacity will be 10x context window (default: 10)
-    long_term="sqlite:///data/memory.db"  # Enable long-term memory with SQLite
-    # Alternatively: long_term="postgresql://user:pass@localhost/muxi"
-)
-
-# Add an agent from a configuration file
-app.add_agent("assistant", "configs/assistant.yaml")
-
-# Chat with the agent
-response = await app.chat("Hello, who are you?")
-print(response)
-
-# Run the server
-# app.run()
-```
-
-Example configuration file (`configs/muxi_config.yaml`):
+The easiest way to get started is to use MUXI as a server with the YAML configuration:
 
 ```yaml
-# Memory configuration at the top level
+# config.yaml
 memory:
   buffer_size: 10  # Context window size of 10 messages
   buffer_multiplier: 10  # Total buffer capacity will be 10x context window (default: 10)
@@ -188,136 +184,78 @@ agents:
         env_fallback: SEARCH_API_KEY
 ```
 
-### Programmatic Approach
-
-You can also create agents programmatically using the Overlord interface:
-
-```python
-from muxi.core.overlord import Overlord
-from muxi.core.models.providers.openai import OpenAIModel
-from muxi.core.memory.buffer import BufferMemory
-from muxi.core.memory.long_term import LongTermMemory
-from muxi.core.knowledge.base import FileKnowledge
-
-# Create an overlord with memory configuration
-buffer_memory = BufferMemory(
-    max_size=10,                    # Context window size
-    buffer_multiplier=10,           # Total capacity = 10 × 10 = 100 messages
-    model=OpenAIModel(model="text-embedding-ada-002")
-)
-long_term_memory = LongTermMemory("postgresql://user:password@localhost:5432/muxi")
-
-overlord = Overlord(
-    buffer_memory=buffer_memory,
-    long_term_memory=long_term_memory
-)
-
-# Create a basic agent (memory is provided by the overlord)
-agent = overlord.create_agent(
-    agent_id="assistant",
-    model=OpenAIModel(model="gpt-4o", api_key="your_api_key"),
-    system_message="You are a helpful AI assistant.",
-    description="General-purpose assistant for answering questions and providing information."
-)
-
-# Add domain knowledge to the agent
-product_knowledge = FileKnowledge(
-    path="knowledge/products.txt",
-    description="Product information and specifications"
-)
-await agent.add_knowledge(product_knowledge)
-
-# Create additional specialized agents
-overlord.create_agent(
-    agent_id="researcher",
-    model=OpenAIModel(model="gpt-4o", api_key="your_api_key"),
-    system_message="You are a helpful research assistant.",
-    description="Specialized in research tasks, data analysis, and information retrieval."
-)
-
-overlord.create_agent(
-    agent_id="local_assistant",
-    model=OpenAIModel(model="gpt-4o", api_key="your_api_key"),
-    system_message="You are a helpful personal assistant.",
-    description="Personal assistant for tasks, reminders, and general information."
-)
-
-# Add MCP server to the agent
-await overlord.agents["assistant"].connect_mcp_server(
-    name="web_search",
-    url="http://localhost:5001",
-    credentials={"api_key": "your_search_api_key"}
-)
-
-# Chat with an agent (automatic routing based on query)
-response = await overlord.chat("Tell me about quantum physics")
-print(response.content)
-
-# Chat with a specific agent
-response = await overlord.chat("Tell me about quantum physics", agent_name="researcher")
-print(response.content)
-
-# Chat with multi-user support
-response = await overlord.chat("Remember my name is Alice", user_id="user123")
-print(response.content)
-
-# Run the server
-# overlord.run()
-```
-
-### Using the CLI
-
-```bash
-# Start a chat session with the default agent
-muxi chat
-
-# Send a one-off message
-muxi send "What is the capital of France?"
-
-# Run the server
-muxi run
-```
-
-### Using the Server (API w/ Websockets + MCP Server)
-
 Start the server:
 
 ```bash
-muxi run
+# Start the MUXI server with the configuration file
+muxi server --config config.yaml
 ```
 
-Then, in another terminal or from your application:
+Then interact with it from any programming language:
 
-```bash
-# Send a message to an agent
-curl -X POST http://localhost:5050/agents/assistant/messages \
-  -H "Content-Type: application/json" \
-  -d '{"content": "What is the capital of France?"}'
+```javascript
+// JavaScript example using fetch
+const response = await fetch('http://localhost:3000/api/v1/chat', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer sk_muxi_user_abc123' // Your API key
+  },
+  body: JSON.stringify({
+    messages: [{ role: 'user', content: 'Hello, who are you?' }]
+  })
+});
+
+const data = await response.json();
+console.log(data.message.content);
 ```
 
-### Using the Web UI
+```python
+# Python example
+import requests
 
-The web UI requires installing the web module first:
+response = requests.post(
+    "http://localhost:3000/api/v1/chat",
+    headers={
+        "Content-Type": "application/json",
+        "Authorization": "Bearer sk_muxi_user_abc123"  # Your API key
+    },
+    json={
+        "messages": [{"role": "user", "content": "Hello, who are you?"}]
+    }
+)
 
-```bash
-# Install the web UI module
-pip install muxi-web
-
-# Start the server with web UI support
-muxi run
+print(response.json()["message"]["content"])
 ```
 
-Then open your browser and navigate to:
+### For Python Developers: Library Approach
 
-```
-http://localhost:5050
-```
+You can also use MUXI as a Python library for deeper customization:
 
-Alternatively, you can run the web UI separately if you already have a MUXI server running elsewhere:
+```python
+from muxi import muxi
+from dotenv import load_dotenv
 
-```bash
-# Start just the web UI, connecting to a server
-muxi-web --server-url http://your-server-address:5050
+# Load environment variables
+load_dotenv()
+
+# Initialize MUXI with memory configuration at the overlord level
+app = muxi(
+    buffer_size=10,  # Context window size of 10 messages
+    buffer_multiplier=10,  # Total buffer capacity will be 10x context window (default: 10)
+    long_term="sqlite:///data/memory.db"  # Enable long-term memory with SQLite
+    # Alternatively: long_term="postgresql://user:pass@localhost/muxi"
+)
+
+# Add an agent from a configuration file
+app.add_agent("assistant", "configs/assistant.yaml")
+
+# Chat with the agent
+response = await app.chat("Hello, who are you?")
+print(response)
+
+# Run the server
+# app.run()
 ```
 
 ## Core Capabilities
