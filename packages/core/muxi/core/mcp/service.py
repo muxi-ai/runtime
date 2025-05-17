@@ -35,7 +35,7 @@ from typing import Any, Dict, Optional
 
 from loguru import logger
 
-from muxi.core.models.base import BaseModel
+from muxi.core.llm import LLM
 
 
 class MCPService:
@@ -96,7 +96,7 @@ class MCPService:
         url: Optional[str] = None,
         command: Optional[str] = None,
         credentials: Optional[Dict[str, Any]] = None,
-        model: Optional[BaseModel] = None,
+        model: Optional[LLM] = None,
         request_timeout: Optional[int] = None,
     ) -> str:
         """
@@ -134,7 +134,7 @@ class MCPService:
         url: Optional[str] = None,
         command: Optional[str] = None,
         credentials: Optional[Dict[str, Any]] = None,
-        model: Optional[BaseModel] = None,
+        model: Optional[LLM] = None,
         request_timeout: int = 60,
     ) -> str:
         """

@@ -45,7 +45,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from muxi.core.mcp import MCPMessage, ToolParser, MCPService
-from muxi.core.models.base import BaseModel
+from muxi.core.llm import LLM
 
 
 # Simple class to represent an MCP server
@@ -94,7 +94,7 @@ class Agent:
 
     def __init__(
         self,
-        model: BaseModel,
+        model: LLM,
         overlord: Any,  # Forward reference to Overlord
         system_message: Optional[str] = None,
         agent_id: Optional[str] = None,

@@ -35,7 +35,7 @@
 
 from typing import Any, Dict, List, Optional, Union
 
-from muxi_llm import ChatCompletion, Embedding
+from muxi_llm import ChatCompletion, Embedding  # type: ignore
 from loguru import logger
 
 

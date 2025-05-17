@@ -42,7 +42,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from muxi.core.config import config
 from muxi.core.utils.id_generator import get_default_nanoid
-from muxi.core.models.base import BaseModel
+from muxi.core.llm import LLM
 
 # Create SQLAlchemy Base
 Base = declarative_base()
@@ -99,7 +99,7 @@ class LongTermMemory:
         connection_string: Optional[str] = None,
         dimension: int = config.memory.vector_dimension,
         default_collection: str = "default",
-        embedding_provider: Optional[BaseModel] = None,
+        embedding_provider: Optional[LLM] = None,
     ):
         """
         Initialize the long-term memory.
