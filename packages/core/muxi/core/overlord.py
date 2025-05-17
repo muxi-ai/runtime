@@ -930,7 +930,7 @@ class Overlord:
             prompt = self._create_routing_prompt(message)
 
             # Query the routing model
-            response = await self.routing_model.generate(prompt)
+            response = await self.routing_model.generate_text(prompt)
 
             # Parse the response
             selected_agent_id = self._parse_routing_response(response)

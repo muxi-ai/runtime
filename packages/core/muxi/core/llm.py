@@ -36,7 +36,23 @@
 from typing import Any, Dict, List, Optional, Union
 
 from muxi_llm import ChatCompletion, Embedding  # type: ignore
+from muxi_llm.config import set_api_key as muxi_llm_set_api_key  # type: ignore
 from loguru import logger
+
+
+def set_llm_api_key(api_key: str, provider: str) -> None:
+    """
+    Set the API key for a specific provider in muxi-llm.
+
+    This is a convenience function that wraps muxi_llm.config.set_api_key.
+    Use this to configure API keys before creating LLM instances.
+
+    Args:
+        api_key: The API key to set
+        provider: The provider to set the key for (e.g., "openai", "anthropic")
+    """
+    muxi_llm_set_api_key(api_key, provider)
+    logger.debug(f"API key set for provider: {provider}")
 
 
 class LLM:
@@ -62,8 +78,8 @@ class LLM:
         Args:
             model: The model to use in "provider/model-name" format (e.g., "openai/gpt-4o").
                 This unified format works across all supported providers.
-            api_key: API key for the provider. If None, will attempt to use
-                environment variables based on the provider.
+            api_key: API key for the provider. If provided, it will be set using
+                muxi_llm.config.set_api_key for the appropriate provider.
             temperature: The temperature parameter for generation. Controls randomness
                 where higher values produce more random outputs.
             max_tokens: Maximum tokens to generate in responses. If None, uses
@@ -82,6 +98,10 @@ class LLM:
         else:
             self.provider = "openai"  # Default provider if not specified
             self.model_name = f"openai/{model}"  # Automatically prefix with openai/
+
+        # If API key is provided, set it for the provider
+        if api_key:
+            set_llm_api_key(api_key, self.provider)
 
         logger.info(f"Initialized LLM with {self.model_name}")
 
@@ -140,10 +160,6 @@ class LLM:
 
             # Add any additional kwargs
             params.update(kwargs)
-
-            # Use the API key if provided
-            if self.api_key:
-                params["api_key"] = self.api_key
 
             # Call ChatCompletion API
             response = await ChatCompletion.acreate(**params)
