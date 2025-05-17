@@ -62,8 +62,7 @@ from muxi.core.mcp import MCPService
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.memory.long_term import LongTermMemory
 from muxi.core.memory.memobase import Memobase
-from muxi.core.models.base import BaseModel
-from muxi.core.models.providers.openai import OpenAIModel
+from muxi.core.llm import LLM
 
 
 class Overlord:
@@ -90,7 +89,7 @@ class Overlord:
         buffer_memory (Optional[BufferMemory]): Short-term memory for recent context
         long_term_memory (Optional[Union[LongTermMemory, Memobase]]): Persistent memory system
         auto_extract_user_info (bool): Whether to automatically extract user information
-        extraction_model (Optional[BaseModel]): Model used for information extraction
+        extraction_model (Optional[Model]): Model used for information extraction
         is_multi_user (bool): Whether multi-user mode is enabled
         mcp_service (MCPService): Service for managing Model Context Protocol servers
         request_timeout (int): Default timeout for MCP requests in seconds
@@ -103,7 +102,7 @@ class Overlord:
         buffer_memory: Optional[BufferMemory] = None,
         long_term_memory: Optional[Union[LongTermMemory, Memobase]] = None,
         auto_extract_user_info: bool = True,
-        extraction_model: Optional[BaseModel] = None,
+        extraction_model: Optional[LLM] = None,
         request_timeout: int = 60,
         user_api_key: Optional[str] = None,
         admin_api_key: Optional[str] = None,
@@ -206,62 +205,76 @@ class Overlord:
             self._admin_key_auto_generated = False
 
     def _initialize_routing_model(self):
-        """
-        Initialize the routing model for intelligent message routing between agents.
-
-        This method sets up the LLM model used for selecting the most appropriate agent
-        to handle specific messages based on their content and agent capabilities.
-        The model and parameters are configured from the global configuration settings.
-
-        If initialization fails (e.g., due to missing API keys or invalid configuration),
-        the system will continue to function but will fall back to using the default agent
-        for all messages rather than performing intelligent routing.
-        """
+        """Initialize the model used for agent routing decisions."""
         try:
-            # Get routing configuration from global config
-            routing_config = config.routing
+            # Use environment variables or defaults from config
+            routing_provider = os.environ.get(
+                "ROUTING_LLM", config.routing.provider
+            )
+            routing_model_name = os.environ.get(
+                "ROUTING_LLM_MODEL", config.routing.model
+            )
+            routing_temperature = float(
+                os.environ.get("ROUTING_LLM_TEMPERATURE", config.routing.temperature)
+            )
 
-            # Initialize the appropriate model based on provider
-            provider = routing_config.provider.lower()
+            # Use the new Model class with provider/model format
+            model_name = f"{routing_provider}/{routing_model_name}"
 
-            if provider == "openai":
-                # Get API key based on provider
-                api_key = os.environ.get("OPENAI_API_KEY")
-
-                # Initialize OpenAI model with configured parameters
-                self.routing_model = OpenAIModel(
-                    model=routing_config.model,
-                    temperature=routing_config.temperature,
-                    max_tokens=routing_config.max_tokens,
-                    api_key=api_key,
-                )
-
-                logger.info(
-                    f"Initialized routing model: {provider} / {routing_config.model} "
-                    f"(temp: {routing_config.temperature})"
-                )
-            else:
-                # Default to OpenAI if provider not recognized
-                logger.warning(
-                    f"Unrecognized routing LLM provider: {provider}. "
-                    "Defaulting to OpenAI gpt-4o-mini."
-                )
-                self.routing_model = OpenAIModel(
-                    model="gpt-4o-mini",
-                    temperature=0.0,  # Use deterministic output for routing
-                    max_tokens=256,  # Limit tokens since we only need the agent ID
-                    api_key=os.environ.get("OPENAI_API_KEY"),
-                )
+            # Create the routing model
+            self.routing_model = self.create_model(
+                model=model_name,
+                temperature=routing_temperature,  # Use configured temperature
+                max_tokens=config.routing.max_tokens,  # Limit tokens for agent ID
+                api_key=os.environ.get(f"{routing_provider.upper()}_API_KEY")
+            )
 
         except Exception as e:
             # If initialization fails, log error but continue (routing will fall back to default)
             logger.error(f"Failed to initialize routing model: {str(e)}")
             self.routing_model = None
 
+    def create_model(
+        self,
+        model: str = "openai/gpt-4o",
+        api_key: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        **kwargs,
+    ) -> LLM:
+        """
+        Create a model instance using the unified Model class.
+
+        This method creates a model using the provider/model-name format.
+        It's the preferred way to create models for use with agents.
+
+        Args:
+            model: The model to use in "provider/model-name" format (e.g., "openai/gpt-4o").
+                This format works across all supported providers.
+            api_key: API key for the provider. If None, will attempt to use
+                environment variables based on the provider.
+            temperature: The temperature parameter for generation. Controls randomness
+                where higher values produce more random outputs.
+            max_tokens: Maximum tokens to generate in responses. If None, uses
+                provider defaults.
+            **kwargs: Additional parameters passed directly to the model.
+
+        Returns:
+            A Model instance ready to use with agents.
+        """
+        # Create and return a new model instance
+        return LLM(
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs
+        )
+
     def create_agent(
         self,
         agent_id: str,
-        model: BaseModel,
+        model: LLM,
         system_message: Optional[str] = None,
         description: Optional[str] = None,
         set_as_default: bool = False,
@@ -1085,7 +1098,7 @@ Available agents:
         agent_response: str,
         user_id: int,
         agent_id: str,
-        extraction_model: Optional[BaseModel] = None,
+        extraction_model: Optional[LLM] = None,
     ) -> None:
         """
         Handle the process of extracting user information from a conversation turn.
@@ -1145,7 +1158,7 @@ Available agents:
         user_id: int,
         agent_id: str,
         message_count: int = 1,
-        extraction_model: Optional[BaseModel] = None,
+        extraction_model: Optional[LLM] = None,
     ) -> None:
         """
         Run the extraction process asynchronously.
@@ -1199,7 +1212,7 @@ Available agents:
         user_id: int,
         agent_id: Optional[str] = None,
         message_count: int = 1,
-        extraction_model: Optional[BaseModel] = None,
+        extraction_model: Optional[LLM] = None,
     ):
         """
         Extract and store information about a user from a conversation turn.
@@ -1331,7 +1344,7 @@ Available agents:
         url: Optional[str] = None,
         command: Optional[str] = None,
         credentials: Optional[Dict[str, Any]] = None,
-        model: Optional[BaseModel] = None,
+        model: Optional[LLM] = None,
         request_timeout: Optional[int] = None,
     ) -> str:
         """

@@ -48,18 +48,19 @@
 
 import os
 import asyncio
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 
 from muxi.core.agent import Agent
 from muxi.core.overlord import Overlord
-from muxi.core.models.providers.openai import OpenAIModel
 from muxi.core.memory.buffer import BufferMemory
 from muxi.core.memory.long_term import LongTermMemory
 from muxi.core.memory.memobase import Memobase
 from muxi.core.memory.sqlite import SQLiteMemory
 from muxi.core.config.loader import ConfigLoader
+from muxi.core.llm import LLM
 
 
 class Muxi:
@@ -321,24 +322,22 @@ class Muxi:
         """
         Add an agent from a configuration file.
 
-        This method loads agent configuration from a YAML or JSON file, creates the
-        specified model, and registers the agent with the overlord. It also
-        handles connecting MCP servers if specified in the configuration.
+        This method loads an agent configuration from a file, creates the
+        necessary components, and adds the agent to the overlord. It supports
+        both YAML and JSON configuration formats.
 
         Args:
-            name: Name to assign to the agent (overrides the name in the config).
-                This will be used as the agent_id for routing and reference.
-            path: Path to the configuration file (YAML or JSON) containing agent
-                configuration including model settings and system message.
-            env_file: Optional path to an environment file to load variables from
-                before processing the configuration.
+            name: Name for the agent. Will override any name in the config file.
+            path: Path to the configuration file. Can be absolute or relative.
+            env_file: Optional path to a .env file for environment variables
+                needed by the configuration.
 
         Returns:
-            The created Agent instance.
+            The created agent instance.
 
         Raises:
-            ValueError: If the configuration is invalid.
-            FileNotFoundError: If the configuration file does not exist.
+            FileNotFoundError: If the configuration file doesn't exist.
+            ValueError: If the configuration is invalid or components can't be created.
         """
         # Load environment file if provided
         if env_file:
@@ -346,15 +345,18 @@ class Muxi:
 
             load_dotenv(env_file)
 
-        # Load and process the configuration
+        # Load and process configuration
         config = self.config_loader.load_and_process(path)
 
-        # Override the name if provided
-        config["name"] = name
+        # Override name if provided
+        if name:
+            config["name"] = name
+        else:
+            # If name not provided, use name from config
+            name = config.get("name", Path(path).stem)
 
-        # Create the model
-        model_config = config.get("model", {})
-        model = self._create_model(model_config)
+        # Create the model (using the whole config to support both formats)
+        model = self._create_model(config)
 
         # Extract description or use system message as fallback
         description = config.get("description", config.get("system_message", ""))
@@ -375,7 +377,7 @@ class Muxi:
             and self.overlord.buffer_memory.model is None
         ):
             self.overlord.buffer_memory.model = model
-            logger.info(f"Enabled vector search in buffer memory using {model.__class__.__name__}")
+            logger.info(f"Enabled vector search in buffer memory using {model.model_name}")
 
         # Connect MCP servers if specified
         mcp_servers = config.get("mcp_servers", [])
@@ -384,34 +386,44 @@ class Muxi:
 
         return agent
 
-    def _create_model(self, model_config: Dict[str, Any]) -> Any:
+    def _create_model(self, model_config: Dict[str, Any]) -> LLM:
         """
         Create a model from the configuration.
 
         This internal method creates a language model instance based on the
-        provided configuration. Currently supports OpenAI models, with potential
-        for expansion to other providers.
+        provided configuration. Uses MUXI-LLM to support multiple providers
+        through a unified interface with "provider/model-name" format.
 
         Args:
-            model_config: Model configuration dictionary containing provider name,
-                API key, model name, and other provider-specific parameters.
+            model_config: Model configuration dictionary containing the 'llm' section
+                with model, API key, and other parameters.
 
         Returns:
             The model instance ready for use with agents.
-
-        Raises:
-            ValueError: If the model provider is not supported.
         """
-        provider = model_config.get("provider", "openai").lower()
-
-        if provider == "openai":
-            return OpenAIModel(
-                api_key=model_config.get("api_key"),
-                model=model_config.get("model", "gpt-4o"),
-                temperature=model_config.get("temperature", 0.7),
+        if "llm" not in model_config:
+            raise ValueError(
+                "Model configuration must contain 'llm' section with 'model' parameter"
             )
-        else:
-            raise ValueError(f"Unsupported model provider: {provider}")
+
+        # Get configuration from llm section
+        llm_config = model_config["llm"]
+        model_name = llm_config.get("model")
+        api_key = llm_config.get("api_key")
+        temperature = llm_config.get("temperature", 0.7)
+        max_tokens = llm_config.get("max_tokens")
+
+        # Get any additional params
+        kwargs = {k: v for k, v in llm_config.items()
+                  if k not in ["model", "api_key", "temperature", "max_tokens"]}
+
+        return self.overlord.create_model(
+            model=model_name,
+            api_key=api_key,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            **kwargs
+        )
 
     def _create_memory_systems(self, memory_config: Dict[str, Any]) -> tuple:
         """
