@@ -10,7 +10,7 @@ setup(
     install_requires=[
         "loguru",
         "pydantic",
-        "openai>=1.0.0",
+        "muxi-llm>=0.1.0",
         "faiss-cpu",
         "numpy>=1.20.0",
     ],
