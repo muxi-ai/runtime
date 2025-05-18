@@ -10,9 +10,9 @@ import os
 import yaml
 import json
 from dotenv import load_dotenv
-from muxi.core.agent import Agent
-from muxi.core.overlord import Overlord
-from muxi.core.llm import LLM
+from muxi.engine.agent import Agent
+from muxi.engine.overlord import Overlord
+from muxi.engine.llm import LLM
 
 # Load environment variables from .env file
 load_dotenv()

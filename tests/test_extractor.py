@@ -8,7 +8,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from muxi.core.memory.extractor import MemoryExtractor
+from muxi.engine.memory.extractor import MemoryExtractor
 
 from tests.utils.async_test import async_test
 
@@ -169,7 +169,7 @@ class TestOverlordExtraction(unittest.TestCase):
         self.mock_memory_extractor.extraction_model = MagicMock()
 
         # Create a mock overlord with the mock extractor
-        from muxi.core.overlord import Overlord
+        from muxi.engine.overlord import Overlord
 
         self.overlord = Overlord(
             buffer_memory=MagicMock(),
@@ -301,16 +301,16 @@ class TestAgentExtraction(unittest.TestCase):
         self.mock_overlord.add_message_to_memory = AsyncMock()
 
         # Create mock MCP server
-        from muxi.core.agent import MCPServer
+        from muxi.engine.agent import MCPServer
         self.mock_mcp_server = MagicMock(spec=MCPServer)
         self.mock_mcp_server.name = "test_server"
         self.mock_mcp_server.url = "http://localhost:8000"
 
         # Create the agent with mock components
-        from muxi.core.agent import Agent
+        from muxi.engine.agent import Agent
 
         # Replace the _mcp_service instance to avoid making real calls
-        with patch('muxi.core.mcp.service.MCPService.get_instance') as mock_get_instance:
+        with patch('muxi.engine.mcp.service.MCPService.get_instance') as mock_get_instance:
             mock_service = MagicMock()
             mock_service.invoke_tool = AsyncMock(return_value={"result": "Test result"})
             mock_get_instance.return_value = mock_service

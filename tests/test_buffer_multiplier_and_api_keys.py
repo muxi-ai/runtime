@@ -20,8 +20,8 @@ import numpy as np
 import yaml
 
 # Use direct imports instead of from muxi import muxi
-from muxi.core.memory.buffer import BufferMemory
-from muxi.core.overlord import Overlord
+from muxi.engine.memory.buffer import BufferMemory
+from muxi.engine.overlord import Overlord
 # Mock the muxi facade for testing
 # We'll patch its functionality directly in the test methods
 
@@ -136,11 +136,11 @@ class TestAPIKeys(unittest.TestCase):
         self.assertEqual(overlord.user_api_key, self.user_api_key)
         self.assertEqual(overlord.admin_api_key, self.admin_api_key)
 
-    @patch("muxi.core.memory.buffer.BufferMemory")
+    @patch("muxi.engine.memory.buffer.BufferMemory")
     def test_muxi_facade_api_keys(self, mock_buffer):
         """Test that API keys can be provided to the muxi facade."""
         # Since we can't import muxi directly, we'll mock the core functionality
-        with patch("muxi.core.overlord.Overlord") as mock_overlord:
+        with patch("muxi.engine.overlord.Overlord") as mock_overlord:
             # Mock a muxi function that creates an overlord
             def mock_muxi(buffer_size=10, buffer_multiplier=10,
                           user_api_key=None, admin_api_key=None):
@@ -166,7 +166,7 @@ class TestAPIKeys(unittest.TestCase):
             self.assertEqual(kwargs.get("user_api_key"), self.user_api_key)
             self.assertEqual(kwargs.get("admin_api_key"), self.admin_api_key)
 
-    @patch("muxi.core.memory.buffer.BufferMemory")
+    @patch("muxi.engine.memory.buffer.BufferMemory")
     def test_muxi_buffer_parameters(self, mock_buffer):
         """Test that buffer_size and buffer_multiplier are correctly passed to muxi facade."""
         # Mock the muxi function directly
@@ -232,11 +232,11 @@ class TestBufferConfigFromFiles(unittest.TestCase):
         """Clean up temporary files."""
         shutil.rmtree(self.temp_dir)
 
-    @patch("muxi.core.memory.buffer.BufferMemory")
+    @patch("muxi.engine.memory.buffer.BufferMemory")
     def test_yaml_config_buffer_params(self, mock_buffer):
         """Test that buffer parameters from YAML config are correctly applied."""
         # Mock the config loader
-        with patch("muxi.core.config.loader.ConfigLoader") as mock_loader:
+        with patch("muxi.engine.config.loader.ConfigLoader") as mock_loader:
             mock_instance = mock_loader.return_value
             mock_instance.load_config.return_value = self.yaml_config
             mock_instance.normalize_config.return_value = {
@@ -276,11 +276,11 @@ class TestBufferConfigFromFiles(unittest.TestCase):
             # Check that BufferMemory was created
             mock_buffer.assert_called()
 
-    @patch("muxi.core.memory.buffer.BufferMemory")
+    @patch("muxi.engine.memory.buffer.BufferMemory")
     def test_json_config_buffer_params(self, mock_buffer):
         """Test that buffer parameters from JSON config are correctly applied."""
         # Mock the config loader similar to the YAML test
-        with patch("muxi.core.config.loader.ConfigLoader") as mock_loader:
+        with patch("muxi.engine.config.loader.ConfigLoader") as mock_loader:
             mock_instance = mock_loader.return_value
             mock_instance.load_config.return_value = self.json_config
             mock_instance.normalize_config.return_value = {

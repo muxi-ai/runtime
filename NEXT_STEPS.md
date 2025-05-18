@@ -442,9 +442,9 @@ This scenario demonstrates a complete workflow from installation to running an a
 Demonstrates how to use the FAISS-backed smart buffer memory:
 
 ```python
-from muxi.core.overlord import Overlord
-from muxi.core.memory.buffer import BufferMemory
-from muxi.core.models.providers.openai import OpenAIModel
+from muxi.engine.overlord import Overlord
+from muxi.engine.memory.buffer import BufferMemory
+from muxi.engine.models.providers.openai import OpenAIModel
 
 # Create embedding model for vector search
 embedding_model = OpenAIModel(model="text-embedding-ada-002", api_key="your_api_key")
