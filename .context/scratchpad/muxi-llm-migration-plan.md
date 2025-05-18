@@ -1,7 +1,8 @@
-
 ## Multi-Modal Implementation Plan
 
 This section outlines the detailed plan for implementing multi-modal support in the MUXI framework using the muxi-llm package.
+
+> **Important Note**: Before implementing any of these changes, we should fully lock in the server (Overlord) and agent configuration schema, possibly in its own repository, to ensure consistency and maintainability.
 
 ### 1. Technical Requirements
 
@@ -22,6 +23,100 @@ This section outlines the detailed plan for implementing multi-modal support in 
 - Defer completely to muxi-llm for supported providers and models
 - Framework should automatically support any provider/model that muxi-llm supports
 - No hard-coding of specific providers or models in the MUXI framework
+
+1.3 Capability-Based Model Configuration
+
+To handle different content types efficiently while maintaining a clean configuration, we'll implement a capability-based model configuration system:
+
+#### 1.3.1 Hierarchical Configuration Approach
+
+Models will be configured at the Overlord level by capability, with optional overrides at the agent level:
+
+```yaml
+# Example configuration
+models:
+  default:
+    text: "openai/gpt-4o"              # For text processing
+    vision: "openai/gpt-4o"            # For image analysis
+    transcription: "openai/whisper-1"  # For audio transcription
+    embedding: "openai/text-embedding-3-large"  # For vector search
+    routing: "openai/gpt-3.5-turbo"    # For agent routing (less expensive)
+
+  # Agent-specific overrides
+  agents:
+    research_agent:
+      text: "anthropic/claude-3-opus"  # Override default for research
+
+    vision_agent:
+      vision: "openai/gpt-4o-vision"   # Specialized vision model
+```
+
+#### 1.3.2 Model Resolution Logic
+
+When a capability is needed:
+
+1. Check if an agent-specific override exists
+2. If not, fall back to the Overlord's default for that capability
+3. If that capability isn't defined, use the default text model
+4. Cache initialized models to avoid repeated initialization
+
+#### 1.3.3 Implementation Approach
+
+```python
+class Overlord:
+    def get_model_for_capability(self, capability, agent_id=None):
+        """Get model for a capability, with agent-specific override if available"""
+        # Check for agent-specific override
+        if agent_id and agent_id in self.config["models"].get("agents", {}):
+            model_name = self.config["models"]["agents"][agent_id].get(capability)
+
+        # Fall back to default if no agent-specific model
+        if not model_name:
+            model_name = self.config["models"]["default"].get(capability)
+
+        # Fall back to text model if capability not defined
+        if not model_name:
+            model_name = self.config["models"]["default"].get("text")
+
+        return LLM(model=model_name)
+```
+
+#### 1.3.4 Middleware for Content Preprocessing
+
+Multi-modal content preprocessing will happen at the Overlord level using middleware:
+
+```python
+class MultiModalMiddleware:
+    """Preprocesses multi-modal content before routing"""
+
+    async def process(self, content_items, overlord):
+        """Process multi-modal content to extract routing info"""
+        extracted_text = []
+
+        for item in content_items:
+            if item.get("type") == "text":
+                extracted_text.append(item.get("text", ""))
+            elif item.get("type") == "image_url":
+                # Extract image description using vision model
+                vision_model = overlord.get_model_for_capability("vision")
+                # Process image...
+            elif item.get("type") == "audio":
+                # Transcribe audio
+                transcription_model = overlord.get_model_for_capability("transcription")
+                # Process audio...
+
+        return {
+            'original_content': content_items,
+            'extracted_text': ' '.join(extracted_text),
+            # Additional metadata...
+        }
+```
+
+This approach ensures:
+- Consistent model handling across content types
+- Efficient resource utilization
+- Clean separation of concerns
+- Flexibility for specialized agents
 
 ### 2. Implementation Approach
 
