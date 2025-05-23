@@ -1,15 +1,20 @@
-# MUXI Engine
+# MUXI Runtime
 
-> The computational heart of the MUXI AI Server, providing powerful agent orchestration, memory management, and execution capabilities.
+> The computational engine that powers formation execution in the MUXI AI Server and enables direct deployment in embedded systems.
 
 ## Overview
 
-MUXI Engine is the central component of the MUXI Framework, serving as the computational core that powers the AI Server. It provides a comprehensive set of abstractions and utilities for building, deploying, and managing complex AI agent systems.
+MUXI Runtime is the foundational execution engine of the MUXI Framework, serving as the computational core that runs AI agent formations. It provides a comprehensive set of abstractions and utilities for building, deploying, and managing complex AI agent systems both within the MUXI Server and as a standalone embedded runtime.
 
-Think of MUXI Engine as analogous to the Docker Engine - it's the powerful runtime that executes agent capabilities while the MUXI Server acts as the "Docker daemon" handling HTTP, routing, and authentication.
+Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful engine that executes formation definitions (YAML configs) as live AI systems, while the MUXI Server acts as the "Docker daemon" handling HTTP, routing, authentication, and formation lifecycle management.
+
+**Dual Deployment Model:**
+- **Server Integration**: Powers formation execution within the MUXI AI Server
+- **Embedded Systems**: Runs directly in applications for local AI agent capabilities
 
 ## Features
 
+- **Formation Execution**: Direct execution of formation YAML configurations as live AI systems
 - **Overlord Orchestration**: Central orchestration system for managing multiple agents
 - **Agent Framework**: Flexible agent implementation with specialized capabilities
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage
@@ -17,16 +22,18 @@ Think of MUXI Engine as analogous to the Docker Engine - it's the powerful runti
 - **Knowledge Integration**: Built-in knowledge base capabilities
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
+- **Multi-Modal Support**: Handle text, image, audio, video, and document content
+- **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
 
 ## Installation
 
 ```bash
 # From PyPI
-pip install muxi-engine
+pip install muxi-runtime
 
 # Development installation
-git clone https://github.com/muxi-ai/engine.git
-cd engine
+git clone https://github.com/muxi-ai/runtime.git
+cd runtime
 pip install -e .
 ```
 
@@ -66,33 +73,48 @@ print(response)
 
 ## Architecture
 
-MUXI Engine consists of several key components:
+MUXI Runtime consists of several key components:
 
 ```
-muxi/engine/
-├── agent.py        # Agent implementation
-├── overlord.py     # Overlord orchestration
-├── config/         # Configuration components
-├── memory/         # Memory systems
-│   ├── buffer.py   # Buffer memory
-│   ├── long_term.py # Long-term memory
-│   └── extractor.py # Information extraction
-├── mcp/            # Model Context Protocol
-│   ├── service.py  # Centralized MCP service
-│   └── transport/  # Transport implementations
-└── knowledge/      # Knowledge base integration
+muxi/runtime/
+├── agent.py          # Agent implementation
+├── overlord.py       # Overlord orchestration
+├── config/           # Configuration components
+├── memory/           # Memory systems
+│   ├── buffer.py     # Buffer memory
+│   ├── long_term.py  # Long-term memory
+│   └── extractor.py  # Information extraction
+├── mcp/              # Model Context Protocol
+│   ├── service.py    # Centralized MCP service
+│   └── transport/    # Transport implementations
+└── knowledge/        # Knowledge base integration
 ```
 
-## Engine in the MUXI Ecosystem
+## Runtime in the MUXI Ecosystem
 
-MUXI Engine is part of the broader MUXI Framework ecosystem:
+MUXI Runtime is part of the broader MUXI Framework ecosystem, designed around formation-based AI system deployment:
 
-- **MUXI Engine**: The computational heart powering agent capabilities (this repository)
-- **MUXI Server**: HTTP server with REST API, WebSocket, and MCP endpoints
-- **OneLLM**: Standardized interface for LLM providers
-- **MUXI Schemas**: Configuration schemas for consistent definition
+- **MUXI Runtime**: The computational engine executing formations (this repository) - **95% Complete**
+- **MUXI Server**: Formation management server with REST/SSE/WebRTC/MCP/Webhook APIs - **In Development**
+- **OneLLM**: Provider-agnostic LLM interface (OpenAI implemented, others planned)
+- **FAISSx**: Distributed FAISS vector database for memory systems
+- **MUXI CLI**: Command-line interface for formation management (planned)
+- **MUXI Schemas**: Formation and agent configuration schemas
+
+### Formation-First Architecture
+
+The runtime executes **Formation configs** (YAML files defining complete AI systems) as live **Formations** (running AI systems), following a Docker-like paradigm:
+
+| Docker Concept | MUXI Equivalent |
+|---------------|-----------------|
+| Dockerfile | Formation.yaml |
+| Docker Container | Running Formation |
+| Docker Runtime | MUXI Runtime |
+| Docker Daemon | MUXI Server |
+
+**Current Status**: Runtime foundation is 95% complete with all core components functional. The remaining 5% includes A2A communication protocol completion and performance optimizations.
 
 ## License
 
-MIT License
+Elastic License 2.0
 
