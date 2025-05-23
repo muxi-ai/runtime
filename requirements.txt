@@ -13,7 +13,7 @@ colorama>=0.4.6
 mcp>=1.4.1  # Now available on PyPI
 
 # LLM Package
-muxi-llm>=0.1.0
+onellm>=0.1.0
 
 # Development tools
 pytest>=7.0.0

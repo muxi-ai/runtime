@@ -5,7 +5,7 @@ Test the version utility function.
 import unittest
 from unittest.mock import mock_open, patch
 
-from muxi.engine.utils.version import get_version
+from muxi.runtime.utils.version import get_version
 
 
 class TestVersionUtil(unittest.TestCase):

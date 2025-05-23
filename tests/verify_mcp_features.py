@@ -28,7 +28,7 @@ sys.path.insert(0, os.path.join(root_dir, "packages/core/src"))
 
 try:
     # Try to import directly from the package
-    from muxi.engine.mcp.handler import (
+    from muxi.runtime.mcp.handler import (
         MCPTransportFactory,
         HTTPSSETransport,
         CommandLineTransport,

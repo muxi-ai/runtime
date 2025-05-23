@@ -7,7 +7,7 @@ This module contains tests for the knowledge functionality of the Agent class.
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
-from muxi.engine.agent import Agent
+from muxi.runtime.agent import Agent
 
 
 # Fixtures
@@ -46,7 +46,7 @@ def agent_setup():
 
 # Tests
 @pytest.mark.asyncio
-@patch("muxi.engine.knowledge.handler.KnowledgeHandler")
+@patch("muxi.runtime.knowledge.handler.KnowledgeHandler")
 async def test_initialize_knowledge(mock_knowledge_handler_class, agent_setup):
     """Test initializing knowledge in agent."""
     # Skip this test as the Agent class doesn't have knowledge initialization anymore
@@ -111,8 +111,8 @@ async def test_search_knowledge_without_handler(agent_setup):
 
 
 @pytest.mark.asyncio
-@patch("muxi.engine.knowledge.handler.KnowledgeHandler")
-@patch("muxi.engine.knowledge.base.FileKnowledge")
+@patch("muxi.runtime.knowledge.handler.KnowledgeHandler")
+@patch("muxi.runtime.knowledge.base.FileKnowledge")
 async def test_integration_with_real_file(
     mock_file_knowledge_class, mock_knowledge_handler_class, agent_setup
 ):

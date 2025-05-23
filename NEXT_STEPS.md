@@ -111,16 +111,16 @@ Core components of the muxi framework now implemented:
 
 Things to do next to enhance the framework, ordered by priority:
 
-### 1. Replace Provider Model with MUXI LLM
+### 1. Replace Provider Model with OneLLM
 
-- [ ] Integrate muxi-llm package as the standardized interface for all LLM providers
-  - [ ] Incorporate muxi-llm (already created with initial OpenAI support)
-  - [ ] Update all code references to use the new MUXI LLM interfaces
+- [ ] Integrate onellm package as the standardized interface for all LLM providers
+  - [ ] Incorporate onellm (already created with initial OpenAI support)
+  - [ ] Update all code references to use the new OneLLM interfaces
   - [ ] Create backward compatibility layer if needed
   - [ ] Test all existing functionality with new implementation
   - [ ] Optimize performance for common operations
 - [ ] Implement standard retry mechanisms and error handling
-- [ ] Support multi-modal capabilities through MUXI LLM
+- [ ] Support multi-modal capabilities through OneLLM
 
 ### 2. Implement a Better Overlord and A2A Communication
 
@@ -184,7 +184,7 @@ Things to do next to enhance the framework, ordered by priority:
   - [ ] Build user-friendly configuration interface
   - [ ] Create agent management dashboard
 
-### 5. Extend MUXI LLM with Additional Providers
+### 5. Extend OneLLM with Additional Providers
 
 - [ ] Implement additional LLM provider integrations
   - [ ] Anthropic
@@ -204,7 +204,7 @@ Things to do next to enhance the framework, ordered by priority:
 
 ### 6. Multi-Modal Capabilities
 
-These will largely come from MUXI LLM support, but may need additional infrastructure:
+These will largely come from OneLLM support, but may need additional infrastructure:
 
 - [ ] Document processing enhancements
   - [ ] PDF processing and text extraction
@@ -238,14 +238,14 @@ These will largely come from MUXI LLM support, but may need additional infrastru
 Based on current progress and updated priorities:
 
 ### Phase 1: Core Foundation (Current Focus)
-- [ ] Replace current provider model with MUXI LLM
-  - [ ] Integrate muxi-llm package as the standardized interface (already created with OpenAI support)
-  - [ ] Update all code references to use the new MUXI LLM interfaces
+- [ ] Replace current provider model with OneLLM
+  - [ ] Integrate onellm package as the standardized interface (already created with OpenAI support)
+  - [ ] Update all code references to use the new OneLLM interfaces
   - [ ] Create backward compatibility layer if needed
   - [ ] Test all existing functionality with new implementation
   - [ ] Optimize performance for common operations
 - [ ] Implement standard retry mechanisms and error handling
-- [ ] Support multi-modal capabilities through MUXI LLM (images, audio, document processing)
+- [ ] Support multi-modal capabilities through OneLLM (images, audio, document processing)
 
 ### Phase 2: Advanced Orchestration
 - [ ] Implement a Better Overlord system
@@ -291,7 +291,7 @@ Based on current progress and updated priorities:
   - [ ] PHP, Go, Java/Kotlin, etc.
 
 ### Phase 5: Expansion & Optimization
-- [ ] Extend MUXI LLM with additional providers
+- [ ] Extend OneLLM with additional providers
   - [ ] Anthropic
   - [ ] Gemini/VertexAI (Google)
   - [ ] xAI (Grok)
@@ -442,9 +442,9 @@ This scenario demonstrates a complete workflow from installation to running an a
 Demonstrates how to use the FAISS-backed smart buffer memory:
 
 ```python
-from muxi.engine.overlord import Overlord
-from muxi.engine.memory.buffer import BufferMemory
-from muxi.engine.models.providers.openai import OpenAIModel
+from muxi.runtime.overlord import Overlord
+from muxi.runtime.memory.buffer import BufferMemory
+from muxi.runtime.models.providers.openai import OpenAIModel
 
 # Create embedding model for vector search
 embedding_model = OpenAIModel(model="text-embedding-ada-002", api_key="your_api_key")

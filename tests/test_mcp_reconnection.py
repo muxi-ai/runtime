@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # Load MCP classes
 try:
     # Try direct import
-    from muxi.engine.mcp.handler import (
+    from muxi.runtime.mcp.handler import (
         MCPHandler,
         MCPServerClient,
         HTTPSSETransport,

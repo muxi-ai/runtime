@@ -9,8 +9,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 import pytest
 
-from muxi.engine.memory.long_term import LongTermMemory
-from muxi.engine.memory.memobase import Memobase
+from muxi.runtime.memory.long_term import LongTermMemory
+from muxi.runtime.memory.memobase import Memobase
 from tests.utils.async_test import async_test
 
 

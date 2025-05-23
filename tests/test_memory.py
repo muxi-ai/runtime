@@ -7,8 +7,8 @@ This module contains tests for the memory implementations in the muxi framework.
 import unittest
 import numpy as np
 
-from muxi.engine.memory.buffer import BufferMemory
-from muxi.engine.llm import LLM
+from muxi.runtime.memory.buffer import BufferMemory
+from muxi.runtime.llm import LLM
 
 
 class TestBufferMemory(unittest.IsolatedAsyncioTestCase):

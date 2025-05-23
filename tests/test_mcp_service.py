@@ -7,8 +7,8 @@ This module contains tests for the MCPService class in the MUXI Framework.
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from muxi.engine.mcp.parser import ToolCall, ToolParser
-from muxi.engine.mcp.service import MCPService
+from muxi.runtime.mcp.parser import ToolCall, ToolParser
+from muxi.runtime.mcp.service import MCPService
 
 from tests.utils.async_test import async_test
 
@@ -46,7 +46,7 @@ class TestMCPService(unittest.TestCase):
 
         # Patch the MCPHandler import
         self.handler_patcher = patch(
-            "muxi.engine.mcp.handler.MCPHandler", return_value=self.mock_handler
+            "muxi.runtime.mcp.handler.MCPHandler", return_value=self.mock_handler
         )
         self.mock_handler_class = self.handler_patcher.start()
 
@@ -202,12 +202,12 @@ class TestAgentToolIntegration(unittest.TestCase):
 
         # Patch the MCPService.get_instance method
         self.mcp_service_patcher = patch(
-            "muxi.engine.mcp.service.MCPService.get_instance", return_value=self.mock_mcp_service
+            "muxi.runtime.mcp.service.MCPService.get_instance", return_value=self.mock_mcp_service
         )
         self.mcp_service_patcher.start()
 
         # Import the Agent class after patching
-        from muxi.engine.agent import Agent, MCPServer
+        from muxi.runtime.agent import Agent, MCPServer
 
         # Create an MCP server
         self.mcp_server = MCPServer(name="Test Server", url="http://example.com")
@@ -245,8 +245,8 @@ class TestAgentToolIntegration(unittest.TestCase):
         # Check that the result was returned
         self.assertEqual(result, {"result": "Tool result", "status": "success"})
 
-    @patch("muxi.engine.mcp.parser.ToolParser.parse")
-    @patch("muxi.engine.agent.Agent.invoke_tool")
+    @patch("muxi.runtime.mcp.parser.ToolParser.parse")
+    @patch("muxi.runtime.agent.Agent.invoke_tool")
     @async_test
     async def test_process_message_with_tool_calls(self, mock_invoke_tool, mock_parse):
         """Test processing a message that includes tool calls."""
@@ -254,7 +254,7 @@ class TestAgentToolIntegration(unittest.TestCase):
             "Test needs to be refactored due to API changes in Agent tools implementation"
         )
 
-    @patch("muxi.engine.mcp.parser.ToolParser.parse")
+    @patch("muxi.runtime.mcp.parser.ToolParser.parse")
     @async_test
     async def test_process_message_no_tool_calls(self, mock_parse):
         """Test processing a message without tool calls."""

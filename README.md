@@ -33,7 +33,7 @@ pip install -e .
 ## Usage
 
 ```python
-from muxi.engine import Overlord, Agent
+from muxi.runtime import Overlord, Agent
 
 # Create an overlord to manage agents and shared memory
 overlord = Overlord(
@@ -89,7 +89,7 @@ MUXI Engine is part of the broader MUXI Framework ecosystem:
 
 - **MUXI Engine**: The computational heart powering agent capabilities (this repository)
 - **MUXI Server**: HTTP server with REST API, WebSocket, and MCP endpoints
-- **MUXI LLM**: Standardized interface for LLM providers
+- **OneLLM**: Standardized interface for LLM providers
 - **MUXI Schemas**: Configuration schemas for consistent definition
 
 ## License

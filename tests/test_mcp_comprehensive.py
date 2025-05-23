@@ -28,7 +28,7 @@ sys.path.insert(0, root_dir)
 # Import after sys.path modification
 try:
     # Try direct import
-    from muxi.engine.mcp.handler import (  # noqa: E402
+    from muxi.runtime.mcp.handler import (  # noqa: E402
         MCPHandler,
         MCPServerClient,
         HTTPSSETransport,
@@ -39,7 +39,7 @@ try:
         MCPRequestError,
         MCPCancelledError
     )
-    from muxi.engine.mcp.message import MCPMessage  # noqa: E402
+    from muxi.runtime.mcp.message import MCPMessage  # noqa: E402
     print("✅ Successfully imported MCP classes directly")
 except ImportError as e:
     print(f"❌ Direct import failed: {e}")
@@ -177,7 +177,7 @@ class TestHTTPSSETransport(unittest.IsolatedAsyncioTestCase):
 
         # Set up patches
         self.http_client_patcher = patch(
-            'muxi.engine.mcp.handler.httpx.AsyncClient'
+            'muxi.runtime.mcp.handler.httpx.AsyncClient'
         )
         self.mock_http_client_class = self.http_client_patcher.start()
         self.mock_http_client = MagicMock()
@@ -187,7 +187,7 @@ class TestHTTPSSETransport(unittest.IsolatedAsyncioTestCase):
 
         # Mock SSE client - we create=True since EventSource may not exist as a class
         self.sse_patcher = patch(
-            'muxi.engine.mcp.handler.EventSource',
+            'muxi.runtime.mcp.handler.EventSource',
             create=True
         )
         self.mock_sse_class = self.sse_patcher.start()
@@ -437,7 +437,7 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up test fixtures."""
         # Create patchers
-        self.factory_patcher = patch('muxi.engine.mcp.handler.MCPTransportFactory')
+        self.factory_patcher = patch('muxi.runtime.mcp.handler.MCPTransportFactory')
         self.mock_factory = self.factory_patcher.start()
 
         # Set up mock transport
@@ -562,7 +562,7 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
         self.handler = MCPHandler(model=self.mock_model)
 
         # Set up client patch
-        self.client_patcher = patch('muxi.engine.mcp.handler.MCPServerClient')
+        self.client_patcher = patch('muxi.runtime.mcp.handler.MCPServerClient')
         self.mock_client_class = self.client_patcher.start()
         self.mock_client = MagicMock()
         self.mock_client.connect = AsyncMock(return_value=True)
