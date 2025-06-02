@@ -67,8 +67,8 @@ import faiss
 import numpy as np
 from loguru import logger
 
-from muxi.runtime.utils import load_document, chunk_text
-from muxi.runtime.knowledge.base import FileKnowledge
+from .utils import load_document, chunk_text
+from .base import FileKnowledge
 
 
 class KnowledgeHandler:

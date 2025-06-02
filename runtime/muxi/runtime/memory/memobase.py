@@ -34,7 +34,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Union
 
-from muxi.runtime.memory.long_term import LongTermMemory
+from .long_term import LongTermMemory
 
 
 class Memobase:

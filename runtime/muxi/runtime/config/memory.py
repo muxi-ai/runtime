@@ -30,7 +30,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config import memory_config
+#   from .config import memory_config
 #
 #   # Access memory configuration
 #   vector_dim = memory_config.vector_dimension

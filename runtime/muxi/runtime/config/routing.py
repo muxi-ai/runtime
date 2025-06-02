@@ -29,7 +29,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config import routing_config
+#   from .config import routing_config
 #
 #   # Access routing configuration
 #   model = routing_config.model

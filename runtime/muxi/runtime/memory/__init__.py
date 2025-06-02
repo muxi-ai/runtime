@@ -44,7 +44,7 @@
 # Example usage:
 #
 #   # Create a buffer memory for conversation history
-#   from muxi.runtime.memory import BufferMemory
+#   from .memory import BufferMemory
 #
 #   buffer = BufferMemory(
 #       max_size=10,              # Context window size
@@ -59,12 +59,12 @@
 #   results = await buffer.search("topic of interest")
 # =============================================================================
 
-from muxi.runtime.memory.base import BaseMemory
-from muxi.runtime.memory.buffer import BufferMemory
-from muxi.runtime.memory.long_term import LongTermMemory
-from muxi.runtime.memory.memobase import Memobase
-from muxi.runtime.memory.sqlite import SQLiteMemory
-from muxi.runtime.memory.context_memory import ContextMemory
+from .base import BaseMemory
+from .buffer import BufferMemory
+from .long_term import LongTermMemory
+from .memobase import Memobase
+from .sqlite import SQLiteMemory
+from .context_memory import ContextMemory
 
 __all__ = [
     "BaseMemory",

@@ -40,9 +40,9 @@ from sqlalchemy import Column, DateTime, String, Text, create_engine, desc, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from muxi.runtime.config import config
-from muxi.runtime.utils.id_generator import get_default_nanoid
-from muxi.runtime.llm import LLM
+from ..config import config
+from ..utils.id_generator import get_default_nanoid
+from ..llm import LLM
 
 # Create SQLAlchemy Base
 Base = declarative_base()

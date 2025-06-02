@@ -23,9 +23,9 @@
 # =============================================================================
 
 # Import facade classes for easy access
-from muxi.runtime.facade import Muxi
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.run import run_server, is_port_in_use
+from .facade import Muxi
+from .overlord import Overlord
+from .run import run_server, is_port_in_use
 
 # Current version of the Muxi Core framework
 __version__ = "0.1.0"

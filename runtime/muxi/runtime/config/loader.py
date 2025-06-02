@@ -30,7 +30,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config.loader import ConfigLoader
+#   from .config.loader import ConfigLoader
 #
 #   # Load and process a configuration file
 #   loader = ConfigLoader()

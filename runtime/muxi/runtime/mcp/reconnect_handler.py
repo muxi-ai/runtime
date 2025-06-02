@@ -35,8 +35,8 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
-from muxi.runtime.mcp.handler import MCPHandler, MCPConnectionError
-from muxi.runtime.reconnection import RetryConfiguration, with_retries
+from .handler import MCPHandler, MCPConnectionError
+from ..reconnection import RetryConfiguration, with_retries
 
 
 class ReconnectingMCPHandler(MCPHandler):

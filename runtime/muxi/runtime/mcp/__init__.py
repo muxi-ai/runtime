@@ -50,13 +50,13 @@
 # =============================================================================
 
 # Re-export key classes
-from muxi.runtime.mcp.handler import (
+from .handler import (
     MCPHandler, MCPConnectionError, MCPRequestError, MCPTimeoutError
 )
-from muxi.runtime.mcp.reconnect_handler import ReconnectingMCPHandler
-from muxi.runtime.mcp.service import MCPService
-from muxi.runtime.mcp.message import MCPMessage, MCPToolCall
-from muxi.runtime.mcp.parser import ToolParser, ToolCall
+from .reconnect_handler import ReconnectingMCPHandler
+from .service import MCPService
+from .message import MCPMessage, MCPToolCall
+from .parser import ToolParser, ToolCall
 
 __all__ = [
     'MCPHandler',

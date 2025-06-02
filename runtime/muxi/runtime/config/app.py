@@ -31,7 +31,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config import app_config
+#   from .config import app_config
 #
 #   # Access configuration settings
 #   host = app_config.host

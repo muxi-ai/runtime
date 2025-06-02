@@ -53,14 +53,14 @@ from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 
-from muxi.runtime.agent import Agent
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.memory.buffer import BufferMemory
-from muxi.runtime.memory.long_term import LongTermMemory
-from muxi.runtime.memory.memobase import Memobase
-from muxi.runtime.memory.sqlite import SQLiteMemory
-from muxi.runtime.config.loader import ConfigLoader
-from muxi.runtime.llm import LLM
+from .agent import Agent
+from .overlord import Overlord
+from .memory.buffer import BufferMemory
+from .memory.long_term import LongTermMemory
+from .memory.memobase import Memobase
+from .memory.sqlite import SQLiteMemory
+from .config.loader import ConfigLoader
+from .llm import LLM
 
 
 class Muxi:
@@ -594,7 +594,7 @@ class Muxi:
             **kwargs: Additional arguments to pass to the API server.
         """
         # Import here to avoid circular imports
-        from muxi.runtime.run import run_server
+        from .run import run_server
 
         # Start the server
         run_server(host=host, port=port, **kwargs)

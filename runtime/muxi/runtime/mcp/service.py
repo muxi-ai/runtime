@@ -35,7 +35,8 @@ from typing import Any, Dict, Optional
 
 from loguru import logger
 
-from muxi.runtime.llm import LLM
+from ..llm import LLM
+from .handler import MCPHandler
 
 
 class MCPService:
@@ -164,9 +165,6 @@ class MCPService:
         # Initialize the handler
         async with self.locks[server_id]:
             try:
-                # Import MCPHandler here to avoid circular imports
-                from muxi.runtime.mcp.handler import MCPHandler
-
                 # Create and initialize the MCP handler
                 handler = MCPHandler(model=model)
 

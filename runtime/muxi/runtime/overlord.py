@@ -55,14 +55,14 @@ from typing import Any, Dict, List, Optional, Union
 
 from loguru import logger
 
-from muxi.runtime.config import config
-from muxi.runtime.agent import Agent, MCPServer
-from muxi.runtime.mcp import MCPMessage
-from muxi.runtime.mcp import MCPService
-from muxi.runtime.memory.buffer import BufferMemory
-from muxi.runtime.memory.long_term import LongTermMemory
-from muxi.runtime.memory.memobase import Memobase
-from muxi.runtime.llm import LLM
+from .config import config
+from .agent import Agent, MCPServer
+from .mcp import MCPMessage
+from .mcp import MCPService
+from .memory.buffer import BufferMemory
+from .memory.long_term import LongTermMemory
+from .memory.memobase import Memobase
+from .llm import LLM
 
 
 class Overlord:
@@ -161,7 +161,7 @@ class Overlord:
             if self.auto_extract_user_info:
                 try:
                     # Dynamically import to avoid circular dependencies
-                    from muxi.runtime.memory.extractor import MemoryExtractor
+                    from .memory.extractor import MemoryExtractor
 
                     self.memory_extractor = MemoryExtractor(
                         overlord=self,
@@ -857,7 +857,7 @@ class Overlord:
         """
         try:
             # Import here to avoid circular imports
-            from muxi.runtime.run import run_server, is_port_in_use
+            from .run import run_server, is_port_in_use
 
             # Check if port is already in use
             if is_port_in_use(port):

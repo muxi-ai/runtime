@@ -60,7 +60,7 @@ import sqlite3
 
 from loguru import logger
 
-from muxi.runtime.extensions.base import Extension
+from .base import Extension
 
 
 @Extension.register

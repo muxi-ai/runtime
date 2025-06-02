@@ -52,7 +52,7 @@
 # =============================================================================
 
 
-from muxi.runtime.knowledge.base import KnowledgeSource, FileKnowledge, KnowledgeHandler
+from .base import KnowledgeSource, FileKnowledge, KnowledgeHandler
 
 __all__ = [
     "KnowledgeSource",

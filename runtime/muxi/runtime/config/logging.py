@@ -30,7 +30,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config import configure_logging
+#   from .config import configure_logging
 #
 #   # Set up logging with configured settings
 #   configure_logging()
@@ -106,7 +106,7 @@ def configure_logging():
     4. Creates directories for log files if they don't exist
 
     Usage:
-        from muxi.runtime.config import configure_logging
+        from .config import configure_logging
         configure_logging()  # Call early in the application startup
     """
     import sys

@@ -32,7 +32,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config import model_config
+#   from .config import model_config
 #
 #   # Access model configuration
 #   provider = model_config.provider

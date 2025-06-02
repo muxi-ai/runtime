@@ -29,13 +29,13 @@
 # The configuration system can be accessed in several ways:
 #
 #   # Using the global config object (recommended):
-#   from muxi.runtime.config import config
+#   from .config import config
 #
 #   buffer_size = config.memory.buffer_size
 #   vector_search = config.memory.vector_search_enabled
 #
 #   # Using component-specific config objects:
-#   from muxi.runtime.config import memory_config
+#   from .config import memory_config
 #
 #   buffer_size = memory_config.buffer_size
 #
@@ -48,11 +48,11 @@
 # =============================================================================
 
 
-from muxi.runtime.config.database import DatabaseConfig, database_config
-from muxi.runtime.config.loader import ConfigLoader
-from muxi.runtime.config.memory import MemoryConfig, memory_config
-from muxi.runtime.config.model import ModelConfig, model_config
-from muxi.runtime.config.routing import RoutingConfig, routing_config
+from .database import DatabaseConfig, database_config
+from .loader import ConfigLoader
+from .memory import MemoryConfig, memory_config
+from .model import ModelConfig, model_config
+from .routing import RoutingConfig, routing_config
 
 from pydantic import BaseModel, Field
 

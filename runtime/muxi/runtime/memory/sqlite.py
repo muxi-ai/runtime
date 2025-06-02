@@ -39,8 +39,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 from loguru import logger
 
-from muxi.runtime.memory.base import BaseMemory
-from muxi.runtime.extensions import SQLiteVecExtension
+from .base import BaseMemory
+from ..extensions import SQLiteVecExtension
 
 
 class SQLiteMemory(BaseMemory):

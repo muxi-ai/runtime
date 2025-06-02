@@ -27,7 +27,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.config import database_config
+#   from .config import database_config
 #
 #   # Access database configuration
 #   connection_string = database_config.connection_string

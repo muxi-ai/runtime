@@ -26,7 +26,7 @@
 #
 # Example usage:
 #
-#   from muxi.runtime.utils import load_document, chunk_text
+#   from .utils import load_document, chunk_text
 #
 #   # Load a document from a file
 #   content = load_document("path/to/document.txt")

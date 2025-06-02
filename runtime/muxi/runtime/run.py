@@ -27,7 +27,7 @@
 #
 # Or it can be used directly in more advanced scenarios:
 #
-#   from muxi.runtime.run import run_server
+#   from .run import run_server
 #   run_server(host="0.0.0.0", port=5050, reload=False, mcp=True)
 #
 # Note: The current implementation is a placeholder that will be replaced

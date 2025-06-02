@@ -44,8 +44,8 @@ import datetime
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from muxi.runtime.mcp import MCPMessage, ToolParser, MCPService
-from muxi.runtime.llm import LLM
+from .mcp import MCPMessage, ToolParser, MCPService
+from .llm import LLM
 
 
 # Simple class to represent an MCP server

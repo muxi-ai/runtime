@@ -50,7 +50,7 @@
 
 from typing import Any, Dict, List, Optional
 
-from muxi.runtime.knowledge.base import KnowledgeHandler, KnowledgeSource
+from .base import KnowledgeHandler, KnowledgeSource
 
 
 class Retriever:
