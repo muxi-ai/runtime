@@ -114,9 +114,10 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 
 **Current Status**: ✅ **Runtime foundation is 100% complete** with all core components functional including:
 - **Task #1 Completed**: OneLLM integration with comprehensive multi-modal support
+- **Task #2 Completed**: FAISSx integration with local/remote mode support for distributed vector operations
 - **Directory Structure**: Clean organization with proper test separation
 - **Import Resolution**: All module imports working correctly
-- **Next**: Task #2 - Replace FAISS with FAISSx for remote buffer memory capabilities
+- **Next**: Formation YAML configuration integration for FAISSx capabilities
 
 ## Recent Updates
 
