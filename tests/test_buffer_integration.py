@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from typing import Dict, List, Any, Optional
 
-from muxi.runtime.memory.buffer import BufferMemory
+from runtime.muxi.runtime.memory.buffer import BufferMemory
 
 
 class SimpleEmbeddingModel:

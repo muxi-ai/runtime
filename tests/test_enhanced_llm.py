@@ -16,7 +16,7 @@ import pytest
 # Add current directory to Python path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from runtime.muxi.runtime.llm import (
+from runtime.muxi.runtime.llm import (  # noqa: E402
     LLM, LLMError, LLMErrorType, get_cache_stats, get_retry_stats,
     get_circuit_breaker_stats, clear_llm_cache, set_cache_ttl, reset_all_stats,
     AuthenticationError, RateLimitError

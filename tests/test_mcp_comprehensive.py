@@ -28,7 +28,7 @@ sys.path.insert(0, root_dir)
 # Import after sys.path modification
 try:
     # Try direct import
-    from muxi.runtime.mcp.handler import (  # noqa: E402
+    from runtime.muxi.runtime.mcp.handler import (  # noqa: E402
         MCPHandler,
         MCPServerClient,
         HTTPSSETransport,
@@ -39,7 +39,7 @@ try:
         MCPRequestError,
         MCPCancelledError
     )
-    from muxi.runtime.mcp.message import MCPMessage  # noqa: E402
+    from runtime.muxi.runtime.mcp.message import MCPMessage  # noqa: E402
     print("✅ Successfully imported MCP classes directly")
 except ImportError as e:
     print(f"❌ Direct import failed: {e}")

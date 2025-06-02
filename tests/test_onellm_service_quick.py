@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Import errors from the proper module path
-from runtime.muxi.runtime.llm.errors import (
+from runtime.muxi.runtime.llm.errors import (  # noqa: E402
     OneLLMConnectionError,
     OneLLMAuthenticationError,
     OneLLMRateLimitError,

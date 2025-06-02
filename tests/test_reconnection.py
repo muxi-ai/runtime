@@ -10,9 +10,9 @@ import logging
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from muxi.runtime.mcp.handler import MCPConnectionError
-from muxi.runtime.mcp.reconnect_handler import ReconnectingMCPHandler
-from muxi.runtime.reconnection import RetryConfiguration
+from runtime.muxi.runtime.mcp.handler import MCPConnectionError
+from runtime.muxi.runtime.mcp.reconnect_handler import ReconnectingMCPHandler
+from runtime.muxi.runtime.reconnection import RetryConfiguration
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

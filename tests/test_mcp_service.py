@@ -7,8 +7,8 @@ This module contains tests for the MCPService class in the MUXI Framework.
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from muxi.runtime.mcp.parser import ToolCall, ToolParser
-from muxi.runtime.mcp.service import MCPService
+from runtime.muxi.runtime.mcp.parser import ToolCall, ToolParser
+from runtime.muxi.runtime.mcp.service import MCPService
 
 from tests.utils.async_test import async_test
 
@@ -207,7 +207,7 @@ class TestAgentToolIntegration(unittest.TestCase):
         self.mcp_service_patcher.start()
 
         # Import the Agent class after patching
-        from muxi.runtime.agent import Agent, MCPServer
+        from runtime.muxi.runtime.agent import Agent, MCPServer
 
         # Create an MCP server
         self.mcp_server = MCPServer(name="Test Server", url="http://example.com")

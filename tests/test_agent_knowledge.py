@@ -7,7 +7,7 @@ This module contains tests for the knowledge functionality of the Agent class.
 from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
-from muxi.runtime.agent import Agent
+from runtime.muxi.runtime.agent import Agent
 
 
 # Fixtures

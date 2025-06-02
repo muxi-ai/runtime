@@ -28,7 +28,7 @@ sys.path.insert(0, root_dir)
 # Load the mcp_handler module
 try:
     # First try direct import
-    from muxi.runtime.mcp.handler import (
+    from runtime.muxi.runtime.mcp.handler import (
         CommandLineTransport,
         CancellationToken
     )

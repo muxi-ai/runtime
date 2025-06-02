@@ -20,8 +20,8 @@ import numpy as np
 import yaml
 
 # Use direct imports instead of from muxi import muxi
-from muxi.runtime.memory.buffer import BufferMemory
-from muxi.runtime.overlord import Overlord
+from runtime.muxi.runtime.memory.buffer import BufferMemory
+from runtime.muxi.runtime.overlord import Overlord
 # Mock the muxi facade for testing
 # We'll patch its functionality directly in the test methods
 

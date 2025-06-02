@@ -7,8 +7,8 @@ These tests verify that the Overlord implementation works correctly.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.mcp import MCPMessage
+from runtime.muxi.runtime.overlord import Overlord
+from runtime.muxi.runtime.mcp import MCPMessage
 
 
 class TestOverlord:
