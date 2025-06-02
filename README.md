@@ -19,7 +19,7 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Agent Framework**: Flexible agent implementation with specialized capabilities
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
-- **Knowledge Integration**: Built-in knowledge base capabilities
+- **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
 - **Multi-Modal Support**: Handle text, image, audio, video, and document content
@@ -115,9 +115,10 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 **Current Status**: ✅ **Runtime foundation is 100% complete** with all core components functional including:
 - **Task #1 Completed**: OneLLM integration with comprehensive multi-modal support
 - **Task #2 Completed**: FAISSx integration with local/remote mode support for distributed vector operations
+- **Task #3 Completed**: Knowledge handler enhancement with directory support and YAML configuration
 - **Directory Structure**: Clean organization with proper test separation
 - **Import Resolution**: All module imports working correctly
-- **Next**: Formation YAML configuration integration for FAISSx capabilities
+- **Next**: Formation YAML configuration integration for FAISSx and knowledge capabilities
 
 ## Recent Updates
 
@@ -126,6 +127,20 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 - **FileProcessor Class**: Robust file processing with security validation
 - **Enhanced Chat Method**: Multi-modal content support with proper error handling
 - **Test Coverage**: Complete test suite for all new functionality
+
+### ✅ Task #2 - FAISSx Integration (COMPLETED)
+- **Local/Remote Modes**: Support for both local and remote FAISSx vector operations
+- **BufferMemory Enhancement**: FAISSx integration with mode switching capabilities
+- **KnowledgeHandler Enhancement**: FAISSx support for knowledge base vector search
+- **Real Server Testing**: Validated with actual FAISSx server deployment
+- **Backward Compatibility**: All existing functionality preserved
+
+### ✅ Task #3 - Knowledge Handler Enhancement (COMPLETED)
+- **Directory Support**: FileKnowledge now supports both files and directories with recursive scanning
+- **YAML Configuration**: New schema with `enabled` flag and `sources` array for flexible configuration
+- **Performance Optimizations**: File limits, size restrictions, and aggressive performance controls
+- **Multiple Path Support**: Configure multiple knowledge sources with individual settings
+- **Production Ready**: Comprehensive error handling, UTF-8 encoding, and sub-second test execution
 
 ### ✅ Directory Structure Reorganization (COMPLETED)
 - **Test Separation**: Moved test files from production modules to `runtime/tests/`
