@@ -12,8 +12,8 @@
 #
 # 1. Vector Storage
 #    - Efficient storage of document embeddings
-#    - FAISS index for fast similarity search
-#    - Persistence with file caching
+#    - FAISSx index for fast similarity search
+#    - Persistence with file caching (local mode only)
 #
 # 2. Document Management
 #    - Loading and chunking of documents
@@ -35,12 +35,28 @@
 # making it ideal for cases where agents need access to domain-specific
 # documentation, product information, or other textual resources.
 #
+# Supports both local and remote FAISSx modes:
+# - Local mode: Uses local FAISSx client with file-based persistence
+# - Remote mode: Connects to remote FAISSx server for distributed storage
+#
 # Example usage:
 #
-#   # Initialize with an agent ID
+#   # Initialize with an agent ID (local mode)
 #   handler = KnowledgeHandler(
 #       agent_id="support_agent",
 #       embedding_dimension=1536
+#   )
+#
+#   # Initialize with remote FAISSx server
+#   handler = KnowledgeHandler(
+#       agent_id="support_agent",
+#       embedding_dimension=1536,
+#       mode="remote",
+#       remote={
+#           "url": "tcp://localhost:45678",
+#           "api_key": "your_api_key",
+#           "tenant": "your_tenant"
+#       }
 #   )
 #
 #   # Add documents to knowledge base
@@ -63,12 +79,13 @@ import os
 import pickle
 from typing import Any, Dict, List
 
-# Use FAISSx client as drop-in replacement for FAISS
-from faissx import client as faiss
 import numpy as np
 from loguru import logger
 
-from .utils import load_document, chunk_text
+# Import FAISSx client - same for both local and remote modes
+from faissx import client as faiss
+
+from ..utils import load_document, chunk_text
 from .base import FileKnowledge
 
 
@@ -83,8 +100,9 @@ class KnowledgeHandler:
     Key features include:
     - File processing and document management
     - Vector embeddings for semantic search
-    - Persistent caching of embeddings for performance
+    - Persistent caching of embeddings for performance (local mode only)
     - Metadata tracking for source attribution
+    - Support for both local and remote FAISSx storage modes
     """
 
     def __init__(
@@ -92,6 +110,8 @@ class KnowledgeHandler:
         agent_id_or_sources,
         embedding_dimension: int = 1536,
         cache_dir: str = ".cache/knowledge_embeddings",
+        mode: str = "local",
+        remote: Dict[str, Any] = None,
     ):
         """
         Initialize the knowledge handler.
@@ -107,7 +127,13 @@ class KnowledgeHandler:
                 which matches OpenAI's text-embedding-3-small model.
             cache_dir: Directory to store cached embeddings, relative to application
                 root. This enables persisting embeddings between runs for better
-                performance.
+                performance. Only used in local mode.
+            mode: FAISSx mode - "local" for in-memory storage with file persistence
+                or "remote" for server-based storage. Default is "local".
+            remote: Remote server configuration when mode is "remote". Should contain:
+                - url: FAISSx server URL (e.g., "tcp://localhost:45678")
+                - api_key: Optional API key for authentication
+                - tenant: Optional tenant ID for multi-tenancy
         """
         # Handle initializing with knowledge sources (backward compatibility)
         if isinstance(agent_id_or_sources, list):
@@ -126,26 +152,47 @@ class KnowledgeHandler:
 
         self.embedding_dimension = embedding_dimension
         self.cache_dir = cache_dir
+        self.mode = mode
+        self.remote = remote or {}
+
+        # Cache files only used in local mode
         self.embedding_file = f"{cache_dir}/{self.agent_id}_embeddings.pickle"
         self.metadata_file = f"{cache_dir}/{self.agent_id}_metadata.pickle"
 
-        # Create cache directory if it doesn't exist
-        os.makedirs(cache_dir, exist_ok=True)
+        # Create cache directory if it doesn't exist (local mode only)
+        if mode == "local":
+            os.makedirs(cache_dir, exist_ok=True)
+
+        # Configure FAISSx for remote mode
+        if mode == "remote" and self.remote:
+            faiss.configure(
+                server=self.remote.get("url"),
+                api_key=self.remote.get("api_key"),
+                tenant_id=self.remote.get("tenant")
+            )
+        elif mode != "local" and mode != "remote":
+            raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
 
         # Initialize variables
         self.index = None
         self.documents = []
 
-        # Try to load cached embeddings
-        self._load_cached_embeddings()
+        # Try to load cached embeddings (local mode only)
+        if mode == "local":
+            self._load_cached_embeddings()
+        else:
+            # For remote mode, create new index
+            self.index = faiss.IndexFlatL2(self.embedding_dimension)
 
     def _load_cached_embeddings(self) -> bool:
         """
         Load cached embeddings if they exist and are valid.
 
-        This internal method attempts to load previously saved FAISS index and
+        This internal method attempts to load previously saved FAISSx index and
         document metadata from disk. If the cached data is valid and consistent,
         it's used, avoiding the need to regenerate embeddings.
+
+        Note: Only used in local mode. Remote mode handles persistence on the server.
 
         Returns:
             bool: True if cached embeddings were successfully loaded, False otherwise
@@ -164,13 +211,13 @@ class KnowledgeHandler:
                     return True
 
             # If we get here, we need to create a new index
-            self.index = faiss.IndexFlatL2(self.embedding_dimension)  # Use model's dimension
+            self.index = faiss.IndexFlatL2(self.embedding_dimension)
             self.documents = []
             return False
         except Exception as e:
             logger.error(f"Error loading cached embeddings: {e}")
             # Create a new index
-            self.index = faiss.IndexFlatL2(self.embedding_dimension)  # Use model's dimension
+            self.index = faiss.IndexFlatL2(self.embedding_dimension)
             self.documents = []
             return False
 
@@ -178,10 +225,16 @@ class KnowledgeHandler:
         """
         Save embeddings and metadata to disk for persistence.
 
-        This internal method serializes the FAISS index and document metadata
+        This internal method serializes the FAISSx index and document metadata
         to disk, enabling them to be loaded in future sessions. This improves
         performance by avoiding the need to regenerate embeddings every time.
+
+        Note: Only used in local mode. Remote mode handles persistence on the server.
         """
+        if self.mode != "local":
+            # Skip saving in remote mode - server handles persistence
+            return
+
         try:
             with open(self.embedding_file, "wb") as f:
                 pickle.dump(self.index, f)
@@ -305,7 +358,7 @@ class KnowledgeHandler:
 
         # If we removed all documents, just reset the index
         if not self.documents:
-            self.index = faiss.IndexFlatL2(self.embedding_dimension)  # Use model's dimension
+            self.index = faiss.IndexFlatL2(self.embedding_dimension)
             self._save_embeddings()
             logger.info(f"Removed file {file_path} and reset knowledge base")
             return True

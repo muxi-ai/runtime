@@ -33,12 +33,25 @@
 #
 # Example usage:
 #
-#   # Create buffer memory with semantic search
+#   # Create buffer memory with semantic search (local mode)
 #   model = OpenAIModel(model="text-embedding-3-small")
 #   buffer = BufferMemory(
 #       max_size=10,              # Context window size
 #       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
 #       model=model               # For generating embeddings
+#   )
+#
+#   # Create buffer memory with remote FAISSx server
+#   buffer = BufferMemory(
+#       max_size=10,
+#       buffer_multiplier=10,
+#       model=model,
+#       mode="remote",
+#       remote={
+#           "url": "tcp://localhost:45678",
+#           "api_key": "your_api_key",
+#           "tenant": "your_tenant"
+#       }
 #   )
 #
 #   # Add items to buffer
@@ -57,7 +70,8 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 import numpy as np
-# Use FAISSx client as drop-in replacement for FAISS
+
+# Import FAISSx client - same for both local and remote modes
 from faissx import client as faiss
 
 
@@ -66,7 +80,7 @@ class BufferMemory:
     A fixed-size buffer memory with vector search capabilities.
 
     BufferMemory provides a hybrid memory system that combines recency-based retrieval
-    with semantic search powered by FAISS. It maintains a buffer of messages with
+    with semantic search powered by FAISSx. It maintains a buffer of messages with
     associated metadata and vector embeddings for efficient contextual search.
 
     The buffer operates with two key size parameters:
@@ -75,6 +89,10 @@ class BufferMemory:
 
     This enables maintaining a larger storage for vector search while keeping a smaller
     context window for recent conversations.
+
+    Supports both local and remote FAISSx modes:
+    - Local mode: Uses local FAISSx client for in-memory vector storage
+    - Remote mode: Connects to remote FAISSx server for distributed vector storage
     """
 
     def __init__(
@@ -83,6 +101,8 @@ class BufferMemory:
         buffer_multiplier: int = 10,
         dimension: int = 1536,
         model=None,
+        mode: str = "local",
+        remote: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize a buffer memory with vector search capabilities.
@@ -97,6 +117,12 @@ class BufferMemory:
             model: Optional language model instance for generating embeddings.
                 Must have an async embed(text) method. If None, vector search
                 will be disabled and only recency-based retrieval will be used.
+            mode: FAISSx mode - "local" for in-memory storage or "remote" for
+                server-based storage. Default is "local".
+            remote: Remote server configuration when mode is "remote". Should contain:
+                - url: FAISSx server URL (e.g., "tcp://localhost:45678")
+                - api_key: Optional API key for authentication
+                - tenant: Optional tenant ID for multi-tenancy
         """
         # Buffer size and content
         self.max_size = max_size
@@ -107,12 +133,24 @@ class BufferMemory:
         # Vector search configuration
         self.dimension = dimension
         self.model = model
+        self.mode = mode
+        self.remote = remote or {}
         self.has_vector_search = True
 
-        # Initialize vector storage if FAISS is available
+        # Configure FAISSx for remote mode
+        if mode == "remote" and self.remote:
+            faiss.configure(
+                server=self.remote.get("url"),
+                api_key=self.remote.get("api_key"),
+                tenant_id=self.remote.get("tenant")
+            )
+        elif mode != "local" and mode != "remote":
+            raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
+
+        # Initialize vector storage
         self.index = faiss.IndexFlatL2(self.dimension)
-        self.index_mapping = {}  # Maps buffer indices to FAISS indices
-        self.index_count = 0  # Counter for FAISS indices
+        self.index_mapping = {}  # Maps buffer indices to FAISSx indices
+        self.index_count = 0  # Counter for FAISSx indices
         self.needs_rebuild = False  # Flag to track if index needs rebuilding
 
     async def add(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
@@ -144,15 +182,15 @@ class BufferMemory:
                 embedding = await self.model.embed(text)
                 item["embedding"] = embedding
 
-                # Record the mapping from buffer index to FAISS index
+                # Record the mapping from buffer index to FAISSx index
                 buffer_idx = len(self.buffer)
                 self.index_mapping[buffer_idx] = self.index_count
 
-                # Add the embedding to the FAISS index
+                # Add the embedding to the FAISSx index
                 embedding_array = np.array([embedding], dtype=np.float32)
                 self.index.add(embedding_array)
 
-                # Increment the FAISS index counter
+                # Increment the FAISSx index counter
                 self.index_count += 1
             except Exception as e:
                 # Handle embedding generation failures gracefully
@@ -171,9 +209,9 @@ class BufferMemory:
 
     def _rebuild_index(self) -> None:
         """
-        Rebuild the FAISS index after buffer overflow.
+        Rebuild the FAISSx index after buffer overflow.
 
-        This internal method rebuilds the FAISS index and mapping when the buffer
+        This internal method rebuilds the FAISSx index and mapping when the buffer
         is full and new items have displaced old ones. It ensures the vector search
         stays in sync with the actual buffer contents.
         """
@@ -204,7 +242,7 @@ class BufferMemory:
         self.index_count = new_count
         self.needs_rebuild = False
 
-        logger.debug(f"Rebuilt FAISS index with {new_count} embeddings")
+        logger.debug(f"Rebuilt FAISSx index with {new_count} embeddings")
 
     def _recency_search(
         self,
@@ -314,14 +352,14 @@ class BufferMemory:
             # Convert query vector to numpy array
             query_np = np.array([query_vector], dtype=np.float32)
 
-            # Search the FAISS index for similar vectors
+            # Search the FAISSx index for similar vectors
             k = min(limit * 2, self.index_count)  # Get more results to allow for filtering
             distances, indices = self.index.search(query_np, k)
 
-            # Map FAISS indices back to buffer indices
+            # Map FAISSx indices back to buffer indices
             buffer_indices = []
             for faiss_idx in indices[0]:
-                # Find the buffer index for this FAISS index
+                # Find the buffer index for this FAISSx index
                 for buffer_idx, mapped_faiss_idx in self.index_mapping.items():
                     if mapped_faiss_idx == faiss_idx:
                         buffer_indices.append(buffer_idx)
@@ -365,7 +403,7 @@ class BufferMemory:
             return results[:limit]
 
         except Exception as e:
-            # Handle FAISS search errors gracefully
+            # Handle FAISSx search errors gracefully
             logger.error(f"Error in vector search: {e}")
             return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
@@ -393,13 +431,13 @@ class BufferMemory:
         """
         Clear the buffer memory.
 
-        This method removes all items from the buffer and resets the FAISS index
+        This method removes all items from the buffer and resets the FAISSx index
         if vector search is enabled. It effectively resets the memory to an empty state.
         """
         # Clear the buffer
         self.buffer.clear()
 
-        # Reset FAISS index if enabled
+        # Reset FAISSx index if enabled
         self.index = faiss.IndexFlatL2(self.dimension)
         self.index_mapping = {}
         self.index_count = 0
@@ -419,7 +457,7 @@ class BufferMemory:
             - buffer_capacity: Maximum number of items the buffer can hold
             - context_window_size: Size of the context window (max_size)
             - has_vector_search: Whether vector search is available
-            - vector_index_size: Number of vectors in the FAISS index
+            - vector_index_size: Number of vectors in the FAISSx index
             - model_available: Whether a model is available for embedding generation
         """
         stats = {
