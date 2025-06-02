@@ -63,7 +63,8 @@ import os
 import pickle
 from typing import Any, Dict, List
 
-import faiss
+# Use FAISSx client as drop-in replacement for FAISS
+from faissx import client as faiss
 import numpy as np
 from loguru import logger
 

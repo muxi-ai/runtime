@@ -56,18 +56,9 @@ import collections
 from typing import Any, Dict, List, Optional
 
 from loguru import logger
-
-try:
-    import numpy as np
-    import faiss
-
-    FAISS_AVAILABLE = True
-except ImportError:
-    FAISS_AVAILABLE = False
-    logger.warning(
-        "FAISS not available. Vector search in BufferMemory will be disabled. "
-        "Install with 'pip install faiss-cpu' or 'pip install faiss-gpu'."
-    )
+import numpy as np
+# Use FAISSx client as drop-in replacement for FAISS
+from faissx import client as faiss
 
 
 class BufferMemory:
@@ -116,22 +107,13 @@ class BufferMemory:
         # Vector search configuration
         self.dimension = dimension
         self.model = model
-        self.has_vector_search = FAISS_AVAILABLE
+        self.has_vector_search = True
 
         # Initialize vector storage if FAISS is available
-        if self.has_vector_search:
-            self.index = faiss.IndexFlatL2(self.dimension)
-            self.index_mapping = {}  # Maps buffer indices to FAISS indices
-            self.index_count = 0  # Counter for FAISS indices
-            self.needs_rebuild = False  # Flag to track if index needs rebuilding
-        else:
-            self.index = None
-            self.index_mapping = None
-            self.index_count = 0
-            logger.warning(
-                "FAISS not available, BufferMemory will use recency-based search only. "
-                "Install FAISS for vector search capabilities."
-            )
+        self.index = faiss.IndexFlatL2(self.dimension)
+        self.index_mapping = {}  # Maps buffer indices to FAISS indices
+        self.index_count = 0  # Counter for FAISS indices
+        self.needs_rebuild = False  # Flag to track if index needs rebuilding
 
     async def add(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """
@@ -156,7 +138,7 @@ class BufferMemory:
         item = {"text": text, "metadata": metadata}
 
         # Generate embedding if model is available
-        if self.model and self.has_vector_search:
+        if self.model:
             try:
                 # Generate embedding for the text
                 embedding = await self.model.embed(text)
@@ -177,14 +159,14 @@ class BufferMemory:
                 logger.error(f"Error generating embedding: {e}")
                 item["embedding"] = None
         else:
-            # No embedding if model or FAISS is not available
+            # No embedding if model is not available
             item["embedding"] = None
 
         # Add item to the buffer
         self.buffer.append(item)
 
         # Check if we need to rebuild the index (buffer is full and items were removed)
-        if len(self.buffer) == self.buffer_size and self.has_vector_search and self.model:
+        if len(self.buffer) == self.buffer_size and self.model:
             self.needs_rebuild = True
 
     def _rebuild_index(self) -> None:
@@ -195,7 +177,7 @@ class BufferMemory:
         is full and new items have displaced old ones. It ensures the vector search
         stays in sync with the actual buffer contents.
         """
-        if not self.has_vector_search or not self.model:
+        if not self.model:
             return
 
         # Create a new index with the same dimension
@@ -306,9 +288,9 @@ class BufferMemory:
             similarity and recency. Each item includes the original text, metadata,
             and a score field indicating the match quality.
         """
-        # If we don't have vector search capability, return most recent messages
-        if not self.has_vector_search or not self.model:
-            logger.debug("Using recency-only search (vector search not available)")
+        # If we don't have a model, return most recent messages
+        if not self.model:
+            logger.debug("Using recency-only search (no model available)")
             return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
         # Rebuild index if needed
@@ -418,11 +400,10 @@ class BufferMemory:
         self.buffer.clear()
 
         # Reset FAISS index if enabled
-        if self.has_vector_search:
-            self.index = faiss.IndexFlatL2(self.dimension)
-            self.index_mapping = {}
-            self.index_count = 0
-            self.needs_rebuild = False
+        self.index = faiss.IndexFlatL2(self.dimension)
+        self.index_mapping = {}
+        self.index_count = 0
+        self.needs_rebuild = False
 
     def get_stats(self) -> Dict[str, Any]:
         """
