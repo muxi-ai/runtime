@@ -53,19 +53,18 @@
 # API connectors, or other specialized knowledge sources.
 # =============================================================================
 
-from typing import Any, Dict, List, Optional
-import os
 import glob
+import os
+from typing import Any, Dict, List, Optional
 
 
 class KnowledgeSource:
     """
-    Abstract base class for knowledge sources.
+    Base class for knowledge sources.
 
-    A knowledge source represents any repository of information that can be
-    queried to provide relevant knowledge in response to a query. This could
-    be a set of files, a database, an API, or any other system containing
-    structured or unstructured information.
+    Knowledge sources provide a way to retrieve relevant information based on a query.
+    This could be from files, databases, APIs, or any other source of information.
+    Each source can have its own search strategy and data format.
 
     This class defines the interface that all knowledge sources must implement,
     ensuring consistent behavior across different source types and enabling
@@ -126,7 +125,9 @@ class FileKnowledge(KnowledgeSource):
         description: Optional[str] = None,
         recursive: bool = True,
         allowed_extensions: Optional[List[str]] = None,
-        name: Optional[str] = None
+        name: Optional[str] = None,
+        max_files: int = 50,  # Limit files processed for performance
+        max_file_size: int = 1024 * 1024  # 1MB limit per file
     ):
         """
         Initialize a file-based knowledge source.
@@ -137,6 +138,8 @@ class FileKnowledge(KnowledgeSource):
             recursive: If path is a directory, whether to scan recursively (default: True)
             allowed_extensions: List of allowed file extensions (default: [".txt", ".md", ".pdf"])
             name: Optional name for the source (defaults to path basename)
+            max_files: Maximum number of files to process (default: 50)
+            max_file_size: Maximum file size in bytes (default: 1MB)
         """
         # Generate name from path if not provided
         if name is None:
@@ -146,6 +149,8 @@ class FileKnowledge(KnowledgeSource):
         self.path = path
         self.recursive = recursive
         self.allowed_extensions = allowed_extensions or [".txt", ".md", ".pdf"]
+        self.max_files = max_files
+        self.max_file_size = max_file_size
         self._files: Optional[List[str]] = None
 
     def _discover_files(self) -> List[str]:
@@ -165,21 +170,36 @@ class FileKnowledge(KnowledgeSource):
             files = [self.path]
         elif os.path.isdir(self.path):
             # Directory - scan for files
+            print(f"Scanning directory: {self.path} (recursive: {self.recursive})")
+
             if self.recursive:
                 # Recursive scan
                 for ext in self.allowed_extensions:
                     pattern = os.path.join(self.path, "**", f"*{ext}")
-                    files.extend(glob.glob(pattern, recursive=True))
+                    ext_files = glob.glob(pattern, recursive=True)
+                    files.extend(ext_files)
+                    print(f"  Found {len(ext_files)} {ext} files")
             else:
                 # Only immediate directory
                 for ext in self.allowed_extensions:
                     pattern = os.path.join(self.path, f"*{ext}")
-                    files.extend(glob.glob(pattern))
+                    ext_files = glob.glob(pattern)
+                    files.extend(ext_files)
+                    print(f"  Found {len(ext_files)} {ext} files")
         else:
             print(f"Warning: Path {self.path} does not exist")
 
+        # Remove duplicates, sort, and limit
+        unique_files = sorted(list(set(files)))
+
+        if len(unique_files) > self.max_files:
+            print(f"Limiting to first {self.max_files} files "
+                  f"(found {len(unique_files)} total)")
+            unique_files = unique_files[:self.max_files]
+
         # Cache the discovered files
-        self._files = sorted(list(set(files)))  # Remove duplicates and sort
+        self._files = unique_files
+        print(f"Total files to process: {len(self._files)}")
         return self._files
 
     async def retrieve(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
@@ -206,8 +226,17 @@ class FileKnowledge(KnowledgeSource):
         results = []
         files = self._discover_files()
 
-        for file_path in files[:limit]:
+        for i, file_path in enumerate(files[:limit]):
             try:
+                # Check file size before reading
+                file_size = os.path.getsize(file_path)
+                if file_size > self.max_file_size:
+                    print(f"Skipping large file: {file_path} "
+                          f"({file_size} bytes > {self.max_file_size})")
+                    continue
+
+                print(f"Reading file {i+1}/{min(len(files), limit)}: {file_path}")
+
                 # Read the entire file contents
                 with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
@@ -248,7 +277,9 @@ class FileKnowledge(KnowledgeSource):
             description=config.get('description'),
             recursive=config.get('recursive', True),
             allowed_extensions=config.get('allowed_extensions'),
-            name=config.get('name')
+            name=config.get('name'),
+            max_files=config.get('max_files', 50),
+            max_file_size=config.get('max_file_size', 1024 * 1024)
         )
 
 
