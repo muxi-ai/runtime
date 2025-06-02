@@ -54,16 +54,22 @@
 # =============================================================================
 
 from typing import Any, Dict, List, Optional
+import os
+import glob
 
 
 class KnowledgeSource:
     """
-    Base class for knowledge sources that can be integrated with agents.
+    Abstract base class for knowledge sources.
 
-    Knowledge sources provide relevant information to augment agent responses.
-    This abstract base class defines the contract that all knowledge source
-    implementations must follow, ensuring consistent behavior across different
-    types of knowledge sources.
+    A knowledge source represents any repository of information that can be
+    queried to provide relevant knowledge in response to a query. This could
+    be a set of files, a database, an API, or any other system containing
+    structured or unstructured information.
+
+    This class defines the interface that all knowledge sources must implement,
+    ensuring consistent behavior across different source types and enabling
+    the KnowledgeHandler to work with any source implementation.
     """
 
     def __init__(self, name: str, description: Optional[str] = None):
@@ -107,27 +113,74 @@ class KnowledgeSource:
 
 class FileKnowledge(KnowledgeSource):
     """
-    Simple knowledge source that retrieves information from files.
+    Knowledge source that retrieves information from files and directories.
 
-    This implementation reads content directly from files on disk. It serves
-    as a basic example of a knowledge source implementation and is useful for
-    development and testing scenarios where sophisticated retrieval is not required.
+    This implementation can handle both individual files and directories,
+    with support for recursive scanning and file extension filtering.
+    It supports the new configuration schema with path, description, and options.
     """
 
-    def __init__(self, name: str, files: List[str], description: Optional[str] = None):
+    def __init__(
+        self,
+        path: str,
+        description: Optional[str] = None,
+        recursive: bool = True,
+        allowed_extensions: Optional[List[str]] = None,
+        name: Optional[str] = None
+    ):
         """
         Initialize a file-based knowledge source.
 
         Args:
-            name: A unique name for this knowledge source. Used for identification
-                and reference in logs and debugging.
-            files: List of file paths to use as knowledge sources. These should be
-                valid paths to accessible text files containing the knowledge content.
-            description: Optional description of this knowledge source. Provides
-                human-readable context about what these files contain.
+            path: File path or directory path to use as knowledge source
+            description: Optional description of this knowledge source
+            recursive: If path is a directory, whether to scan recursively (default: True)
+            allowed_extensions: List of allowed file extensions (default: [".txt", ".md", ".pdf"])
+            name: Optional name for the source (defaults to path basename)
         """
+        # Generate name from path if not provided
+        if name is None:
+            name = os.path.basename(path) or path
+
         super().__init__(name, description)
-        self.files = files
+        self.path = path
+        self.recursive = recursive
+        self.allowed_extensions = allowed_extensions or [".txt", ".md", ".pdf"]
+        self._files: Optional[List[str]] = None
+
+    def _discover_files(self) -> List[str]:
+        """
+        Discover all files based on the path and configuration.
+
+        Returns:
+            List of file paths that match the criteria
+        """
+        if self._files is not None:
+            return self._files
+
+        files = []
+
+        if os.path.isfile(self.path):
+            # Single file
+            files = [self.path]
+        elif os.path.isdir(self.path):
+            # Directory - scan for files
+            if self.recursive:
+                # Recursive scan
+                for ext in self.allowed_extensions:
+                    pattern = os.path.join(self.path, "**", f"*{ext}")
+                    files.extend(glob.glob(pattern, recursive=True))
+            else:
+                # Only immediate directory
+                for ext in self.allowed_extensions:
+                    pattern = os.path.join(self.path, f"*{ext}")
+                    files.extend(glob.glob(pattern))
+        else:
+            print(f"Warning: Path {self.path} does not exist")
+
+        # Cache the discovered files
+        self._files = sorted(list(set(files)))  # Remove duplicates and sort
+        return self._files
 
     async def retrieve(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
@@ -151,11 +204,12 @@ class FileKnowledge(KnowledgeSource):
             - metadata: Additional information including file type, path, and size
         """
         results = []
+        files = self._discover_files()
 
-        for file_path in self.files[:limit]:
+        for file_path in files[:limit]:
             try:
                 # Read the entire file contents
-                with open(file_path, "r") as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     content = f.read()
 
                 # Create a result item with file information
@@ -163,7 +217,13 @@ class FileKnowledge(KnowledgeSource):
                     {
                         "source": file_path,
                         "content": content,
-                        "metadata": {"type": "file", "path": file_path, "size": len(content)},
+                        "metadata": {
+                            "type": "file",
+                            "path": file_path,
+                            "size": len(content),
+                            "base_path": self.path,
+                            "extension": os.path.splitext(file_path)[1]
+                        },
                     }
                 )
             except Exception as e:
@@ -171,6 +231,25 @@ class FileKnowledge(KnowledgeSource):
                 print(f"Error reading file {file_path}: {str(e)}")
 
         return results
+
+    @classmethod
+    def from_config(cls, config: Dict[str, Any]) -> 'FileKnowledge':
+        """
+        Create FileKnowledge instance from configuration dictionary.
+
+        Args:
+            config: Configuration dict with path, description, and optional settings
+
+        Returns:
+            FileKnowledge instance
+        """
+        return cls(
+            path=config['path'],
+            description=config.get('description'),
+            recursive=config.get('recursive', True),
+            allowed_extensions=config.get('allowed_extensions'),
+            name=config.get('name')
+        )
 
 
 class KnowledgeHandler:

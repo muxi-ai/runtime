@@ -456,3 +456,80 @@ class KnowledgeHandler:
             if "source" in doc:
                 sources.add(doc["source"])
         return list(sources)
+
+    @classmethod
+    async def from_agent_config(
+        cls,
+        agent_id: str,
+        knowledge_config: Dict[str, Any],
+        generate_embeddings_fn,
+        **kwargs
+    ) -> 'KnowledgeHandler':
+        """
+        Create KnowledgeHandler from agent configuration schema.
+
+        Args:
+            agent_id: Agent identifier
+            knowledge_config: Knowledge section from agent YAML config
+                (with 'enabled' and 'sources')
+            generate_embeddings_fn: Function to generate embeddings for documents
+            **kwargs: Additional KnowledgeHandler parameters
+
+        Returns:
+            Configured KnowledgeHandler instance
+        """
+        # Check if knowledge is enabled
+        if not knowledge_config.get('enabled', False):
+            logger.info(f"Knowledge disabled for agent {agent_id}")
+            return None
+
+        # Create handler instance
+        handler = cls(agent_id, **kwargs)
+
+        # Load all knowledge sources
+        knowledge_sources = knowledge_config.get('sources', [])
+        logger.info(
+            f"Loading {len(knowledge_sources)} knowledge sources for agent {agent_id}"
+        )
+
+        for source_config in knowledge_sources:
+            try:
+                # Create FileKnowledge from config
+                knowledge_source = FileKnowledge.from_config(source_config)
+
+                # Add to handler
+                await handler.add_file(knowledge_source, generate_embeddings_fn)
+                logger.info(f"Loaded knowledge source: {knowledge_source.path}")
+
+            except Exception as e:
+                source_path = source_config.get('path', 'unknown')
+                logger.error(f"Failed to load knowledge source {source_path}: {e}")
+                continue
+
+        doc_count = len(handler.documents)
+        logger.info(
+            f"Knowledge handler initialized for agent {agent_id} with {doc_count} documents"
+        )
+        return handler
+
+    async def load_sources_from_config(
+        self,
+        knowledge_sources: List[Dict[str, Any]],
+        generate_embeddings_fn
+    ) -> None:
+        """
+        Load multiple knowledge sources from configuration.
+
+        Args:
+            knowledge_sources: List of source configurations
+            generate_embeddings_fn: Function to generate embeddings
+        """
+        for source_config in knowledge_sources:
+            try:
+                knowledge_source = FileKnowledge.from_config(source_config)
+                await self.add_file(knowledge_source, generate_embeddings_fn)
+                logger.info(f"Loaded knowledge source: {knowledge_source.path}")
+            except Exception as e:
+                source_path = source_config.get('path', 'unknown')
+                logger.error(f"Failed to load knowledge source {source_path}: {e}")
+                continue
