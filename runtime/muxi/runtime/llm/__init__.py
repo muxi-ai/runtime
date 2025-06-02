@@ -22,6 +22,7 @@
 # =============================================================================
 
 from .service import OneLLMService
+from .llm import LLM
 from .errors import (
     OneLLMError,
     OneLLMConnectionError,
@@ -35,6 +36,7 @@ from .errors import (
 
 __all__ = [
     "OneLLMService",
+    "LLM",
     "OneLLMError",
     "OneLLMConnectionError",
     "OneLLMAuthenticationError",
