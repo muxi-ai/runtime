@@ -57,6 +57,13 @@ import glob
 import os
 from typing import Any, Dict, List, Optional
 
+# Import markitdown for document conversion
+try:
+    from markitdown import MarkItDown
+    MARKITDOWN_AVAILABLE = True
+except ImportError:
+    MARKITDOWN_AVAILABLE = False
+
 
 class KnowledgeSource:
     """
@@ -90,22 +97,22 @@ class KnowledgeSource:
         Retrieve relevant information based on a query.
 
         This is an abstract method that must be implemented by subclasses.
-        Each implementation should search its knowledge source and return
-        relevant information matching the query.
+        Each implementation can use different strategies for finding and
+        ranking relevant information.
 
         Args:
-            query: The search query. This is typically a question or keyword
-                phrase that should be used to find relevant information.
-            limit: Maximum number of results to return. Controls the volume of
-                information retrieved from this source.
+            query: The search query string. This should be a question or set
+                of keywords that the source will use to find relevant information.
+            limit: Maximum number of results to return. Sources should respect
+                this limit to prevent overwhelming the caller with too much information.
 
         Returns:
-            List of retrieved knowledge items. Each item should be a dictionary with
-            at least 'source' and 'content' keys, and optionally 'metadata'.
+            List of dictionaries containing relevant information. Each dictionary
+            should have at least a "content" field with the relevant text, and
+            optionally a "metadata" field with additional context.
 
         Raises:
-            NotImplementedError: This base method raises an error since it must
-                be implemented by subclasses.
+            NotImplementedError: If not implemented by a subclass.
         """
         raise NotImplementedError("Subclasses must implement retrieve()")
 
@@ -117,7 +124,41 @@ class FileKnowledge(KnowledgeSource):
     This implementation can handle both individual files and directories,
     with support for recursive scanning and file extension filtering.
     It supports the new configuration schema with path, description, and options.
+
+    Enhanced with markitdown support for comprehensive file format handling:
+    - Office documents: .docx, .pptx, .xlsx, .xls
+    - PDFs: .pdf
+    - Images: .jpg, .jpeg, .png, .gif, .bmp, .tiff
+    - Audio: .wav, .mp3
+    - Web content: .html, .htm
+    - Data formats: .csv, .json, .xml
+    - Archives: .zip
+    - E-books: .epub
+    - Plain text: .txt, .md
     """
+
+    # Extended list of supported file extensions via markitdown
+    _MARKITDOWN_EXTENSIONS = [
+        # Office documents
+        ".docx", ".pptx", ".xlsx", ".xls",
+        # PDFs
+        ".pdf",
+        # Images (with OCR support)
+        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
+        # Audio (with transcription support)
+        ".wav", ".mp3",
+        # Web content
+        ".html", ".htm",
+        # Data formats
+        ".csv", ".json", ".xml",
+        # Archives
+        ".zip",
+        # E-books
+        ".epub"
+    ]
+
+    # Traditional text extensions (processed directly)
+    _TEXT_EXTENSIONS = [".txt", ".md"]
 
     def __init__(
         self,
@@ -127,7 +168,8 @@ class FileKnowledge(KnowledgeSource):
         allowed_extensions: Optional[List[str]] = None,
         name: Optional[str] = None,
         max_files: int = 50,  # Limit files processed for performance
-        max_file_size: int = 1024 * 1024  # 1MB limit per file
+        max_file_size: int = 1024 * 1024,  # 1MB limit per file
+        enable_markitdown: bool = True,  # Enable markitdown processing
     ):
         """
         Initialize a file-based knowledge source.
@@ -136,10 +178,13 @@ class FileKnowledge(KnowledgeSource):
             path: File path or directory path to use as knowledge source
             description: Optional description of this knowledge source
             recursive: If path is a directory, whether to scan recursively (default: True)
-            allowed_extensions: List of allowed file extensions (default: [".txt", ".md", ".pdf"])
+            allowed_extensions: List of allowed file extensions
+                (default: includes all supported formats)
             name: Optional name for the source (defaults to path basename)
             max_files: Maximum number of files to process (default: 50)
             max_file_size: Maximum file size in bytes (default: 1MB)
+            enable_markitdown: Whether to use markitdown for supported file types
+                (default: True)
         """
         # Generate name from path if not provided
         if name is None:
@@ -148,10 +193,84 @@ class FileKnowledge(KnowledgeSource):
         super().__init__(name, description)
         self.path = path
         self.recursive = recursive
-        self.allowed_extensions = allowed_extensions or [".txt", ".md", ".pdf"]
         self.max_files = max_files
         self.max_file_size = max_file_size
+        self.enable_markitdown = enable_markitdown and MARKITDOWN_AVAILABLE
+
+        # Set default allowed extensions to include all supported formats
+        if allowed_extensions is None:
+            self.allowed_extensions = (
+                self._TEXT_EXTENSIONS + self._MARKITDOWN_EXTENSIONS
+            )
+        else:
+            self.allowed_extensions = allowed_extensions
+
         self._files: Optional[List[str]] = None
+
+        # Initialize markitdown converter if available
+        self._markitdown = None
+        if self.enable_markitdown:
+            try:
+                self._markitdown = MarkItDown()
+            except Exception as e:
+                print(f"Warning: Failed to initialize MarkItDown: {e}")
+                self.enable_markitdown = False
+
+    def _is_markitdown_supported(self, file_path: str) -> bool:
+        """Check if file extension is supported by markitdown."""
+        if not self.enable_markitdown:
+            return False
+        ext = os.path.splitext(file_path)[1].lower()
+        return ext in self._MARKITDOWN_EXTENSIONS
+
+    def _is_text_file(self, file_path: str) -> bool:
+        """Check if file is a plain text file."""
+        ext = os.path.splitext(file_path)[1].lower()
+        return ext in self._TEXT_EXTENSIONS
+
+    def _load_file_content(self, file_path: str) -> str:
+        """
+        Load and process file content using appropriate method.
+
+        Uses markitdown for supported formats, direct reading for text files.
+
+        Args:
+            file_path: Path to the file to load
+
+        Returns:
+            Processed file content as text/markdown
+        """
+        try:
+            if self._is_markitdown_supported(file_path):
+                # Use markitdown for supported file types
+                result = self._markitdown.convert(file_path)
+                return result.text_content
+
+            elif self._is_text_file(file_path):
+                # Direct reading for plain text files
+                with open(file_path, "r", encoding="utf-8") as f:
+                    return f.read()
+
+            else:
+                # Fallback: try to read as text with error handling
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        return f.read()
+                except UnicodeDecodeError:
+                    # If not UTF-8, try other common encodings
+                    for encoding in ["latin-1", "cp1252", "iso-8859-1"]:
+                        try:
+                            with open(file_path, "r", encoding=encoding) as f:
+                                return f.read()
+                        except UnicodeDecodeError:
+                            continue
+
+                    # If all text reading fails, return empty content with note
+                    return f"[Binary file: {os.path.basename(file_path)}]"
+
+        except Exception as e:
+            print(f"Error processing file {file_path}: {e}")
+            return f"[Error loading file: {os.path.basename(file_path)}]"
 
     def _discover_files(self) -> List[str]:
         """
@@ -178,14 +297,16 @@ class FileKnowledge(KnowledgeSource):
                     pattern = os.path.join(self.path, "**", f"*{ext}")
                     ext_files = glob.glob(pattern, recursive=True)
                     files.extend(ext_files)
-                    print(f"  Found {len(ext_files)} {ext} files")
+                    if ext_files:  # Only print if files found
+                        print(f"  Found {len(ext_files)} {ext} files")
             else:
                 # Only immediate directory
                 for ext in self.allowed_extensions:
                     pattern = os.path.join(self.path, f"*{ext}")
                     ext_files = glob.glob(pattern)
                     files.extend(ext_files)
-                    print(f"  Found {len(ext_files)} {ext} files")
+                    if ext_files:  # Only print if files found
+                        print(f"  Found {len(ext_files)} {ext} files")
         else:
             print(f"Warning: Path {self.path} does not exist")
 
@@ -206,10 +327,9 @@ class FileKnowledge(KnowledgeSource):
         """
         Retrieve relevant information from files based on a query.
 
-        This is a simple implementation that just returns the file contents without
-        any sophisticated search or ranking. In a production implementation, this would
-        typically use vector search, indexing, or other techniques to find the most
-        relevant parts of the files.
+        This implementation processes files using markitdown for supported formats
+        and direct reading for text files. The content is converted to markdown
+        format for consistent processing downstream.
 
         Args:
             query: The search query. In this simple implementation, the query is not
@@ -220,8 +340,9 @@ class FileKnowledge(KnowledgeSource):
         Returns:
             List of retrieved knowledge items. Each item includes:
             - source: The file path
-            - content: The entire file contents
-            - metadata: Additional information including file type, path, and size
+            - content: The processed file contents (converted to markdown if applicable)
+            - metadata: Additional information including file type, path, size, and
+                processing method
         """
         results = []
         files = self._discover_files()
@@ -235,11 +356,19 @@ class FileKnowledge(KnowledgeSource):
                           f"({file_size} bytes > {self.max_file_size})")
                     continue
 
-                print(f"Reading file {i+1}/{min(len(files), limit)}: {file_path}")
+                print(f"Processing file {i+1}/{min(len(files), limit)}: {file_path}")
 
-                # Read the entire file contents
-                with open(file_path, "r", encoding="utf-8") as f:
-                    content = f.read()
+                # Load file content using appropriate method
+                content = self._load_file_content(file_path)
+
+                # Determine processing method for metadata
+                processing_method = "text"
+                if self._is_markitdown_supported(file_path):
+                    processing_method = "markitdown"
+                elif self._is_text_file(file_path):
+                    processing_method = "text"
+                else:
+                    processing_method = "fallback"
 
                 # Create a result item with file information
                 results.append(
@@ -251,7 +380,11 @@ class FileKnowledge(KnowledgeSource):
                             "path": file_path,
                             "size": len(content),
                             "base_path": self.path,
-                            "extension": os.path.splitext(file_path)[1]
+                            "extension": os.path.splitext(file_path)[1],
+                            "processing_method": processing_method,
+                            "markitdown_supported": self._is_markitdown_supported(
+                                file_path
+                            ),
                         },
                     }
                 )
@@ -279,7 +412,8 @@ class FileKnowledge(KnowledgeSource):
             allowed_extensions=config.get('allowed_extensions'),
             name=config.get('name'),
             max_files=config.get('max_files', 50),
-            max_file_size=config.get('max_file_size', 1024 * 1024)
+            max_file_size=config.get('max_file_size', 1024 * 1024),
+            enable_markitdown=config.get('enable_markitdown', True),
         )
 
 

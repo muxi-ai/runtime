@@ -18,6 +18,9 @@ onellm>=0.1.0
 # A2A (Agent-to-Agent) Communication
 a2a-sdk>=1.0.0  # Google's Agent-to-Agent SDK for inter-agent communication
 
+# Document processing
+markitdown[all]>=0.1.0  # Convert various file formats (PDF, Word, Excel, PowerPoint, etc.) to Markdown
+
 # Development tools
 pytest>=7.0.0
 

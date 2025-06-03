@@ -18,6 +18,7 @@ setup(
         "onellm>=0.1.0",
         "faiss-cpu",
         "numpy>=1.20.0",
+        "markitdown[all]>=0.1.0",
     ],
     project_urls={
         "Source": "https://github.com/muxi-ai/formations",
