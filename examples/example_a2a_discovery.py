@@ -1,208 +1,241 @@
 #!/usr/bin/env python3
 """
-Example: A2A Local Discovery Service Usage
+Example: Simple A2A Discovery Usage
 
-This example demonstrates how to use the Local Discovery Service for
-Agent-to-Agent (A2A) communication within MUXI formations.
+This example demonstrates the new simplified A2A discovery approach where
+agents simply ask their overlord to discover other agents in the formation.
+No HTTP servers, no complex discovery services - just simple method calls!
 """
 
-import asyncio
-import json
 import sys
 from pathlib import Path
 
 # Add the runtime to the path for testing from examples directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from runtime.muxi.runtime.a2a.discovery import (  # noqa: E402
-    LocalDiscoveryService,
-    DiscoveryConfig,
-    DiscoveryServiceManager
-)
-from runtime.muxi.runtime.a2a.models import AgentCard, A2ACapability  # noqa: E402
+from runtime.muxi.runtime.overlord import Overlord  # noqa: E402
+from runtime.muxi.runtime.llm import LLM  # noqa: E402
 
 
-async def example_basic_discovery():
-    """Example of basic discovery service usage"""
-    print("=== Basic Discovery Service Example ===\n")
+def example_basic_discovery():
+    """Example of basic A2A discovery using the overlord"""
+    print("=== Basic A2A Discovery Example ===\n")
 
-    # Create discovery service configuration
-    config = DiscoveryConfig(
-        health_check_interval=30,  # Check health every 30 seconds
-        agent_timeout=120,         # Mark agents as unreachable after 2 minutes
-        enable_persistence=True,   # Save registry to disk
-        registry_file="./discovery_registry.json"
+    # Create overlord (formation manager)
+    overlord = Overlord()
+    print("✓ Created overlord (formation manager)")
+
+    # Create a mock model for agents
+    model = LLM(model="openai/gpt-4o-mini")
+
+    # Create agents with different capabilities
+    weather_agent = overlord.create_agent(
+        agent_id="weather-agent",
+        model=model,
+        description="Provides weather information and forecasts",
+        a2a_internal=True,  # Participates in A2A
+        a2a_external=True
     )
 
-    # Create and start discovery service
-    discovery = LocalDiscoveryService(config)
-    await discovery.start("example_formation", 8080)
-
-    print("✓ Discovery service started for formation 'example_formation'")
-
-    # Create some example agent cards
-    search_agent_card = AgentCard(
-        name="Search Agent",
-        description="Provides search capabilities across multiple data sources",
-        version="1.0.0",
-        url="http://localhost:8081"
+    calendar_agent = overlord.create_agent(
+        agent_id="calendar-agent",
+        model=model,
+        description="Manages calendar events and scheduling",
+        a2a_internal=True,  # Participates in A2A
+        a2a_external=True
     )
 
-    # Add capabilities
-    search_agent_card.add_capability(A2ACapability(
-        name="web_search",
-        description="Search the web for information",
-        enabled=True
-    ))
-    search_agent_card.add_capability(A2ACapability(
-        name="document_search",
-        description="Search through document collections",
-        enabled=True
-    ))
-
-    analysis_agent_card = AgentCard(
-        name="Analysis Agent",
-        description="Provides data analysis and visualization capabilities",
-        version="1.0.0",
-        url="http://localhost:8082"
+    email_agent = overlord.create_agent(
+        agent_id="email-agent",
+        model=model,
+        description="Handles email communication",
+        a2a_internal=False,  # Does NOT participate in A2A
+        a2a_external=True
     )
 
-    analysis_agent_card.add_capability(A2ACapability(
-        name="data_analysis",
-        description="Analyze datasets and generate insights",
-        enabled=True
-    ))
-    analysis_agent_card.add_capability(A2ACapability(
-        name="visualization",
-        description="Create charts and visualizations",
-        enabled=True
-    ))
+    print("✓ Created 3 agents in the formation")
+    print(f"  - {weather_agent.agent_id}: A2A enabled")
+    print(f"  - {calendar_agent.agent_id}: A2A enabled")
+    print(f"  - {email_agent.agent_id}: A2A disabled")
 
-    # Register agents
-    try:
-        search_result = await discovery.register_agent(
-            "search_agent_001",
-            "http://localhost:8081",
-            search_agent_card
+    # Weather agent discovers other agents
+    print("\n--- Weather Agent Discovering Peers ---")
+    discovered = weather_agent.discover_agents()
+
+    print(f"Weather agent discovered {len(discovered)} other agents:")
+    for agent_id, info in discovered.items():
+        print(f"  - {agent_id}: {info['description']}")
+        print(f"    Status: {info['status']}")
+        print(f"    Capabilities: {info.get('capabilities', 'N/A')}")
+
+    return overlord, weather_agent, calendar_agent, email_agent
+
+
+def example_capability_filtering(overlord, weather_agent):
+    """Example of discovering agents with specific capabilities"""
+    print("\n=== Capability-Based Discovery Example ===\n")
+
+    # Create agents with specific capabilities
+    search_agent = overlord.create_agent(
+        agent_id="search-agent",
+        model=LLM(model="openai/gpt-4o-mini"),
+        description="Provides web and document search capabilities",
+        a2a_internal=True
+    )
+
+    # Mock adding capabilities (in real implementation, this would be more structured)
+    search_agent.capabilities = ["web_search", "document_search"]
+
+    analysis_agent = overlord.create_agent(
+        agent_id="analysis-agent",
+        model=LLM(model="openai/gpt-4o-mini"),
+        description="Provides data analysis and visualization",
+        a2a_internal=True
+    )
+
+    analysis_agent.capabilities = ["data_analysis", "visualization"]
+
+    print("✓ Created agents with specific capabilities:")
+    print(f"  - {search_agent.agent_id}: {search_agent.capabilities}")
+    print(f"  - {analysis_agent.agent_id}: {analysis_agent.capabilities}")
+
+    # Discover agents with search capabilities
+    print("\n--- Discovering Agents with Search Capabilities ---")
+    search_capable = weather_agent.discover_agents(capability_filter=["web_search"])
+
+    for agent_id, info in search_capable.items():
+        print(f"Found: {agent_id} with search capabilities")
+        print(f"  Capabilities: {info.get('capabilities', [])}")
+
+
+def example_a2a_configuration():
+    """Example showing different A2A configuration scenarios"""
+    print("\n=== A2A Configuration Examples ===\n")
+
+    overlord = Overlord()
+    model = LLM(model="openai/gpt-4o-mini")
+
+    # Different A2A configurations
+    agents = {
+        "public-agent": overlord.create_agent(
+            agent_id="public-agent",
+            model=model,
+            description="Public-facing agent",
+            a2a_internal=True,   # Can talk to other agents in formation
+            a2a_external=True    # Can talk to agents in other formations
+        ),
+
+        "internal-only": overlord.create_agent(
+            agent_id="internal-only",
+            model=model,
+            description="Internal operations agent",
+            a2a_internal=True,   # Can talk to agents in formation
+            a2a_external=False   # Cannot talk to external agents
+        ),
+
+        "isolated-agent": overlord.create_agent(
+            agent_id="isolated-agent",
+            model=model,
+            description="Isolated processing agent",
+            a2a_internal=False,  # Cannot talk to any agents
+            a2a_external=False
         )
-        print(f"✓ Registered search agent: {search_result}")
+    }
 
-        analysis_result = await discovery.register_agent(
-            "analysis_agent_001",
-            "http://localhost:8082",
-            analysis_agent_card
+    print("✓ Created agents with different A2A configurations:")
+    for agent_id, agent in agents.items():
+        print(f"  - {agent_id}:")
+        print(f"    Internal A2A: {agent.a2a_internal}")
+        print(f"    External A2A: {agent.a2a_external}")
+
+    # Test discovery from different perspectives
+    print("\n--- Discovery Results ---")
+
+    print("Public agent discovers:")
+    public_discovered = agents["public-agent"].discover_agents()
+    for agent_id, info in public_discovered.items():
+        print(f"  - {agent_id}: {info['description']}")
+
+    print("\nIsolated agent discovers:")
+    isolated_discovered = agents["isolated-agent"].discover_agents()
+    print(f"  - Found {len(isolated_discovered)} agents (should be same as above)")
+    print("  - Note: Isolated agent can discover others, but others cannot discover it")
+
+    # Show overlord perspective
+    print("\n--- Overlord's Full View ---")
+    all_agents = overlord.list_agents()
+    print(f"Overlord manages {len(all_agents)} total agents:")
+    for agent_id, info in all_agents.items():
+        print(f"  - {agent_id}: {info['description']}")
+
+
+def example_formation_management():
+    """Example of managing agents in a formation"""
+    print("\n=== Formation Management Example ===\n")
+
+    overlord = Overlord()
+    model = LLM(model="openai/gpt-4o-mini")
+
+    print("Building a customer service formation...")
+
+    # Create a formation for customer service
+    agents = []
+    agent_configs = [
+        ("ticket-router", "Routes customer tickets to appropriate agents", True),
+        ("billing-agent", "Handles billing inquiries and payments", True),
+        ("tech-support", "Provides technical support and troubleshooting", True),
+        ("escalation-agent", "Handles escalated issues", True),
+        ("audit-agent", "Monitors interactions for quality", False)  # Internal only
+    ]
+
+    for agent_id, description, a2a_enabled in agent_configs:
+        agent = overlord.create_agent(
+            agent_id=agent_id,
+            model=model,
+            description=description,
+            a2a_internal=a2a_enabled
         )
-        print(f"✓ Registered analysis agent: {analysis_result}")
+        agents.append(agent)
 
-    except Exception as e:
-        print(f"Note: Agent registration failed (expected in demo): {e}")
+    print(f"✓ Created {len(agents)} agents in customer service formation")
 
-    # Discover all agents
-    print("\n--- Discovering All Agents ---")
-    all_agents = discovery.discover_agents()
-    for agent in all_agents:
-        print(f"Agent: {agent['name']} ({agent['agent_id']})")
-        print(f"  Status: {agent['status']}")
-        print(f"  Capabilities: {agent['capabilities']}")
-        print(f"  Health Score: {agent['health_score']}")
-        print()
+    # Simulate ticket router discovering available agents
+    router = next(a for a in agents if a.agent_id == "ticket-router")
+    available_agents = router.discover_agents()
 
-    # Discover agents with specific capabilities
-    print("--- Discovering Agents with 'web_search' Capability ---")
-    search_agents = discovery.discover_agents(capability_filter=["web_search"])
-    for agent in search_agents:
-        print(f"Found: {agent['name']} with web_search capability")
+    print(f"\nTicket router can route to {len(available_agents)} agents:")
+    for agent_id, info in available_agents.items():
+        print(f"  - {agent_id}: {info['description']}")
 
-    # Get formation status
-    print("\n--- Formation Status ---")
-    status = discovery.get_formation_status()
-    print(json.dumps(status, indent=2))
-
-    # Stop the service
-    await discovery.stop()
-    print("\n✓ Discovery service stopped")
+    # Show formation status
+    print(f"\nFormation status:")
+    print(f"  Total agents: {len(overlord.list_agents())}")
+    print(f"  A2A enabled: {len(available_agents) + 1}")  # +1 for router itself
+    print(f"  A2A disabled: {len(overlord.list_agents()) - len(available_agents) - 1}")
 
 
-async def example_multi_formation():
-    """Example of managing multiple formations"""
-    print("\n=== Multi-Formation Discovery Example ===\n")
-
-    # Create discovery service manager
-    manager = DiscoveryServiceManager()
-
-    # Create services for different formations
-    config = DiscoveryConfig(health_check_interval=0, enable_persistence=False)
-
-    await manager.create_service("frontend_formation", config)
-    await manager.create_service("backend_formation", config)
-
-    print("✓ Created discovery services for multiple formations")
-
-    # List all formations
-    formations = manager.list_formations()
-    print(f"Active formations: {formations}")
-
-    # Get global status
-    global_status = manager.get_global_status()
-    print(f"Global status: {json.dumps(global_status, indent=2)}")
-
-    # Stop all services
-    await manager.stop_all_services()
-    print("✓ All discovery services stopped")
-
-
-async def example_agent_monitoring():
-    """Example of agent health monitoring"""
-    print("\n=== Agent Health Monitoring Example ===\n")
-
-    config = DiscoveryConfig(
-        health_check_interval=5,  # Fast health checks for demo
-        agent_timeout=15,
-        enable_persistence=False
-    )
-
-    discovery = LocalDiscoveryService(config)
-    await discovery.start("monitoring_formation", 8080)
-
-    print("✓ Started discovery service with health monitoring")
-
-    # Create a test agent card
-    test_card = AgentCard(
-        name="Test Agent",
-        description="Agent for monitoring demonstration",
-        version="1.0.0",
-        url="http://localhost:8083"
-    )
-    test_card.add_capability(A2ACapability(name="test", enabled=True))
-
-    # Register agent (will fail health checks since no real server)
-    try:
-        await discovery.register_agent("test_agent", "http://localhost:8083", test_card)
-        print("✓ Registered test agent")
-    except Exception as e:
-        print(f"Note: Registration failed (expected): {e}")
-
-    # Show how to get detailed agent info
-    agent_info = discovery.get_agent_info("test_agent")
-    if agent_info:
-        print(f"Agent info: {json.dumps(agent_info, indent=2)}")
-
-    await discovery.stop()
-    print("✓ Monitoring example completed")
-
-
-async def main():
-    """Run all discovery service examples"""
-    print("A2A DISCOVERY SERVICE EXAMPLES")
+def main():
+    """Run all A2A discovery examples"""
+    print("SIMPLE A2A DISCOVERY EXAMPLES")
     print("=" * 50)
+    print("No HTTP servers, no complex discovery services!")
+    print("Just agents asking their overlord: 'Who else is here?'\n")
 
-    await example_basic_discovery()
-    await example_multi_formation()
-    await example_agent_monitoring()
+    # Run examples
+    overlord, weather_agent, calendar_agent, email_agent = example_basic_discovery()
+    example_capability_filtering(overlord, weather_agent)
+    example_a2a_configuration()
+    example_formation_management()
 
     print("\n" + "=" * 50)
     print("🎉 All examples completed!")
+    print("\nKey Takeaways:")
+    print("- A2A discovery is now trivially simple")
+    print("- Agents just call discover_agents() on themselves")
+    print("- Overlord already knows everything")
+    print("- No HTTP, no ports, no complex setup needed")
+    print("- Single source of truth: agent.a2a_internal")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
