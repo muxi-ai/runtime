@@ -101,6 +101,8 @@ class Agent:
         name: Optional[str] = None,
         mcp_server: Optional[MCPServer] = None,
         request_timeout: Optional[int] = None,
+        a2a_internal: bool = True,
+        a2a_external: bool = True,
     ):
         """
         Initialize the agent with a model, overlord, and optional parameters.
@@ -120,6 +122,10 @@ class Agent:
                 Enables the agent to use external tools.
             request_timeout: Optional timeout in seconds for MCP requests.
                 Defaults to overlord's timeout if not specified.
+            a2a_internal: Whether this agent participates in intra-formation A2A
+                communication. Default True.
+            a2a_external: Whether this agent participates in external A2A
+                communication. Default True.
         """
         self.model = model
         self.overlord = overlord
@@ -133,6 +139,10 @@ class Agent:
             "You are a helpful assistant that responds accurately to user queries. "
             "Provide detailed, factual responses and be transparent about uncertainty."
         )
+
+        # Set up A2A configuration (single source of truth)
+        self.a2a_internal = a2a_internal
+        self.a2a_external = a2a_external
 
         # Set up MCP integration
         self.mcp_server = mcp_server
@@ -321,26 +331,64 @@ class Agent:
 
     async def get_relevant_memories(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
         """
-        Get relevant memories for a user query from the overlord's memory systems.
+        Get relevant memories from the overlord's memory systems.
+
+        This method searches through the overlord's memory systems to find
+        information relevant to the current query. It can search both buffer
+        memory (for recent context) and long-term memory (for persistent knowledge).
 
         Args:
-            query: The user query to find relevant memories for. Used for semantic
-                search to find related context.
-            limit: Maximum number of memories to retrieve. Controls the amount of
-                context included.
+            query: The search query to find relevant memories.
+            limit: Maximum number of memories to return.
 
         Returns:
-            A list of relevant memories, each as a dictionary with metadata.
-            Returns an empty list if memory retrieval is not available.
+            List of memory dictionaries containing relevant information.
         """
-        if not self.overlord or not hasattr(self.overlord, "search_buffer_memory"):
-            return []
-
-        memories = self.overlord.search_buffer_memory(
-            query=query, limit=limit, agent_id=self.agent_id
-        )
-
+        memories = []
+        if self.overlord and hasattr(self.overlord, "search_memory"):
+            memories = await self.overlord.search_memory(
+                query=query, agent_id=self.agent_id, k=limit
+            )
         return memories
+
+    def discover_agents(
+        self, capability_filter: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Discover other agents available for A2A (Agent-to-Agent) communication.
+
+        This is the simple discovery method for local formations. The agent asks
+        its overlord what other agents exist and what they can do.
+
+        Args:
+            capability_filter: Optional list of required capabilities to filter agents by.
+                Only agents with at least one of these capabilities will be returned.
+
+        Returns:
+            Dict mapping agent_id to agent information including:
+            - description: Agent's description/purpose
+            - capabilities: List of agent's available capabilities
+            - status: Always 'active' for agents in the local formation
+
+        Example:
+            >>> # Weather agent discovers calendar agents
+            >>> calendar_agents = agent.discover_agents(['calendar_lookup'])
+            >>> print(calendar_agents)
+            {
+                'calendar-agent': {
+                    'description': 'Manages calendar events and scheduling',
+                    'capabilities': ['calendar_lookup', 'schedule_meeting'],
+                    'status': 'active'
+                }
+            }
+        """
+        if not self.overlord or not hasattr(self.overlord, 'get_available_agents_for_a2a'):
+            return {}
+
+        return self.overlord.get_available_agents_for_a2a(
+            requesting_agent_id=self.agent_id,
+            capability_filter=capability_filter
+        )
 
     async def invoke_tool(
         self, server_id: str, tool_name: str, parameters: Dict[str, Any]

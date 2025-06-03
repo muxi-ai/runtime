@@ -280,6 +280,8 @@ class Overlord:
         set_as_default: bool = False,
         mcp_server: Optional[MCPServer] = None,
         request_timeout: Optional[int] = None,
+        a2a_internal: bool = True,
+        a2a_external: bool = True,
     ) -> Agent:
         """
         Create a new agent that uses the overlord's memory systems.
@@ -304,6 +306,8 @@ class Overlord:
                 Enables the agent to access external tools and services.
             request_timeout: Optional timeout in seconds for MCP requests.
                 If not provided, defaults to the overlord's timeout setting.
+            a2a_internal: Whether the agent participates in internal A2A communication.
+            a2a_external: Whether the agent participates in external A2A communication.
 
         Returns:
             The created agent instance.
@@ -322,6 +326,8 @@ class Overlord:
             agent_id=agent_id,
             mcp_server=mcp_server,
             request_timeout=request_timeout,  # Pass timeout parameter
+            a2a_internal=a2a_internal,
+            a2a_external=a2a_external,
         )
 
         # Store the agent
@@ -1070,27 +1076,98 @@ Available agents:
 
     def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
-        List all registered agents and their descriptions.
+        List all registered agents and their basic information.
 
-        This method provides information about all available agents in the overlord,
-        including their descriptions and whether they are set as the default agent.
-        It's useful for displaying agent options in user interfaces or for debugging.
+        Returns a dictionary containing information about all registered agents
+        including their descriptions and registration status. This is useful for
+        getting an overview of available agents in the formation.
 
         Returns:
-            A dictionary mapping agent IDs to their information, where each agent's
-            information is itself a dictionary with:
-            - "name": The agent's name (usually same as agent_id)
-            - "description": The agent's description used for routing
-            - "is_default": Boolean indicating if this is the default agent
-        """
-        agent_info = {}
-        for agent_id, agent in self.agents.items():
-            agent_info[agent_id] = {
-                "name": agent.name,
-                "description": self.agent_descriptions.get(agent_id, ""),
-                "is_default": agent_id == self.default_agent_id,
+            Dict[str, Dict[str, Any]]: Dictionary where keys are agent IDs and values
+                contain agent information including 'description' and 'default' status.
+
+        Example:
+            >>> agents = overlord.list_agents()
+            >>> print(agents)
+            {
+                'assistant': {'description': 'General purpose assistant', 'default': True},
+                'researcher': {'description': 'Research specialist', 'default': False}
             }
-        return agent_info
+        """
+        return {
+            agent_id: {
+                "description": self.agent_descriptions.get(agent_id, ""),
+                "default": agent_id == self.default_agent_id,
+            }
+            for agent_id in self.agents.keys()
+        }
+
+    def get_available_agents_for_a2a(
+        self,
+        requesting_agent_id: str,
+        capability_filter: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get available agents for A2A (Agent-to-Agent) communication.
+
+        This is the simple discovery mechanism for local formations where all agents
+        are managed by the same Overlord. Agents can call this to discover other
+        agents they can communicate with.
+
+        Args:
+            requesting_agent_id: ID of the agent making the discovery request
+            capability_filter: Optional list of required capabilities to filter by
+
+        Returns:
+            Dict mapping agent_id to agent information including:
+            - description: Agent's description
+            - capabilities: Agent's available capabilities (if any)
+            - status: 'active' (always active if in registry)
+
+        Example:
+            >>> # Agent A discovers other agents
+            >>> available = overlord.get_available_agents_for_a2a('weather-agent')
+            >>> print(available)
+            {
+                'calendar-agent': {
+                    'description': 'Manages calendar events',
+                    'capabilities': ['calendar_lookup', 'schedule_meeting'],
+                    'status': 'active'
+                }
+            }
+        """
+        available_agents = {}
+
+        for agent_id, agent in self.agents.items():
+            # Don't include the requesting agent
+            if agent_id == requesting_agent_id:
+                continue
+
+            # Check if agent participates in internal A2A communication
+            # Default to True if not specified (backwards compatibility)
+            if not getattr(agent, 'a2a_internal', True):
+                continue
+
+            # Get agent capabilities if available
+            capabilities = []
+            if hasattr(agent, 'get_capabilities'):
+                capabilities = agent.get_capabilities()
+            elif hasattr(agent, 'capabilities'):
+                capabilities = agent.capabilities
+
+            # Apply capability filter if specified
+            if capability_filter:
+                if not capabilities or not any(cap in capabilities for cap in capability_filter):
+                    continue
+
+            # Add agent to available list
+            available_agents[agent_id] = {
+                'description': self.agent_descriptions.get(agent_id, ''),
+                'capabilities': capabilities,
+                'status': 'active'  # If it's in the registry, it's active
+            }
+
+        return available_agents
 
     async def handle_user_information_extraction(
         self,

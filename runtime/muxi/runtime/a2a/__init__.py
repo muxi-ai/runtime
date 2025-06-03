@@ -1,24 +1,41 @@
 """
-MUXI A2A (Agent-to-Agent) Integration Module
+A2A (Agent-to-Agent) Communication Module
 
-This module provides A2A protocol support for MUXI agents, including:
-- Agent card generation and caching
-- A2A server and client implementations
-- Discovery and registry services
-- Integration with Google's A2A SDK
+This module provides comprehensive A2A communication capabilities for MUXI agents,
+including agent cards, server infrastructure, caching, and discovery services.
 """
 
-__version__ = "1.0.0"
-
-from .card_generator import AgentCardGenerator, AgentCard
+from .models import AgentCard, A2ACapability, A2AEndpoint
 from .cache_manager import A2ACacheManager
+from .card_generator import AgentCardGenerator
 from .server import A2AAgentServer, A2AServerManager, MUXIAgentExecutor
+from .discovery import (
+    LocalDiscoveryService,
+    DiscoveryServiceManager,
+    DiscoveryConfig,
+    AgentRegistration
+)
 
 __all__ = [
-    "AgentCardGenerator",
+    # Models
     "AgentCard",
+    "A2ACapability",
+    "A2AEndpoint",
+
+    # Cache Management
     "A2ACacheManager",
+
+    # Card Generation
+    "AgentCardGenerator",
+
+    # Server Infrastructure
     "A2AAgentServer",
     "A2AServerManager",
     "MUXIAgentExecutor",
+
+    # Discovery Services
+    "LocalDiscoveryService",
+    "DiscoveryServiceManager",
+    "DiscoveryConfig",
+    "AgentRegistration"
 ]
