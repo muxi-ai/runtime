@@ -26,9 +26,17 @@
 from .facade import Muxi
 from .overlord import Overlord
 from .run import run_server, is_port_in_use
+from .utils.version import get_version
 
-# Current version of the Muxi Core framework
-__version__ = "0.1.0"
+
+# Initialize package version from .version file
+__version__ = get_version()
+
+# Package metadata
+__author__ = "Ran Aroussi"
+__license__ = "Elastic License 2.0"
+__url__ = "https://github.com/muxi-ai/formation"
+
 
 # Explicitly define what's available when using "from muxi.runtime import *"
 __all__ = [

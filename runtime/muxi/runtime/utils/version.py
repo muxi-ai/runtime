@@ -5,7 +5,6 @@ This module provides utilities for getting and managing version information.
 """
 
 import os
-import json
 
 
 def get_version() -> str:
@@ -20,25 +19,10 @@ def get_version() -> str:
 
     try:
         # Try to read from package.json if it exists
-        package_path = os.path.join(os.path.dirname(__file__), "..", "..", "package.json")
-        if os.path.exists(package_path):
-            with open(package_path, "r") as f:
-                package_data = json.load(f)
-                if "version" in package_data:
-                    return package_data["version"]
-
-        # If that fails, try to get from setup.py
-        setup_path = os.path.join(os.path.dirname(__file__), "..", "setup.py")
-        if os.path.exists(setup_path):
-            with open(setup_path, "r") as f:
-                content = f.read()
-                version_match = next((
-                    line for line in content.splitlines() if 'version="' in line), None)
-                if version_match:
-                    import re
-                    match = re.search(r'version="([^"]+)"', version_match)
-                    if match:
-                        return match.group(1)
+        version_file = os.path.join(os.path.dirname(__file__), "..", "..", ".version")
+        if os.path.exists(version_file):
+            with open(version_file, "r", encoding="utf-8") as f:
+                return f.read().strip()
 
         return default_version
     except Exception as e:
