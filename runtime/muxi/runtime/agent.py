@@ -419,8 +419,8 @@ class Agent:
         Handle an incoming A2A message from another agent.
 
         This method is called by the overlord when another agent sends a message
-        to this agent. It can be overridden by subclasses to implement custom
-        A2A message handling logic.
+        to this agent. It recognizes different collaboration patterns and handles
+        them appropriately.
 
         Args:
             source_agent_id: The ID of the agent that sent the message
@@ -432,39 +432,243 @@ class Agent:
         Returns:
             Response data if this is a "request" message, otherwise None
         """
-        # Default handling based on message type
-        if message_type == "request":
-            # For requests, try to process using the agent's model
-            try:
-                # Create a context-enhanced prompt
-                prompt_parts = [f"A2A Request from {source_agent_id}: {message}"]
+        # Check if this is a collaboration message with special handling
+        collaboration_type = None
+        if context and isinstance(context, dict):
+            collaboration_type = context.get("collaboration_type")
 
-                if context:
-                    prompt_parts.append(f"Context: {context}")
-
-                prompt_parts.append(
-                    "Please provide a helpful response to this agent-to-agent request."
+        try:
+            if collaboration_type == "consultation":
+                return await self._handle_consultation_request(
+                    source_agent_id, message, context, message_id
+                )
+            elif collaboration_type == "information_sharing":
+                return await self._handle_information_sharing(
+                    source_agent_id, message, context, message_id
+                )
+            elif collaboration_type == "peer_coordination":
+                return await self._handle_peer_coordination(
+                    source_agent_id, message, context, message_id
+                )
+            else:
+                # Default handling for generic A2A messages
+                return await self._handle_generic_a2a_message(
+                    source_agent_id, message, message_type, context, message_id
                 )
 
-                full_prompt = "\n".join(prompt_parts)
-
-                # Process the message through the agent's model
-                response = await self.process_message(full_prompt)
-
-                return {
-                    "status": "success",
-                    "response": response.content,
-                    "agent_id": self.agent_id,
-                    "message_id": message_id
-                }
-
-            except Exception as e:
+        except Exception as e:
+            logger.error(f"Error handling A2A message: {e}")
+            if message_type == "request":
                 return {
                     "status": "error",
-                    "error": str(e),
+                    "error": f"Failed to process message: {str(e)}",
                     "agent_id": self.agent_id,
                     "message_id": message_id
                 }
+            return None
+
+    async def _handle_consultation_request(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        context: Dict[str, Any],
+        message_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Handle a consultation request from another agent."""
+        topic = context.get("topic", str(message))
+        consultation_context = context.get("context", {})
+
+        # Create a consultation-specific prompt
+        prompt_parts = [
+            f"CONSULTATION REQUEST from Agent {source_agent_id}:",
+            f"Topic: {topic}",
+            f"Question: {message}",
+        ]
+
+        if consultation_context:
+            prompt_parts.append(f"Context: {consultation_context}")
+
+        prompt_parts.extend([
+            "",
+            "Please provide expert advice and helpful guidance on this topic.",
+            "Be specific, actionable, and professional in your response."
+        ])
+
+        consultation_prompt = "\n".join(prompt_parts)
+
+        # Process the consultation through the agent's model
+        response = await self.process_message(consultation_prompt)
+
+        logger.info(
+            f"Agent {self.agent_id} provided consultation to {source_agent_id} "
+            f"on topic: {topic}"
+        )
+
+        return {
+            "status": "success",
+            "response": response.content,
+            "consultation_topic": topic,
+            "expert_agent": self.agent_id,
+            "message_id": message_id
+        }
+
+    async def _handle_information_sharing(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        context: Dict[str, Any],
+        message_id: Optional[str] = None
+    ) -> None:
+        """Handle information sharing notification from another agent."""
+        topic = context.get("topic", "general")
+        relevance_reason = context.get("relevance_reason")
+
+        # Log the shared information
+        log_parts = [
+            f"Agent {self.agent_id} received shared information from {source_agent_id}",
+            f"Topic: {topic}",
+            f"Content: {message}"
+        ]
+
+        if relevance_reason:
+            log_parts.append(f"Relevance: {relevance_reason}")
+
+        logger.info(" | ".join(log_parts))
+
+        # Optionally store the shared information in memory
+        if self.overlord and hasattr(self.overlord, "add_to_buffer_memory"):
+            try:
+                await self.overlord.add_to_buffer_memory(
+                    message=f"Shared info from {source_agent_id}: {message}",
+                    metadata={
+                        "type": "shared_information",
+                        "source_agent": source_agent_id,
+                        "topic": topic,
+                        "relevance_reason": relevance_reason
+                    },
+                    agent_id=self.agent_id
+                )
+            except Exception as e:
+                logger.warning(f"Failed to store shared information: {e}")
+
+        return None  # Notifications don't return responses
+
+    async def _handle_peer_coordination(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        context: Dict[str, Any],
+        message_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Handle peer coordination request from another agent."""
+        coordination_type = context.get("coordination_type", "sync")
+        details = context.get("details", {})
+
+        # Create coordination-specific response based on type
+        if coordination_type == "handoff":
+            response_content = await self._handle_task_handoff(source_agent_id, details)
+        elif coordination_type == "sync":
+            response_content = await self._handle_synchronization(source_agent_id, details)
+        elif coordination_type == "parallel":
+            response_content = await self._handle_parallel_coordination(source_agent_id, details)
+        else:
+            response_content = f"Acknowledged coordination request: {coordination_type}"
+
+        logger.info(
+            f"Agent {self.agent_id} coordinated with {source_agent_id} "
+            f"({coordination_type})"
+        )
+
+        return {
+            "status": "success",
+            "response": response_content,
+            "coordination_type": coordination_type,
+            "coordinated_with": self.agent_id,
+            "message_id": message_id
+        }
+
+    async def _handle_task_handoff(
+        self, source_agent_id: str, details: Dict[str, Any]
+    ) -> str:
+        """Handle a task handoff coordination."""
+        task = details.get("task", "Unknown task")
+        next_step = details.get("next_step", "Continue work")
+        artifacts = details.get("artifacts", [])
+
+        response_parts = [
+            f"Task handoff acknowledged from {source_agent_id}",
+            f"Completed task: {task}",
+            f"Next step: {next_step}"
+        ]
+
+        if artifacts:
+            response_parts.append(f"Received artifacts: {', '.join(artifacts)}")
+
+        response_parts.append("Ready to proceed with next phase.")
+
+        return "\n".join(response_parts)
+
+    async def _handle_synchronization(
+        self, source_agent_id: str, details: Dict[str, Any]
+    ) -> str:
+        """Handle a synchronization coordination."""
+        sync_point = details.get("sync_point", "general")
+        status = details.get("status", "in_progress")
+
+        return (
+            f"Synchronization with {source_agent_id} at {sync_point}. "
+            f"My status: {status}. Ready for next coordinated step."
+        )
+
+    async def _handle_parallel_coordination(
+        self, source_agent_id: str, details: Dict[str, Any]
+    ) -> str:
+        """Handle parallel work coordination."""
+        work_area = details.get("work_area", "general")
+        dependencies = details.get("dependencies", [])
+
+        response_parts = [
+            f"Parallel coordination with {source_agent_id} on {work_area}"
+        ]
+
+        if dependencies:
+            response_parts.append(f"Shared dependencies: {', '.join(dependencies)}")
+
+        response_parts.append("Coordinating parallel execution.")
+
+        return "\n".join(response_parts)
+
+    async def _handle_generic_a2a_message(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]],
+        message_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Handle generic A2A messages (fallback for non-collaboration patterns)."""
+        if message_type == "request":
+            # For generic requests, try to process using the agent's model
+            prompt_parts = [f"A2A Request from {source_agent_id}: {message}"]
+
+            if context:
+                prompt_parts.append(f"Context: {context}")
+
+            prompt_parts.append(
+                "Please provide a helpful response to this agent-to-agent request."
+            )
+
+            full_prompt = "\n".join(prompt_parts)
+
+            # Process the message through the agent's model
+            response = await self.process_message(full_prompt)
+
+            return {
+                "status": "success",
+                "response": response.content,
+                "agent_id": self.agent_id,
+                "message_id": message_id
+            }
 
         elif message_type == "notification":
             # For notifications, just acknowledge receipt
@@ -480,4 +684,278 @@ class Agent:
 
         else:
             logger.warning(f"Agent {self.agent_id} received unknown message type: {message_type}")
+            return None
+
+    async def request_consultation(
+        self,
+        target_agent_id: str,
+        topic: str,
+        context: Optional[Dict[str, Any]] = None,
+        timeout: int = 30
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Request consultation/help from another agent on a specific topic.
+
+        This is a core collaboration pattern where one agent asks another for
+        assistance, advice, or expertise on a particular subject.
+
+        Args:
+            target_agent_id: The ID of the agent to consult
+            topic: The subject matter needing consultation
+            context: Optional additional context for the consultation
+            timeout: Maximum time to wait for response
+
+        Returns:
+            Consultation response with advice/help, or None if failed
+
+        Example:
+            >>> response = await agent.request_consultation(
+            ...     target_agent_id="security-expert",
+            ...     topic="Best practices for API authentication",
+            ...     context={"project": "user-management-api"}
+            ... )
+        """
+        consultation_data = {
+            "collaboration_type": "consultation",
+            "topic": topic,
+            "context": context or {},
+            "requester_id": self.agent_id
+        }
+
+        try:
+            response = await self.send_a2a_message(
+                target_agent_id=target_agent_id,
+                message=topic,
+                message_type="request",
+                context=consultation_data,
+                wait_for_response=True,
+                timeout=timeout
+            )
+
+            if response and response.get("status") == "success":
+                logger.info(
+                    f"Agent {self.agent_id} received consultation from {target_agent_id} "
+                    f"on topic: {topic}"
+                )
+                return response
+            else:
+                logger.warning(
+                    f"Consultation failed: {self.agent_id} -> {target_agent_id} "
+                    f"on topic: {topic}"
+                )
+                return None
+
+        except Exception as e:
+            logger.error(f"Consultation error: {e}")
+            return None
+
+    async def share_information(
+        self,
+        target_agent_id: str,
+        information: Union[str, Dict[str, Any]],
+        topic: str,
+        relevance_reason: Optional[str] = None
+    ) -> bool:
+        """
+        Proactively share information with another agent.
+
+        This collaboration pattern allows agents to share relevant findings,
+        insights, or data that might be useful for other agents' work.
+
+        Args:
+            target_agent_id: The ID of the agent to share information with
+            information: The information content to share
+            topic: The topic/category of the information
+            relevance_reason: Optional explanation of why this is relevant
+
+        Returns:
+            True if information was shared successfully, False otherwise
+
+        Example:
+            >>> success = await agent.share_information(
+            ...     target_agent_id="research-agent",
+            ...     information="New security vulnerability found in library X",
+            ...     topic="security_alerts",
+            ...     relevance_reason="You're working on dependency analysis"
+            ... )
+        """
+        sharing_data = {
+            "collaboration_type": "information_sharing",
+            "topic": topic,
+            "relevance_reason": relevance_reason,
+            "shared_by": self.agent_id,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+
+        try:
+            await self.send_a2a_message(
+                target_agent_id=target_agent_id,
+                message=information,
+                message_type="notification",
+                context=sharing_data,
+                wait_for_response=False
+            )
+
+            logger.info(
+                f"Agent {self.agent_id} shared information with {target_agent_id} "
+                f"on topic: {topic}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Information sharing error: {e}")
+            return False
+
+    async def register_expertise(
+        self,
+        expertise_areas: List[str],
+        proficiency_levels: Optional[Dict[str, str]] = None
+    ) -> bool:
+        """
+        Register areas of expertise with the overlord for discovery by other agents.
+
+        This allows agents to declare their specializations so other agents
+        can find and consult them on relevant topics.
+
+        Args:
+            expertise_areas: List of topics/domains this agent has expertise in
+            proficiency_levels: Optional mapping of area -> proficiency level
+                ("novice", "intermediate", "expert", "master")
+
+        Returns:
+            True if expertise was registered successfully
+
+        Example:
+            >>> await agent.register_expertise(
+            ...     expertise_areas=["machine_learning", "data_analysis"],
+            ...     proficiency_levels={
+            ...         "machine_learning": "expert",
+            ...         "data_analysis": "master"
+            ...     }
+            ... )
+        """
+        if not self.overlord or not hasattr(self.overlord, 'register_agent_expertise'):
+            logger.warning("Overlord does not support expertise registry")
+            return False
+
+        try:
+            return await self.overlord.register_agent_expertise(
+                agent_id=self.agent_id,
+                expertise_areas=expertise_areas,
+                proficiency_levels=proficiency_levels or {}
+            )
+        except Exception as e:
+            logger.error(f"Expertise registration error: {e}")
+            return False
+
+    async def find_expert(
+        self,
+        topic: str,
+        min_proficiency: str = "intermediate"
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Find agents with expertise in a specific topic.
+
+        This method helps agents discover other agents who can provide
+        expert consultation on particular subjects.
+
+        Args:
+            topic: The topic/domain to find experts for
+            min_proficiency: Minimum required proficiency level
+
+        Returns:
+            Dict mapping agent_id to expert information including proficiency
+
+        Example:
+            >>> experts = await agent.find_expert(
+            ...     topic="security",
+            ...     min_proficiency="expert"
+            ... )
+            >>> print(experts)
+            {
+                "security-agent": {
+                    "proficiency": "master",
+                    "description": "Cybersecurity specialist",
+                    "expertise_areas": ["security", "penetration_testing"]
+                }
+            }
+        """
+        if not self.overlord or not hasattr(self.overlord, 'find_experts'):
+            return {}
+
+        try:
+            return await self.overlord.find_experts(
+                topic=topic,
+                min_proficiency=min_proficiency,
+                requesting_agent_id=self.agent_id
+            )
+        except Exception as e:
+            logger.error(f"Expert discovery error: {e}")
+            return {}
+
+    async def coordinate_with_peer(
+        self,
+        peer_agent_id: str,
+        coordination_type: str,
+        details: Dict[str, Any],
+        timeout: int = 30
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Coordinate work with a peer agent on interdependent tasks.
+
+        This pattern enables agents to synchronize their work when they're
+        working on related or dependent tasks.
+
+        Args:
+            peer_agent_id: The ID of the peer agent to coordinate with
+            coordination_type: Type of coordination ("sync", "handoff", "parallel")
+            details: Coordination details and context
+            timeout: Maximum time to wait for coordination response
+
+        Returns:
+            Coordination response or None if failed
+
+        Example:
+            >>> response = await agent.coordinate_with_peer(
+            ...     peer_agent_id="deployment-agent",
+            ...     coordination_type="handoff",
+            ...     details={
+            ...         "task": "API testing complete",
+            ...         "next_step": "deployment",
+            ...         "artifacts": ["test_results.json", "coverage_report.html"]
+            ...     }
+            ... )
+        """
+        coordination_data = {
+            "collaboration_type": "peer_coordination",
+            "coordination_type": coordination_type,
+            "details": details,
+            "coordinator_id": self.agent_id
+        }
+
+        try:
+            response = await self.send_a2a_message(
+                target_agent_id=peer_agent_id,
+                message=f"Coordination request: {coordination_type}",
+                message_type="request",
+                context=coordination_data,
+                wait_for_response=True,
+                timeout=timeout
+            )
+
+            if response and response.get("status") == "success":
+                logger.info(
+                    f"Agent {self.agent_id} coordinated with {peer_agent_id} "
+                    f"({coordination_type})"
+                )
+                return response
+            else:
+                logger.warning(
+                    f"Coordination failed: {self.agent_id} -> {peer_agent_id} "
+                    f"({coordination_type})"
+                )
+                return None
+
+        except Exception as e:
+            logger.error(f"Coordination error: {e}")
             return None

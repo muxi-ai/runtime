@@ -52,6 +52,7 @@ import os
 import secrets
 import string
 from typing import Any, Dict, List, Optional, Union
+import datetime
 
 from loguru import logger
 
@@ -203,6 +204,9 @@ class Overlord:
             self._admin_key_auto_generated = True
         else:
             self._admin_key_auto_generated = False
+
+        # Add expertise registry
+        self._agent_expertise: Dict[str, Dict[str, Any]] = {}
 
     def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
@@ -1837,3 +1841,209 @@ Available agents:
             'a2a_disabled_agents': a2a_disabled,
             'agent_capabilities': agent_capabilities
         }
+
+    # =========================================================================
+    # Agent Collaboration Infrastructure
+    # =========================================================================
+
+    async def register_agent_expertise(
+        self,
+        agent_id: str,
+        expertise_areas: List[str],
+        proficiency_levels: Optional[Dict[str, str]] = None
+    ) -> bool:
+        """
+        Register areas of expertise for an agent.
+
+        This allows agents to declare their specializations so other agents
+        can find and consult them on relevant topics.
+
+        Args:
+            agent_id: The ID of the agent registering expertise
+            expertise_areas: List of topics/domains the agent has expertise in
+            proficiency_levels: Optional mapping of area -> proficiency level
+                ("novice", "intermediate", "expert", "master")
+
+        Returns:
+            True if expertise was registered successfully
+
+        Example:
+            >>> await overlord.register_agent_expertise(
+            ...     agent_id="security-agent",
+            ...     expertise_areas=["cybersecurity", "penetration_testing"],
+            ...     proficiency_levels={
+            ...         "cybersecurity": "expert",
+            ...         "penetration_testing": "master"
+            ...     }
+            ... )
+        """
+        if agent_id not in self.agents:
+            logger.warning(f"Cannot register expertise for unknown agent: {agent_id}")
+            return False
+
+        try:
+            # Get agent information
+            agent = self.agents[agent_id]
+            agent_description = getattr(agent, 'name', agent_id)
+
+            # Create expertise record
+            expertise_record = {
+                "agent_id": agent_id,
+                "description": agent_description,
+                "expertise_areas": expertise_areas,
+                "proficiency_levels": proficiency_levels or {},
+                "registered_at": datetime.datetime.now().isoformat()
+            }
+
+            # Store in registry
+            self._agent_expertise[agent_id] = expertise_record
+
+            logger.info(
+                f"Registered expertise for agent {agent_id}: {', '.join(expertise_areas)}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to register agent expertise: {e}")
+            return False
+
+    async def find_experts(
+        self,
+        topic: str,
+        min_proficiency: str = "intermediate",
+        requesting_agent_id: Optional[str] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Find agents with expertise in a specific topic.
+
+        This method helps agents discover other agents who can provide
+        expert consultation on particular subjects.
+
+        Args:
+            topic: The topic/domain to find experts for
+            min_proficiency: Minimum required proficiency level
+            requesting_agent_id: Optional ID of the requesting agent (for filtering)
+
+        Returns:
+            Dict mapping agent_id to expert information including proficiency
+
+        Example:
+            >>> experts = await overlord.find_experts(
+            ...     topic="security",
+            ...     min_proficiency="expert"
+            ... )
+        """
+        experts = {}
+        proficiency_order = ["novice", "intermediate", "expert", "master"]
+        min_level_index = (
+            proficiency_order.index(min_proficiency)
+            if min_proficiency in proficiency_order
+            else 1
+        )
+
+        try:
+            for agent_id, expertise_record in self._agent_expertise.items():
+                # Skip self if requesting agent specified
+                if requesting_agent_id and agent_id == requesting_agent_id:
+                    continue
+
+                # Check if agent is still active
+                if agent_id not in self.agents:
+                    continue
+
+                # Check if agent has expertise in the topic
+                expertise_areas = expertise_record.get("expertise_areas", [])
+                proficiency_levels = expertise_record.get("proficiency_levels", {})
+
+                # Look for topic match (exact or substring)
+                topic_match = any(
+                    topic.lower() in area.lower() or area.lower() in topic.lower()
+                    for area in expertise_areas
+                )
+
+                if topic_match:
+                    # Check proficiency level if specified
+                    topic_proficiency = None
+                    for area in expertise_areas:
+                        is_topic_match = (
+                            topic.lower() in area.lower() or
+                            area.lower() in topic.lower()
+                        )
+                        if is_topic_match:
+                            topic_proficiency = proficiency_levels.get(
+                                area, "intermediate"
+                            )
+                            break
+
+                    if topic_proficiency:
+                        topic_level_index = (
+                            proficiency_order.index(topic_proficiency)
+                            if topic_proficiency in proficiency_order
+                            else 1
+                        )
+                        if topic_level_index >= min_level_index:
+                            experts[agent_id] = {
+                                "agent_id": agent_id,
+                                "description": expertise_record.get(
+                                    "description", agent_id
+                                ),
+                                "proficiency": topic_proficiency,
+                                "expertise_areas": expertise_areas,
+                                "available": True
+                            }
+
+            logger.info(
+                f"Found {len(experts)} experts for topic '{topic}' "
+                f"(min proficiency: {min_proficiency})"
+            )
+            return experts
+
+        except Exception as e:
+            logger.error(f"Failed to find experts: {e}")
+            return {}
+
+    def get_collaboration_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about agent collaboration activity.
+
+        Returns:
+            Dictionary containing collaboration metrics and insights
+        """
+        try:
+            stats = {
+                "total_agents": len(self.agents),
+                "agents_with_expertise": len(self._agent_expertise),
+                "total_expertise_areas": sum(
+                    len(record.get("expertise_areas", []))
+                    for record in self._agent_expertise.values()
+                ),
+                "expertise_by_agent": {
+                    agent_id: {
+                        "areas": len(record.get("expertise_areas", [])),
+                        "proficiencies": list(record.get("proficiency_levels", {}).values())
+                    }
+                    for agent_id, record in self._agent_expertise.items()
+                },
+                "most_common_expertise": self._get_most_common_expertise_areas()
+            }
+
+            return stats
+
+        except Exception as e:
+            logger.error(f"Failed to get collaboration stats: {e}")
+            return {}
+
+    def _get_most_common_expertise_areas(self) -> List[Dict[str, Any]]:
+        """Get the most common expertise areas across all agents."""
+        area_counts = {}
+
+        for record in self._agent_expertise.values():
+            for area in record.get("expertise_areas", []):
+                area_counts[area] = area_counts.get(area, 0) + 1
+
+        # Sort by count and return top areas
+        sorted_areas = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)
+        return [
+            {"area": area, "agent_count": count}
+            for area, count in sorted_areas[:10]  # Top 10
+        ]
