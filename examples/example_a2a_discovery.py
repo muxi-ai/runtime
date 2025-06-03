@@ -208,7 +208,7 @@ def example_formation_management():
         print(f"  - {agent_id}: {info['description']}")
 
     # Show formation status
-    print(f"\nFormation status:")
+    print("\nFormation status:")
     print(f"  Total agents: {len(overlord.list_agents())}")
     print(f"  A2A enabled: {len(available_agents) + 1}")  # +1 for router itself
     print(f"  A2A disabled: {len(overlord.list_agents()) - len(available_agents) - 1}")
