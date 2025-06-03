@@ -155,3 +155,7 @@ logs/
 .playwright-cache/
 .specstory/
 .specstory/
+
+
+.a2a_registry/
+.registry_data/
