@@ -17,23 +17,55 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
+    # Core dependencies
+    "pyyaml>=6.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.24.0",
+    "anyio>=3.7.0",
+    "python-dotenv>=1.0.0",
+    "websockets>=11.0.3",
+    "httpx-sse>=0.4.0",
+    "rich>=13.6.0",
+    "colorama>=0.4.6",
+
+    # MCP Package
+    "mcp>=1.4.1",  # Now available on PyPI
+
+    # LLM Package
+    "onellm>=0.1.0",
+
+    # A2A (Agent-to-Agent) Communication
+    "a2a-sdk>=1.0.0",  # Google's Agent-to-Agent SDK for inter-agent communication
+
+    # Development tools
+    "pytest>=7.0.0",
+
+    # Server components
+    "fastapi>=0.108.0",
+    "uvicorn>=0.24.0",
+    "starlette>=0.27.0",
+
+    # Vector search
+    "faiss-cpu>=1.10.0",
+    "faissx>=0.1.0",  # Distributed FAISS for remote vector operations
+    "pgvector>=0.3.6",
+    "numpy>=1.24.0",
+    "sqlite-vec>=0.1.7",  # SQLite vector extension for similarity search
+
+    # Database
+    "psycopg2-binary>=2.9.9",
+    "sqlalchemy>=2.0.0",
+
+    # Legacy dependencies (keeping for compatibility)
     "aiohttp>=3.8.0",
     "asyncio>=3.4.3",
     "click>=8.1.0",
-    "fastapi>=0.108.0",
     "openai>=1.3.0",
-    "pgvector>=0.2.0",
-    "pydantic>=2.5.0",
-    "python-dotenv>=1.0.0",
-    "rich>=13.5.0",
-    "sqlalchemy>=2.0.0",
-    "uvicorn>=0.24.0",
-    "websockets>=11.0.0",
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/ranaroussi/muxi"
-"Bug Tracker" = "https://github.com/ranaroussi/muxi/issues"
+"Homepage" = "https://github.com/muxi-ai/runtime"
+"Bug Tracker" = "https://github.com/muxi-ai/runtime/issues"
 
 [project.scripts]
 muxi = "muxi.cli:main"

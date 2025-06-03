@@ -15,6 +15,9 @@ mcp>=1.4.1  # Now available on PyPI
 # LLM Package
 onellm>=0.1.0
 
+# A2A (Agent-to-Agent) Communication
+a2a-sdk>=1.0.0  # Google's Agent-to-Agent SDK for inter-agent communication
+
 # Development tools
 pytest>=7.0.0
 
@@ -25,6 +28,7 @@ starlette>=0.27.0
 
 # Vector search
 faiss-cpu>=1.10.0
+faissx>=0.1.0  # Distributed FAISS for remote vector operations
 pgvector>=0.3.6
 numpy>=1.24.0
 sqlite-vec>=0.1.7  # SQLite vector extension for similarity search
