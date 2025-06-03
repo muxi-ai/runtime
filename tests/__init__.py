@@ -1,5 +1,5 @@
 """
-Test package initialization.
+MUXI Runtime Tests
 
-This file is intentionally left empty to make the directory a Python package.
+This package contains all tests for the MUXI runtime components.
 """
