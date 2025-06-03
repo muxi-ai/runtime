@@ -56,7 +56,7 @@ from typing import Any, Dict, List, Optional, Union
 from loguru import logger
 
 from .config import config
-from .agent import Agent, MCPServer
+from .agent import Agent
 from .mcp import MCPMessage
 from .mcp import MCPService
 from .memory.buffer import BufferMemory
@@ -278,7 +278,6 @@ class Overlord:
         system_message: Optional[str] = None,
         description: Optional[str] = None,
         set_as_default: bool = False,
-        mcp_server: Optional[MCPServer] = None,
         request_timeout: Optional[int] = None,
         a2a_internal: bool = True,
         a2a_external: bool = True,
@@ -302,8 +301,6 @@ class Overlord:
                 specific queries. If not provided, falls back to system_message.
             set_as_default: Whether to set this agent as the default for unrouted messages.
                 If True, or if this is the first agent being created, it will become the default.
-            mcp_server: Optional MCP server for tool calling and external integrations.
-                Enables the agent to access external tools and services.
             request_timeout: Optional timeout in seconds for MCP requests.
                 If not provided, defaults to the overlord's timeout setting.
             a2a_internal: Whether the agent participates in internal A2A communication.
@@ -324,7 +321,6 @@ class Overlord:
             overlord=self,  # Pass reference to overlord
             system_message=system_message,
             agent_id=agent_id,
-            mcp_server=mcp_server,
             request_timeout=request_timeout,  # Pass timeout parameter
             a2a_internal=a2a_internal,
             a2a_external=a2a_external,
@@ -1705,3 +1701,139 @@ Available agents:
 ╰──────────────────────────────────────────────────────────────────────╯
 """
         )
+
+    async def route_a2a_message(
+        self,
+        source_agent_id: str,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None,
+        wait_for_response: bool = True,
+        timeout: int = 30
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Route an A2A (Agent-to-Agent) message between agents in the formation.
+
+        This is the central routing mechanism for A2A communication in local
+        formations. All agent-to-agent messages go through this method for
+        coordination and potential security checks.
+
+        Args:
+            source_agent_id: The ID of the agent sending the message
+            target_agent_id: The ID of the agent to receive the message
+            message: The message content (can be text or structured data)
+            message_type: Type of message ("request", "notification", "response")
+            context: Optional context information to include with the message
+            wait_for_response: Whether to wait for a response (only for requests)
+            timeout: Maximum time to wait for response in seconds
+
+        Returns:
+            Response from target agent if wait_for_response=True and this is a request,
+            otherwise None
+
+        Raises:
+            RuntimeError: If source or target agent not found or not configured for A2A
+            TimeoutError: If waiting for response and timeout exceeded
+
+        Example:
+            >>> # Route a request between agents
+            >>> response = await overlord.route_a2a_message(
+            ...     source_agent_id="weather-agent",
+            ...     target_agent_id="calendar-agent",
+            ...     message="Check availability tomorrow 2-3pm",
+            ...     message_type="request"
+            ... )
+        """
+        # Validate source agent
+        if source_agent_id not in self.agents:
+            raise RuntimeError(f"Source agent '{source_agent_id}' not found")
+
+        source_agent = self.agents[source_agent_id]
+        if not getattr(source_agent, 'a2a_internal', True):
+            raise RuntimeError(f"Source agent '{source_agent_id}' not configured for A2A")
+
+        # Validate target agent
+        if target_agent_id not in self.agents:
+            raise RuntimeError(f"Target agent '{target_agent_id}' not found")
+
+        target_agent = self.agents[target_agent_id]
+        if not getattr(target_agent, 'a2a_internal', True):
+            raise RuntimeError(f"Target agent '{target_agent_id}' not configured for A2A")
+
+        # Generate message ID for tracking
+        import uuid
+        message_id = str(uuid.uuid4())
+
+        # Log the A2A communication
+        logger.info(
+            f"A2A Message: {source_agent_id} -> {target_agent_id} "
+            f"({message_type}, id: {message_id})"
+        )
+
+        try:
+            # Route the message to the target agent
+            response = await target_agent.handle_a2a_message(
+                source_agent_id=source_agent_id,
+                message=message,
+                message_type=message_type,
+                context=context,
+                message_id=message_id
+            )
+
+            # Return response if this was a request and caller wants to wait
+            if message_type == "request" and wait_for_response:
+                return response
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"A2A message routing failed: {e}")
+            if message_type == "request" and wait_for_response:
+                return {
+                    "status": "error",
+                    "error": f"Message routing failed: {str(e)}",
+                    "message_id": message_id
+                }
+            else:
+                raise
+
+    def get_a2a_message_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about A2A messaging in the formation.
+
+        Returns:
+            Dictionary containing A2A messaging statistics including:
+            - total_agents: Total number of agents in formation
+            - a2a_enabled_agents: Number of agents with A2A enabled
+            - a2a_disabled_agents: Number of agents with A2A disabled
+            - agent_capabilities: Mapping of agents to their capabilities
+
+        Example:
+            >>> stats = overlord.get_a2a_message_stats()
+            >>> print(f"A2A enabled agents: {stats['a2a_enabled_agents']}")
+        """
+        total_agents = len(self.agents)
+        a2a_enabled = 0
+        a2a_disabled = 0
+        agent_capabilities = {}
+
+        for agent_id, agent in self.agents.items():
+            if getattr(agent, 'a2a_internal', True):
+                a2a_enabled += 1
+                # Get agent capabilities if available
+                capabilities = []
+                if hasattr(agent, 'get_capabilities'):
+                    capabilities = agent.get_capabilities()
+                elif hasattr(agent, 'capabilities'):
+                    capabilities = agent.capabilities
+                agent_capabilities[agent_id] = capabilities
+            else:
+                a2a_disabled += 1
+
+        return {
+            'total_agents': total_agents,
+            'a2a_enabled_agents': a2a_enabled,
+            'a2a_disabled_agents': a2a_disabled,
+            'agent_capabilities': agent_capabilities
+        }

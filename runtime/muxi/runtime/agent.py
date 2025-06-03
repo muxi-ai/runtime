@@ -41,46 +41,15 @@
 # =============================================================================
 
 import datetime
+import logging
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from .mcp import MCPMessage, ToolParser, MCPService
+from .mcp.message import MCPMessage
+from .mcp.service import MCPService
 from .llm import LLM
 
-
-# Simple class to represent an MCP server
-class MCPServer:
-    """
-    Represents a connected MCP server.
-
-    This class encapsulates the configuration for connecting to an external MCP
-    (Model Context Protocol) server that provides tool functionality to agents.
-    """
-
-    def __init__(
-        self,
-        name: str,
-        url: str,
-        credentials: Optional[Dict[str, Any]] = None,
-        request_timeout: int = 60,
-    ):
-        """
-        Initialize an MCP server configuration.
-
-        Args:
-            name: The name of the server. Used for human-readable identification
-                and generating the server_id.
-            url: The URL of the server. Endpoint where MCP requests will be sent.
-            credentials: Optional credentials for authentication with the server.
-                Format depends on the server's requirements.
-            request_timeout: Timeout in seconds for requests to this server.
-                Controls how long to wait before considering a request failed.
-        """
-        self.name = name
-        self.url = url
-        self.credentials = credentials or {}
-        self.server_id = f"server_{name.lower().replace(' ', '_')}"
-        self.request_timeout = request_timeout
+logger = logging.getLogger(__name__)
 
 
 class Agent:
@@ -99,7 +68,6 @@ class Agent:
         system_message: Optional[str] = None,
         agent_id: Optional[str] = None,
         name: Optional[str] = None,
-        mcp_server: Optional[MCPServer] = None,
         request_timeout: Optional[int] = None,
         a2a_internal: bool = True,
         a2a_external: bool = True,
@@ -118,8 +86,6 @@ class Agent:
                 Used for identification in memory systems and routing.
             name: Optional name for the agent (e.g., "Customer Service Bot").
                 Used for display purposes.
-            mcp_server: Optional MCP server for tool calling and external integrations.
-                Enables the agent to use external tools.
             request_timeout: Optional timeout in seconds for MCP requests.
                 Defaults to overlord's timeout if not specified.
             a2a_internal: Whether this agent participates in intra-formation A2A
@@ -143,9 +109,6 @@ class Agent:
         # Set up A2A configuration (single source of truth)
         self.a2a_internal = a2a_internal
         self.a2a_external = a2a_external
-
-        # Set up MCP integration
-        self.mcp_server = mcp_server
 
         # Set request timeout (use overlord's if not specified)
         if request_timeout is not None:
@@ -221,47 +184,8 @@ class Agent:
         # Process the message with the model directly
         raw_response = await self.model.chat(self._messages)
 
-        # Parse the response to detect and handle tool calls
-        cleaned_text, tool_calls = ToolParser.parse(raw_response)
-
-        # If tool calls were found, process them
-        if tool_calls and self.mcp_server:
-            # Process each tool call
-            for tool_call in tool_calls:
-                try:
-                    # Use the server_id from the MCP server configuration
-                    server_id = self.mcp_server.server_id
-
-                    # Invoke the tool using the MCP service
-                    result = await self.invoke_tool(
-                        server_id=server_id,
-                        tool_name=tool_call.tool_name,
-                        parameters=tool_call.parameters,
-                    )
-
-                    # Store the result with the tool call
-                    tool_call.set_result(result)
-                except Exception as e:
-                    error_msg = f"Error processing tool call {tool_call.tool_name}: {str(e)}"
-                    tool_call.set_result({"error": error_msg, "status": "error"})
-
-            # Replace tool calls with results in the response
-            final_content = ToolParser.replace_tool_calls_with_results(raw_response, tool_calls)
-
-            # Add an entry to the conversation history for each tool call
-            for tool_call in tool_calls:
-                tool_info = {
-                    "role": "function",
-                    "name": tool_call.tool_name,
-                    "content": str(tool_call.result),
-                }
-                self._messages.append(tool_info)
-        else:
-            # No tool calls found, use the raw response
-            final_content = raw_response
-
         # Create response message
-        response = MCPMessage(role="assistant", content=final_content)
+        response = MCPMessage(role="assistant", content=raw_response)
 
         # Add response to conversation context
         self._messages.append({"role": "assistant", "content": response.content})
@@ -391,35 +315,169 @@ class Agent:
         )
 
     async def invoke_tool(
-        self, server_id: str, tool_name: str, parameters: Dict[str, Any]
+        self, tool_name: str, parameters: Dict[str, Any], server_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Invoke a tool on a connected MCP server.
+        Invoke a tool via the centralized MCP service.
 
-        This method sends a tool call to an external MCP server and returns the result.
-        It handles the communication details and error handling.
+        This method sends a tool call to the MCP service and returns the result.
+        The MCP service handles routing to the appropriate server.
 
         Args:
-            server_id: The server ID to send the tool call to. Identifies which
-                MCP server should handle the request.
             tool_name: The name of the tool to call. Must match a tool provided
-                by the target MCP server.
+                by a connected MCP server.
             parameters: The parameters to pass to the tool. Must match the
                 expected parameters for the specified tool.
+            server_id: Optional specific server ID to use. If not provided,
+                the MCP service will route to an appropriate server.
 
         Returns:
             The result of the tool call as a dictionary.
 
         Raises:
-            ValueError: If server_id is not valid
             Exception: Any error from the MCP service during tool invocation
         """
-        if not server_id:
-            raise ValueError("Invalid server_id provided")
-
         return await self._mcp_service.invoke_tool(
-            server_id=server_id,
             tool_name=tool_name,
             parameters=parameters,
+            server_id=server_id,
             request_timeout=self.request_timeout,
         )
+
+    async def send_a2a_message(
+        self,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None,
+        wait_for_response: bool = True,
+        timeout: int = 30
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Send an A2A (Agent-to-Agent) message to another agent in the formation.
+
+        This is the simple messaging method for local formations. The agent asks
+        its overlord to route the message to the target agent and optionally waits
+        for a response.
+
+        Args:
+            target_agent_id: The ID of the agent to send the message to
+            message: The message content (can be text or structured data)
+            message_type: Type of message ("request", "notification", "response")
+            context: Optional context information to include with the message
+            wait_for_response: Whether to wait for a response (only for "request" type)
+            timeout: Maximum time to wait for response in seconds
+
+        Returns:
+            Response from target agent if wait_for_response=True and message_type="request",
+            otherwise None
+
+        Example:
+            >>> # Send a request and wait for response
+            >>> response = await agent.send_a2a_message(
+            ...     target_agent_id="calendar-agent",
+            ...     message="Check availability for tomorrow 2-3pm",
+            ...     message_type="request"
+            ... )
+
+            >>> # Send a notification (no response expected)
+            >>> await agent.send_a2a_message(
+            ...     target_agent_id="notification-agent",
+            ...     message="Task completed successfully",
+            ...     message_type="notification",
+            ...     wait_for_response=False
+            ... )
+        """
+        if not self.overlord or not hasattr(self.overlord, 'route_a2a_message'):
+            raise RuntimeError("Overlord does not support A2A messaging")
+
+        # Check if we can send A2A messages
+        if not getattr(self, 'a2a_internal', True):
+            raise RuntimeError(
+                f"Agent {self.agent_id} is not configured for A2A communication"
+            )
+
+        return await self.overlord.route_a2a_message(
+            source_agent_id=self.agent_id,
+            target_agent_id=target_agent_id,
+            message=message,
+            message_type=message_type,
+            context=context,
+            wait_for_response=wait_for_response,
+            timeout=timeout
+        )
+
+    async def handle_a2a_message(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]] = None,
+        message_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Handle an incoming A2A message from another agent.
+
+        This method is called by the overlord when another agent sends a message
+        to this agent. It can be overridden by subclasses to implement custom
+        A2A message handling logic.
+
+        Args:
+            source_agent_id: The ID of the agent that sent the message
+            message: The message content (can be text or structured data)
+            message_type: Type of message ("request", "notification", "response")
+            context: Optional context information from the sender
+            message_id: Unique message ID for tracking
+
+        Returns:
+            Response data if this is a "request" message, otherwise None
+        """
+        # Default handling based on message type
+        if message_type == "request":
+            # For requests, try to process using the agent's model
+            try:
+                # Create a context-enhanced prompt
+                prompt_parts = [f"A2A Request from {source_agent_id}: {message}"]
+
+                if context:
+                    prompt_parts.append(f"Context: {context}")
+
+                prompt_parts.append(
+                    "Please provide a helpful response to this agent-to-agent request."
+                )
+
+                full_prompt = "\n".join(prompt_parts)
+
+                # Process the message through the agent's model
+                response = await self.process_message(full_prompt)
+
+                return {
+                    "status": "success",
+                    "response": response.content,
+                    "agent_id": self.agent_id,
+                    "message_id": message_id
+                }
+
+            except Exception as e:
+                return {
+                    "status": "error",
+                    "error": str(e),
+                    "agent_id": self.agent_id,
+                    "message_id": message_id
+                }
+
+        elif message_type == "notification":
+            # For notifications, just acknowledge receipt
+            logger.info(
+                f"Agent {self.agent_id} received notification from {source_agent_id}: {message}"
+            )
+            return None
+
+        elif message_type == "response":
+            # For responses, log the response (typically handled by the sender)
+            logger.info(f"Agent {self.agent_id} received response from {source_agent_id}")
+            return None
+
+        else:
+            logger.warning(f"Agent {self.agent_id} received unknown message type: {message_type}")
+            return None
