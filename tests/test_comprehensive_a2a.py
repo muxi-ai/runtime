@@ -72,7 +72,7 @@ class ComprehensiveA2ATest:
     async def test_requirement_1_auto_registration(self) -> bool:
         """
         Requirement 1: Auto-register agents on external servers when runtime starts
-        (when allow_external ≠ false on formation level and a2a_external ≠ false on agent level)
+        (when server.enabled ≠ false on formation level and a2a_external ≠ false on agent level)
         """
         print("\n📝 Testing Requirement 1: Auto-registration on startup...")
 

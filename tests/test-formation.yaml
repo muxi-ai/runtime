@@ -22,12 +22,14 @@ a2a:
   registries:
     - "http://localhost:9090"
 
-  # Security Configuration
-  allow_external: true                        # Accept external agent requests
-  trusted_endpoints:                          # Trusted external endpoints
-    - "localhost"
-    - "127.0.0.1"
-  mode: "none"                               # No authentication for testing
+  # Server Configuration
+  server:
+    enabled: true                               # Accept external agent requests
+    port: 8181                                  # Port for A2A server
+    trusted_endpoints:                          # Trusted external endpoints
+      - "localhost"
+      - "127.0.0.1"
+    mode: "none"                               # No authentication for testing
 
 # Memory Configuration
 memory:
