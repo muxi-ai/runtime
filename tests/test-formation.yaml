@@ -1,0 +1,39 @@
+name: "test-formation"
+description: "Test formation for external A2A registry integration"
+version: "1.0.0"
+
+# Agent definitions
+agents:
+  - id: "weather-specialist"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a weather specialist agent that provides weather information and forecasts."
+    description: "Provides weather information, forecasts, and weather-related advice"
+    a2a_external: true
+
+  - id: "travel-planner"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a travel planning agent that helps with itineraries and travel advice."
+    description: "Helps plan trips, book accommodations, and provides travel recommendations"
+    a2a_external: true
+
+# A2A Configuration
+a2a:
+  # External Registries for cross-formation communication
+  registries:
+    - "http://localhost:9090"
+
+  # Security Configuration
+  allow_external: true                        # Accept external agent requests
+  trusted_endpoints:                          # Trusted external endpoints
+    - "localhost"
+    - "127.0.0.1"
+  mode: "none"                               # No authentication for testing
+
+# Memory Configuration
+memory:
+  buffer_size: 20
+  long_term: "sqlite:///test_formation.db"
+
+# Environment
+environment:
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
