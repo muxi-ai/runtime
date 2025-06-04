@@ -64,6 +64,8 @@ from .memory.buffer import BufferMemory
 from .memory.long_term import LongTermMemory
 from .memory.memobase import Memobase
 from .llm import LLM
+from .a2a.registry_client import A2ARegistryClient
+from .a2a.models import AgentCard, A2ACapability, A2AAuthentication, AuthType
 
 
 class Overlord:
@@ -72,8 +74,9 @@ class Overlord:
 
     The Overlord serves as the central coordination component in the Muxi Framework.
     It manages multiple agents, provides centralized memory access, handles message routing,
-    and coordinates user interactions. The Overlord maintains buffer and long-term memory
-    systems that can be shared across agents, enabling coherent multi-agent conversations.
+    coordinates user interactions, and manages external registry communication for A2A.
+    The Overlord maintains buffer and long-term memory systems that can be shared across
+    agents, enabling coherent multi-agent conversations.
 
     Key responsibilities:
     - Agent lifecycle management (creation, retrieval, removal)
@@ -82,6 +85,7 @@ class Overlord:
     - User authentication and authorization
     - Multi-user support
     - Tool integration via MCP
+    - External A2A registry integration for cross-formation communication
 
     Attributes:
         agents (Dict[str, Agent]): Dictionary of registered agents, keyed by agent_id
@@ -96,6 +100,8 @@ class Overlord:
         request_timeout (int): Default timeout for MCP requests in seconds
         user_api_key (str): API key for user-level access
         admin_api_key (str): API key for admin-level access
+        formation_config (Dict[str, Any]): Formation configuration including A2A settings
+        external_registry_client (Optional[A2ARegistryClient]): Client for external A2A registries
     """
 
     def __init__(
@@ -107,6 +113,7 @@ class Overlord:
         request_timeout: int = 60,
         user_api_key: Optional[str] = None,
         admin_api_key: Optional[str] = None,
+        formation_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the overlord with optional centralized memory systems.
@@ -134,12 +141,17 @@ class Overlord:
                 key will be generated.
             admin_api_key: Optional API key for admin-level access. If not provided, a random
                 key will be generated.
+            formation_config: Optional formation configuration dict containing A2A settings
+                and other configuration. Used to initialize external registry client.
         """
         # Initialize agent storage
         self.agents: Dict[str, Agent] = {}
         self.agent_descriptions: Dict[str, str] = {}
         self.default_agent_id: Optional[str] = None
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
+
+        # Store formation configuration for A2A and other features
+        self.formation_config = formation_config or {}
 
         # Store centralized memory systems
         self.buffer_memory = buffer_memory
@@ -152,6 +164,12 @@ class Overlord:
 
         # Track message counts per user for extraction
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
+
+        # Initialize external registry client (will be set up later)
+        self.external_registry_client: Optional[A2ARegistryClient] = None
+
+        # Initialize external registry from formation config if provided
+        self._initialize_external_registry_client()
 
         # Determine if we're in multi-user mode based on memory type
         self.is_multi_user = False
@@ -342,6 +360,19 @@ class Overlord:
 
         logger.info(f"Created agent with ID '{agent_id}'")
 
+        # Auto-register with external registries if enabled
+        if a2a_external and self.external_registry_client:
+            # Check formation config for allow_external
+            allow_external = True  # Default to True
+            if self.formation_config:
+                a2a_config = self.formation_config.get('a2a', {})
+                allow_external = a2a_config.get('allow_external', True)
+
+            if allow_external:
+                # Register asynchronously without blocking agent creation
+                asyncio.create_task(self.register_agent_with_external_registry(agent_id))
+                logger.info(f"Scheduling external registry registration for agent '{agent_id}'")
+
         return agent
 
     def add_agent(
@@ -375,7 +406,7 @@ class Overlord:
         self.agents[agent.agent_id] = agent
 
         # Store description for routing
-        self.agent_descriptions[agent.agent_id] = agent.description or agent.system_message or ""
+        self.agent_descriptions[agent.agent_id] = agent.system_message or ""
 
         # Set as default if requested or if it's the first agent
         if set_as_default or len(self.agents) == 1:
@@ -768,6 +799,8 @@ class Overlord:
         Remove an agent from the overlord.
 
         This method unregisters an agent and updates the default agent if necessary.
+        If external registry client is configured, it also automatically deregisters
+        the agent from all external registries.
 
         Args:
             agent_id: The ID of the agent to remove.
@@ -780,6 +813,18 @@ class Overlord:
         """
         if agent_id not in self.agents:
             raise ValueError(f"No agent with ID '{agent_id}' exists")
+
+        # Deregister from external registries if configured
+        if self.external_registry_client:
+            try:
+                # Run deregistration in background - don't block removal
+                asyncio.create_task(
+                    self.deregister_agent_from_external_registry(agent_id)
+                )
+                logger.debug(f"Scheduled external registry deregistration for agent {agent_id}")
+            except Exception as e:
+                # Log warning but don't fail the removal
+                logger.warning(f"Failed to schedule external deregistration for {agent_id}: {e}")
 
         # Remove the agent
         del self.agents[agent_id]
@@ -2047,3 +2092,388 @@ Available agents:
             {"area": area, "agent_count": count}
             for area, count in sorted_areas[:10]  # Top 10
         ]
+
+    def _initialize_external_registry_client(self):
+        """
+        Initialize external registry client from formation configuration.
+
+        This method reads the a2a.registries configuration from the formation
+        and creates an A2ARegistryClient if external registries are configured.
+        """
+        if not self.formation_config:
+            logger.debug("No formation config provided, skipping external registry initialization")
+            return
+
+        # Get A2A configuration from formation
+        a2a_config = self.formation_config.get('a2a', {})
+        registries = a2a_config.get('registries', [])
+
+        if not registries:
+            logger.debug("No external registries configured in formation")
+            return
+
+        # Check if external registry is allowed
+        allow_external = a2a_config.get('allow_external', False)
+        if not allow_external:
+            logger.info("External A2A communication is disabled in formation config")
+            return
+
+        try:
+            # Create registry client with formation-provided registries
+            self.external_registry_client = A2ARegistryClient(registries=registries)
+            logger.info(
+                f"Initialized external registry client with {len(registries)} "
+                f"registries: {registries}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize external registry client: {e}")
+            self.external_registry_client = None
+
+    async def initialize_external_registry_async(self):
+        """
+        Async initialization for external registry operations.
+
+        This method should be called after creating the Overlord to perform
+        any async setup required for the external registry client.
+        """
+        if not self.external_registry_client:
+            logger.debug("No external registry client configured")
+            return
+
+        # Perform health checks on all configured registries
+        logger.info("Performing health checks on external registries...")
+        try:
+            healthy_registries = await self.external_registry_client.health_check_all()
+            if healthy_registries:
+                logger.info(
+                    f"External registries healthy: {list(healthy_registries.keys())}"
+                )
+            else:
+                logger.warning("No external registries are currently healthy")
+        except Exception as e:
+            logger.error(f"Error during external registry health check: {e}")
+
+    async def register_agent_with_external_registry(self, agent_id: str) -> bool:
+        """
+        Register an agent with all configured external registries.
+
+        Args:
+            agent_id: The ID of the agent to register
+
+        Returns:
+            True if registration was successful on at least one registry
+        """
+        if not self.external_registry_client:
+            logger.debug("No external registry client configured")
+            return False
+
+        if agent_id not in self.agents:
+            logger.error(f"Agent {agent_id} not found")
+            return False
+
+        agent = self.agents[agent_id]
+
+        # Check if agent is configured for external A2A
+        if not getattr(agent, 'a2a_external', True):
+            logger.debug(f"Agent {agent_id} is not configured for external A2A")
+            return False
+
+        # Check formation-level external permission
+        a2a_config = self.formation_config.get('a2a', {})
+        if not a2a_config.get('allow_external', False):
+            logger.debug("External A2A is disabled in formation config")
+            return False
+
+        try:
+            # Create agent card for registration
+            agent_description = (
+                self.agent_descriptions.get(agent_id) or agent.system_message or f"Agent {agent_id}"
+            )
+
+            agent_card = AgentCard(
+                name=agent_id,
+                description=agent_description,
+                version="1.0.0",
+                url=f"http://localhost:8080/{agent_id}",  # TODO: Make configurable
+                muxi_agent_id=agent_id,
+                muxi_formation=(
+                    self.formation_config.get('name', 'unknown')
+                    if self.formation_config
+                    else 'unknown'
+                )
+            )
+
+            # Add basic capabilities
+            tools_capability = A2ACapability(
+                name="tools",
+                description="Agent can use tools and process requests",
+                enabled=True
+            )
+            agent_card.add_capability(tools_capability)
+
+            # Set authentication (optional for testing)
+            agent_card.authentication = A2AAuthentication(
+                type=AuthType.NONE,
+                description="No authentication required for testing",
+                required=False
+            )
+
+            # Register with all external registries
+            responses = await self.external_registry_client.register_agent(
+                agent_card
+            )
+
+            # Check if at least one registration was successful
+            success_count = sum(1 for resp in responses.values() if resp.success)
+
+            if success_count > 0:
+                logger.info(
+                    f"Successfully registered agent {agent_id} with "
+                    f"{success_count} external registries"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"Failed to register agent {agent_id} with any external registry"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(
+                f"Error registering agent {agent_id} with external registry: {e}"
+            )
+            return False
+
+    async def deregister_agent_from_external_registry(self, agent_id: str) -> bool:
+        """
+        Deregister an agent from all configured external registries.
+
+        Args:
+            agent_id: The ID of the agent to deregister
+
+        Returns:
+            True if deregistration was successful on at least one registry
+        """
+        if not self.external_registry_client:
+            return False
+
+        try:
+            responses = await self.external_registry_client.deregister_agent(
+                f"http://localhost:8080/{agent_id}"  # TODO: Make configurable
+            )
+            success_count = sum(1 for resp in responses.values() if resp.success)
+
+            if success_count > 0:
+                logger.info(
+                    f"Successfully deregistered agent {agent_id} from "
+                    f"{success_count} external registries"
+                )
+                return True
+            else:
+                logger.warning(
+                    f"Failed to deregister agent {agent_id} from any external registry"
+                )
+                return False
+
+        except Exception as e:
+            logger.error(
+                f"Error deregistering agent {agent_id} from external registry: {e}"
+            )
+            return False
+
+    async def discover_external_agents(
+        self,
+        capability: Optional[str] = None,
+        limit: int = 10
+    ) -> List[AgentCard]:
+        """
+        Discover agents from external registries.
+
+        Args:
+            capability: Optional capability filter (e.g., "tools")
+            limit: Maximum number of agents to return
+
+        Returns:
+            List of discovered agent cards
+        """
+        if not self.external_registry_client:
+            logger.debug("No external registry client configured")
+            return []
+
+        try:
+            # Discover from all registries
+            responses = await self.external_registry_client.discover_agents()
+
+            all_agents = []
+            for registry_url, response in responses.items():
+                if response.success and response.data:
+                    agents = response.data.get('agents', [])
+                    # Convert dicts to AgentCard objects if needed
+                    for agent_data in agents:
+                        if isinstance(agent_data, dict):
+                            try:
+                                agent_card = AgentCard(**agent_data)
+                                all_agents.append(agent_card)
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to parse agent card from "
+                                    f"{registry_url}: {e}"
+                                )
+                        else:
+                            all_agents.append(agent_data)
+
+            # Filter by capability if specified
+            if capability:
+                filtered_agents = []
+                for agent in all_agents:
+                    agent_capabilities = getattr(agent, 'capabilities', {})
+                    if capability in agent_capabilities:
+                        filtered_agents.append(agent)
+                all_agents = filtered_agents
+
+            # Limit results
+            if len(all_agents) > limit:
+                all_agents = all_agents[:limit]
+
+            logger.info(f"Discovered {len(all_agents)} external agents")
+            return all_agents
+
+        except Exception as e:
+            logger.error(f"Error discovering external agents: {e}")
+            return []
+
+    def __del__(self):
+        """
+        Destructor to clean up resources when overlord is destroyed.
+
+        This ensures that agents are properly deregistered from external
+        registries when the overlord instance is garbage collected.
+        """
+        try:
+            import asyncio
+
+            # If we have an external registry client and registered agents
+            if self.external_registry_client:
+                # Get all agent IDs that might be registered externally
+                agents_to_deregister = [
+                    agent_id for agent_id, agent in self.agents.items()
+                    if getattr(agent, 'a2a_external', True)
+                ]
+
+                if agents_to_deregister:
+                    logger.info(
+                        f"Deregistering {len(agents_to_deregister)} agents "
+                        f"from external registries"
+                    )
+
+                    # Try to run the cleanup in the current event loop if available
+                    try:
+                        asyncio.get_running_loop()
+                        # Schedule the cleanup but don't wait for it to avoid blocking
+                        for agent_id in agents_to_deregister:
+                            asyncio.create_task(
+                                self.deregister_agent_from_external_registry(agent_id)
+                            )
+                    except RuntimeError:
+                        # No running event loop, which is fine during shutdown
+                        logger.debug(
+                            "No running event loop for cleanup, "
+                            "skipping external deregistration"
+                        )
+
+        except Exception as e:
+            logger.debug(f"Error during overlord cleanup: {e}")
+
+    async def shutdown(self):
+        """
+        Gracefully shutdown the overlord and clean up all resources.
+
+        This method should be called when the application is shutting down
+        to ensure all agents are properly deregistered from external registries.
+        """
+        logger.info("Shutting down overlord...")
+
+        try:
+            # Deregister all external agents
+            if self.external_registry_client:
+                agents_to_deregister = [
+                    agent_id for agent_id, agent in self.agents.items()
+                    if getattr(agent, 'a2a_external', True)
+                ]
+
+                if agents_to_deregister:
+                    logger.info(f"Deregistering {len(agents_to_deregister)} agents from external registries")
+
+                    deregister_tasks = [
+                        self.deregister_agent_from_external_registry(agent_id)
+                        for agent_id in agents_to_deregister
+                    ]
+
+                    # Wait for all deregistrations to complete with timeout
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*deregister_tasks, return_exceptions=True),
+                            timeout=10.0  # 10 second timeout for cleanup
+                        )
+                        logger.info("Successfully deregistered all agents from external registries")
+                    except asyncio.TimeoutError:
+                        logger.warning("Timeout during external registry cleanup")
+
+                # Close the registry client
+                await self.external_registry_client.close()
+
+            # Close other resources
+            if hasattr(self, '_mcp_service') and self._mcp_service:
+                # Close MCP service if it has a close method
+                if hasattr(self._mcp_service, 'close'):
+                    await self._mcp_service.close()
+
+            logger.info("Overlord shutdown complete")
+
+        except Exception as e:
+            logger.error(f"Error during overlord shutdown: {e}")
+
+    def add_shutdown_handler(self):
+        """
+        Add signal handlers for graceful shutdown.
+
+        This ensures that the shutdown() method is called when the process
+        receives termination signals.
+        """
+        import signal
+        import atexit
+
+        def signal_handler(signum, frame):
+            logger.info(f"Received signal {signum}, initiating shutdown...")
+            try:
+                import asyncio
+                loop = asyncio.get_running_loop()
+                loop.create_task(self.shutdown())
+            except RuntimeError:
+                # No running event loop
+                logger.warning("No running event loop for graceful shutdown")
+
+        # Register signal handlers
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+
+        # Register atexit handler
+        atexit.register(self._atexit_handler)
+
+        logger.debug("Registered shutdown handlers")
+
+    def _atexit_handler(self):
+        """Handler for atexit to ensure cleanup."""
+        try:
+            import asyncio
+
+            # Try to run cleanup if we have an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Don't await, just schedule
+                loop.create_task(self.shutdown())
+            except RuntimeError:
+                logger.debug("No event loop available for atexit cleanup")
+
+        except Exception as e:
+            logger.debug(f"Error in atexit handler: {e}")

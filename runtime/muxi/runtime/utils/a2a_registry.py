@@ -5,8 +5,8 @@ Mock A2A Registry Server
 A standalone development server that simulates external A2A (Agent-to-Agent)
 registries for testing MUXI framework integration. This server:
 
-- Accepts agent registrations from MUXI formations
-- Provides hardcoded test agents with various authentication schemes
+- Accepts agent registrations from MUXI formations using Google A2A protocol
+- Provides hardcoded test agents in A2A-compliant format
 - Implements A2A-compliant discovery endpoints
 - Enables testing of external registry integration
 
@@ -46,51 +46,53 @@ REGISTRY_CONFIG = {
 
 
 # =============================================================================
-# Pydantic Models for A2A AgentCard
+# Google A2A Protocol Models
 # =============================================================================
 
-
-class Provider(BaseModel):
-    organization: str
-    url: str
-
-
-class Capabilities(BaseModel):
-    streaming: bool = False
-    pushNotifications: bool = False
+class A2AAuthentication(BaseModel):
+    """A2A Authentication configuration"""
+    type: str  # "none", "bearer", "apiKey", "oauth2"
+    description: Optional[str] = None
+    required: bool = False
 
 
-class SecurityScheme(BaseModel):
-    type: str
-    scheme: Optional[str] = None
-    bearerFormat: Optional[str] = None
-    name: Optional[str] = None
-    in_: Optional[str] = Field(None, alias="in")
-    flows: Optional[Dict[str, Any]] = None
-
-
-class Skill(BaseModel):
-    id: str
+class A2ACapability(BaseModel):
+    """A2A Capability definition"""
     name: str
-    description: str
-    tags: List[str] = []
+    description: Optional[str] = None
+    enabled: bool = True
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class A2AEndpoint(BaseModel):
+    """A2A Endpoint definition"""
+    url: str
+    methods: List[str] = Field(default_factory=lambda: ["POST"])
+    description: Optional[str] = None
 
 
 class AgentCard(BaseModel):
+    """
+    Google A2A Protocol AgentCard
+
+    This follows the official Google A2A Agent Card specification.
+    """
+    # Required fields
     name: str
     description: str
-    url: str
     version: str
-    provider: Provider
-    capabilities: Capabilities
-    securitySchemes: Dict[str, SecurityScheme] = {}
-    security: List[Dict[str, List[str]]] = []
-    defaultInputModes: List[str] = ["application/json"]
-    defaultOutputModes: List[str] = ["application/json"]
-    skills: List[Skill] = []
+    url: str
+
+    # A2A Protocol fields
+    a2aVersion: str = "1.0"
+    capabilities: Dict[str, A2ACapability] = Field(default_factory=dict)
+    authentication: Optional[A2AAuthentication] = None
+    endpoints: Dict[str, A2AEndpoint] = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    # Optional fields
     iconUrl: Optional[str] = None
     documentationUrl: Optional[str] = None
-    supportsAuthenticatedExtendedCard: bool = False
 
     @field_validator("url")
     @classmethod
@@ -114,161 +116,235 @@ class HealthResponse(BaseModel):
 
 
 # =============================================================================
-# Hardcoded Test Agents
+# Hardcoded Test Agents (Google A2A Format)
 # =============================================================================
 
 HARDCODED_AGENTS = [
     {
         "name": "external-billing-service",
-        "description": "Third-party billing and payment processing with API key auth",
-        "url": "https://billing-service.vendor.com/a2a",
+        "description": "Handles billing, invoicing, and payment processing for external services",
         "version": "2.1.0",
-        "provider": {
-            "organization": "Billing Solutions Inc",
-            "url": "https://billing-service.vendor.com",
+        "url": "https://billing-service.vendor.com/a2a",
+        "a2aVersion": "1.0",
+        "capabilities": {
+            "payment_processing": {
+                "name": "payment_processing",
+                "description": "Process payments and handle billing operations",
+                "enabled": True
+            },
+            "invoice_generation": {
+                "name": "invoice_generation",
+                "description": "Generate and manage invoices",
+                "enabled": True
+            }
         },
-        "capabilities": {"streaming": True, "pushNotifications": False},
-        "securitySchemes": {"ApiKeyAuth": {"type": "apiKey", "in": "header", "name": "X-API-Key"}},
-        "security": [{"ApiKeyAuth": []}],
-        "defaultInputModes": ["application/json"],
-        "defaultOutputModes": ["application/json"],
-        "skills": [
-            {
-                "id": "payment-processing",
-                "name": "Payment Processing",
-                "description": "Process credit card and ACH payments",
-                "tags": ["billing", "payments", "credit-card", "ach"],
-            },
-            {
-                "id": "invoice-generation",
-                "name": "Invoice Generation",
-                "description": "Generate PDF invoices and receipts",
-                "tags": ["billing", "invoices", "pdf"],
-            },
-        ],
+        "authentication": {
+            "type": "apiKey",
+            "description": "API key authentication for billing operations",
+            "required": True
+        },
+        "metadata": {
+            "organization": "VendorCorp",
+            "contact": "billing-support@vendor.com",
+            "tags": ["billing", "payments", "finance"]
+        }
     },
     {
         "name": "analytics-engine",
-        "description": "Data analytics and reporting service with Bearer token auth",
+        "description": "Data analytics and reporting service",
         "url": "https://analytics.vendor-x.io/a2a",
         "version": "1.5.3",
-        "provider": {"organization": "AnalyticsX Corporation", "url": "https://vendor-x.io"},
-        "capabilities": {"streaming": True, "pushNotifications": True},
-        "securitySchemes": {
-            "BearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
-        },
-        "security": [{"BearerAuth": []}],
-        "defaultInputModes": ["application/json", "text/plain"],
-        "defaultOutputModes": ["application/json", "text/plain"],
-        "skills": [
-            {
-                "id": "data-analysis",
-                "name": "Data Analysis",
+        "a2aVersion": "1.0",
+        "capabilities": {
+            "data_analysis": {
+                "name": "data_analysis",
                 "description": "Statistical analysis and data insights",
-                "tags": ["analytics", "statistics", "insights"],
+                "enabled": True,
+                "metadata": {"analysis_types": ["statistical", "predictive", "descriptive"]}
             },
-            {
-                "id": "report-generation",
-                "name": "Report Generation",
+            "report_generation": {
+                "name": "report_generation",
                 "description": "Generate business intelligence reports",
-                "tags": ["analytics", "reports", "business-intelligence"],
+                "enabled": True,
+                "metadata": {"formats": ["pdf", "html", "excel"]}
             },
-        ],
+            "streaming": {
+                "name": "streaming",
+                "description": "Real-time data streaming",
+                "enabled": True,
+                "metadata": {"protocols": ["websocket", "sse"]}
+            }
+        },
+        "authentication": {
+            "type": "bearer",
+            "description": "JWT Bearer token authentication",
+            "required": True
+        },
+        "endpoints": {
+            "analyze_data": {
+                "url": "https://analytics.vendor-x.io/a2a/analyze",
+                "methods": ["POST"],
+                "description": "Analyze provided data"
+            },
+            "generate_report": {
+                "url": "https://analytics.vendor-x.io/a2a/report",
+                "methods": ["POST"],
+                "description": "Generate analytical report"
+            }
+        },
+        "metadata": {
+            "organization": "AnalyticsX Corporation",
+            "tags": ["analytics", "statistics", "reporting"],
+            "support_email": "support@vendor-x.io"
+        }
     },
     {
         "name": "notification-hub",
-        "description": "Multi-channel notification service with OAuth2 auth",
+        "description": "Multi-channel notification service",
         "url": "https://notify.cloudservice.net/a2a",
         "version": "3.0.1",
-        "provider": {
-            "organization": "CloudService Notifications",
-            "url": "https://cloudservice.net",
-        },
-        "capabilities": {"streaming": False, "pushNotifications": True},
-        "securitySchemes": {
-            "OAuth2": {
-                "type": "oauth2",
-                "flows": {
-                    "clientCredentials": {
-                        "tokenUrl": "https://auth.cloudservice.net/oauth/token",
-                        "scopes": {
-                            "notifications:send": "Send notifications",
-                            "notifications:read": "Read notification status",
-                        },
-                    }
-                },
+        "a2aVersion": "1.0",
+        "capabilities": {
+            "email_notifications": {
+                "name": "email_notifications",
+                "description": "Send email notifications and campaigns",
+                "enabled": True,
+                "metadata": {"templates": ["plain", "html", "rich"]}
+            },
+            "sms_notifications": {
+                "name": "sms_notifications",
+                "description": "Send SMS and text message notifications",
+                "enabled": True,
+                "metadata": {"regions": ["US", "EU", "APAC"]}
+            },
+            "push_notifications": {
+                "name": "push_notifications",
+                "description": "Mobile and web push notifications",
+                "enabled": True,
+                "metadata": {"platforms": ["ios", "android", "web"]}
             }
         },
-        "security": [{"OAuth2": ["notifications:send"]}],
-        "defaultInputModes": ["application/json"],
-        "defaultOutputModes": ["application/json"],
-        "skills": [
-            {
-                "id": "email-notifications",
-                "name": "Email Notifications",
-                "description": "Send email notifications and campaigns",
-                "tags": ["notifications", "email", "campaigns"],
+        "authentication": {
+            "type": "oauth2",
+            "description": "OAuth2 client credentials flow",
+            "required": True
+        },
+        "endpoints": {
+            "send_email": {
+                "url": "https://notify.cloudservice.net/a2a/email",
+                "methods": ["POST"],
+                "description": "Send email notification"
             },
-            {
-                "id": "sms-notifications",
-                "name": "SMS Notifications",
-                "description": "Send SMS and text message notifications",
-                "tags": ["notifications", "sms", "text-messaging"],
-            },
-        ],
+            "send_sms": {
+                "url": "https://notify.cloudservice.net/a2a/sms",
+                "methods": ["POST"],
+                "description": "Send SMS notification"
+            }
+        },
+        "metadata": {
+            "organization": "CloudService Notifications",
+            "tags": ["notifications", "messaging", "communications"],
+            "support_email": "support@cloudservice.net"
+        }
     },
     {
         "name": "document-processor",
-        "description": "Document processing service with Basic auth",
+        "description": "Document processing and OCR service",
         "url": "https://docs.enterprise-tools.com/a2a",
         "version": "4.2.0",
-        "provider": {"organization": "Enterprise Tools Inc", "url": "https://enterprise-tools.com"},
-        "capabilities": {"streaming": True, "pushNotifications": False},
-        "securitySchemes": {"BasicAuth": {"type": "http", "scheme": "basic"}},
-        "security": [{"BasicAuth": []}],
-        "defaultInputModes": ["application/json", "application/pdf", "text/plain"],
-        "defaultOutputModes": ["application/json", "application/pdf"],
-        "skills": [
-            {
-                "id": "pdf-processing",
-                "name": "PDF Processing",
+        "a2aVersion": "1.0",
+        "capabilities": {
+            "pdf_processing": {
+                "name": "pdf_processing",
                 "description": "Extract text and data from PDF documents",
-                "tags": ["documents", "pdf", "extraction"],
+                "enabled": True,
+                "metadata": {"max_file_size": "50MB", "supported_versions": ["1.4", "1.7", "2.0"]}
             },
-            {
-                "id": "ocr-scanning",
-                "name": "OCR Scanning",
+            "ocr_scanning": {
+                "name": "ocr_scanning",
                 "description": "Optical character recognition for scanned documents",
-                "tags": ["documents", "ocr", "scanning"],
+                "enabled": True,
+                "metadata": {"languages": ["en", "es", "fr", "de"], "accuracy": "95%"}
             },
-        ],
+            "document_conversion": {
+                "name": "document_conversion",
+                "description": "Convert between document formats",
+                "enabled": True,
+                "metadata": {"formats": ["pdf", "docx", "txt", "html"]}
+            }
+        },
+        "authentication": {
+            "type": "apiKey",
+            "description": "API key authentication for document processing",
+            "required": True
+        },
+        "endpoints": {
+            "process_pdf": {
+                "url": "https://docs.enterprise-tools.com/a2a/pdf",
+                "methods": ["POST"],
+                "description": "Process PDF document"
+            },
+            "ocr_scan": {
+                "url": "https://docs.enterprise-tools.com/a2a/ocr",
+                "methods": ["POST"],
+                "description": "Perform OCR on document"
+            }
+        },
+        "metadata": {
+            "organization": "Enterprise Tools Inc",
+            "tags": ["documents", "pdf", "ocr", "conversion"],
+            "support_email": "support@enterprise-tools.com"
+        }
     },
     {
         "name": "public-data-service",
-        "description": "Public data service with no authentication required",
+        "description": "Public data service with open access",
         "url": "https://public-api.data-commons.org/a2a",
         "version": "1.0.0",
-        "provider": {"organization": "Data Commons Foundation", "url": "https://data-commons.org"},
-        "capabilities": {"streaming": False, "pushNotifications": False},
-        "securitySchemes": {},
-        "security": [],
-        "defaultInputModes": ["application/json", "text/plain"],
-        "defaultOutputModes": ["application/json", "text/csv"],
-        "skills": [
-            {
-                "id": "weather-data",
-                "name": "Weather Data",
+        "a2aVersion": "1.0",
+        "capabilities": {
+            "weather_data": {
+                "name": "weather_data",
                 "description": "Current and historical weather information",
-                "tags": ["weather", "public-data", "meteorology"],
+                "enabled": True,
+                "metadata": {"coverage": "global", "history": "10_years"}
             },
-            {
-                "id": "geographic-info",
-                "name": "Geographic Information",
+            "geographic_info": {
+                "name": "geographic_info",
                 "description": "Geographic and demographic data",
-                "tags": ["geography", "demographics", "public-data"],
+                "enabled": True,
+                "metadata": {"resolution": "city_level", "data_sources": ["census", "satellite"]}
             },
-        ],
-    },
+            "public_datasets": {
+                "name": "public_datasets",
+                "description": "Access to curated public datasets",
+                "enabled": True,
+                "metadata": {"categories": ["economic", "social", "environmental"]}
+            }
+        },
+        "authentication": {
+            "type": "none",
+            "description": "No authentication required",
+            "required": False
+        },
+        "endpoints": {
+            "get_weather": {
+                "url": "https://public-api.data-commons.org/a2a/weather",
+                "methods": ["GET", "POST"],
+                "description": "Get weather data"
+            },
+            "get_geography": {
+                "url": "https://public-api.data-commons.org/a2a/geography",
+                "methods": ["GET", "POST"],
+                "description": "Get geographic information"
+            }
+        },
+        "metadata": {
+            "organization": "Data Commons Foundation",
+            "tags": ["public-data", "weather", "geography", "open-access"],
+            "support_email": "support@data-commons.org"
+        }
+    }
 ]
 
 
@@ -310,6 +386,9 @@ class RegistryStorage:
         # Use URL as unique key
         url_key = agent_card.url
 
+        # Debug logging
+        logging.info(f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'")
+
         # Add registration metadata
         agent_data = agent_card.model_dump()
         agent_data["_registered_at"] = datetime.now(timezone.utc).isoformat()
@@ -317,20 +396,25 @@ class RegistryStorage:
         agents[url_key] = agent_data
         self._save_agents(agents)
 
-        logging.info(f"Registered agent: {agent_card.name} at {agent_card.url}")
+        logging.info(f"REGISTER: Successfully stored agent at URL key: '{url_key}'")
         return True
 
     def deregister_agent(self, agent_url: str) -> bool:
         """Deregister an agent by URL. Returns True if found and removed."""
         agents = self._load_agents()
 
+        # Debug logging
+        logging.info(f"DEREGISTER: Looking for agent with URL: '{agent_url}'")
+        logging.info(f"DEREGISTER: Available URLs in storage: {list(agents.keys())}")
+
         if agent_url in agents:
             agent_name = agents[agent_url].get("name", "unknown")
             del agents[agent_url]
             self._save_agents(agents)
-            logging.info(f"Deregistered agent: {agent_name} at {agent_url}")
+            logging.info(f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'")
             return True
 
+        logging.warning(f"DEREGISTER: Agent URL '{agent_url}' not found in storage")
         return False
 
     def get_registered_agents(self) -> List[AgentCard]:
@@ -341,7 +425,33 @@ class RegistryStorage:
         for agent_data in agents.values():
             # Remove metadata before creating AgentCard
             clean_data = {k: v for k, v in agent_data.items() if not k.startswith("_")}
+
             try:
+                # Convert capabilities from dict to A2ACapability objects
+                if "capabilities" in clean_data and isinstance(clean_data["capabilities"], dict):
+                    converted_capabilities = {}
+                    for cap_name, cap_data in clean_data["capabilities"].items():
+                        if isinstance(cap_data, dict):
+                            # Convert dict to A2ACapability
+                            converted_capabilities[cap_name] = A2ACapability(**cap_data)
+                        else:
+                            # Skip invalid capability data
+                            logging.warning(f"Skipping invalid capability {cap_name}: {cap_data}")
+                    clean_data["capabilities"] = converted_capabilities
+
+                # Convert authentication from dict to A2AAuthentication object
+                auth_data = clean_data.get("authentication")
+                if auth_data and isinstance(auth_data, dict):
+                    clean_data["authentication"] = A2AAuthentication(**auth_data)
+
+                # Convert endpoints from dict to A2AEndpoint objects
+                if "endpoints" in clean_data and isinstance(clean_data["endpoints"], dict):
+                    converted_endpoints = {}
+                    for ep_name, ep_data in clean_data["endpoints"].items():
+                        if isinstance(ep_data, dict):
+                            converted_endpoints[ep_name] = A2AEndpoint(**ep_data)
+                    clean_data["endpoints"] = converted_endpoints
+
                 agent_cards.append(AgentCard(**clean_data))
             except Exception as e:
                 logging.warning(f"Failed to parse stored agent: {e}")
@@ -412,12 +522,41 @@ async def register_agent(agent_card: AgentCard):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@app.delete("/register/{agent_url_encoded}")
-async def deregister_agent(agent_url_encoded: str):
+@app.post("/deregister")
+async def deregister_agent(request: dict):
     """
     Deregister an agent from the registry.
 
+    Accepts a JSON body with the agent URL to deregister.
+    Body format: {"agent_url": "http://localhost:8080/agent-name"}
+    """
+    try:
+        agent_url = request.get("agent_url")
+        if not agent_url:
+            raise HTTPException(status_code=400, detail="agent_url is required in request body")
+
+        success = storage.deregister_agent(agent_url)
+        if success:
+            return {
+                "message": "Agent deregistered successfully",
+                "agent_url": agent_url,
+                "deregistered_at": datetime.now(timezone.utc).isoformat(),
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"Agent not found: {agent_url}")
+
+    except Exception as e:
+        logger.error(f"Error deregistering agent: {e}")
+        raise HTTPException(status_code=500, detail="Failed to deregister agent")
+
+
+@app.delete("/register/{agent_url_encoded}")
+async def deregister_agent_legacy(agent_url_encoded: str):
+    """
+    Legacy deregister endpoint (for backward compatibility).
+
     The agent URL must be URL-encoded in the path parameter.
+    Recommended to use POST /deregister instead.
     """
     try:
         # Decode the URL
@@ -441,14 +580,14 @@ async def deregister_agent(agent_url_encoded: str):
 @app.get("/discover", response_model=DiscoveryResponse)
 async def discover_agents(
     capabilities: Optional[str] = Query(None, description="Comma-separated capabilities filter"),
-    skills: Optional[str] = Query(None, description="Comma-separated skills filter"),
+    tags: Optional[str] = Query(None, description="Comma-separated tags filter"),
     provider: Optional[str] = Query(None, description="Provider organization filter"),
 ):
     """
     Discover agents based on query parameters.
 
     Returns both hardcoded test agents and registered agents.
-    Supports filtering by capabilities, skills, and provider.
+    Supports filtering by capabilities, tags, and provider organization.
     """
     try:
         # Get all agents (hardcoded + registered)
@@ -464,42 +603,44 @@ async def discover_agents(
         # Apply filters
         filtered_agents = all_agents
 
+        # Filter by capabilities (match against capability names)
         if capabilities:
             capability_list = [c.strip().lower() for c in capabilities.split(",")]
             filtered_agents = [
                 agent
                 for agent in filtered_agents
                 if any(
-                    capability in [skill.id.lower() for skill in agent.skills]
-                    or capability in [tag.lower() for skill in agent.skills for tag in skill.tags]
+                    capability in agent.capabilities.keys()
+                    or any(capability in cap.name.lower() for cap in agent.capabilities.values())
                     for capability in capability_list
                 )
             ]
 
-        if skills:
-            skill_list = [s.strip().lower() for s in skills.split(",")]
+        # Filter by tags (match against metadata.tags)
+        if tags:
+            tag_list = [t.strip().lower() for t in tags.split(",")]
             filtered_agents = [
                 agent
                 for agent in filtered_agents
-                if any(
-                    skill in [agent_skill.id.lower() for agent_skill in agent.skills]
-                    or skill
-                    in [tag.lower() for agent_skill in agent.skills for tag in agent_skill.tags]
-                    for skill in skill_list
+                if agent.metadata.get("tags") and any(
+                    tag in [t.lower() for t in agent.metadata.get("tags", [])]
+                    for tag in tag_list
                 )
             ]
 
+        # Filter by provider organization (match against metadata.organization)
         if provider:
             provider_filter = provider.strip().lower()
             filtered_agents = [
                 agent
                 for agent in filtered_agents
-                if provider_filter in agent.provider.organization.lower()
+                if (agent.metadata.get("organization") and
+                    provider_filter in agent.metadata.get("organization", "").lower())
             ]
 
         logger.info(
             f"Discovery query returned {len(filtered_agents)} agents "
-            f"(capabilities={capabilities}, skills={skills}, provider={provider})"
+            f"(capabilities={capabilities}, tags={tags}, provider={provider})"
         )
 
         return DiscoveryResponse(
@@ -559,7 +700,8 @@ def main():
     print()
     print("Available endpoints:")
     print("  POST   /register          - Register an agent")
-    print("  DELETE /register/{url}    - Deregister an agent")
+    print("  POST   /deregister        - Deregister an agent")
+    print("  DELETE /register/{url}    - Deregister an agent (legacy)")
     print("  GET    /discover          - Discover agents")
     print("  GET    /health            - Health check")
     print()
@@ -568,7 +710,7 @@ def main():
     print("  curl http://localhost:9090/discover?capabilities=billing")
     print()
 
-    # Run the server
+    # Run the server (auto-reload disabled to avoid import string issues)
     uvicorn.run(
         app,
         host=REGISTRY_CONFIG["host"],
