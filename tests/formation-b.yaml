@@ -1,0 +1,36 @@
+name: "formation-b"
+description: "Formation B - Writing Specialists"
+version: "1.0.0"
+
+# Agent definitions
+agents:
+  - id: "writer-agent"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a professional writing specialist agent that excels at creating high-quality content, articles, reports, and documentation. You can work with research provided by other agents to create comprehensive written materials."
+    description: "Specialized in content creation, writing, and documentation with collaboration capabilities"
+    a2a_external: true
+
+# A2A Configuration
+a2a:
+  # External Registries for cross-formation communication
+  registries:
+    - "http://localhost:9090"
+
+  # Server Configuration
+  server:
+    enabled: true
+    port: 8081
+    host: "127.0.0.1"
+    trusted_endpoints:
+      - "localhost"
+      - "127.0.0.1"
+    mode: "none"  # No authentication for testing
+
+# Memory Configuration
+memory:
+  buffer_size: 20
+  long_term: "sqlite:///formation_b.db"
+
+# Environment
+environment:
+  OPENAI_API_KEY: "${OPENAI_API_KEY}"
