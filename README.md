@@ -116,11 +116,22 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 - **Task #1 Completed**: OneLLM integration with comprehensive multi-modal support
 - **Task #2 Completed**: FAISSx integration with local/remote mode support for distributed vector operations
 - **Task #3 Completed**: Knowledge handler enhancement with directory support and YAML configuration
+- **Task #4 Completed**: A2A Message Routing - External agent-to-agent communication across formations
 - **Directory Structure**: Clean organization with proper test separation
 - **Import Resolution**: All module imports working correctly
 - **Next**: Formation YAML configuration integration for FAISSx and knowledge capabilities
 
 ## Recent Updates
+
+### ✅ Task #4 - A2A Message Routing (COMPLETED) 🎉
+- **External Agent Communication**: Full agent-to-agent communication across different formations
+- **Registry-Based Discovery**: Agents can discover and communicate with external agents via A2A registry
+- **Formation Server Integration**: Complete A2A protocol implementation in formation servers
+- **Cross-Formation Testing**: Validated agent collaboration between Formation A (port 8080) and Formation B (port 8081)
+- **Protocol Compliance**: Fixed A2A response format to return clean strings for protocol compatibility
+- **Port Resolution**: Fixed agent registration to use actual running ports instead of configured ports
+- **Duplicate Registration Prevention**: Resolved timing issues that caused agents to register multiple times
+- **Production Ready**: All 6/6 tests passing consistently with robust error handling
 
 ### ✅ Task #1 - OneLLM Integration (COMPLETED)
 - **Multi-Modal Support**: Added comprehensive file handling for images, audio, video, documents
