@@ -65,6 +65,7 @@ from .memory.long_term import LongTermMemory
 from .memory.memobase import Memobase
 from .llm import LLM
 from .a2a.registry_client import A2ARegistryClient
+from .a2a.formation_server import A2AFormationServer
 from .a2a.models import AgentCard, A2ACapability, A2AAuthentication, AuthType
 
 
@@ -102,6 +103,7 @@ class Overlord:
         admin_api_key (str): API key for admin-level access
         formation_config (Dict[str, Any]): Formation configuration including A2A settings
         external_registry_client (Optional[A2ARegistryClient]): Client for external A2A registries
+        formation_server (Optional[A2AFormationServer]): Server for A2A formation
     """
 
     def __init__(
@@ -168,8 +170,14 @@ class Overlord:
         # Initialize external registry client (will be set up later)
         self.external_registry_client: Optional[A2ARegistryClient] = None
 
+        # Initialize A2A Formation Server (will be set up based on config)
+        self.formation_server: Optional[A2AFormationServer] = None
+
         # Initialize external registry from formation config if provided
         self._initialize_external_registry_client()
+
+        # Initialize A2A Formation Server if enabled
+        self._initialize_formation_server()
 
         # Determine if we're in multi-user mode based on memory type
         self.is_multi_user = False
@@ -362,13 +370,14 @@ class Overlord:
 
         # Auto-register with external registries if enabled
         if a2a_external and self.external_registry_client:
-            # Check formation config for allow_external
-            allow_external = True  # Default to True
+            # Check formation config for server.enabled
+            server_enabled = True  # Default to True
             if self.formation_config:
                 a2a_config = self.formation_config.get('a2a', {})
-                allow_external = a2a_config.get('allow_external', True)
+                server_config = a2a_config.get('server', {})
+                server_enabled = server_config.get('enabled', True)
 
-            if allow_external:
+            if server_enabled:
                 # Register asynchronously without blocking agent creation
                 asyncio.create_task(self.register_agent_with_external_registry(agent_id))
                 logger.info(f"Scheduling external registry registration for agent '{agent_id}'")
@@ -1751,101 +1760,10 @@ Available agents:
 """
         )
 
-    async def route_a2a_message(
-        self,
-        source_agent_id: str,
-        target_agent_id: str,
-        message: Union[str, Dict[str, Any]],
-        message_type: str = "request",
-        context: Optional[Dict[str, Any]] = None,
-        wait_for_response: bool = True,
-        timeout: int = 30
-    ) -> Optional[Dict[str, Any]]:
-        """
-        Route an A2A (Agent-to-Agent) message between agents in the formation.
-
-        This is the central routing mechanism for A2A communication in local
-        formations. All agent-to-agent messages go through this method for
-        coordination and potential security checks.
-
-        Args:
-            source_agent_id: The ID of the agent sending the message
-            target_agent_id: The ID of the agent to receive the message
-            message: The message content (can be text or structured data)
-            message_type: Type of message ("request", "notification", "response")
-            context: Optional context information to include with the message
-            wait_for_response: Whether to wait for a response (only for requests)
-            timeout: Maximum time to wait for response in seconds
-
-        Returns:
-            Response from target agent if wait_for_response=True and this is a request,
-            otherwise None
-
-        Raises:
-            RuntimeError: If source or target agent not found or not configured for A2A
-            TimeoutError: If waiting for response and timeout exceeded
-
-        Example:
-            >>> # Route a request between agents
-            >>> response = await overlord.route_a2a_message(
-            ...     source_agent_id="weather-agent",
-            ...     target_agent_id="calendar-agent",
-            ...     message="Check availability tomorrow 2-3pm",
-            ...     message_type="request"
-            ... )
-        """
-        # Validate source agent
-        if source_agent_id not in self.agents:
-            raise RuntimeError(f"Source agent '{source_agent_id}' not found")
-
-        source_agent = self.agents[source_agent_id]
-        if not getattr(source_agent, 'a2a_internal', True):
-            raise RuntimeError(f"Source agent '{source_agent_id}' not configured for A2A")
-
-        # Validate target agent
-        if target_agent_id not in self.agents:
-            raise RuntimeError(f"Target agent '{target_agent_id}' not found")
-
-        target_agent = self.agents[target_agent_id]
-        if not getattr(target_agent, 'a2a_internal', True):
-            raise RuntimeError(f"Target agent '{target_agent_id}' not configured for A2A")
-
-        # Generate message ID for tracking
-        import uuid
-        message_id = str(uuid.uuid4())
-
-        # Log the A2A communication
-        logger.info(
-            f"A2A Message: {source_agent_id} -> {target_agent_id} "
-            f"({message_type}, id: {message_id})"
-        )
-
-        try:
-            # Route the message to the target agent
-            response = await target_agent.handle_a2a_message(
-                source_agent_id=source_agent_id,
-                message=message,
-                message_type=message_type,
-                context=context,
-                message_id=message_id
-            )
-
-            # Return response if this was a request and caller wants to wait
-            if message_type == "request" and wait_for_response:
-                return response
-            else:
-                return None
-
-        except Exception as e:
-            logger.error(f"A2A message routing failed: {e}")
-            if message_type == "request" and wait_for_response:
-                return {
-                    "status": "error",
-                    "error": f"Message routing failed: {str(e)}",
-                    "message_id": message_id
-                }
-            else:
-                raise
+    # DEPRECATED: route_a2a_message method has been removed as part of the
+    # architectural refactor to optimal A2A communication. Agents now
+    # communicate directly with each other instead of routing through
+    # the overlord for better performance and cleaner separation of concerns.
 
     def get_a2a_message_stats(self) -> Dict[str, Any]:
         """
@@ -2112,9 +2030,10 @@ Available agents:
             logger.debug("No external registries configured in formation")
             return
 
-        # Check if external registry is allowed
-        allow_external = a2a_config.get('allow_external', False)
-        if not allow_external:
+        # Check if external registry is enabled
+        server_config = a2a_config.get('server', {})
+        server_enabled = server_config.get('enabled', False)
+        if not server_enabled:
             logger.info("External A2A communication is disabled in formation config")
             return
 
@@ -2180,7 +2099,8 @@ Available agents:
 
         # Check formation-level external permission
         a2a_config = self.formation_config.get('a2a', {})
-        if not a2a_config.get('allow_external', False):
+        server_config = a2a_config.get('server', {})
+        if not server_config.get('enabled', False):
             logger.debug("External A2A is disabled in formation config")
             return False
 
@@ -2402,7 +2322,10 @@ Available agents:
                 ]
 
                 if agents_to_deregister:
-                    logger.info(f"Deregistering {len(agents_to_deregister)} agents from external registries")
+                    logger.info(
+                        f"Deregistering {len(agents_to_deregister)} agents "
+                        f"from external registries"
+                    )
 
                     deregister_tasks = [
                         self.deregister_agent_from_external_registry(agent_id)
@@ -2477,3 +2400,119 @@ Available agents:
 
         except Exception as e:
             logger.debug(f"Error in atexit handler: {e}")
+
+    def _initialize_formation_server(self):
+        """
+        Initialize A2A Formation Server based on formation configuration.
+
+        This method sets up the A2A Formation Server if it's enabled in the formation
+        configuration. The server provides A2A endpoints for all agents in this formation.
+        """
+        if not self.formation_config:
+            logger.debug(
+                "No formation config provided, skipping A2A Formation Server initialization"
+            )
+            return
+
+        # Get A2A configuration from formation
+        a2a_config = self.formation_config.get('a2a', {})
+        server_config = a2a_config.get('server', {})
+        server_enabled = server_config.get('enabled', False)
+
+        if not server_enabled:
+            logger.info("A2A Formation Server is disabled in formation config")
+            return
+
+        try:
+            # Extract server configuration
+            port = server_config.get('port', 8181)
+            host = server_config.get('host', '0.0.0.0')
+            trusted_endpoints = server_config.get('trusted_endpoints', [])
+            auth_mode = server_config.get('mode', 'none')
+            formation_name = self.formation_config.get('name', 'default')
+
+            # Create A2A Formation Server
+            self.formation_server = A2AFormationServer(
+                overlord=self,
+                port=port,
+                host=host,
+                trusted_endpoints=trusted_endpoints,
+                auth_mode=auth_mode,
+                formation_name=formation_name
+            )
+            logger.info("A2A Formation Server initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize A2A Formation Server: {e}")
+            self.formation_server = None
+
+    # A2A Formation Server Management Methods
+
+    async def start_formation_server(self) -> Dict[str, Any]:
+        """
+        Start the A2A Formation Server if it's configured.
+
+        Returns:
+            Server startup information or error status
+        """
+        if not self.formation_server:
+            return {
+                "status": "error",
+                "message": "A2A Formation Server not configured"
+            }
+
+        try:
+            result = await self.formation_server.start()
+            logger.info(f"A2A Formation Server started: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to start A2A Formation Server: {e}")
+            return {
+                "status": "error",
+                "message": f"Failed to start server: {e}"
+            }
+
+    async def stop_formation_server(self) -> Dict[str, Any]:
+        """
+        Stop the A2A Formation Server if it's running.
+
+        Returns:
+            Server shutdown information or error status
+        """
+        if not self.formation_server:
+            return {
+                "status": "error",
+                "message": "A2A Formation Server not configured"
+            }
+
+        try:
+            result = await self.formation_server.stop()
+            logger.info(f"A2A Formation Server stopped: {result}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to stop A2A Formation Server: {e}")
+            return {
+                "status": "error",
+                "message": f"Failed to stop server: {e}"
+            }
+
+    async def get_formation_server_status(self) -> Dict[str, Any]:
+        """
+        Get the current status of the A2A Formation Server.
+
+        Returns:
+            Server status information
+        """
+        if not self.formation_server:
+            return {
+                "status": "not_configured",
+                "message": "A2A Formation Server not configured"
+            }
+
+        try:
+            return await self.formation_server.get_status()
+        except Exception as e:
+            logger.error(f"Failed to get A2A Formation Server status: {e}")
+            return {
+                "status": "error",
+                "message": f"Failed to get status: {e}"
+            }

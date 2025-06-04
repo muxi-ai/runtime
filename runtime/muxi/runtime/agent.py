@@ -40,6 +40,7 @@
 # for external tool integration.
 # =============================================================================
 
+import asyncio
 import datetime
 import logging
 import uuid
@@ -354,11 +355,10 @@ class Agent:
         timeout: int = 30
     ) -> Optional[Dict[str, Any]]:
         """
-        Send an A2A (Agent-to-Agent) message to another agent in the formation.
+        Send an A2A (Agent-to-Agent) message directly to another agent.
 
-        This is the simple messaging method for local formations. The agent asks
-        its overlord to route the message to the target agent and optionally waits
-        for a response.
+        This method handles both local and external communication directly,
+        using the overlord only for discovery and resource access, not routing.
 
         Args:
             target_agent_id: The ID of the agent to send the message to
@@ -388,8 +388,8 @@ class Agent:
             ...     wait_for_response=False
             ... )
         """
-        if not self.overlord or not hasattr(self.overlord, 'route_a2a_message'):
-            raise RuntimeError("Overlord does not support A2A messaging")
+        if not self.overlord:
+            raise RuntimeError("Agent has no overlord reference for A2A communication")
 
         # Check if we can send A2A messages
         if not getattr(self, 'a2a_internal', True):
@@ -397,15 +397,152 @@ class Agent:
                 f"Agent {self.agent_id} is not configured for A2A communication"
             )
 
-        return await self.overlord.route_a2a_message(
-            source_agent_id=self.agent_id,
+        # Generate message ID for tracking
+        import uuid
+        message_id = str(uuid.uuid4())
+
+        # First, try to find the target agent locally
+        if target_agent_id in self.overlord.agents:
+            return await self._send_local_a2a_message(
+                target_agent_id=target_agent_id,
+                message=message,
+                message_type=message_type,
+                context=context,
+                wait_for_response=wait_for_response,
+                timeout=timeout,
+                message_id=message_id
+            )
+
+        # If not local, try external communication
+        return await self._send_external_a2a_message(
             target_agent_id=target_agent_id,
             message=message,
             message_type=message_type,
             context=context,
             wait_for_response=wait_for_response,
-            timeout=timeout
+            timeout=timeout,
+            message_id=message_id
         )
+
+    async def _send_local_a2a_message(
+        self,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]],
+        wait_for_response: bool,
+        timeout: int,
+        message_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Send A2A message to a local agent directly."""
+        target_agent = self.overlord.agents[target_agent_id]
+
+        # Check if target agent accepts internal A2A
+        if not getattr(target_agent, 'a2a_internal', True):
+            raise RuntimeError(
+                f"Target agent '{target_agent_id}' is not configured for A2A communication"
+            )
+
+        # Log the A2A communication
+        logger.info(
+            f"A2A Message (local): {self.agent_id} -> {target_agent_id} "
+            f"({message_type}, id: {message_id})"
+        )
+
+        try:
+            # Send message directly to target agent with timeout
+            response = await asyncio.wait_for(
+                target_agent.handle_a2a_message(
+                    source_agent_id=self.agent_id,
+                    message=message,
+                    message_type=message_type,
+                    context=context,
+                    message_id=message_id
+                ),
+                timeout=timeout
+            )
+
+            # Return response if this was a request and caller wants to wait
+            if message_type == "request" and wait_for_response:
+                return response
+            else:
+                return None
+
+        except asyncio.TimeoutError:
+            logger.error(
+                f"Local A2A message timed out after {timeout}s: "
+                f"{self.agent_id} -> {target_agent_id}"
+            )
+            if message_type == "request" and wait_for_response:
+                return {
+                    "status": "error",
+                    "error": f"Message timed out after {timeout} seconds",
+                    "message_id": message_id
+                }
+            else:
+                raise
+        except Exception as e:
+            logger.error(f"Local A2A message failed: {e}")
+            if message_type == "request" and wait_for_response:
+                return {
+                    "status": "error",
+                    "error": f"Message failed: {str(e)}",
+                    "message_id": message_id
+                }
+            else:
+                raise
+
+    async def _send_external_a2a_message(
+        self,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]],
+        wait_for_response: bool,
+        timeout: int,
+        message_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Send A2A message to an external agent via registry client."""
+        # Get registry client from overlord
+        registry_client = getattr(self.overlord, 'external_registry_client', None)
+        if not registry_client:
+            raise RuntimeError("No external registry client available for external A2A")
+
+        # Check if this agent can send external messages
+        if not getattr(self, 'a2a_external', True):
+            raise RuntimeError(
+                f"Agent {self.agent_id} is not configured for external A2A communication"
+            )
+
+        # Log the external A2A communication
+        logger.info(
+            f"A2A Message (external): {self.agent_id} -> {target_agent_id} "
+            f"({message_type}, id: {message_id})"
+        )
+
+        try:
+            # TODO: Implement direct external communication via registry client
+            # For now, return an error since this requires registry client refactoring
+            logger.warning("External A2A communication not yet implemented in direct mode")
+            if message_type == "request" and wait_for_response:
+                return {
+                    "status": "error",
+                    "error": "External A2A communication not yet implemented",
+                    "message_id": message_id
+                }
+            else:
+                return None
+
+        except Exception as e:
+            logger.error(f"External A2A message failed: {e}")
+            if message_type == "request" and wait_for_response:
+                return {
+                    "status": "error",
+                    "error": f"External message failed: {str(e)}",
+                    "message_id": message_id
+                }
+            else:
+                raise
 
     async def handle_a2a_message(
         self,
