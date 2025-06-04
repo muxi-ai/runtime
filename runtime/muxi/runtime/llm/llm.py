@@ -757,7 +757,7 @@ class LLM:
 
             # Prepare parameters
             params = {
-                "model": self._model,
+                "model": self.model_name,  # Use full model name with provider prefix
                 "messages": messages,
                 "temperature": temperature if temperature is not None else self.temperature,
             }
@@ -799,8 +799,8 @@ class LLM:
                     logger.debug(f"Cache hit for chat request: {cache_key}")
                     return cached_response
 
-            # Call OneLLM ChatCompletion
-            response = ChatCompletion.create(**params)
+            # Call OneLLM ChatCompletion using async method
+            response = await ChatCompletion.acreate(**params)
 
             # Extract content from response
             if isinstance(response, dict) and "choices" in response:
@@ -850,8 +850,8 @@ class LLM:
                 logger.debug(f"Cache hit for embedding request: {cache_key}")
                 return cached_response
 
-            # Call OneLLM Embedding
-            response = Embedding.create(**params)
+            # Call OneLLM Embedding using async method
+            response = await Embedding.acreate(**params)
 
             # Extract embedding from response
             if isinstance(response, dict) and "data" in response:
@@ -900,8 +900,8 @@ class LLM:
                 logger.debug(f"Cache hit for batch embedding request: {cache_key}")
                 return cached_response
 
-            # Call OneLLM Embedding
-            response = Embedding.create(**params)
+            # Call OneLLM Embedding using async method
+            response = await Embedding.acreate(**params)
 
             # Extract embeddings from response
             if isinstance(response, dict) and "data" in response:
