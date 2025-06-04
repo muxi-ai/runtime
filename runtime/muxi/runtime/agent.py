@@ -45,6 +45,7 @@ import datetime
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Union
+from urllib.parse import urlparse
 
 from .mcp.message import MCPMessage
 from .mcp.service import MCPService
@@ -185,8 +186,53 @@ class Agent:
         # Process the message with the model directly
         raw_response = await self.model.chat(self._messages)
 
+        # Debug logging to see what we got
+        logger.debug(f"Raw response type: {type(raw_response)}")
+        logger.debug(f"Raw response: {str(raw_response)[:200]}...")  # Truncate for readability
+
+        # Extract the actual content string from the response
+        if isinstance(raw_response, str):
+            content = raw_response
+            logger.debug("Used string path")
+        elif hasattr(raw_response, 'choices') and raw_response.choices:
+            # Handle ChatCompletionResponse object
+            message = raw_response.choices[0].message
+            logger.debug(f"Message type: {type(message)}")
+            logger.debug(f"Message: {message}")
+            if isinstance(message, dict):
+                content = message.get('content', '')
+                logger.debug("Used ChatCompletionResponse dict path")
+            else:
+                # Handle message as object with content attribute/property
+                content = getattr(message, 'content', '')
+                logger.debug("Used ChatCompletionResponse object path")
+            logger.debug("Used ChatCompletionResponse path")
+        elif isinstance(raw_response, dict) and 'choices' in raw_response:
+            # Handle dict response format
+            content = raw_response['choices'][0]['message']['content']
+            logger.debug("Used dict path")
+        else:
+            # Try to extract content from string representation if it's embedded
+            response_str = str(raw_response)
+            if "content': '" in response_str or 'content": "' in response_str:
+                # Try to extract content from string representation
+                import re
+                pattern = r"'content': '([^']*)'|\"content\": \"([^']*)\""
+                content_match = re.search(pattern, response_str)
+                if content_match:
+                    content = content_match.group(1) or content_match.group(2)
+                    logger.debug("Extracted content from string representation")
+                else:
+                    content = response_str
+                    logger.debug("Used full string representation")
+            else:
+                content = response_str
+                logger.debug("Used fallback string conversion")
+
+        logger.debug(f"Final extracted content: {content[:100]}...")
+
         # Create response message
-        response = MCPMessage(role="assistant", content=raw_response)
+        response = MCPMessage(role="assistant", content=content)
 
         # Add response to conversation context
         self._messages.append({"role": "assistant", "content": response.content})
@@ -521,17 +567,155 @@ class Agent:
         )
 
         try:
-            # TODO: Implement direct external communication via registry client
-            # For now, return an error since this requires registry client refactoring
-            logger.warning("External A2A communication not yet implemented in direct mode")
+            # 1. Discover the target agent via registry
+            logger.debug(f"Discovering external agent: {target_agent_id}")
+            discovered_agents = await registry_client.discover_agents()
+
+            # Find the target agent across all registries
+            target_agent_url = None
+            all_matches = []  # Collect all matching agents
+
+            if isinstance(discovered_agents, dict):
+                # Multiple registries
+                for registry_url, agents in discovered_agents.items():
+                    for agent_card in agents:
+                        if ((hasattr(agent_card, 'name') and
+                             agent_card.name == target_agent_id) or
+                            (hasattr(agent_card, 'muxi_agent_id') and
+                             agent_card.muxi_agent_id == target_agent_id)):
+                            all_matches.append(agent_card)
+                            logger.debug(
+                                f"Found potential agent {target_agent_id} at {agent_card.url}"
+                            )
+            else:
+                # Single registry
+                for agent_card in discovered_agents:
+                    if ((hasattr(agent_card, 'name') and
+                         agent_card.name == target_agent_id) or
+                        (hasattr(agent_card, 'muxi_agent_id') and
+                         agent_card.muxi_agent_id == target_agent_id)):
+                        all_matches.append(agent_card)
+                        logger.debug(
+                            f"Found potential agent {target_agent_id} at {agent_card.url}"
+                        )
+
+            # Handle duplicate agent registrations by preferring specific criteria
+            if all_matches:
+                if len(all_matches) == 1:
+                    target_agent_url = all_matches[0].url
+                else:
+                    # Multiple matches found - prefer one that DOESN'T start
+                    # with our own formation's port
+                    # Get our own formation port to avoid selecting ourselves
+                    our_port = "8080"  # Default
+                    if (self.overlord and
+                            hasattr(self.overlord, 'formation_config')):
+                        formation_config = self.overlord.formation_config
+                        if formation_config:
+                            a2a_config = formation_config.get('a2a', {})
+                            server_config = a2a_config.get('server', {})
+                            our_port = str(server_config.get('port', 8080))
+
+                    # Prefer agents that are NOT on our own formation port
+                    preferred_match = None
+                    for match in all_matches:
+                        if f":{our_port}/" not in match.url:
+                            preferred_match = match
+                            break
+
+                    # If no non-local match found, take the last one (most recent registration)
+                    target_agent_url = (preferred_match or all_matches[-1]).url
+
+                    logger.info(
+                        f"Multiple agents found for {target_agent_id}, "
+                        f"selected: {target_agent_url}"
+                    )
+
+                logger.debug(f"Selected agent {target_agent_id} at {target_agent_url}")
+
+            if not target_agent_url:
+                error_msg = f"Agent {target_agent_id} not found in external registries"
+                logger.error(error_msg)
+                if message_type == "request" and wait_for_response:
+                    return {
+                        "status": "error",
+                        "error": error_msg,
+                        "message_id": message_id
+                    }
+                else:
+                    raise RuntimeError(error_msg)
+
+            # 2. Prepare A2A message payload
+            message_payload = {
+                "message": message if isinstance(message, str) else str(message),
+                "message_type": message_type,
+                "context": context or {},
+                "message_id": message_id
+            }
+
+            # 3. Send direct HTTP request to target agent
+            import httpx
+
+            # Extract base URL and construct proper endpoint
+            # The target_agent_url might be in format: http://localhost:8080/writer-agent
+            # But formation server expects: http://localhost:8080/agents/writer-agent/message
+
+            # Parse the URL to extract base and agent parts
+            parsed_url = urlparse(target_agent_url)
+
+            # Extract the base URL (protocol + netloc)
+            base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+
+            # The agent ID should be the target_agent_id, not from the URL path
+            # Formation server expects: /agents/{agent_id}/message
+            endpoint_url = f"{base_url}/agents/{target_agent_id}/message"
+
+            logger.debug(f"Sending HTTP request to: {endpoint_url}")
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.post(
+                    endpoint_url,
+                    json=message_payload,
+                    headers={"Content-Type": "application/json"}
+                )
+
+                # 4. Handle HTTP response
+                if response.status_code == 200:
+                    response_data = response.json()
+                    logger.info(
+                        f"External A2A message successful: {self.agent_id} -> {target_agent_id} "
+                        f"(status: {response_data.get('status', 'unknown')})"
+                    )
+
+                    if message_type == "request" and wait_for_response:
+                        return response_data
+                    else:
+                        return None
+
+                else:
+                    error_msg = f"HTTP {response.status_code}: {response.text}"
+                    logger.error(f"External A2A request failed: {error_msg}")
+
+                    if message_type == "request" and wait_for_response:
+                        return {
+                            "status": "error",
+                            "error": error_msg,
+                            "message_id": message_id
+                        }
+                    else:
+                        raise RuntimeError(f"External A2A request failed: {error_msg}")
+
+        except httpx.TimeoutException:
+            error_msg = f"Request timed out after {timeout} seconds"
+            logger.error(f"External A2A message timed out: {error_msg}")
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
-                    "error": "External A2A communication not yet implemented",
+                    "error": error_msg,
                     "message_id": message_id
                 }
             else:
-                return None
+                raise RuntimeError(error_msg)
 
         except Exception as e:
             logger.error(f"External A2A message failed: {e}")
@@ -633,21 +817,97 @@ class Agent:
 
         consultation_prompt = "\n".join(prompt_parts)
 
-        # Process the consultation through the agent's model
-        response = await self.process_message(consultation_prompt)
+        # Process the consultation through the agent's model directly
+        raw_response = await self.model.chat(
+            [{"role": "user", "content": consultation_prompt}]
+        )
+
+        # Debug: Log what we received
+        logger.debug(f"Consultation raw response type: {type(raw_response)}")
+        logger.debug(f"Consultation raw response: {str(raw_response)[:100]}...")
+
+        # For A2A protocol compatibility, ensure we return a clean string
+        # Handle different response formats and extract text content
+        content = None
+
+        try:
+            if isinstance(raw_response, str):
+                content = raw_response
+                logger.debug("Consultation: Used string path")
+            elif hasattr(raw_response, 'choices') and raw_response.choices:
+                # Handle ChatCompletionResponse object
+                choice = raw_response.choices[0]
+                message_obj = choice.message
+                logger.debug(f"Consultation choice type: {type(choice)}")
+                logger.debug(f"Consultation message obj type: {type(message_obj)}")
+
+                # Try multiple ways to extract content
+                if hasattr(message_obj, 'content') and message_obj.content:
+                    content = str(message_obj.content)
+                    logger.debug("Consultation: Used message.content attribute")
+                elif isinstance(message_obj, dict) and 'content' in message_obj:
+                    content = str(message_obj['content'])
+                    logger.debug("Consultation: Used message dict content")
+                elif hasattr(message_obj, 'get') and message_obj.get('content'):
+                    content = str(message_obj.get('content'))
+                    logger.debug("Consultation: Used message.get content")
+                else:
+                    # Convert the message object to string and try to extract content
+                    message_str = str(message_obj)
+                    if "'content':" in message_str:
+                        import re
+                        match = re.search(r"'content':\s*'([^']*)'", message_str)
+                        if match:
+                            content = match.group(1)
+                            logger.debug("Consultation: Extracted from string representation")
+                        else:
+                            content = f"Consultation response for topic: {topic}"
+                            logger.warning("Consultation: Failed regex extraction")
+                    else:
+                        content = f"Consultation response for topic: {topic}"
+                        logger.warning(f"Consultation: No content found in: {message_str[:200]}")
+            elif isinstance(raw_response, dict) and 'choices' in raw_response:
+                # Handle dict response format
+                try:
+                    content = str(raw_response['choices'][0]['message']['content'])
+                    logger.debug("Consultation: Used dict path")
+                except (KeyError, IndexError) as e:
+                    logger.error(f"Consultation: Error extracting from dict: {e}")
+                    content = f"Consultation response for topic: {topic}"
+            else:
+                # Unknown format
+                content = f"Consultation response for topic: {topic}"
+                logger.warning(f"Consultation: Unknown response format: {type(raw_response)}")
+
+        except Exception as e:
+            logger.error(f"Consultation: Content extraction error: {e}")
+            content = f"Consultation response for topic: {topic}"
+
+        # Ensure content is a valid string
+        if not content or not isinstance(content, str):
+            content = f"Consultation response for topic: {topic}"
+            logger.warning("Consultation: Used fallback content due to extraction failure")
+
+        if not content.strip():
+            content = f"Consultation response for topic: {topic}"
+            logger.warning("Consultation: Used fallback content due to empty result")
+
+        logger.debug(f"Consultation final content: {content[:100]}...")
 
         logger.info(
             f"Agent {self.agent_id} provided consultation to {source_agent_id} "
             f"on topic: {topic}"
         )
 
-        return {
+        response_dict = {
             "status": "success",
-            "response": response.content,
+            "response": content,  # Clean string for A2A protocol compatibility
             "consultation_topic": topic,
             "expert_agent": self.agent_id,
             "message_id": message_id
         }
+
+        return response_dict
 
     async def _handle_information_sharing(
         self,

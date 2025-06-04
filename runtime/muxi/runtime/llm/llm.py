@@ -805,9 +805,31 @@ class LLM:
             # Extract content from response
             if isinstance(response, dict) and "choices" in response:
                 content = response["choices"][0]["message"]["content"] or ""
-            else:
+            elif hasattr(response, 'choices') and response.choices:
+                # Handle ChatCompletionResponse object
+                message = response.choices[0].message
+                if hasattr(message, 'content'):
+                    content = message.content or ""
+                elif isinstance(message, dict):
+                    content = message.get('content', '')
+                else:
+                    content = str(message)
+            elif isinstance(response, str):
                 # If it's already a string, return it
-                content = str(response)
+                content = response
+            else:
+                # Fallback: try to extract content from string representation
+                response_str = str(response)
+                if "content" in response_str:
+                    # Try to extract content using regex
+                    import re
+                    match = re.search(r"'content':\s*'([^']*)'", response_str)
+                    if match:
+                        content = match.group(1)
+                    else:
+                        content = "Error: Could not extract content from response"
+                else:
+                    content = "Error: No content found in response"
 
             # Cache the response only if no files were involved
             if not files:

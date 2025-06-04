@@ -185,37 +185,57 @@ class AgentCard:
 
         # Parse capabilities
         capabilities = {}
-        if "capabilities" in data:
+        if "capabilities" in data and data["capabilities"]:
             for cap_name, cap_data in data["capabilities"].items():
-                capabilities[cap_name] = A2ACapability(
-                    name=cap_data["name"],
-                    description=cap_data.get("description"),
-                    enabled=cap_data.get("enabled", True),
-                    metadata=cap_data.get("metadata", {})
-                )
+                # Skip if cap_data is None or not a dict
+                if not cap_data or not isinstance(cap_data, dict):
+                    continue
+
+                try:
+                    capabilities[cap_name] = A2ACapability(
+                        name=cap_data.get("name", cap_name),  # fallback to cap_name
+                        description=cap_data.get("description"),
+                        enabled=cap_data.get("enabled", True),
+                        metadata=cap_data.get("metadata", {})
+                    )
+                except Exception:
+                    # Skip malformed capabilities
+                    continue
 
         # Parse authentication
         authentication = None
-        if "authentication" in data:
+        if "authentication" in data and data["authentication"]:
             auth_data = data["authentication"]
-            authentication = A2AAuthentication(
-                type=AuthType(auth_data["type"]),
-                description=auth_data.get("description"),
-                required=auth_data.get("required", False)
-            )
+            try:
+                authentication = A2AAuthentication(
+                    type=AuthType(auth_data["type"]),
+                    description=auth_data.get("description"),
+                    required=auth_data.get("required", False)
+                )
+            except Exception:
+                # Skip malformed authentication
+                pass
 
         # Parse endpoints
         endpoints = {}
-        if "endpoints" in data:
+        if "endpoints" in data and data["endpoints"]:
             for ep_name, ep_data in data["endpoints"].items():
-                endpoints[ep_name] = A2AEndpoint(
-                    url=ep_data["url"],
-                    methods=ep_data.get("methods", ["POST"]),
-                    description=ep_data.get("description")
-                )
+                # Skip if ep_data is None or not a dict
+                if not ep_data or not isinstance(ep_data, dict):
+                    continue
+
+                try:
+                    endpoints[ep_name] = A2AEndpoint(
+                        url=ep_data["url"],
+                        methods=ep_data.get("methods", ["POST"]),
+                        description=ep_data.get("description")
+                    )
+                except Exception:
+                    # Skip malformed endpoints
+                    continue
 
         # Parse MUXI extensions
-        muxi_ext = data.get("muxiExtensions", {})
+        muxi_ext = data.get("muxiExtensions", {}) or {}
 
         return cls(
             name=name,
@@ -226,7 +246,7 @@ class AgentCard:
             capabilities=capabilities,
             authentication=authentication,
             endpoints=endpoints,
-            metadata=data.get("metadata", {}),
+            metadata=data.get("metadata", {}) or {},
             muxi_agent_id=muxi_ext.get("agentId"),
             muxi_formation=muxi_ext.get("formation"),
             created_at=muxi_ext.get("createdAt"),

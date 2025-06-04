@@ -235,9 +235,13 @@ class A2AFormationServer:
 
             # Return successful response
             if response:
+                # Extract the actual response content from the agent's response
+                response_content = (
+                    response.get("response") if isinstance(response, dict) else str(response)
+                )
                 return {
                     "status": "success",
-                    "response": response,
+                    "response": response_content,  # Extract the actual content string
                     "agent_id": agent_id,
                     "message_id": message_id
                 }

@@ -173,10 +173,13 @@ class Overlord:
         # Initialize A2A Formation Server (will be set up based on config)
         self.formation_server: Optional[A2AFormationServer] = None
 
-        # Initialize external registry from formation config if provided
+        # Initialize external registries if configured in formation
         self._initialize_external_registry_client()
 
-        # Initialize A2A Formation Server if enabled
+        # Initialize agent tracking for delayed external registration
+        self.pending_external_registrations = set()
+
+        # Initialize the A2A Formation Server
         self._initialize_formation_server()
 
         # Determine if we're in multi-user mode based on memory type
@@ -356,11 +359,9 @@ class Overlord:
             a2a_external=a2a_external,
         )
 
-        # Store the agent
+        # Add agent to overlord
         self.agents[agent_id] = agent
-
-        # Store description for routing
-        self.agent_descriptions[agent_id] = description or system_message or ""
+        self.agent_descriptions[agent_id] = description or system_message or f"Agent {agent_id}"
 
         # Set as default if requested or if it's the first agent
         if set_as_default or len(self.agents) == 1:
@@ -368,19 +369,20 @@ class Overlord:
 
         logger.info(f"Created agent with ID '{agent_id}'")
 
-        # Auto-register with external registries if enabled
-        if a2a_external and self.external_registry_client:
-            # Check formation config for server.enabled
-            server_enabled = True  # Default to True
-            if self.formation_config:
-                a2a_config = self.formation_config.get('a2a', {})
-                server_config = a2a_config.get('server', {})
-                server_enabled = server_config.get('enabled', True)
+        # Track agents that need external registration (but don't register yet)
+        a2a_config = self.formation_config.get('a2a', {}) if self.formation_config else {}
+        server_config = a2a_config.get('server', {})
+        server_enabled = server_config.get('enabled', False)
 
-            if server_enabled:
-                # Register asynchronously without blocking agent creation
-                asyncio.create_task(self.register_agent_with_external_registry(agent_id))
-                logger.info(f"Scheduling external registry registration for agent '{agent_id}'")
+        if server_enabled and a2a_external:
+            # Store for later registration after formation server starts
+            if not hasattr(self, 'pending_external_registrations'):
+                self.pending_external_registrations = set()
+            self.pending_external_registrations.add(agent_id)
+            logger.info(
+                f"Agent '{agent_id}' queued for external registration "
+                f"after formation server starts"
+            )
 
         return agent
 
@@ -2110,11 +2112,21 @@ Available agents:
                 self.agent_descriptions.get(agent_id) or agent.system_message or f"Agent {agent_id}"
             )
 
+            # Get the formation server port - use ACTUAL running port, not configured port
+            formation_port = 8080  # Default fallback
+            if self.formation_server and self.formation_server.is_running:
+                # Use the actual port the formation server is running on
+                formation_port = self.formation_server.port
+            elif self.formation_config:
+                a2a_config = self.formation_config.get('a2a', {})
+                server_config = a2a_config.get('server', {})
+                formation_port = server_config.get('port', 8080)
+
             agent_card = AgentCard(
                 name=agent_id,
                 description=agent_description,
                 version="1.0.0",
-                url=f"http://localhost:8080/{agent_id}",  # TODO: Make configurable
+                url=f"http://localhost:{formation_port}/{agent_id}",
                 muxi_agent_id=agent_id,
                 muxi_formation=(
                     self.formation_config.get('name', 'unknown')
@@ -2178,8 +2190,15 @@ Available agents:
             return False
 
         try:
+            # Get the formation server port from formation config
+            formation_port = 8080  # Default fallback
+            if self.formation_config:
+                a2a_config = self.formation_config.get('a2a', {})
+                server_config = a2a_config.get('server', {})
+                formation_port = server_config.get('port', 8080)
+
             responses = await self.external_registry_client.deregister_agent(
-                f"http://localhost:8080/{agent_id}"  # TODO: Make configurable
+                f"http://localhost:{formation_port}/{agent_id}"
             )
             success_count = sum(1 for resp in responses.values() if resp.success)
 
@@ -2463,6 +2482,38 @@ Available agents:
         try:
             result = await self.formation_server.start()
             logger.info(f"A2A Formation Server started: {result}")
+
+            # Now that the formation server is running, register all pending agents
+            if (hasattr(self, 'pending_external_registrations') and
+                    self.pending_external_registrations):
+                pending_agents = list(self.pending_external_registrations)
+                logger.info(
+                    f"Registering {len(pending_agents)} pending agents "
+                    f"with external registries: {pending_agents}"
+                )
+
+                registration_results = []
+                for agent_id in pending_agents:
+                    try:
+                        success = await self.register_agent_with_external_registry(agent_id)
+                        registration_results.append((agent_id, success))
+                        if success:
+                            # Remove from pending list on successful registration
+                            self.pending_external_registrations.discard(agent_id)
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to register pending agent {agent_id}: {e}"
+                        )
+                        registration_results.append((agent_id, False))
+
+                successful_registrations = [
+                    agent_id for agent_id, success in registration_results if success
+                ]
+                logger.info(
+                    f"Successfully registered {len(successful_registrations)} "
+                    f"agents: {successful_registrations}"
+                )
+
             return result
         except Exception as e:
             logger.error(f"Failed to start A2A Formation Server: {e}")
