@@ -40,7 +40,7 @@ from sqlalchemy import Column, DateTime, String, Text, create_engine, desc, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
-from ..config import config
+# Note: No longer importing global config - values passed as parameters
 from ..utils.id_generator import get_default_nanoid
 from ..llm import LLM
 
@@ -59,7 +59,7 @@ class Memory(Base):
     __tablename__ = "memories"
 
     id = Column(String(21), primary_key=True, default=get_default_nanoid)
-    embedding = Column(Vector(config.memory.vector_dimension))
+    embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
     meta_data = Column(JSONB, nullable=False, default={})
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -97,7 +97,7 @@ class LongTermMemory:
     def __init__(
         self,
         connection_string: Optional[str] = None,
-        dimension: int = config.memory.vector_dimension,
+        dimension: int = 1536,  # Default dimension for OpenAI embeddings
         default_collection: str = "default",
         embedding_provider: Optional[LLM] = None,
     ):
@@ -113,7 +113,9 @@ class LongTermMemory:
         """
         self.dimension = dimension
         self.default_collection = default_collection
-        self.connection_string = connection_string or config.database.connection_string
+        self.connection_string = connection_string
+        if not self.connection_string:
+            raise ValueError("connection_string is required for LongTermMemory")
         self.embedding_provider = embedding_provider
 
         # Create engine and session
