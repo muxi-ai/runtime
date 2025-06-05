@@ -43,6 +43,7 @@
 from .app import AppConfig
 from .database import DatabaseConfig
 from .loader import ConfigLoader
+from .formation_loader import FormationLoader
 from .logging import LoggingConfig
 from .memory import MemoryConfig
 from .model import ModelConfig
@@ -53,6 +54,7 @@ __all__ = [
     "AppConfig",
     "ConfigLoader",
     "DatabaseConfig",
+    "FormationLoader",
     "LoggingConfig",
     "MemoryConfig",
     "ModelConfig",
