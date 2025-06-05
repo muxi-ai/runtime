@@ -6,6 +6,7 @@ version: "1.0.0"
 agents:
   - id: "writer-agent"
     model: "openai/gpt-4o-mini"
+    api_key: "${{ secrets.OPENAI_API_KEY }}"
     system_message: "You are a professional writing specialist agent that excels at creating high-quality content, articles, reports, and documentation. You can work with research provided by other agents to create comprehensive written materials."
     description: "Specialized in content creation, writing, and documentation with collaboration capabilities"
     a2a_external: true
@@ -31,6 +32,3 @@ memory:
   buffer_size: 20
   long_term: "sqlite:///formation_b.db"
 
-# Environment
-environment:
-  OPENAI_API_KEY: "${OPENAI_API_KEY}"

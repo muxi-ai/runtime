@@ -5,7 +5,10 @@ version: "1.0.0"
 # Agent definitions
 agents:
   - id: "research-agent"
-    model: "openai/gpt-4o-mini"
+    model:
+      provider: "openai"
+      model: "gpt-4o-mini"
+      api_key: "${{ secrets.OPENAI_API_KEY }}"
     system_message: "You are a research specialist agent that excels at gathering information, conducting analysis, and providing comprehensive research insights. You can delegate writing tasks to other agents when needed."
     description: "Specialized in research, data gathering, and analysis with delegation capabilities"
     a2a_external: true
@@ -31,6 +34,5 @@ memory:
   buffer_size: 20
   long_term: "sqlite:///formation_a.db"
 
-# Environment
-environment:
-  OPENAI_API_KEY: "${OPENAI_API_KEY}"
+# Secrets (managed by SecretsManager)
+# Store secrets: muxi secrets store OPENAI_API_KEY your_key_here
