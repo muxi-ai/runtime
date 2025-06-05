@@ -1,28 +1,27 @@
 #!/usr/bin/env python3
 """
-Demonstration of FormationLoader integration with Overlord and validation tools.
+Demo script showing FormationLoader integration with Overlord.
 
-This script shows how to:
-1. Validate formation configurations
-2. Load formations into Overlord
-3. Use the integrated validation and loading features
-
-Usage:
-    python demo_formation_integration.py
+This script demonstrates:
+1. Formation validation using both direct FormationValidator and through Overlord
+2. Formation loading with automatic agent and MCP server creation (mocked)
+3. Integration between all components with proper logging
 """
 
 import asyncio
-import tempfile
 import os
+import sys
+import tempfile
 import yaml
 from pathlib import Path
 
-# Add the runtime to the path for imports
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Add runtime to Python path
+current_dir = Path(__file__).parent.absolute()
+runtime_dir = current_dir.parent
+sys.path.insert(0, str(runtime_dir))
 
-from runtime.muxi.runtime.overlord import Overlord
-from runtime.muxi.runtime.config.validation import validate_formation
+from runtime.muxi.runtime.overlord import Overlord  # noqa: E402
+from runtime.muxi.runtime.config.validation import validate_formation  # noqa: E402
 
 
 def create_sample_formation():

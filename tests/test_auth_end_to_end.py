@@ -9,13 +9,14 @@ import os
 import sys
 
 # Add path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'runtime'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "runtime"))
 
-from muxi.runtime.a2a.auth import A2AAuthManager, AuthType
+from runtime.muxi.runtime.a2a.auth import A2AAuthManager, AuthType  # noqa: E402
 
 # Set up logging to see what's happening
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
+
 
 def simulate_registry_with_auth_agents():
     """Simulate registry response with agents requiring different auth types"""
@@ -42,6 +43,7 @@ def simulate_registry_with_auth_agents():
 
     return [hmac_agent, jwt_agent]
 
+
 async def test_hmac_message_auth():
     """Test HMAC authentication in message context"""
     print("\n🔐 Testing HMAC in A2A message context...")
@@ -50,9 +52,7 @@ async def test_hmac_message_auth():
 
     # Add HMAC credentials for secure-processor
     auth_manager.add_credentials(
-        'secure-processor',
-        AuthType.HMAC,
-        {'secret': 'secure-message-secret-456'}
+        "secure-processor", AuthType.HMAC, {"secret": "secure-message-secret-456"}
     )
 
     # Simulate the message that would be sent
@@ -60,7 +60,7 @@ async def test_hmac_message_auth():
         "message": "Process this document securely",
         "message_type": "request",
         "context": {"document_id": "doc-123", "priority": "high"},
-        "message_id": "msg-abc-123"
+        "message_id": "msg-abc-123",
     }
 
     # This is what agent.py would do for HMAC auth
@@ -69,7 +69,7 @@ async def test_hmac_message_auth():
     payload_json = json.dumps(message_payload)
 
     success, auth_headers = await auth_manager.apply_authentication_with_context(
-        'secure-processor', AuthType.HMAC, headers, target_url, "POST", payload_json, True
+        "secure-processor", AuthType.HMAC, headers, target_url, "POST", payload_json, True
     )
 
     print(f"✓ HMAC auth prepared: {success}")
@@ -77,9 +77,10 @@ async def test_hmac_message_auth():
         print(f"  Target URL: {target_url}")
         print(f"  X-Signature: {auth_headers.get('X-Signature', 'N/A')}")
         print(f"  X-Timestamp: {auth_headers.get('X-Timestamp', 'N/A')}")
-        print(f"  Message would be sent with HMAC signature")
+        print("  Message would be sent with HMAC signature")
 
     return success
+
 
 async def test_jwt_message_auth():
     """Test JWT authentication in message context"""
@@ -89,22 +90,22 @@ async def test_jwt_message_auth():
 
     # Add JWT credentials for auth-service
     auth_manager.add_credentials(
-        'auth-service',
+        "auth-service",
         AuthType.JWT,
         {
-            'private_key': 'jwt-signing-key-789',
-            'algorithm': 'HS256',
-            'issuer': 'muxi-agent-network',
-            'audience': 'auth-service'
-        }
+            "private_key": "jwt-signing-key-789",
+            "algorithm": "HS256",
+            "issuer": "muxi-agent-network",
+            "audience": "auth-service",
+        },
     )
 
     # Simulate the message that would be sent
-    message_payload = {
+    message_payload = {  # noqa: F841
         "message": "Authenticate user session",
         "message_type": "request",
         "context": {"user_id": "user-456", "session_id": "sess-789"},
-        "message_id": "msg-xyz-789"
+        "message_id": "msg-xyz-789",
     }
 
     # This is what agent.py would do for JWT auth
@@ -112,28 +113,30 @@ async def test_jwt_message_auth():
     target_url = "http://localhost:8080/agents/auth-service/message"
 
     success, auth_headers = await auth_manager.apply_authentication_with_context(
-        'auth-service', AuthType.JWT, headers, target_url, "POST", required=True
+        "auth-service", AuthType.JWT, headers, target_url, "POST", required=True
     )
 
     print(f"✓ JWT auth prepared: {success}")
     if success:
         print(f"  Target URL: {target_url}")
-        auth_header = auth_headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
+        auth_header = auth_headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
             token = auth_header[7:]  # Remove 'Bearer '
             print(f"  JWT Token: {token[:30]}...")
 
             # Decode and show JWT claims (for verification)
             try:
                 import jwt
+
                 decoded = jwt.decode(token, options={"verify_signature": False})
                 print(f"  JWT Claims: {decoded}")
             except Exception as e:
                 print(f"  JWT decode preview failed: {e}")
 
-        print(f"  Message would be sent with JWT token")
+        print("  Message would be sent with JWT token")
 
     return success
+
 
 async def test_authentication_discovery():
     """Test authentication discovery from registry"""
@@ -157,6 +160,7 @@ async def test_authentication_discovery():
     print("✓ Authentication discovery working")
     return True
 
+
 async def main():
     """Run all end-to-end tests"""
     print("A2A Authentication End-to-End Test")
@@ -166,7 +170,7 @@ async def main():
     hmac_success = await test_hmac_message_auth()
     jwt_success = await test_jwt_message_auth()
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Test Results:")
     print(f"Discovery:    {'✓ PASS' if discovery_success else '✗ FAIL'}")
     print(f"HMAC E2E:     {'✓ PASS' if hmac_success else '✗ FAIL'}")
@@ -177,6 +181,7 @@ async def main():
         print("✓ Ready for production A2A secure communication")
     else:
         print("\n❌ Some authentication flows need fixes")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 
 from runtime.muxi.runtime.overlord import Overlord
-from runtime.muxi.runtime.secrets import SecretsManager
+from runtime.muxi.runtime.secrets import SecretsManager  # noqa: F401
 
 
 async def test_overlord_secrets_integration():
@@ -37,12 +37,12 @@ async def test_overlord_secrets_integration():
         # Test 3: List secrets
         secrets_list = await overlord.list_secrets()
         expected_secrets = {"OPENAI_API_KEY", "WEATHER_API_KEY", "SEARCH_API_KEY"}
-        assert set(secrets_list) == expected_secrets, f"Expected {expected_secrets}, got {set(secrets_list)}"
+        assert set(secrets_list) == expected_secrets, f"Expected {expected_secrets}, got {set(secrets_list)}"  # noqa: E501
         print("✅ Secrets listing successful")
 
         # Test 4: Test create_model with secrets interpolation
         try:
-            model = await overlord.create_model(
+            model = await overlord.create_model(  # noqa: F841
                 model="openai/gpt-4o",
                 api_key="${{ secrets.OPENAI_API_KEY }}",
                 temperature=0.7

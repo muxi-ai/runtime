@@ -61,7 +61,7 @@ async def test_config_loader_secrets():
 
         print("✅ Config loaded and processed successfully")
 
-                        # Verify secrets were interpolated
+        # Verify secrets were interpolated
         assert processed_config["model"]["api_key"] == "sk-test123456789", \
             f"Expected 'sk-test123456789', got '{processed_config['model']['api_key']}'"
 

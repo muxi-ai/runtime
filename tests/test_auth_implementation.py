@@ -7,9 +7,10 @@ import os
 import asyncio
 
 # Add path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'runtime'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "runtime"))
 
-from muxi.runtime.a2a.auth import A2AAuthManager, AuthType
+from runtime.muxi.runtime.a2a.auth import A2AAuthManager, AuthType  # noqa: E402
+
 
 async def test_hmac_auth():
     """Test HMAC authentication"""
@@ -18,20 +19,24 @@ async def test_hmac_auth():
     auth_manager = A2AAuthManager()
 
     # Add HMAC credentials
-    auth_manager.add_credentials('test-agent', AuthType.HMAC, {'secret': 'test-secret'})
+    auth_manager.add_credentials("test-agent", AuthType.HMAC, {"secret": "test-secret"})
     print("✓ HMAC credentials added")
 
     # Test HMAC authentication
-    headers = {'Content-Type': 'application/json'}
+    headers = {"Content-Type": "application/json"}
     success, result_headers = await auth_manager.apply_authentication_with_context(
-        'test-agent', AuthType.HMAC, headers,
-        'http://test.com/endpoint', 'POST',
-        '{"test": "data"}', True
+        "test-agent",
+        AuthType.HMAC,
+        headers,
+        "http://test.com/endpoint",
+        "POST",
+        '{"test": "data"}',
+        True,
     )
 
     print(f"HMAC Auth Success: {success}")
     if success:
-        hmac_headers = {k: v for k, v in result_headers.items() if k.startswith('X-')}
+        hmac_headers = {k: v for k, v in result_headers.items() if k.startswith("X-")}
         for key, value in hmac_headers.items():
             print(f"  {key}: {value}")
         print("✓ HMAC authentication working")
@@ -40,6 +45,7 @@ async def test_hmac_auth():
 
     return success
 
+
 async def test_jwt_auth():
     """Test JWT authentication"""
     print("\nTesting JWT authentication...")
@@ -47,27 +53,30 @@ async def test_jwt_auth():
     auth_manager = A2AAuthManager()
 
     try:
-        import jwt as jwt_lib
+        import jwt as jwt_lib  # noqa: F401
+
         print("✓ JWT library available")
 
         # Test with a simple symmetric key first
-        auth_manager.add_credentials('jwt-agent', AuthType.JWT, {
-            'private_key': 'test-symmetric-secret',
-            'algorithm': 'HS256'  # Use symmetric for simple test
-        })
+        auth_manager.add_credentials(
+            "jwt-agent",
+            AuthType.JWT,
+            {
+                "private_key": "test-symmetric-secret",
+                "algorithm": "HS256",  # Use symmetric for simple test
+            },
+        )
         print("✓ JWT credentials added")
 
         # Test JWT authentication
-        headers = {'Content-Type': 'application/json'}
+        headers = {"Content-Type": "application/json"}
         success, result_headers = await auth_manager.apply_authentication_with_context(
-            'jwt-agent', AuthType.JWT, headers,
-            'http://test.com/endpoint', 'POST',
-            required=True
+            "jwt-agent", AuthType.JWT, headers, "http://test.com/endpoint", "POST", required=True
         )
 
         print(f"JWT Auth Success: {success}")
-        if success and 'Authorization' in result_headers:
-            auth_header = result_headers['Authorization']
+        if success and "Authorization" in result_headers:
+            auth_header = result_headers["Authorization"]
             print(f"  Authorization: {auth_header[:50]}...")
             print("✓ JWT authentication working")
             return True
@@ -78,6 +87,7 @@ async def test_jwt_auth():
     except ImportError:
         print("✗ JWT library not available - install PyJWT")
         return False
+
 
 async def main():
     """Run all tests"""
@@ -97,6 +107,7 @@ async def main():
         print("\n✓ HMAC implemented, JWT needs dependencies")
     else:
         print("\n❌ Some implementations need fixes")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

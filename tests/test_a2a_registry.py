@@ -5,11 +5,11 @@ Tests A2A registry interactions using the modular formation template.
 Demonstrates external registry communication and service discovery.
 """
 
-import pytest
 from pathlib import Path
+import pytest
 
-from muxi.runtime.config.formation_loader import FormationLoader
-from muxi.runtime.secrets import SecretsManager
+from runtime.muxi.runtime.config.formation_loader import FormationLoader  # noqa: F401
+from runtime.muxi.runtime.secrets import SecretsManager  # noqa: F401
 
 
 class TestA2ARegistry:

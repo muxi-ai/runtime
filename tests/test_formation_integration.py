@@ -147,7 +147,7 @@ class TestFormationIntegration:
         validation_result = await overlord.validate_formation("/nonexistent/path")
 
         assert not validation_result['is_valid']
-                assert len(validation_result['errors']) > 0
+        assert len(validation_result['errors']) > 0
 
     @pytest.mark.asyncio
     @patch('runtime.muxi.runtime.overlord.Overlord.create_model')
@@ -183,8 +183,8 @@ class TestFormationIntegration:
         overlord = Overlord()
 
         # Mock the agent creation to avoid actual LLM calls
-        with patch.object(overlord, 'create_agent') as mock_create_agent, \
-             patch.object(overlord, 'register_mcp_server') as mock_register_mcp:
+        with patch.object(overlord, 'create_agent'), \
+             patch.object(overlord, 'register_mcp_server'):
 
             formation_config = await overlord.load_formation_from_path(temp_modular_formation)
 
