@@ -1,0 +1,22 @@
+# Test Agent Configuration
+schema: "1.0.0"
+id: "test-agent"
+name: "Test Agent"
+description: "Test agent for A2A operations and communication"
+
+# System message
+system_message: |
+  You are a test agent designed to validate A2A communication functionality.
+  You can perform basic operations and respond to messages from other agents.
+
+# A2A configuration
+a2a:
+  internal: true
+  external: true
+
+# Model override for testing
+models:
+  - text: "openai/gpt-4o-mini"
+    settings:
+      temperature: 0.2
+      max_tokens: 500
