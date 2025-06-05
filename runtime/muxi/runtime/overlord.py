@@ -173,20 +173,25 @@ class Overlord:
         # Track message counts per user for extraction
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
 
-        # Initialize external registry client (will be set up later)
-        self.external_registry_client: Optional[A2ARegistryClient] = None
+        # Initialize external registry clients (will be set up later)
+        self.external_registry_client: Optional[A2ARegistryClient] = None  # For discovery (outbound)
+        self.inbound_registry_client: Optional[A2ARegistryClient] = None   # For registration (inbound)
 
         # Initialize A2A Formation Server (will be set up based on config)
         self.formation_server: Optional[A2AFormationServer] = None
 
         # Initialize external registries if configured in formation
+        # Initialize external registry clients for inbound/outbound
         self._initialize_external_registry_client()
+        self._initialize_inbound_registry_client()
 
         # Initialize agent tracking for delayed external registration
         self.pending_external_registrations = set()
 
-        # Initialize the A2A Formation Server
+                # Initialize the A2A Formation Server
         self._initialize_formation_server()
+
+        # Note: Outbound services will be initialized asynchronously when needed
 
         # Determine if we're in multi-user mode based on memory type
         self.is_multi_user = False
@@ -393,10 +398,10 @@ class Overlord:
 
         # Track agents that need external registration (but don't register yet)
         a2a_config = self.formation_config.get('a2a', {}) if self.formation_config else {}
-        server_config = a2a_config.get('server', {})
-        server_enabled = server_config.get('enabled', False)
+        inbound_config = a2a_config.get('inbound', {})
+        inbound_enabled = inbound_config.get('enabled', False)
 
-        if server_enabled and a2a_external:
+        if inbound_enabled and a2a_external:
             # Store for later registration after formation server starts
             if not hasattr(self, 'pending_external_registrations'):
                 self.pending_external_registrations = set()
@@ -2167,7 +2172,7 @@ Available agents:
         """
         Initialize external registry client from formation configuration.
 
-        This method reads the a2a.registries configuration from the formation
+        This method reads the a2a.outbound.registries configuration from the formation
         and creates an A2ARegistryClient if external registries are configured.
         """
         if not self.formation_config:
@@ -2176,17 +2181,25 @@ Available agents:
 
         # Get A2A configuration from formation
         a2a_config = self.formation_config.get('a2a', {})
-        registries = a2a_config.get('registries', [])
 
-        if not registries:
-            logger.debug("No external registries configured in formation")
+        # Check if A2A is globally enabled
+        a2a_enabled = a2a_config.get('enabled', True)
+        if a2a_enabled is False:
+            logger.info("A2A communication is globally disabled in formation config")
             return
 
-        # Check if external registry is enabled
-        server_config = a2a_config.get('server', {})
-        server_enabled = server_config.get('enabled', False)
-        if not server_enabled:
-            logger.info("External A2A communication is disabled in formation config")
+        outbound_config = a2a_config.get('outbound', {})
+
+        # Check if outbound is enabled
+        outbound_enabled = outbound_config.get('enabled', True)
+        if not outbound_enabled:
+            logger.info("A2A outbound communication is disabled in formation config")
+            return
+
+        registries = outbound_config.get('registries', [])
+
+        if not registries:
+            logger.debug("No outbound registries configured in formation")
             return
 
         try:
@@ -2194,7 +2207,7 @@ Available agents:
             self.external_registry_client = A2ARegistryClient(registries=registries)
             logger.info(
                 f"Initialized external registry client with {len(registries)} "
-                f"registries: {registries}"
+                f"outbound registries: {registries}"
             )
         except Exception as e:
             logger.error(f"Failed to initialize external registry client: {e}")
@@ -2224,6 +2237,50 @@ Available agents:
         except Exception as e:
             logger.error(f"Error during external registry health check: {e}")
 
+    def _initialize_inbound_registry_client(self):
+        """
+        Initialize inbound registry client from formation configuration.
+
+        This method reads the a2a.inbound.registries configuration from the formation
+        and creates an A2ARegistryClient for registering our agents.
+        """
+        if not self.formation_config:
+            logger.debug("No formation config provided, skipping inbound registry init")
+            return
+
+        # Get A2A configuration from formation
+        a2a_config = self.formation_config.get('a2a', {})
+
+        # Check if A2A is globally enabled
+        a2a_enabled = a2a_config.get('enabled', True)
+        if a2a_enabled is False:
+            logger.info("A2A communication is globally disabled in formation config")
+            return
+
+        inbound_config = a2a_config.get('inbound', {})
+
+        # Check if inbound is enabled
+        inbound_enabled = inbound_config.get('enabled', False)
+        if not inbound_enabled:
+            logger.info("A2A inbound communication is disabled in formation config")
+            return
+
+        registries = inbound_config.get('registries', [])
+
+        if not registries:
+            logger.debug("No inbound registries configured in formation")
+            return
+
+        try:
+            self.inbound_registry_client = A2ARegistryClient(registries)
+            logger.info(
+                f"Initialized inbound registry client with {len(registries)} "
+                f"inbound registries: {registries}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to initialize inbound registry client: {e}")
+            self.inbound_registry_client = None
+
     async def register_agent_with_external_registry(self, agent_id: str) -> bool:
         """
         Register an agent with all configured external registries.
@@ -2234,8 +2291,8 @@ Available agents:
         Returns:
             True if registration was successful on at least one registry
         """
-        if not self.external_registry_client:
-            logger.debug("No external registry client configured")
+        if not self.inbound_registry_client:
+            logger.debug("No inbound registry client configured")
             return False
 
         if agent_id not in self.agents:
@@ -2249,11 +2306,18 @@ Available agents:
             logger.debug(f"Agent {agent_id} is not configured for external A2A")
             return False
 
-        # Check formation-level external permission
+        # Check formation-level A2A configuration
         a2a_config = self.formation_config.get('a2a', {})
-        server_config = a2a_config.get('server', {})
-        if not server_config.get('enabled', False):
-            logger.debug("External A2A is disabled in formation config")
+
+        # Check if A2A is globally enabled
+        a2a_enabled = a2a_config.get('enabled', True)
+        if a2a_enabled is False:
+            logger.debug("A2A communication is globally disabled in formation config")
+            return False
+
+        inbound_config = a2a_config.get('inbound', {})
+        if not inbound_config.get('enabled', False):
+            logger.debug("A2A inbound communication is disabled in formation config")
             return False
 
         try:
@@ -2269,8 +2333,8 @@ Available agents:
                 formation_port = self.formation_server.port
             elif self.formation_config:
                 a2a_config = self.formation_config.get('a2a', {})
-                server_config = a2a_config.get('server', {})
-                formation_port = server_config.get('port', 8080)
+                inbound_config = a2a_config.get('inbound', {})
+                formation_port = inbound_config.get('port', 8080)
 
             agent_card = AgentCard(
                 name=agent_id,
@@ -2300,8 +2364,8 @@ Available agents:
                 required=False
             )
 
-            # Register with all external registries
-            responses = await self.external_registry_client.register_agent(
+            # Register with all inbound registries
+            responses = await self.inbound_registry_client.register_agent(
                 agent_card
             )
 
@@ -2336,7 +2400,7 @@ Available agents:
         Returns:
             True if deregistration was successful on at least one registry
         """
-        if not self.external_registry_client:
+        if not self.inbound_registry_client:
             return False
 
         try:
@@ -2344,10 +2408,10 @@ Available agents:
             formation_port = 8080  # Default fallback
             if self.formation_config:
                 a2a_config = self.formation_config.get('a2a', {})
-                server_config = a2a_config.get('server', {})
-                formation_port = server_config.get('port', 8080)
+                inbound_config = a2a_config.get('inbound', {})
+                formation_port = inbound_config.get('port', 8080)
 
-            responses = await self.external_registry_client.deregister_agent(
+            responses = await self.inbound_registry_client.deregister_agent(
                 f"http://localhost:{formation_port}/{agent_id}"
             )
             success_count = sum(1 for resp in responses.values() if resp.success)
@@ -2394,22 +2458,10 @@ Available agents:
             responses = await self.external_registry_client.discover_agents()
 
             all_agents = []
-            for registry_url, response in responses.items():
-                if response.success and response.data:
-                    agents = response.data.get('agents', [])
-                    # Convert dicts to AgentCard objects if needed
-                    for agent_data in agents:
-                        if isinstance(agent_data, dict):
-                            try:
-                                agent_card = AgentCard(**agent_data)
-                                all_agents.append(agent_card)
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to parse agent card from "
-                                    f"{registry_url}: {e}"
-                                )
-                        else:
-                            all_agents.append(agent_data)
+            for registry_url, agent_cards in responses.items():
+                # agent_cards is already a List[AgentCard] from the registry client
+                for agent_card in agent_cards:
+                    all_agents.append(agent_card)
 
             # Filter by capability if specified
             if capability:
@@ -2585,19 +2637,26 @@ Available agents:
 
         # Get A2A configuration from formation
         a2a_config = self.formation_config.get('a2a', {})
-        server_config = a2a_config.get('server', {})
-        server_enabled = server_config.get('enabled', False)
 
-        if not server_enabled:
+        # Check if A2A is globally enabled
+        a2a_enabled = a2a_config.get('enabled', True)
+        if a2a_enabled is False:
+            logger.info("A2A communication is globally disabled in formation config")
+            return
+
+        inbound_config = a2a_config.get('inbound', {})
+        inbound_enabled = inbound_config.get('enabled', False)
+
+        if not inbound_enabled:
             logger.info("A2A Formation Server is disabled in formation config")
             return
 
         try:
-            # Extract server configuration
-            port = server_config.get('port', 8181)
-            host = server_config.get('host', '0.0.0.0')
-            trusted_endpoints = server_config.get('trusted_endpoints', [])
-            auth_mode = server_config.get('mode', 'none')
+            # Extract inbound server configuration
+            port = inbound_config.get('port', 8181)
+            host = inbound_config.get('host', '0.0.0.0')
+            trusted_endpoints = inbound_config.get('trusted_endpoints', [])
+            auth_mode = inbound_config.get('mode', 'none')
             formation_name = self.formation_config.get('name', 'default')
 
             # Create A2A Formation Server
@@ -2717,3 +2776,97 @@ Available agents:
                 "status": "error",
                 "message": f"Failed to get status: {e}"
             }
+
+    async def _initialize_outbound_services(self):
+        """
+        Initialize outbound services and their credentials from formation configuration.
+
+        This method reads the a2a.outbound.services configuration and stores
+        the credentials securely for later use when making outbound API calls.
+        """
+        if not self.formation_config:
+            logger.debug("No formation config provided, skipping outbound services initialization")
+            return
+
+        # Get A2A configuration from formation
+        a2a_config = self.formation_config.get('a2a', {})
+
+        # Check if A2A is globally enabled
+        a2a_enabled = a2a_config.get('enabled', True)
+        if a2a_enabled is False:
+            logger.debug("A2A communication is globally disabled")
+            return
+
+        outbound_config = a2a_config.get('outbound', {})
+
+        # Check if outbound is enabled
+        if not outbound_config.get('enabled', True):
+            logger.debug("A2A outbound communication is disabled")
+            return
+
+        services = outbound_config.get('services', [])
+
+        if not services:
+            logger.debug("No outbound services configured in formation")
+            return
+
+        # Ensure secrets manager is available
+        if not await self.ensure_secrets_manager():
+            logger.error("Failed to initialize secrets manager for outbound services")
+            return
+
+        try:
+            logger.info(f"Initializing {len(services)} outbound services...")
+
+            for service in services:
+                service_name = service.get('name')
+                if not service_name:
+                    logger.warning("Outbound service missing service_name, skipping")
+                    continue
+
+                # Get auth configuration (not 'credentials'!)
+                auth_config = service.get('auth', {})
+                logger.debug(f"Processing auth config for outbound service: {service_name}")
+
+                if not auth_config:
+                    logger.warning(f"No auth config found for service: {service_name}")
+                    continue
+
+                # Store auth credentials in secrets manager with service prefix
+                for auth_key, auth_value in auth_config.items():
+                    # Skip 'type' field, only store actual credential values
+                    if auth_key == 'type':
+                        continue
+
+                    secret_name = f"OUTBOUND_{service_name.upper()}_{auth_key.upper()}"
+
+                    # Store direct credential values (secrets refs handled by interpolation)
+                    is_secret_ref = (isinstance(auth_value, str) and
+                                   auth_value.startswith('${{ secrets.'))
+                    if not is_secret_ref:
+                        await self.store_secret(secret_name, auth_value)
+                        logger.debug(f"Stored credential for {secret_name}")
+                    else:
+                        logger.debug(f"Credential reference found for {secret_name}")
+
+            logger.info("Outbound services initialization complete")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize outbound services: {e}")
+
+    async def get_outbound_service_credential(self, service_name: str, credential_key: str) -> Optional[str]:
+        """
+        Get a credential for an outbound service.
+
+        Args:
+            service_name: Name of the outbound service
+            credential_key: Key of the credential (e.g., 'api_key', 'bearer_token')
+
+        Returns:
+            The credential value if found, None otherwise
+        """
+        if not await self.ensure_secrets_manager():
+            return None
+
+        secret_name = f"OUTBOUND_{service_name.upper()}_{credential_key.upper()}"
+        return await self.get_secret(secret_name)

@@ -614,8 +614,8 @@ class Agent:
                         formation_config = self.overlord.formation_config
                         if formation_config:
                             a2a_config = formation_config.get('a2a', {})
-                            server_config = a2a_config.get('server', {})
-                            our_port = str(server_config.get('port', 8080))
+                            inbound_config = a2a_config.get('inbound', {})
+                            our_port = str(inbound_config.get('port', 8080))
 
                     # Prefer agents that are NOT on our own formation port
                     preferred_match = None
