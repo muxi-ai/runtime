@@ -248,6 +248,217 @@ class Overlord:
         # Add expertise registry
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}
 
+    async def load_formation_from_path(self, formation_path: str) -> Dict[str, Any]:
+        """
+        Load formation configuration from a file or directory path.
+
+        This method loads a formation configuration using the FormationLoader
+        and applies it to the overlord. It supports both flattened formation files
+        and modular formation directories.
+
+        Args:
+            formation_path: Path to formation file or directory to load
+
+        Returns:
+            Dict[str, Any]: The loaded formation configuration
+
+        Raises:
+            ValueError: If loading fails or validation errors are found
+        """
+        try:
+            # Import FormationLoader and validation when needed
+            from .config.formation_loader import FormationLoader
+            from .config.validation import validate_formation
+
+            # Validate formation before loading
+            logger.info(f"Validating formation: {formation_path}")
+            validation_result = validate_formation(formation_path, self.secrets_manager)
+
+            if not validation_result.is_valid:
+                error_msg = (
+                    f"Formation validation failed:\n"
+                    f"{validation_result.detailed_report()}"
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+
+            # Log warnings if any
+            if validation_result.warnings:
+                logger.warning(
+                    f"Formation validation warnings:\n"
+                    f"{validation_result.detailed_report()}"
+                )
+
+            # Load formation configuration
+            formation_loader = FormationLoader()
+            formation_config = await formation_loader.load(formation_path, self.secrets_manager)
+
+            # Update overlord's formation config
+            self.formation_config = formation_config
+
+            logger.info(f"✅ Loaded formation: {formation_config.get('name', 'unnamed')}")
+
+            # Apply configuration to overlord
+            await self._apply_formation_config()
+
+            return formation_config
+
+        except Exception as e:
+            logger.error(f"Failed to load formation from {formation_path}: {e}")
+            raise
+
+    async def validate_formation(self, formation_path: str) -> Dict[str, Any]:
+        """
+        Validate a formation configuration without loading it.
+
+        Args:
+            formation_path: Path to formation file or directory to validate
+
+        Returns:
+            Dict[str, Any]: Validation results with 'is_valid', 'errors', 'warnings', 'suggestions'
+        """
+        try:
+            from .config.validation import validate_formation
+
+            validation_result = validate_formation(formation_path, self.secrets_manager)
+
+            return {
+                'is_valid': validation_result.is_valid,
+                'errors': validation_result.errors,
+                'warnings': validation_result.warnings,
+                'suggestions': validation_result.suggestions,
+                'summary': validation_result.summary(),
+                'detailed_report': validation_result.detailed_report()
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to validate formation {formation_path}: {e}")
+            return {
+                'is_valid': False,
+                'errors': [str(e)],
+                'warnings': [],
+                'suggestions': [],
+                'summary': f"❌ Validation failed: {str(e)}",
+                'detailed_report': f"Validation failed with exception: {str(e)}"
+            }
+
+    async def _apply_formation_config(self) -> None:
+        """
+        Apply the loaded formation configuration to the overlord.
+
+        This method processes the formation configuration and applies relevant
+        settings to the overlord, such as creating agents, registering MCP servers,
+        and configuring A2A services.
+        """
+        config = self.formation_config
+
+        # Create agents from configuration
+        agents_config = config.get('agents', [])
+        for agent_config in agents_config:
+            try:
+                await self._create_agent_from_config(agent_config)
+            except Exception as e:
+                logger.error(f"Failed to create agent from config: {e}")
+                continue
+
+        # Register MCP servers from configuration
+        mcp_config = config.get('mcp', {})
+        servers = mcp_config.get('servers', [])
+        for server_config in servers:
+            try:
+                await self._register_mcp_server_from_config(server_config)
+            except Exception as e:
+                logger.error(f"Failed to register MCP server from config: {e}")
+                continue
+
+        # Apply A2A configuration
+        a2a_config = config.get('a2a', {})
+        if a2a_config:
+            try:
+                await self._apply_a2a_config(a2a_config)
+            except Exception as e:
+                logger.error(f"Failed to apply A2A configuration: {e}")
+
+        logger.info("✅ Applied formation configuration to overlord")
+
+    async def _create_agent_from_config(self, agent_config: Dict[str, Any]) -> None:
+        """
+        Create an agent from configuration dict.
+
+        Args:
+            agent_config: Agent configuration dictionary
+        """
+        agent_id = agent_config.get('agent_id')
+        if not agent_id:
+            logger.error("Agent configuration missing agent_id")
+            return
+
+        # Create model from configuration
+        model_config = agent_config.get('model', {})
+        model = await self.create_model(**model_config)
+
+        # Extract other agent parameters
+        system_message = agent_config.get('system_message')
+        description = agent_config.get('description')
+
+        # Create the agent
+        self.create_agent(
+            agent_id=agent_id,
+            model=model,
+            system_message=system_message,
+            description=description
+        )
+
+        logger.info(f"✅ Created agent from config: {agent_id}")
+
+    async def _register_mcp_server_from_config(self, server_config: Dict[str, Any]) -> None:
+        """
+        Register an MCP server from configuration dict.
+
+        Args:
+            server_config: MCP server configuration dictionary
+        """
+        server_id = server_config.get('id')
+        if not server_id:
+            logger.error("MCP server configuration missing id")
+            return
+
+        # Extract server parameters
+        url = server_config.get('url')
+        command = server_config.get('command')
+        credentials = server_config.get('credentials')
+
+        # Register the MCP server
+        await self.register_mcp_server(
+            server_id=server_id,
+            url=url,
+            command=command,
+            credentials=credentials
+        )
+
+        logger.info(f"✅ Registered MCP server from config: {server_id}")
+
+    async def _apply_a2a_config(self, a2a_config: Dict[str, Any]) -> None:
+        """
+        Apply A2A configuration.
+
+        Args:
+            a2a_config: A2A configuration dictionary
+        """
+        # Handle outbound configuration
+        outbound_config = a2a_config.get('outbound', {})
+        if outbound_config:
+            services = outbound_config.get('services', [])
+            for service_config in services:
+                try:
+                    # Apply outbound service configuration
+                    service_id = service_config.get('id')
+                    logger.info(f"✅ Applied A2A outbound service config: {service_id}")
+                except Exception as e:
+                    logger.error(f"Failed to apply A2A service config: {e}")
+
+        logger.info("✅ Applied A2A configuration")
+
     def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
         try:
