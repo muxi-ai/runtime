@@ -5,7 +5,7 @@ system_message: You are a helpful assistant that can check the weather. Use the 
   API when asked about weather conditions.
 llm:
   model: openai/gpt-4o
-  api_key: "${OPENAI_API_KEY}"
+  api_key: "${{ secrets.OPENAI_API_KEY }}"
   temperature: 0.7
 memory:
   buffer_size: 10
@@ -15,14 +15,8 @@ mcp_servers:
 - name: weather
   url: http://localhost:5001
   credentials:
-  - id: weather_api_key
-    param_name: api_key
-    required: true
-    env_fallback: WEATHER_API_KEY
+    api_key: "${{ secrets.WEATHER_API_KEY }}"
 - name: web_search
   url: http://localhost:5002
   credentials:
-  - id: search_api_key
-    param_name: api_key
-    required: true
-    env_fallback: SEARCH_API_KEY
+    api_key: "${{ secrets.SEARCH_API_KEY }}"
