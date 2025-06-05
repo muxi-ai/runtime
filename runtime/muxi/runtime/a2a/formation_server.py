@@ -19,7 +19,7 @@ from contextlib import closing
 from typing import Dict, Any, Optional, List
 import uuid
 
-from fastapi import FastAPI, Path
+from fastapi import FastAPI, Path, Request, Depends, Header, HTTPException
 import uvicorn
 from pydantic import BaseModel
 
@@ -82,6 +82,10 @@ class A2AFormationServer:
         self.app: Optional[FastAPI] = None
         self.server_task: Optional[asyncio.Task] = None
         self.is_running = False
+
+        # Initialize authentication
+        from .inbound_auth import A2AInboundAuthenticator
+        self.authenticator = A2AInboundAuthenticator(auth_mode)
 
         # Initialize FastAPI app
         self._create_app()
@@ -150,7 +154,8 @@ class A2AFormationServer:
         @self.app.post("/agents/{agent_id}/message")
         async def handle_agent_message(
             agent_id: str = Path(..., description="ID of the target agent"),
-            request: A2AMessageRequest = ...
+            request: A2AMessageRequest = ...,
+            http_request: Request = Depends(lambda: None)
         ) -> A2AMessageResponse:
             """
             Handle A2A message for a specific agent.
@@ -158,19 +163,20 @@ class A2AFormationServer:
             This is the main endpoint that external agents use to communicate
             with agents in this formation.
             """
-            return await self._handle_a2a_message(agent_id, request)
+            return await self._handle_a2a_message(agent_id, request, http_request)
 
         # Legacy endpoint support (if needed)
         @self.app.post("/{agent_id}")
         async def handle_legacy_message(
             agent_id: str = Path(..., description="ID of the target agent"),
-            request: A2AMessageRequest = ...
+            request: A2AMessageRequest = ...,
+            http_request: Request = Depends(lambda: None)
         ) -> A2AMessageResponse:
             """Legacy endpoint for backward compatibility"""
-            return await self._handle_a2a_message(agent_id, request)
+            return await self._handle_a2a_message(agent_id, request, http_request)
 
     async def _handle_a2a_message(
-        self, agent_id: str, request: A2AMessageRequest
+        self, agent_id: str, request: A2AMessageRequest, http_request: Optional[Request] = None
     ) -> Dict[str, Any]:
         """
         Handle incoming A2A message by routing directly to the target agent.
@@ -183,6 +189,20 @@ class A2AFormationServer:
         message_id = str(uuid.uuid4())
 
         try:
+            # Authenticate the request if authentication is enabled
+            if http_request and self.auth_mode != "none":
+                authenticated, client_id, auth_error = await self.authenticator.authenticate_request(http_request)
+
+                if not authenticated:
+                    logger.warning(f"Authentication failed for A2A request to {agent_id}: {auth_error}")
+                    return {
+                        "status": "error",
+                        "error": f"Authentication failed: {auth_error}",
+                        "message_id": message_id
+                    }
+
+                logger.debug(f"A2A request authenticated for client: {client_id}")
+
             # Get client host for security validation
             # Note: In a real implementation, this would come from the request headers
             client_host = "127.0.0.1"  # Default for development
