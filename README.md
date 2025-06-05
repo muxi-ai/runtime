@@ -71,6 +71,72 @@ response = overlord.chat("assistant", "Hello, can you help me with a coding prob
 print(response)
 ```
 
+## Secrets Management (Development)
+
+MUXI Runtime includes an encrypted secrets management system for storing sensitive configuration like API keys. For development and testing, use the provided utility scripts:
+
+### Adding Secrets
+
+```bash
+# Add a secret to a formation
+python runtime/muxi/runtime/utils/add_secret.py <formation_path> <SECRET_NAME> "<secret_value>"
+
+# Examples
+python runtime/muxi/runtime/utils/add_secret.py examples/configs OPENAI_API_KEY "sk-your-key-here"
+python runtime/muxi/runtime/utils/add_secret.py formation-a.yaml WEATHER_API_KEY "your-weather-key"
+```
+
+### Listing Secrets
+
+```bash
+# List all secrets in a formation
+python runtime/muxi/runtime/utils/add_secret.py <formation_path> list
+
+# Example
+python runtime/muxi/runtime/utils/add_secret.py examples/configs list
+```
+
+### Deleting Secrets
+
+```bash
+# Delete a specific secret
+python runtime/muxi/runtime/utils/delete_secret.py <formation_path> <SECRET_NAME>
+
+# Examples
+python runtime/muxi/runtime/utils/delete_secret.py examples/configs OPENAI_API_KEY
+python runtime/muxi/runtime/utils/delete_secret.py formation-a.yaml WEATHER_API_KEY
+
+# List secrets (to verify deletion)
+python runtime/muxi/runtime/utils/delete_secret.py examples/configs list
+```
+
+### Using Secrets in Configuration
+
+In your formation YAML files, reference secrets using GitHub Actions-style syntax:
+
+```yaml
+# formation.yaml
+agents:
+  - agent_id: assistant
+    model:
+      provider: openai
+      api_key: "${{ secrets.OPENAI_API_KEY }}"  # Encrypted secret reference
+      model: gpt-4o
+
+mcp_servers:
+  - server_id: weather-api
+    url: "https://api.weather.com"
+    credentials:
+      api_key: "${{ secrets.WEATHER_API_KEY }}"  # Encrypted secret reference
+```
+
+### Security Features
+
+- **AES-256-GCM Encryption**: All secrets are encrypted with per-formation master keys
+- **Secure File Permissions**: Secret files (`.key`, `secrets.enc`) use 0o600 permissions
+- **Formation Isolation**: Each formation has its own encrypted secrets store
+- **No Plaintext Storage**: Secrets are never stored in plaintext on disk
+
 ## Architecture
 
 MUXI Runtime consists of several key components:
