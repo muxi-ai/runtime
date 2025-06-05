@@ -48,7 +48,6 @@
 # =============================================================================
 
 import asyncio
-import os
 import secrets
 import string
 from typing import Any, Dict, List, Optional, Union
@@ -56,7 +55,6 @@ import datetime
 
 from loguru import logger
 
-from .config import config
 from .agent import Agent
 from .mcp import MCPMessage
 from .mcp import MCPService
@@ -68,6 +66,7 @@ from .a2a.registry_client import A2ARegistryClient
 from .a2a.formation_server import A2AFormationServer
 from .a2a.models import AgentCard, A2ACapability, A2AAuthentication, AuthType
 from .secrets import SecretsManager
+from .config.routing import RoutingConfig
 
 
 class Overlord:
@@ -247,26 +246,30 @@ class Overlord:
     def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
         try:
-            # Use environment variables or defaults from config
-            routing_provider = os.environ.get(
-                "ROUTING_LLM", config.routing.provider
-            )
-            routing_model_name = os.environ.get(
-                "ROUTING_LLM_MODEL", config.routing.model
-            )
-            routing_temperature = float(
-                os.environ.get("ROUTING_LLM_TEMPERATURE", config.routing.temperature)
+            # Get routing configuration from formation config or use defaults
+            overlord_config = self.formation_config.get('overlord', {})
+            routing_data = overlord_config.get('routing', {})
+
+            # Create routing config with values from formation YAML or defaults
+            routing_config = RoutingConfig(
+                provider=routing_data.get('provider'),
+                model=routing_data.get('model'),
+                temperature=routing_data.get('temperature'),
+                max_tokens=routing_data.get('max_tokens'),
+                use_caching=routing_data.get('use_caching'),
+                cache_ttl=routing_data.get('cache_ttl'),
+                system_prompt=routing_data.get('system_prompt')
             )
 
             # Use the new Model class with provider/model format
-            model_name = f"{routing_provider}/{routing_model_name}"
+            model_name = f"{routing_config.provider}/{routing_config.model}"
 
             # Create the routing model
             self.routing_model = self.create_model(
                 model=model_name,
-                temperature=routing_temperature,  # Use configured temperature
-                max_tokens=config.routing.max_tokens,  # Limit tokens for agent ID
-                api_key=os.environ.get(f"{routing_provider.upper()}_API_KEY")
+                temperature=routing_config.temperature,
+                max_tokens=routing_config.max_tokens,
+                api_key=routing_data.get('api_key')
             )
 
         except Exception as e:

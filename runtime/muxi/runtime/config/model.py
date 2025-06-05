@@ -1,110 +1,85 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Model Configuration - Language Model Settings
-# Description:  Configuration settings for language models in the Muxi Framework
-# Role:         Provides central settings for all language model interactions
-# Usage:        Imported by components using language models
+# Title:        Model Configuration - AI Model Provider Settings
+# Description:  Configuration for language models, embeddings, and provider API keys
+# Role:         Provides centralized configuration for AI model interactions
+# Usage:        Imported by components that need AI model configuration
 # Author:       Muxi Framework Team
 #
-# The Model Configuration module provides centralized settings for language
-# model access and behavior across the Muxi Framework. It includes settings
-# for model selection, API keys, and generation parameters.
-#
-# Key features include:
-#
-# 1. Provider Management
-#    - Default provider selection (OpenAI, Anthropic, etc.)
-#    - API key storage and management
-#    - Model selection preferences
-#
-# 2. Generation Parameters
-#    - Temperature controls
-#    - Token limits
-#    - Sampling parameters (top_p, frequency/presence penalties)
-#
-# 3. Embedding Configuration
-#    - Embedding model dimensions
-#    - Default embedding models
-#
-# All settings can be configured via environment variables, allowing for
-# easy configuration in different deployment environments without code changes.
-#
-# Example usage:
-#
-#   from .config import model_config
-#
-#   # Access model configuration
-#   provider = model_config.provider
-#   model = model_config.default_model
-#   temperature = model_config.temperature
+# The Model Configuration module provides centralized settings for AI model
+# providers, embedding models, and related parameters in the Muxi Framework.
+# This configuration supports multiple providers (OpenAI, Anthropic, etc.)
+# and enables consistent model behavior across the system.
 # =============================================================================
 
-import os
-from typing import Optional
-
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 class ModelConfig(BaseModel):
     """
-    Language model configuration settings for the Muxi Framework.
+    Configuration settings for AI models and providers.
 
-    This class defines parameters for language model selection, API access,
-    and generation behavior. It uses Pydantic for validation and type safety,
-    with all settings configurable via environment variables.
+    This class defines the configuration structure for AI model settings,
+    including provider selection, model parameters, and API credentials.
+    Settings can be customized per formation or environment.
+
+    Attributes:
+        provider: The AI provider to use (e.g., "openai", "anthropic")
+        model: The specific model name (e.g., "gpt-4o", "claude-3-sonnet")
+        openai_api_key: OpenAI API key for authentication
+        anthropic_api_key: Anthropic API key for authentication
+        temperature: Model temperature for response randomness (0.0-1.0)
+        max_tokens: Maximum tokens in model responses
+        embedding_dimension: Vector dimension for embeddings
+        top_p: Top-p sampling parameter
+        frequency_penalty: Frequency penalty parameter
+        presence_penalty: Presence penalty parameter
     """
 
+    # Provider and model selection
     provider: str = Field(
-        default_factory=lambda: os.getenv("DEFAULT_MODEL_PROVIDER", "openai"),
-        description="Default LLM provider to use (e.g., 'openai', 'anthropic')",
+        default="openai",
+        description="The AI provider to use for model requests",
+    )
+    model: str = Field(
+        default="gpt-4o",
+        description="The specific model name to use",
     )
 
-    default_model: str = Field(
-        default_factory=lambda: os.getenv("DEFAULT_MODEL_NAME", "gpt-4o"),
-        description="Default model name to use from the selected provider",
-    )
-
+    # API keys for providers
     openai_api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("OPENAI_API_KEY"),
-        description="API key for OpenAI services",
+        default=None,
+        description="OpenAI API key for authentication",
     )
-
     anthropic_api_key: Optional[str] = Field(
-        default_factory=lambda: os.getenv("ANTHROPIC_API_KEY"),
-        description="API key for Anthropic services",
+        default=None,
+        description="Anthropic API key for authentication",
     )
 
+    # Model parameters
     temperature: float = Field(
-        default_factory=lambda: float(os.getenv("MODEL_TEMPERATURE", "0.7")),
-        description="Temperature for model generation (0-1, higher = more creative)",
+        default=0.7,
+        description="Temperature for controlling response randomness",
     )
-
-    max_tokens: Optional[int] = Field(
-        default_factory=lambda: int(os.getenv("MODEL_MAX_TOKENS", "1000")),
-        description="Maximum number of tokens to generate in responses",
+    max_tokens: int = Field(
+        default=1000,
+        description="Maximum number of tokens in model responses",
     )
-
     embedding_dimension: int = Field(
-        default_factory=lambda: int(os.getenv("EMBEDDING_DIMENSION", "1536")),
-        description="Dimension of embedding vectors (OpenAI default is 1536)",
+        default=1536,
+        description="Vector dimension for embeddings",
     )
-
     top_p: float = Field(
-        default_factory=lambda: float(os.getenv("TOP_P", "1.0")),
-        description="Top-p sampling parameter (0-1, lower = more focused)",
+        default=1.0,
+        description="Top-p sampling parameter",
     )
-
     frequency_penalty: float = Field(
-        default_factory=lambda: float(os.getenv("FREQUENCY_PENALTY", "0.0")),
-        description="Penalty for token frequency (-2.0 to 2.0, higher = more variety)",
+        default=0.0,
+        description="Frequency penalty parameter",
     )
-
     presence_penalty: float = Field(
-        default_factory=lambda: float(os.getenv("PRESENCE_PENALTY", "0.0")),
-        description="Penalty for token presence (-2.0 to 2.0, higher = less repetition)",
+        default=0.0,
+        description="Presence penalty parameter",
     )
-
-
-# Create a global model config instance for easy imports
-model_config = ModelConfig()

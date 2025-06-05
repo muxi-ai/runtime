@@ -279,17 +279,30 @@ class Muxi:
     @property
     def credential_db_connection_string(self) -> Optional[str]:
         """
-        Get the credential database connection string, fetching from environment if not set.
+        Get the credential database connection string.
 
-        Tries to load the connection string from the POSTGRES_DATABASE_URL environment
-        variable if it hasn't been explicitly provided during initialization.
+        This property provides access to the credential database connection string,
+        attempting to load it from encrypted secrets if it hasn't been explicitly
+        provided during initialization.
 
         Returns:
             Optional[str]: Credential database connection string if available, None otherwise.
         """
         if self._credential_db_connection_string is None:
-            # Try to load from environment if not already set
-            self._credential_db_connection_string = os.environ.get("POSTGRES_DATABASE_URL")
+            # Try to load from encrypted secrets if not already set
+            if (
+                hasattr(self, 'config_loader')
+                and self.config_loader
+                and hasattr(self.config_loader, 'secrets_manager')
+            ):
+                try:
+                    secrets_manager = self.config_loader.secrets_manager
+                    self._credential_db_connection_string = secrets_manager.get_secret(
+                        "POSTGRES_DATABASE_URL"
+                    )
+                except Exception:
+                    # Fallback to None if secrets not available
+                    pass
 
         return self._credential_db_connection_string
 
@@ -460,8 +473,8 @@ class Muxi:
         Connect MCP servers to an agent.
 
         This internal method processes MCP server configurations and connects them
-        to the specified agent, handling credential resolution from environment
-        variables if needed.
+        to the specified agent, handling credential resolution from encrypted secrets
+        instead of environment variables.
 
         Args:
             agent: The agent to connect MCP servers to.
@@ -481,16 +494,34 @@ class Muxi:
                     param_name = cred.get("param_name")
                     required = cred.get("required", False)
 
-                    # Check for env_fallback
-                    env_var = cred.get("env_fallback")
-                    if env_var:
-                        import os
+                    # Check for encrypted secrets first, then env_fallback as last resort
+                    value = None
 
-                        value = os.getenv(env_var)
+                    # Try encrypted secrets if available
+                    if (
+                        hasattr(self, 'config_loader')
+                        and self.config_loader
+                        and hasattr(self.config_loader, 'secrets_manager')
+                    ):
+                        try:
+                            # Convert to standard secret name format
+                            secret_name = cred_id.upper() if cred_id else None
+                            if secret_name:
+                                value = self.config_loader.secrets_manager.get_secret(secret_name)
+                        except Exception:
+                            # Continue to fallback if secrets not available
+                            pass
 
-                        if value:
-                            processed_credentials[param_name] = value
-                            continue
+                    # Check for env_fallback as last resort (for backward compatibility)
+                    if not value:
+                        env_var = cred.get("env_fallback")
+                        if env_var:
+                            import os
+                            value = os.getenv(env_var)
+
+                    if value:
+                        processed_credentials[param_name] = value
+                        continue
 
                     # Missing required credential
                     if required:

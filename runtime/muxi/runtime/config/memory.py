@@ -1,15 +1,15 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Memory Configuration - Framework Memory Settings
-# Description:  Configuration for memory systems in the Muxi Framework
-# Role:         Provides settings for buffer and long-term memory components
-# Usage:        Imported by memory components for configuration
+# Title:        Memory Configuration - Memory System Settings
+# Description:  Configuration for buffer memory, long-term memory, and vector operations
+# Role:         Provides centralized memory system configuration
+# Usage:        Imported by components that need memory configuration
 # Author:       Muxi Framework Team
 #
-# The Memory Configuration module provides centralized settings for the memory
-# systems in the Muxi Framework. It defines parameters for both buffer memory
-# (short-term conversation context) and long-term memory storage.
+# The Memory Configuration module provides centralized settings for memory
+# systems including buffer memory, long-term memory, vector operations,
+# and similarity search parameters.
 #
 # Key features include:
 #
@@ -37,59 +37,59 @@
 #   similarity = memory_config.similarity_threshold
 # =============================================================================
 
-import os
-from pathlib import Path
-from typing import Union
-
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 class MemoryConfig(BaseModel):
     """
-    Memory configuration settings for the Muxi Framework.
+    Configuration settings for memory systems.
 
-    This class defines parameters for both short-term buffer memory and
-    long-term persistent memory. It uses Pydantic for validation and type
-    safety, with all settings configurable via environment variables.
+    This class defines the configuration structure for memory systems,
+    including buffer memory, long-term memory, vector operations, and
+    similarity search parameters. Settings can be customized per formation
+    or environment.
+
+    Attributes:
+        use_long_term_memory: Whether to enable long-term memory
+        vector_dimension: Dimension of embedding vectors
+        buffer_max_size: Maximum size of buffer memory
+        connection_string: Database connection string for memory storage
+        default_collection: Default collection name for memory storage
+        similarity_threshold: Threshold for similarity matching
+        max_search_results: Maximum results to return from searches
     """
 
-    use_long_term: Union[bool, str] = Field(
-        default_factory=lambda: os.getenv("USE_LONG_TERM_MEMORY", "true").lower() == "true",
-        description="Enable long-term memory. Can be boolean or path to SQLite DB/Postgres URL",
+    # Core memory settings
+    use_long_term_memory: bool = Field(
+        default=True,
+        description="Whether to enable long-term memory storage",
     )
-
     vector_dimension: int = Field(
-        default_factory=lambda: int(os.getenv("VECTOR_DIMENSION", "1536")),
-        description="Dimension of vector embeddings (matches OpenAI embedding models)",
+        default=1536,
+        description="Dimension of embedding vectors",
     )
-
     buffer_max_size: int = Field(
-        default_factory=lambda: int(os.getenv("BUFFER_MAX_SIZE", "1000")),
-        description="Maximum number of items to store in buffer memory",
+        default=1000,
+        description="Maximum number of messages in buffer memory",
     )
 
-    faiss_index_path: str = Field(
-        default_factory=lambda: os.getenv(
-            "FAISS_INDEX_PATH", str(Path("./data/faiss_index").absolute())
-        ),
-        description="Path where FAISS indexes are stored for vector similarity search",
+    # Database settings
+    connection_string: Optional[str] = Field(
+        default="sqlite:///data/memory.db",
+        description="Database connection string for memory storage",
     )
-
     default_collection: str = Field(
-        default_factory=lambda: os.getenv("MEMORY_DEFAULT_COLLECTION", "default"),
+        default="default",
         description="Default collection name for memory storage",
     )
 
+    # Search and similarity settings
     similarity_threshold: float = Field(
-        default_factory=lambda: float(os.getenv("MEMORY_SIMILARITY_THRESHOLD", "0.7")),
-        description="Minimum similarity score (0-1) for memory retrieval results",
+        default=0.7,
+        description="Minimum similarity score for memory matches",
     )
-
     max_search_results: int = Field(
-        default_factory=lambda: int(os.getenv("MEMORY_MAX_SEARCH_RESULTS", "10")),
+        default=10,
         description="Maximum number of results to return from memory searches",
     )
-
-
-# Create a global memory config instance for easy imports
-memory_config = MemoryConfig()

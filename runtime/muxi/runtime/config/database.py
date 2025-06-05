@@ -2,14 +2,15 @@
 # FRONTMATTER
 # =============================================================================
 # Title:        Database Configuration - Database Connection Settings
-# Description:  Centralized database configuration for the Muxi Framework
-# Role:         Provides database connection settings for the framework
+# Description:  Configuration for database connections and connection pooling
+# Role:         Provides centralized database configuration
 # Usage:        Imported by components that need database access
 # Author:       Muxi Framework Team
 #
 # The Database Configuration module provides centralized settings for database
-# connections across the Muxi Framework. It uses a Pydantic model to ensure
-# type safety and validation of configuration values.
+# connections, including connection strings, pooling parameters, and timeout
+# settings. This configuration supports various database backends including
+# PostgreSQL and SQLite.
 #
 # Key features include:
 #
@@ -34,47 +35,43 @@
 #   pool_size = database_config.pool_size
 # =============================================================================
 
-import os
-
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 class DatabaseConfig(BaseModel):
     """
-    Database configuration settings for the Muxi Framework.
+    Configuration settings for database connections.
 
-    This class defines database connection and pool settings using Pydantic
-    for validation and type safety. All settings can be configured via
-    environment variables, with sensible defaults provided.
+    This class defines the configuration structure for database connections,
+    including connection strings, pooling parameters, and timeout settings.
+    Settings can be customized per formation or environment.
+
+    Attributes:
+        connection_string: Database connection string
+        pool_size: Number of connections to maintain in the pool
+        max_overflow: Maximum number of overflow connections
+        pool_timeout: Seconds to wait for a connection from the pool
+        pool_recycle: Seconds after which a connection is recreated
     """
 
-    connection_string: str = Field(
-        default_factory=lambda: os.getenv(
-            "POSTGRES_DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ai_agent_db"
-        ),
-        description="Database connection URL (supports PostgreSQL)",
+    connection_string: Optional[str] = Field(
+        default="sqlite:///data/muxi.db",
+        description="Database connection string",
     )
-
     pool_size: int = Field(
-        default_factory=lambda: int(os.getenv("DB_POOL_SIZE", "5")),
-        description="Maximum number of database connections to keep in the pool",
+        default=5,
+        description="Number of connections to maintain in the pool",
     )
-
     max_overflow: int = Field(
-        default_factory=lambda: int(os.getenv("DB_MAX_OVERFLOW", "10")),
-        description="Maximum number of connections that can be created beyond pool_size",
+        default=10,
+        description="Maximum number of overflow connections",
     )
-
     pool_timeout: int = Field(
-        default_factory=lambda: int(os.getenv("DB_POOL_TIMEOUT", "30")),
-        description="Seconds to wait before giving up on getting a connection from the pool",
+        default=30,
+        description="Seconds to wait for a connection from the pool",
     )
-
     pool_recycle: int = Field(
-        default_factory=lambda: int(os.getenv("DB_POOL_RECYCLE", "1800")),
-        description="Seconds after which a connection is automatically recycled (30 minutes)",
+        default=1800,
+        description="Seconds after which a connection is recreated",
     )
-
-
-# Create a global database config instance for easy imports
-database_config = DatabaseConfig()

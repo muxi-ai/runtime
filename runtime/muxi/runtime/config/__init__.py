@@ -3,94 +3,58 @@
 # =============================================================================
 # Title:        Configuration System - Framework Configuration Management
 # Description:  Centralized configuration system for the Muxi framework
-# Role:         Provides settings for all framework components
-# Usage:        Imported by components needing configuration settings
+# Role:         Provides configuration classes for framework components
+# Usage:        Imported by components needing configuration classes
 # Author:       Muxi Framework Team
 #
-# The configuration system provides a centralized way to manage all settings
-# for the Muxi framework. It combines:
+# The configuration system provides centralized configuration classes
+# for the Muxi framework. These classes define:
 #
-# 1. Environment-Based Configuration
-#    - Loads settings from environment variables
-#    - Uses sensible defaults for missing values
-#    - Follows consistent naming conventions
+# 1. Configuration Structure
+#    - Type-safe configuration classes using Pydantic
+#    - Clear defaults for all settings
+#    - Validation and conversion of values
 #
 # 2. Component-Specific Settings
 #    - Database connection settings
 #    - Memory configuration (buffer size, vector search, etc.)
 #    - Model settings (providers, parameters, API keys)
 #    - Routing rules for agent selection and message handling
+#    - Application settings (server, security, etc.)
+#    - Logging configuration
 #
-# 3. Configuration Validation
-#    - Uses Pydantic for type validation and conversion
-#    - Ensures configuration values are within acceptable ranges
-#    - Provides helpful error messages for invalid settings
+# Configuration instances are created from formation YAML data by
+# components like the Overlord, rather than using global instances.
 #
-# The configuration system can be accessed in several ways:
+# Example usage:
 #
-#   # Using the global config object (recommended):
-#   from .config import config
+#   # Create configuration from formation data
+#   from .routing import RoutingConfig
+#   routing_config = RoutingConfig(**formation_yaml.get('routing', {}))
 #
-#   buffer_size = config.memory.buffer_size
-#   vector_search = config.memory.vector_search_enabled
+#   # Use configuration
+#   provider = routing_config.provider
+#   model = routing_config.model
 #
-#   # Using component-specific config objects:
-#   from .config import memory_config
-#
-#   buffer_size = memory_config.buffer_size
-#
-#   # Accessing from the Overlord:
-#   buffer_size = overlord.config.memory.buffer_size
-#
-# The configuration is typically loaded once at application startup and then
-# accessed throughout the framework as needed. Any component that requires
-# configuration settings should import and use this module.
+# This approach provides better testability and flexibility compared
+# to global configuration instances.
 # =============================================================================
 
-
-from .database import DatabaseConfig, database_config
+from .app import AppConfig
+from .database import DatabaseConfig
 from .loader import ConfigLoader
-from .memory import MemoryConfig, memory_config
-from .model import ModelConfig, model_config
-from .routing import RoutingConfig, routing_config
-
-from pydantic import BaseModel, Field
-
-
-class Config(BaseModel):
-    """
-    Main configuration class for the MUXI Framework.
-
-    This class combines all component-specific configuration settings into a single
-    unified object, providing a centralized point of access for all framework
-    configuration. It uses Pydantic for validation and ensures settings are properly
-    typed and within acceptable ranges.
-
-    Configuration is typically loaded from environment variables but can also
-    be set programmatically when needed. The class uses Field with default_factory
-    to defer loading of component configs until they're actually needed.
-    """
-
-    database: DatabaseConfig = Field(default_factory=lambda: database_config)
-    memory: MemoryConfig = Field(default_factory=lambda: memory_config)
-    model: ModelConfig = Field(default_factory=lambda: model_config)
-    routing: RoutingConfig = Field(default_factory=lambda: routing_config)
-
-
-# Create a global config instance that can be imported and used throughout the framework
-config = Config()
+from .logging import LoggingConfig
+from .memory import MemoryConfig
+from .model import ModelConfig
+from .routing import RoutingConfig
 
 
 __all__ = [
+    "AppConfig",
     "ConfigLoader",
-    "config",
-    "Config",
-    "database_config",
     "DatabaseConfig",
-    "memory_config",
+    "LoggingConfig",
     "MemoryConfig",
-    "model_config",
     "ModelConfig",
-    "routing_config",
     "RoutingConfig",
 ]

@@ -1,37 +1,26 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Credential Manager - Secure Credential Handling
-# Description:  Utilities for managing secure credentials across the framework
-# Role:         Provides secure access to API keys and authentication tokens
-# Usage:        Used by Overlord and MCP components to retrieve credentials
+# Title:        Credential Manager - Secure Credential Access
+# Description:  Manages credentials for MCP servers and framework components
+# Role:         Provides secure credential resolution with database and secrets support
+# Usage:        Used by components needing secure credential access
 # Author:       Muxi Framework Team
 #
-# The CredentialManager is responsible for handling secure credentials in the
-# Muxi framework. It provides:
+# The Credential Manager provides a centralized way to access credentials from
+# multiple sources with a defined priority order. It supports both system-wide
+# and user-specific credentials, with database storage, encrypted secrets, and
+# secure credential resolution.
 #
-# 1. Multi-source Credential Resolution
-#    - Environment variable lookup
-#    - Database retrieval (when available)
-#    - User-specific credential handling
+# Credential resolution order:
+# 1. User-specific credential from database (if user_id provided)
+# 2. System-wide credential from database
+# 3. Encrypted secrets using SecretsManager
 #
-# 2. MCP Integration
-#    - Resolving credentials for MCP server configurations
-#    - Managing required vs. optional credentials
-#    - Mapping credential IDs to parameter names
-#
-# 3. Security Hierarchy
-#    - User-specific credentials (highest priority)
-#    - System-wide database credentials
-#    - Environment variables (fallback)
-#
-# This class is used internally by the framework to securely retrieve
-# credentials without exposing sensitive information in configuration files.
-# It supports hierarchical resolution to allow both system-wide and
-# user-specific credential management.
+# This ensures secure handling of sensitive information while providing
+# flexible credential management for different use cases.
 # =============================================================================
 
-import os
 from typing import Any, Dict, List, Optional
 
 
@@ -41,24 +30,31 @@ class CredentialManager:
 
     The CredentialManager provides a centralized way to access credentials from
     multiple sources with a defined priority order. It supports both system-wide
-    and user-specific credentials, with database storage when available and
-    environment variable fallback.
+    and user-specific credentials, with database storage and encrypted secrets
+    support instead of environment variables.
     """
 
-    def __init__(self, credential_db_connection_string: Optional[str] = None):
+    def __init__(
+        self,
+        credential_db_connection_string: Optional[str] = None,
+        secrets_manager: Optional[Any] = None
+    ):
         """
         Initialize the credential manager.
 
-        Creates a credential manager that can access credentials from both
-        environment variables and an optional database. If no database connection
-        is provided, only environment variables will be used.
+        Creates a credential manager that can access credentials from database
+        and encrypted secrets. Encrypted secrets are preferred over environment
+        variables for security.
 
         Args:
             credential_db_connection_string: Database connection string for credential storage.
-                If None, only environment variables will be used for credential retrieval.
+                If None, only encrypted secrets will be used for credential retrieval.
+            secrets_manager: SecretsManager instance for encrypted credential access.
+                If None, credential resolution will only use database storage.
         """
         self.connection_string = credential_db_connection_string
         self.db_available = credential_db_connection_string is not None
+        self.secrets_manager = secrets_manager
 
     def get_credential(self, credential_id: str, user_id: Optional[int] = None) -> Optional[str]:
         """
@@ -67,11 +63,11 @@ class CredentialManager:
         This method tries to retrieve credentials in the following order:
         1. User-specific credential from database (if user_id provided)
         2. System-wide credential from database
-        3. Environment variable (credential_id in uppercase)
+        3. Encrypted secrets using SecretsManager
 
         Args:
             credential_id: ID of the credential to retrieve. Used as key in database
-                and converted to uppercase for environment variable lookup.
+                and for encrypted secrets lookup.
             user_id: Optional user ID for user-specific credentials. When provided,
                 the system will first look for credentials specific to this user.
 
@@ -93,10 +89,17 @@ class CredentialManager:
             if system_credential:
                 return system_credential
 
-        # Finally, try environment variable
-        # Convention: credential IDs map to uppercase env vars
-        env_var = credential_id.upper()
-        return os.environ.get(env_var)
+        # Finally, try encrypted secrets
+        if self.secrets_manager:
+            try:
+                # Convert credential_id to standard secret name format
+                secret_name = credential_id.upper()
+                return self.secrets_manager.get_secret(secret_name)
+            except Exception:
+                # Log error but don't fail - return None
+                return None
+
+        return None
 
     def _get_user_credential(self, credential_id: str, user_id: int) -> Optional[str]:
         """
