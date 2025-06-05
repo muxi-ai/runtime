@@ -2819,17 +2819,17 @@ Available agents:
             logger.info(f"Initializing {len(services)} outbound services...")
 
             for service in services:
-                service_name = service.get('name')
-                if not service_name:
-                    logger.warning("Outbound service missing service_name, skipping")
+                service_id = service.get('id')
+                if not service_id:
+                    logger.warning("Outbound service missing service_id, skipping")
                     continue
 
                 # Get auth configuration (not 'credentials'!)
                 auth_config = service.get('auth', {})
-                logger.debug(f"Processing auth config for outbound service: {service_name}")
+                logger.debug(f"Processing auth config for outbound service: {service_id}")
 
                 if not auth_config:
-                    logger.warning(f"No auth config found for service: {service_name}")
+                    logger.warning(f"No auth config found for service: {service_id}")
                     continue
 
                 # Store auth credentials in secrets manager with service prefix
@@ -2838,11 +2838,10 @@ Available agents:
                     if auth_key == 'type':
                         continue
 
-                    secret_name = f"OUTBOUND_{service_name.upper()}_{auth_key.upper()}"
+                    secret_name = f"OUTBOUND_{service_id.upper()}_{auth_key.upper()}"
 
                     # Store direct credential values (secrets refs handled by interpolation)
-                    is_secret_ref = (isinstance(auth_value, str) and
-                                   auth_value.startswith('${{ secrets.'))
+                    is_secret_ref = (isinstance(auth_value, str) and auth_value.startswith('${{ secrets.'))
                     if not is_secret_ref:
                         await self.store_secret(secret_name, auth_value)
                         logger.debug(f"Stored credential for {secret_name}")
@@ -2854,12 +2853,12 @@ Available agents:
         except Exception as e:
             logger.error(f"Failed to initialize outbound services: {e}")
 
-    async def get_outbound_service_credential(self, service_name: str, credential_key: str) -> Optional[str]:
+    async def get_outbound_service_credential(self, service_id: str, credential_key: str) -> Optional[str]:
         """
         Get a credential for an outbound service.
 
         Args:
-            service_name: Name of the outbound service
+            service_id: Name of the outbound service
             credential_key: Key of the credential (e.g., 'api_key', 'bearer_token')
 
         Returns:
@@ -2868,5 +2867,5 @@ Available agents:
         if not await self.ensure_secrets_manager():
             return None
 
-        secret_name = f"OUTBOUND_{service_name.upper()}_{credential_key.upper()}"
+        secret_name = f"OUTBOUND_{service_id.upper()}_{credential_key.upper()}"
         return await self.get_secret(secret_name)
