@@ -67,6 +67,7 @@ from .llm import LLM
 from .a2a.registry_client import A2ARegistryClient
 from .a2a.formation_server import A2AFormationServer
 from .a2a.models import AgentCard, A2ACapability, A2AAuthentication, AuthType
+from .secrets import SecretsManager
 
 
 class Overlord:
@@ -116,6 +117,7 @@ class Overlord:
         user_api_key: Optional[str] = None,
         admin_api_key: Optional[str] = None,
         formation_config: Optional[Dict[str, Any]] = None,
+        formation_path: Optional[str] = None,
     ):
         """
         Initialize the overlord with optional centralized memory systems.
@@ -154,6 +156,11 @@ class Overlord:
 
         # Store formation configuration for A2A and other features
         self.formation_config = formation_config or {}
+
+        # Initialize SecretsManager if formation_path is provided
+        self.secrets_manager: Optional[SecretsManager] = None
+        if formation_path:
+            self.secrets_manager = SecretsManager(formation_path)
 
         # Store centralized memory systems
         self.buffer_memory = buffer_memory
@@ -267,7 +274,7 @@ class Overlord:
             logger.error(f"Failed to initialize routing model: {str(e)}")
             self.routing_model = None
 
-    def create_model(
+    async def create_model(
         self,
         model: str = "openai/gpt-4o",
         api_key: Optional[str] = None,
@@ -276,15 +283,17 @@ class Overlord:
         **kwargs,
     ) -> LLM:
         """
-        Create a model instance using the unified Model class.
+        Create a model instance using the unified Model class with secrets support.
 
-        This method creates a model using the provider/model-name format.
+        This method creates a model using the provider/model-name format and supports
+        GitHub Actions-style secrets interpolation in the api_key parameter.
         It's the preferred way to create models for use with agents.
 
         Args:
             model: The model to use in "provider/model-name" format (e.g., "openai/gpt-4o").
                 This format works across all supported providers.
-            api_key: API key for the provider. If None, will attempt to use
+            api_key: API key for the provider. Supports secrets interpolation with
+                ${{ secrets.NAME }} syntax. If None, will attempt to use
                 environment variables based on the provider.
             temperature: The temperature parameter for generation. Controls randomness
                 where higher values produce more random outputs.
@@ -295,10 +304,20 @@ class Overlord:
         Returns:
             A Model instance ready to use with agents.
         """
+        # Interpolate secrets in api_key if provided and contains secrets references
+        final_api_key = api_key
+        if api_key and "${{ secrets." in api_key:
+            try:
+                interpolated_config = await self.interpolate_secrets({"api_key": api_key})
+                final_api_key = interpolated_config.get("api_key", api_key)
+            except Exception as e:
+                logger.warning(f"Failed to interpolate secrets in api_key: {e}")
+                # Continue with original api_key
+
         # Create and return a new model instance
         return LLM(
             model=model,
-            api_key=api_key,
+            api_key=final_api_key,
             temperature=temperature,
             max_tokens=max_tokens,
             **kwargs
@@ -705,6 +724,123 @@ class Overlord:
                 If False, only clears buffer memory.
         """
         self.clear_memory(clear_long_term=clear_long_term)
+
+    # ===================================================================
+    # SECRETS MANAGEMENT
+    # ===================================================================
+
+    async def ensure_secrets_manager(self) -> bool:
+        """
+        Ensure the SecretsManager is initialized and ready to use.
+
+        Returns:
+            bool: True if SecretsManager is available, False otherwise
+        """
+        if not self.secrets_manager:
+            return False
+
+        try:
+            await self.secrets_manager.initialize_encryption()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to initialize SecretsManager: {e}")
+            return False
+
+    async def store_secret(self, name: str, value: str) -> bool:
+        """
+        Store a secret in the formation's secrets manager.
+
+        Args:
+            name: Name of the secret (will be normalized to uppercase)
+            value: Secret value to store
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not await self.ensure_secrets_manager():
+            logger.error("SecretsManager not available")
+            return False
+
+        try:
+            await self.secrets_manager.store_secret(name, value)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to store secret '{name}': {e}")
+            return False
+
+    async def get_secret(self, name: str) -> Optional[str]:
+        """
+        Retrieve a secret from the formation's secrets manager.
+
+        Args:
+            name: Name of the secret to retrieve
+
+        Returns:
+            Optional[str]: Secret value if found, None otherwise
+        """
+        if not await self.ensure_secrets_manager():
+            return None
+
+        try:
+            return await self.secrets_manager.get_secret(name)
+        except Exception as e:
+            logger.error(f"Failed to retrieve secret '{name}': {e}")
+            return None
+
+    async def list_secrets(self) -> List[str]:
+        """
+        List all secret names in the formation's secrets manager.
+
+        Returns:
+            List[str]: List of secret names
+        """
+        if not await self.ensure_secrets_manager():
+            return []
+
+        try:
+            return await self.secrets_manager.list_secrets()
+        except Exception as e:
+            logger.error(f"Failed to list secrets: {e}")
+            return []
+
+    async def delete_secret(self, name: str) -> bool:
+        """
+        Delete a secret from the formation's secrets manager.
+
+        Args:
+            name: Name of the secret to delete
+
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not await self.ensure_secrets_manager():
+            return False
+
+        try:
+            await self.secrets_manager.delete_secret(name)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to delete secret '{name}': {e}")
+            return False
+
+    async def interpolate_secrets(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Interpolate secrets in a configuration dictionary.
+
+        Args:
+            config: Configuration dictionary that may contain ${{ secrets.NAME }} references
+
+        Returns:
+            Dict[str, Any]: Configuration with secrets interpolated
+        """
+        if not await self.ensure_secrets_manager():
+            return config
+
+        try:
+            return await self.secrets_manager.interpolate_secrets(config)
+        except Exception as e:
+            logger.error(f"Failed to interpolate secrets: {e}")
+            return config
 
     def register_agent(self, agent):
         """
@@ -1481,10 +1617,11 @@ Available agents:
         request_timeout: Optional[int] = None,
     ) -> str:
         """
-        Register an MCP server with the centralized MCP service.
+        Register an MCP server with the centralized MCP service with secrets support.
 
         This method adds a Model Context Protocol (MCP) server to the overlord,
-        making its tools available to agents. MCP servers can be external HTTP services,
+        making its tools available to agents. Supports GitHub Actions-style secrets
+        interpolation in credentials. MCP servers can be external HTTP services,
         local command-line tools, or other tool providers that implement the MCP protocol.
 
         Args:
@@ -1495,6 +1632,7 @@ Available agents:
             command: Command for command-line MCP servers. Required for CLI-based MCP
                 servers, specifying the command to execute.
             credentials: Optional credentials for authentication with the MCP server.
+                Supports secrets interpolation with ${{ secrets.NAME }} syntax.
                 Format depends on the server's requirements.
             model: Optional model to use for this MCP handler. Some MCP servers
                 require a model for processing tool invocations.
@@ -1511,12 +1649,21 @@ Available agents:
         # Use overlord's default timeout if none specified
         timeout = request_timeout if request_timeout is not None else self.request_timeout
 
+        # Interpolate secrets in credentials if provided
+        final_credentials = credentials
+        if credentials:
+            try:
+                final_credentials = await self.interpolate_secrets(credentials)
+            except Exception as e:
+                logger.warning(f"Failed to interpolate secrets in MCP credentials: {e}")
+                # Continue with original credentials
+
         # Register the server with the MCP service
         return await self.mcp_service.register_mcp_server(
             server_id=server_id,
             url=url,
             command=command,
-            credentials=credentials,
+            credentials=final_credentials,
             model=model,
             request_timeout=timeout,
         )

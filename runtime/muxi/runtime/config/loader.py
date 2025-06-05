@@ -9,8 +9,8 @@
 #
 # The Configuration Loader module provides utilities for loading and processing
 # external configuration files for the Muxi Framework. It supports YAML and JSON
-# formats, handles environment variable substitution, and normalizes configuration
-# structures to ensure consistent format.
+# formats, handles GitHub Actions-style secrets interpolation, and normalizes
+# configuration structures to ensure consistent format.
 #
 # Key features include:
 #
@@ -19,9 +19,9 @@
 #    - Path resolution and error handling
 #    - Format auto-detection based on file extension
 #
-# 2. Environment Variable Processing
-#    - Replace ${ENV_VAR} patterns with actual environment values
-#    - Allows for deployment-specific configuration without code changes
+# 2. Secrets Variable Processing
+#    - Replace ${{ secrets.SECRET_NAME }} patterns with actual secret values
+#    - Formation-level secrets management with encryption
 #
 # 3. Configuration Normalization
 #    - Converts simplified config formats to standardized structure
@@ -31,17 +31,18 @@
 # Example usage:
 #
 #   from .config.loader import ConfigLoader
+#   from .secrets import SecretsManager
 #
 #   # Load and process a configuration file
 #   loader = ConfigLoader()
-#   config = loader.load_and_process("path/to/config.yaml")
+#   secrets_manager = SecretsManager(formation_dir)
+#   config = loader.load_and_process("path/to/config.yaml", secrets_manager)
 # =============================================================================
 
-import os
 import re
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class ConfigLoader:
@@ -49,8 +50,8 @@ class ConfigLoader:
     Load and process configuration files for the Muxi Framework.
 
     This class provides utilities for loading configuration files in YAML or JSON
-    format, processing environment variables within those configurations, and
-    normalizing the configuration structure to ensure consistency across the
+    format, processing GitHub Actions-style secrets within those configurations,
+    and normalizing the configuration structure to ensure consistency across the
     framework.
     """
 
@@ -102,42 +103,73 @@ class ConfigLoader:
                 )
 
     @staticmethod
-    def process_env_vars(config: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_secrets(
+        config: Dict[str, Any],
+        secrets_manager: Optional[Any] = None
+    ) -> Dict[str, Any]:
         """
-        Process environment variables in the configuration.
+        Process secrets variables in the configuration.
 
-        Replaces ${ENV_VAR} patterns in string values with the corresponding
-        environment variable values. This allows for environment-specific
-        configuration without changing the config files.
+        Replaces ${{ secrets.SECRET_NAME }} patterns in string values with the
+        corresponding secret values from the SecretsManager. This allows for
+        secure, encrypted secrets management at the formation level.
 
         Args:
             config: The configuration dictionary to process
+            secrets_manager: SecretsManager instance for retrieving secrets
 
         Returns:
-            Dict[str, Any]: The processed configuration with environment
+            Dict[str, Any]: The processed configuration with secrets
             variables replaced with their values
+
+        Raises:
+            ValueError: If a required secret is not found
         """
 
-        def replace_env_vars(obj: Any) -> Any:
+        async def replace_secrets(obj: Any) -> Any:
             if isinstance(obj, str):
-                # Find all ${ENV_VAR} patterns
-                env_vars = re.findall(r"\${([^}]+)}", obj)
+                # Find all ${{ secrets.SECRET_NAME }} patterns (whitespace tolerant)
+                secret_pattern = r'\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}'
+                matches = re.findall(secret_pattern, obj)
                 result = obj
 
-                # Replace each pattern with the environment variable value
-                for var in env_vars:
-                    env_value = os.environ.get(var, "")
-                    result = result.replace(f"${{{var}}}", env_value)
+                # Replace each pattern with the secret value
+                for secret_name in matches:
+                    if secrets_manager is None:
+                        raise ValueError(
+                            f"Secret '${{{{ secrets.{secret_name} }}}}' found "
+                            f"but no SecretsManager provided"
+                        )
+
+                    try:
+                        secret_value = await secrets_manager.get_secret(secret_name)
+                        if secret_value is None:
+                            raise ValueError(f"Secret '{secret_name}' not found in SecretsManager")
+
+                        # Replace the pattern with the secret value
+                        pattern = rf'\$\{{\{{\s*secrets\.{secret_name}\s*\}}\}}'
+                        result = re.sub(pattern, secret_value, result)
+
+                    except Exception as e:
+                        raise ValueError(
+                            f"Failed to retrieve secret '{secret_name}': {str(e)}"
+                        )
 
                 return result
             elif isinstance(obj, dict):
-                return {k: replace_env_vars(v) for k, v in obj.items()}
+                result = {}
+                for k, v in obj.items():
+                    result[k] = await replace_secrets(v)
+                return result
             elif isinstance(obj, list):
-                return [replace_env_vars(item) for item in obj]
+                result = []
+                for item in obj:
+                    result.append(await replace_secrets(item))
+                return result
             else:
                 return obj
 
-        return replace_env_vars(config)
+        return await replace_secrets(config)
 
     @staticmethod
     def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
@@ -298,19 +330,24 @@ class ConfigLoader:
                     "Missing required field: mcp_servers[].url or mcp_servers[].command"
                 )
 
-    def load_and_process(self, path: str) -> Dict[str, Any]:
+    async def load_and_process(
+        self,
+        path: str,
+        secrets_manager: Optional[Any] = None
+    ) -> Dict[str, Any]:
         """
         Load, validate, and process a configuration file.
 
         This is the main method for loading configuration files, providing
         a complete workflow that:
         1. Loads the file
-        2. Processes environment variables
+        2. Processes secrets variables
         3. Normalizes the configuration structure
         4. Validates the resulting configuration
 
         Args:
             path: Path to the configuration file
+            secrets_manager: SecretsManager instance for secret interpolation
 
         Returns:
             Dict[str, Any]: The processed configuration
@@ -320,7 +357,7 @@ class ConfigLoader:
             FileNotFoundError: If the file does not exist
         """
         config = self.load(path)
-        config = self.process_env_vars(config)
+        config = await self.process_secrets(config, secrets_manager)
         config = self.normalize_config(config)
         self.validate_config(config)
         return config

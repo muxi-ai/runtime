@@ -42,6 +42,7 @@
 
 import asyncio
 import datetime
+import json
 import logging
 import uuid
 from typing import Any, Dict, List, Optional, Union
@@ -653,7 +654,79 @@ class Agent:
                 "message_id": message_id
             }
 
-            # 3. Send direct HTTP request to target agent
+            # 3. Apply authentication based on discovered agent requirements
+            from muxi.runtime.a2a.auth import get_auth_manager, AuthType
+
+            auth_manager = get_auth_manager()
+
+            # Get authentication requirements from the discovered agent
+            auth_type = AuthType.NONE
+            auth_required = False
+
+            # Find the matching discovered agent to get auth requirements
+            matching_agent = None
+            if discovered_agents:
+                if isinstance(discovered_agents, dict):
+                    # Multiple registries - search all
+                    for registry_url, agent_list in discovered_agents.items():
+                        for agent_card in agent_list:
+                            if ((hasattr(agent_card, 'name') and agent_card.name == target_agent_id) or
+                                (hasattr(agent_card, 'muxi_agent_id') and agent_card.muxi_agent_id == target_agent_id)):
+                                matching_agent = agent_card
+                                break
+                        if matching_agent:
+                            break
+                else:
+                    # Single registry
+                    for agent_card in discovered_agents:
+                        if ((hasattr(agent_card, 'name') and agent_card.name == target_agent_id) or
+                            (hasattr(agent_card, 'muxi_agent_id') and agent_card.muxi_agent_id == target_agent_id)):
+                            matching_agent = agent_card
+                            break
+
+            # Extract authentication requirements
+            if matching_agent and hasattr(matching_agent, 'authentication') and matching_agent.authentication:
+                auth_info = matching_agent.authentication
+                auth_type = AuthType(auth_info.type.value if hasattr(auth_info.type, 'value') else str(auth_info.type))
+                auth_required = auth_info.required
+                logger.debug(f"Agent {target_agent_id} requires {auth_type} authentication (required: {auth_required})")
+            else:
+                logger.debug(f"No authentication requirements found for {target_agent_id}")
+
+            # Prepare headers with authentication
+            headers = {"Content-Type": "application/json"}
+
+            # For HMAC and JWT authentication, we need the full request context
+            if auth_type in [AuthType.HMAC, AuthType.JWT]:
+                # Extract base URL and construct proper endpoint first
+                parsed_url = urlparse(target_agent_url)
+                base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
+                endpoint_url = f"{base_url}/agents/{target_agent_id}/message"
+
+                # Convert message payload to JSON string for HMAC calculation
+                payload_json = json.dumps(message_payload)
+
+                auth_success, headers = await auth_manager.apply_authentication_with_context(
+                    target_agent_id, auth_type, headers, endpoint_url, "POST", payload_json, auth_required
+                )
+            else:
+                auth_success, headers = await auth_manager.apply_authentication(
+                    target_agent_id, auth_type, headers, auth_required
+                )
+
+            if not auth_success and auth_required:
+                error_msg = f"Authentication failed for {target_agent_id} (requires {auth_type})"
+                logger.error(error_msg)
+                if message_type == "request" and wait_for_response:
+                    return {
+                        "status": "error",
+                        "error": error_msg,
+                        "message_id": message_id
+                    }
+                else:
+                    raise RuntimeError(error_msg)
+
+            # 4. Send direct HTTP request to target agent
             import httpx
 
             # Extract base URL and construct proper endpoint
@@ -671,12 +744,14 @@ class Agent:
             endpoint_url = f"{base_url}/agents/{target_agent_id}/message"
 
             logger.debug(f"Sending HTTP request to: {endpoint_url}")
+            if auth_type != AuthType.NONE:
+                logger.debug(f"Using {auth_type} authentication for {target_agent_id}")
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(
                     endpoint_url,
                     json=message_payload,
-                    headers={"Content-Type": "application/json"}
+                    headers=headers
                 )
 
                 # 4. Handle HTTP response
