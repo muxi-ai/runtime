@@ -13,10 +13,10 @@ from pathlib import Path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.agent import Agent
-from muxi.runtime.llm.llm import LLM
-from muxi.runtime.a2a.auth import get_auth_manager, AuthType
+from runtime.muxi.runtime.overlord import Overlord
+from runtime.muxi.runtime.agent import Agent
+from runtime.muxi.runtime.llm.llm import LLM
+from runtime.muxi.runtime.a2a.auth import get_auth_manager, AuthType
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)

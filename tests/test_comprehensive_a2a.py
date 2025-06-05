@@ -20,11 +20,11 @@ import time
 from typing import Dict, Any
 
 # Add the runtime directory to Python path
-sys.path.insert(0, '../runtime')  # noqa: E402
+sys.path.insert(0, "../runtime")  # noqa: E402
 
-from muxi.runtime.overlord import Overlord  # noqa: E402
-from muxi.runtime.llm import LLM  # noqa: E402
-from muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+from runtime.muxi.runtime.overlord import Overlord  # noqa: E402
+from runtime.muxi.runtime.llm import LLM  # noqa: E402
+from runtime.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
 
 
 class ComprehensiveA2ATest:
@@ -41,7 +41,7 @@ class ComprehensiveA2ATest:
     def load_formation_config(self, config_path: str = "test-formation.yaml") -> Dict[str, Any]:
         """Load formation configuration from YAML file"""
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, "r") as f:
                 self.formation_config = yaml.safe_load(f)
                 print(f"✅ Loaded formation config from {config_path}")
                 return self.formation_config
@@ -78,17 +78,16 @@ class ComprehensiveA2ATest:
 
         try:
             # Create model for agents
-            model = LLM(
-                model="gpt-4o-mini",
-                api_key="test-key-not-used",
-                temperature=0.7
-            )
+            model = LLM(model="gpt-4o-mini", api_key="test-key-not-used", temperature=0.7)
 
             # Initialize overlord with formation config
             self.overlord = Overlord(formation_config=self.formation_config)
 
             # Verify external registry client was initialized
-            if not hasattr(self.overlord, 'external_registry_client') or not self.overlord.external_registry_client:
+            if (
+                not hasattr(self.overlord, "external_registry_client")
+                or not self.overlord.external_registry_client
+            ):  # noqa: E501
                 print("❌ External registry client not initialized")
                 return False
 
@@ -100,7 +99,7 @@ class ComprehensiveA2ATest:
                 model=model,
                 system_message="You are a weather specialist agent.",
                 description="Provides weather information and forecasts",
-                a2a_external=True  # This should trigger auto-registration
+                a2a_external=True,  # This should trigger auto-registration
             )
 
             travel_agent = self.overlord.create_agent(
@@ -108,7 +107,7 @@ class ComprehensiveA2ATest:
                 model=model,
                 system_message="You are a travel planning agent.",
                 description="Helps plan trips and provides travel advice",
-                a2a_external=True  # This should trigger auto-registration
+                a2a_external=True,  # This should trigger auto-registration
             )
 
             # Wait a moment for registration to complete
@@ -175,21 +174,25 @@ class ComprehensiveA2ATest:
                 external_agent_names = [agent.name for agent in external_agents]
 
             print(f"  Total external agents discovered: {total_discovered}")
-            names_str = ', '.join(external_agent_names[:5])
+            names_str = ", ".join(external_agent_names[:5])
             if len(external_agent_names) > 5:
-                names_str += '...'
+                names_str += "..."
             print(f"  Agent names: {names_str}")
 
             # We should discover at least the 5 hardcoded agents + our 2 registered agents
             expected_minimum = 5  # Hardcoded agents in mock server
 
             if total_discovered >= expected_minimum:
-                print(f"✅ Requirement 3 PASSED: Discovered {total_discovered} external agents "
-                      f"(expected >= {expected_minimum})")
+                print(
+                    f"✅ Requirement 3 PASSED: Discovered {total_discovered} external agents "
+                    f"(expected >= {expected_minimum})"
+                )
                 return True
             else:
-                print(f"❌ Requirement 3 FAILED: Only discovered {total_discovered} agents "
-                      f"(expected >= {expected_minimum})")
+                print(
+                    f"❌ Requirement 3 FAILED: Only discovered {total_discovered} agents "
+                    f"(expected >= {expected_minimum})"
+                )
                 return False
 
         except Exception as e:
@@ -275,7 +278,7 @@ class ComprehensiveA2ATest:
 
             # Simulate shutdown by removing agents from overlord
             # This should trigger automatic deregistration
-            if hasattr(self.overlord, 'agents') and self.test_agents:
+            if hasattr(self.overlord, "agents") and self.test_agents:
                 print(f"  Removing {len(self.test_agents)} agents to test auto-deregistration...")
 
                 # Remove agents from overlord (this should auto-deregister from external registry)
@@ -320,7 +323,7 @@ class ComprehensiveA2ATest:
                 print("✅ Requirement 2 PASSED: Agents auto-deregistered on shutdown")
                 return True
             else:
-                print(f"❌ Requirement 2 FAILED: Some agents still registered")
+                print("❌ Requirement 2 FAILED: Some agents still registered")
                 print(f"  Weather agent still registered: {weather_still_registered}")
                 print(f"  Travel agent still registered: {travel_still_registered}")
                 return False
@@ -331,7 +334,11 @@ class ComprehensiveA2ATest:
 
     async def cleanup(self):
         """Clean up resources"""
-        if self.overlord and hasattr(self.overlord, 'external_registry_client') and self.overlord.external_registry_client:
+        if (
+            self.overlord
+            and hasattr(self.overlord, "external_registry_client")
+            and self.overlord.external_registry_client
+        ):
             await self.overlord.external_registry_client.close()
 
     async def run_comprehensive_test(self) -> bool:
@@ -352,7 +359,9 @@ class ComprehensiveA2ATest:
             req1_passed = await self.test_requirement_1_auto_registration()
             req3_passed = await self.test_requirement_3_external_discovery()  # Test 3 before 4
             req4_passed = await self.test_requirement_4_external_communication()
-            req2_passed = await self.test_requirement_2_auto_deregistration()  # Test 2 last (shutdown)
+            req2_passed = (
+                await self.test_requirement_2_auto_deregistration()
+            )  # Test 2 last (shutdown)
 
             # Summary
             print("\n" + "=" * 60)
@@ -361,7 +370,9 @@ class ComprehensiveA2ATest:
             print(f"Requirement 1 (Auto-registration): {'✅ PASS' if req1_passed else '❌ FAIL'}")
             print(f"Requirement 2 (Auto-deregistration): {'✅ PASS' if req2_passed else '❌ FAIL'}")
             print(f"Requirement 3 (External discovery): {'✅ PASS' if req3_passed else '❌ FAIL'}")
-            print(f"Requirement 4 (External communication): {'✅ PASS' if req4_passed else '❌ FAIL'}")
+            print(
+                f"Requirement 4 (External communication): {'✅ PASS' if req4_passed else '❌ FAIL'}"
+            )
 
             overall_success = all([req1_passed, req2_passed, req3_passed, req4_passed])
 
@@ -370,10 +381,14 @@ class ComprehensiveA2ATest:
                 print("✅ Subtask 1.9 (External Registry Integration) is working correctly")
             else:
                 failed_reqs = []
-                if not req1_passed: failed_reqs.append("1")
-                if not req2_passed: failed_reqs.append("2")
-                if not req3_passed: failed_reqs.append("3")
-                if not req4_passed: failed_reqs.append("4")
+                if not req1_passed:
+                    failed_reqs.append("1")
+                if not req2_passed:
+                    failed_reqs.append("2")
+                if not req3_passed:
+                    failed_reqs.append("3")
+                if not req4_passed:
+                    failed_reqs.append("4")
                 print(f"\n❌ OVERALL RESULT: FAILED - Requirements {', '.join(failed_reqs)} failed")
 
             return overall_success

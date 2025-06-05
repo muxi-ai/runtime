@@ -11,8 +11,8 @@ from pathlib import Path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from muxi.runtime.a2a.auth import get_auth_manager, AuthType
-from muxi.runtime.a2a.registry_client import A2ARegistryClient
+from runtime.muxi.runtime.a2a.auth import get_auth_manager, AuthType
+from runtime.muxi.runtime.a2a.registry_client import A2ARegistryClient
 
 async def main():
     print("🔐 A2A Authentication Verification")

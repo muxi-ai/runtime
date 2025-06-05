@@ -24,8 +24,8 @@ runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
 try:
-    from muxi.runtime.overlord import Overlord
-    from muxi.runtime.llm.llm import LLM
+    from runtime.muxi.runtime.overlord import Overlord
+    from runtime.muxi.runtime.llm.llm import LLM
     print("✅ Successfully imported MUXI components")
 except ImportError as e:
     print(f"❌ Import error: {e}")

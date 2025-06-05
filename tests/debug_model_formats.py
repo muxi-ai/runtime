@@ -11,7 +11,7 @@ from pathlib import Path
 runtime_dir = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_dir))
 
-from muxi.runtime.llm.llm import LLM  # noqa: E402
+from runtime.muxi.runtime.llm.llm import LLM  # noqa: E402
 
 
 def test_model_formats():
@@ -113,7 +113,7 @@ def test_model_creation_with_config():
     # Test 2: Using Agent with LLM
     print("\nTest 2: Agent with LLM model")
     try:
-        from muxi.runtime.agent import Agent
+        from runtime.muxi.runtime.agent import Agent
 
         model = LLM(
             model="gpt-4",

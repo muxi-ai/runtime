@@ -9,18 +9,16 @@ This test shows the full authentication flow for A2A communication.
 import asyncio
 import sys
 import base64
-import time
-import hmac
-import hashlib
 from pathlib import Path
 
 # Add runtime to path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from muxi.runtime.a2a.auth import get_auth_manager, AuthType
-from muxi.runtime.a2a.inbound_auth import A2AInboundAuthenticator, InboundAuthType
-from muxi.runtime.a2a.registry_client import A2ARegistryClient
+from runtime.muxi.runtime.a2a.auth import get_auth_manager, AuthType  # noqa: E402
+from runtime.muxi.runtime.a2a.inbound_auth import A2AInboundAuthenticator  # noqa: E402
+from runtime.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+
 
 async def test_complete_authentication_flow():
     """Test the complete A2A authentication flow"""
@@ -56,18 +54,20 @@ async def test_complete_authentication_flow():
         {
             "auth_mode": "apiKey",
             "headers": {"X-API-Key": "test-external-key-123"},
-            "expected_client": "external-client-1"
+            "expected_client": "external-client-1",
         },
         {
             "auth_mode": "bearer",
             "headers": {"Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.test"},
-            "expected_client": "external-client-2"
+            "expected_client": "external-client-2",
         },
         {
             "auth_mode": "basic",
-            "headers": {"Authorization": f"Basic {base64.b64encode(b'external_user:external_pass123').decode()}"},
-            "expected_client": "external_user"
-        }
+            "headers": {
+                "Authorization": f"Basic {base64.b64encode(b'external_user:external_pass123').decode()}"  # noqa: E501
+            },
+            "expected_client": "external_user",
+        },
     ]
 
     for test_case in inbound_test_cases:
@@ -85,7 +85,7 @@ async def test_complete_authentication_flow():
             def __init__(self, headers):
                 self.headers = headers
                 self.method = "POST"
-                self.url = type('obj', (object,), {'path': '/agents/test-agent/message'})()
+                self.url = type("obj", (object,), {"path": "/agents/test-agent/message"})()
 
             async def body(self):
                 return b'{"message": "test", "message_type": "request"}'
@@ -93,8 +93,8 @@ async def test_complete_authentication_flow():
         mock_request = MockRequest(headers)
 
         # Extract headers
-        authorization = headers.get('Authorization')
-        x_api_key = headers.get('X-API-Key')
+        authorization = headers.get("Authorization")
+        x_api_key = headers.get("X-API-Key")
 
         # Test authentication
         authenticated, client_id, error = await inbound_auth.authenticate_request(
@@ -105,6 +105,7 @@ async def test_complete_authentication_flow():
             print(f"   ✅ SUCCESS: Authenticated as {client_id}")
         else:
             print(f"   ❌ FAILED: Expected {expected_client}, got {client_id} (error: {error})")
+
 
 async def test_registry_integration():
     """Test authentication integration with registry discovery"""
@@ -123,15 +124,15 @@ async def test_registry_integration():
             # Show authentication requirements for discovered agents
             auth_summary = {}
             for agent in agent_list:
-                if hasattr(agent, 'authentication') and agent.authentication:
+                if hasattr(agent, "authentication") and agent.authentication:
                     auth_type = agent.authentication.type
                     if auth_type not in auth_summary:
                         auth_summary[auth_type] = []
                     auth_summary[auth_type].append(agent.name)
                 else:
-                    if 'none' not in auth_summary:
-                        auth_summary['none'] = []
-                    auth_summary['none'].append(agent.name)
+                    if "none" not in auth_summary:
+                        auth_summary["none"] = []
+                    auth_summary["none"].append(agent.name)
 
             print("\n📋 Authentication requirements by type:")
             for auth_type, agent_names in auth_summary.items():
@@ -142,6 +143,7 @@ async def test_registry_integration():
 
     except Exception as e:
         print(f"❌ Registry integration failed: {e}")
+
 
 async def test_authentication_scenarios():
     """Test realistic authentication scenarios"""
@@ -155,7 +157,7 @@ async def test_authentication_scenarios():
             "outbound_target": "public-data-service",
             "outbound_auth": AuthType.NONE,
             "inbound_mode": "none",
-            "should_work": True
+            "should_work": True,
         },
         {
             "name": "Secure API Access",
@@ -163,7 +165,7 @@ async def test_authentication_scenarios():
             "outbound_target": "external-billing-service",
             "outbound_auth": AuthType.API_KEY,
             "inbound_mode": "apiKey",
-            "should_work": True
+            "should_work": True,
         },
         {
             "name": "Enterprise Integration",
@@ -171,8 +173,8 @@ async def test_authentication_scenarios():
             "outbound_target": "analytics-engine",
             "outbound_auth": AuthType.BEARER,
             "inbound_mode": "bearer",
-            "should_work": True
-        }
+            "should_work": True,
+        },
     ]
 
     for scenario in scenarios:
@@ -184,19 +186,19 @@ async def test_authentication_scenarios():
         headers = {"Content-Type": "application/json"}
 
         success, updated_headers = await outbound_auth.apply_authentication(
-            scenario['outbound_target'],
-            scenario['outbound_auth'],
+            scenario["outbound_target"],
+            scenario["outbound_auth"],
             headers,
-            required=(scenario['outbound_auth'] != AuthType.NONE)
+            required=(scenario["outbound_auth"] != AuthType.NONE),
         )
 
         if success:
             print(f"   ✅ Outbound: Ready to authenticate to {scenario['outbound_target']}")
         else:
-            print(f"   ❌ Outbound: Failed to prepare authentication")
+            print("   ❌ Outbound: Failed to prepare authentication")
 
         # Test inbound authentication capability
-        inbound_auth = A2AInboundAuthenticator(scenario['inbound_mode'])
+        inbound_auth = A2AInboundAuthenticator(scenario["inbound_mode"])
         requirements = inbound_auth.get_auth_requirements()
 
         print(f"   ✅ Inbound: {requirements['description']}")
@@ -205,6 +207,7 @@ async def test_authentication_scenarios():
             print(f"   🎉 Scenario: {scenario['name']} - READY")
         else:
             print(f"   ⚠️  Scenario: {scenario['name']} - NEEDS ATTENTION")
+
 
 async def main():
     """Run complete A2A authentication tests"""
@@ -235,6 +238,7 @@ async def main():
     print("   • Test with real formation server endpoints")
     print("   • Configure production credentials")
     print("   • Monitor authentication logs")
+
 
 if __name__ == "__main__":
     asyncio.run(main())

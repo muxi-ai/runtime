@@ -8,8 +8,8 @@ import sys
 # Add parent directory to path for imports
 sys.path.append('..')
 
-from muxi.runtime.overlord import Overlord  # noqa: E402
-from muxi.runtime.llm import LLM  # noqa: E402
+from runtime.muxi.runtime.overlord import Overlord  # noqa: E402
+from runtime.muxi.runtime.llm import LLM  # noqa: E402
 
 
 async def test_real_collaboration():
