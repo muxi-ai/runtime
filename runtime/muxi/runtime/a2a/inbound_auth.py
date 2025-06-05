@@ -11,16 +11,17 @@ import base64
 import hashlib
 import hmac
 import time
-from typing import Dict, Optional, Tuple, List, Any
+from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from enum import Enum
-from fastapi import HTTPException, Request, Header
+from fastapi import Request, Header
 
 logger = logging.getLogger(__name__)
 
 
 class InboundAuthType(str, Enum):
     """Supported inbound authentication types"""
+
     NONE = "none"
     API_KEY = "apiKey"
     BEARER = "bearer"
@@ -31,6 +32,7 @@ class InboundAuthType(str, Enum):
 @dataclass
 class InboundCredential:
     """Container for inbound authentication credentials"""
+
     auth_type: InboundAuthType
     credential_data: Dict[str, Any] = field(default_factory=dict)
     description: str = ""
@@ -68,24 +70,26 @@ class A2AInboundAuthenticator:
             "external-client-1": {
                 "auth_type": InboundAuthType.API_KEY,
                 "api_key": os.getenv("ALLOWED_API_KEY_1", "test-external-key-123"),
-                "description": "Test external client using API key"
+                "description": "Test external client using API key",
             },
             "external-client-2": {
                 "auth_type": InboundAuthType.BEARER,
-                "token": os.getenv("ALLOWED_BEARER_TOKEN_1", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.test"),
-                "description": "Test external client using Bearer token"
+                "token": os.getenv(
+                    "ALLOWED_BEARER_TOKEN_1", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.test"
+                ),
+                "description": "Test external client using Bearer token",
             },
             "external-client-3": {
                 "auth_type": InboundAuthType.BASIC,
                 "username": os.getenv("ALLOWED_BASIC_USER", "external_user"),
                 "password": os.getenv("ALLOWED_BASIC_PASS", "external_pass123"),
-                "description": "Test external client using Basic auth"
+                "description": "Test external client using Basic auth",
             },
             "external-client-4": {
                 "auth_type": InboundAuthType.HMAC,
                 "secret": os.getenv("ALLOWED_HMAC_SECRET", "shared-secret-key-456"),
-                "description": "Test external client using HMAC signature"
-            }
+                "description": "Test external client using HMAC signature",
+            },
         }
 
         for client_id, cred_info in default_credentials.items():
@@ -104,9 +108,7 @@ class A2AInboundAuthenticator:
                 self.hmac_secrets[client_id] = cred_info["secret"]
 
             self.credentials[client_id] = InboundCredential(
-                auth_type=auth_type,
-                credential_data=cred_info,
-                description=cred_info["description"]
+                auth_type=auth_type, credential_data=cred_info, description=cred_info["description"]
             )
 
             logger.debug(f"Loaded inbound credential for {client_id} ({auth_type})")
@@ -116,7 +118,7 @@ class A2AInboundAuthenticator:
         client_id: str,
         auth_type: InboundAuthType,
         credential_data: Dict[str, Any],
-        description: str = ""
+        description: str = "",
     ):
         """
         Add credentials for a client that will authenticate to us
@@ -149,9 +151,7 @@ class A2AInboundAuthenticator:
             self.hmac_secrets[client_id] = credential_data["secret"]
 
         self.credentials[client_id] = InboundCredential(
-            auth_type=auth_type,
-            credential_data=credential_data,
-            description=description
+            auth_type=auth_type, credential_data=credential_data, description=description
         )
 
         logger.info(f"Added inbound credential for {client_id} ({auth_type})")
@@ -162,7 +162,7 @@ class A2AInboundAuthenticator:
         authorization: Optional[str] = Header(None),
         x_api_key: Optional[str] = Header(None),
         x_signature: Optional[str] = Header(None),
-        x_timestamp: Optional[str] = Header(None)
+        x_timestamp: Optional[str] = Header(None),
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Authenticate an incoming request based on the formation's auth mode
@@ -202,7 +202,9 @@ class A2AInboundAuthenticator:
             logger.error(f"Authentication error: {e}")
             return False, None, f"Authentication failed: {str(e)}"
 
-    async def _authenticate_api_key(self, api_key: Optional[str]) -> Tuple[bool, Optional[str], Optional[str]]:
+    async def _authenticate_api_key(
+        self, api_key: Optional[str]
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Authenticate using API key"""
         if not api_key:
             return False, None, "Missing API key header (X-API-Key)"
@@ -215,7 +217,9 @@ class A2AInboundAuthenticator:
             logger.warning(f"Invalid API key attempted: {api_key[:8]}...")
             return False, None, "Invalid API key"
 
-    async def _authenticate_bearer(self, authorization: Optional[str]) -> Tuple[bool, Optional[str], Optional[str]]:
+    async def _authenticate_bearer(
+        self, authorization: Optional[str]
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Authenticate using Bearer token"""
         if not authorization:
             return False, None, "Missing Authorization header"
@@ -233,7 +237,9 @@ class A2AInboundAuthenticator:
             logger.warning(f"Invalid bearer token attempted: {token[:16]}...")
             return False, None, "Invalid bearer token"
 
-    async def _authenticate_basic(self, authorization: Optional[str]) -> Tuple[bool, Optional[str], Optional[str]]:
+    async def _authenticate_basic(
+        self, authorization: Optional[str]
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Authenticate using Basic authentication"""
         if not authorization:
             return False, None, "Missing Authorization header"
@@ -244,8 +250,8 @@ class A2AInboundAuthenticator:
         try:
             # Decode base64 credentials
             encoded_creds = authorization[6:]  # Remove "Basic " prefix
-            decoded_creds = base64.b64decode(encoded_creds).decode('utf-8')
-            username, password = decoded_creds.split(':', 1)
+            decoded_creds = base64.b64decode(encoded_creds).decode("utf-8")
+            username, password = decoded_creds.split(":", 1)
 
             # Check credentials
             if username in self.basic_auth and self.basic_auth[username] == password:
@@ -260,10 +266,7 @@ class A2AInboundAuthenticator:
             return False, None, "Invalid basic authentication format"
 
     async def _authenticate_hmac(
-        self,
-        request: Request,
-        signature: Optional[str],
-        timestamp: Optional[str]
+        self, request: Request, signature: Optional[str], timestamp: Optional[str]
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """Authenticate using HMAC signature"""
         if not signature or not timestamp:
@@ -285,9 +288,7 @@ class A2AInboundAuthenticator:
                 # Create expected signature
                 message = f"{request.method}|{request.url.path}|{timestamp}|{body.decode()}"
                 expected_signature = hmac.new(
-                    secret.encode(),
-                    message.encode(),
-                    hashlib.sha256
+                    secret.encode(), message.encode(), hashlib.sha256
                 ).hexdigest()
 
                 if hmac.compare_digest(signature, expected_signature):
@@ -306,7 +307,7 @@ class A2AInboundAuthenticator:
         return {
             "auth_mode": self.auth_mode.value,
             "required": self.auth_mode != InboundAuthType.NONE,
-            "description": self._get_auth_description()
+            "description": self._get_auth_description(),
         }
 
     def _get_auth_description(self) -> str:
@@ -316,7 +317,7 @@ class A2AInboundAuthenticator:
             InboundAuthType.API_KEY: "Requires X-API-Key header with valid API key",
             InboundAuthType.BEARER: "Requires Authorization: Bearer <token> header",
             InboundAuthType.BASIC: "Requires Authorization: Basic <credentials> header",
-            InboundAuthType.HMAC: "Requires X-Signature and X-Timestamp headers with HMAC-SHA256"
+            InboundAuthType.HMAC: "Requires X-Signature and X-Timestamp headers with HMAC-SHA256",
         }
         return descriptions.get(self.auth_mode, "Unknown authentication type")
 
@@ -327,7 +328,7 @@ class A2AInboundAuthenticator:
             result[client_id] = {
                 "auth_type": cred.auth_type.value,
                 "description": cred.description,
-                "enabled": cred.enabled
+                "enabled": cred.enabled,
             }
         return result
 

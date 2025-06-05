@@ -174,8 +174,10 @@ class Overlord:
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
 
         # Initialize external registry clients (will be set up later)
-        self.external_registry_client: Optional[A2ARegistryClient] = None  # For discovery (outbound)
-        self.inbound_registry_client: Optional[A2ARegistryClient] = None   # For registration (inbound)
+        # For discovery (outbound)
+        self.external_registry_client: Optional[A2ARegistryClient] = None
+        # For registration (inbound)
+        self.inbound_registry_client: Optional[A2ARegistryClient] = None
 
         # Initialize A2A Formation Server (will be set up based on config)
         self.formation_server: Optional[A2AFormationServer] = None
@@ -188,7 +190,7 @@ class Overlord:
         # Initialize agent tracking for delayed external registration
         self.pending_external_registrations = set()
 
-                # Initialize the A2A Formation Server
+        # Initialize the A2A Formation Server
         self._initialize_formation_server()
 
         # Note: Outbound services will be initialized asynchronously when needed
@@ -3052,7 +3054,8 @@ Available agents:
                     secret_name = f"OUTBOUND_{service_id.upper()}_{auth_key.upper()}"
 
                     # Store direct credential values (secrets refs handled by interpolation)
-                    is_secret_ref = (isinstance(auth_value, str) and auth_value.startswith('${{ secrets.'))
+                    is_secret_ref = (isinstance(auth_value, str) and
+                                     auth_value.startswith('${{ secrets.'))
                     if not is_secret_ref:
                         await self.store_secret(secret_name, auth_value)
                         logger.debug(f"Stored credential for {secret_name}")
@@ -3064,7 +3067,9 @@ Available agents:
         except Exception as e:
             logger.error(f"Failed to initialize outbound services: {e}")
 
-    async def get_outbound_service_credential(self, service_id: str, credential_key: str) -> Optional[str]:
+    async def get_outbound_service_credential(
+        self, service_id: str, credential_key: str
+    ) -> Optional[str]:
         """
         Get a credential for an outbound service.
 

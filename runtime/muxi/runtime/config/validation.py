@@ -5,9 +5,8 @@ This module provides tools for validating formation configurations,
 detecting common issues, and ensuring configurations are well-formed.
 """
 
-import os
 import logging
-from typing import Dict, List, Any, Optional, Union, Tuple
+from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 import yaml
 import json
@@ -139,7 +138,9 @@ class FormationValidator:
             elif formation_path.is_dir():
                 self._validate_modular_formation(formation_path, secrets_manager)
             else:
-                self.result.add_error(f"Formation path is neither file nor directory: {formation_path}")
+                self.result.add_error(
+                    f"Formation path is neither file nor directory: {formation_path}"
+                )
 
         except Exception as e:
             self.result.add_error(f"Validation failed with exception: {str(e)}")
@@ -343,9 +344,14 @@ class FormationValidator:
                 has_command = 'command' in server_config
 
                 if not has_url and not has_command:
-                    self.result.add_error(f"MCP server {server_id or i} must have either 'url' or 'command'")
+                    self.result.add_error(
+                        f"MCP server {server_id or i} must have either 'url' or 'command'"
+                    )
                 elif has_url and has_command:
-                    self.result.add_warning(f"MCP server {server_id or i} has both 'url' and 'command' - 'url' will be used")
+                    self.result.add_warning(
+                        f"MCP server {server_id or i} has both 'url' and 'command' - "
+                        f"'url' will be used"
+                    )
 
     def _validate_a2a_config(self, a2a_config: Dict[str, Any]) -> None:
         """Validate A2A configuration."""
@@ -434,7 +440,9 @@ class FormationValidator:
     def _validate_agents_directory(self, agents_dir: Path) -> None:
         """Validate agents directory in modular formation."""
         if not agents_dir.exists():
-            self.result.add_suggestion("Consider adding 'agents/' directory for agent configurations")
+            self.result.add_suggestion(
+                "Consider adding 'agents/' directory for agent configurations"
+            )
             return
 
         if not agents_dir.is_dir():
@@ -467,7 +475,9 @@ class FormationValidator:
     def _validate_mcp_directory(self, mcp_dir: Path) -> None:
         """Validate MCP directory in modular formation."""
         if not mcp_dir.exists():
-            self.result.add_suggestion("Consider adding 'mcp/' directory for MCP server configurations")
+            self.result.add_suggestion(
+                "Consider adding 'mcp/' directory for MCP server configurations"
+            )
             return
 
         if not mcp_dir.is_dir():

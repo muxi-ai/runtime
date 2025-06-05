@@ -12,22 +12,18 @@ import warnings
 from pathlib import Path
 import os
 
+from ..secrets import SecretsManager
+
 # Suppress common warnings that clutter the output
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", message="python-magic not available")
 warnings.filterwarnings("ignore", category=UserWarning)
 os.environ["LOGURU_LEVEL"] = "ERROR"
 
-# Add the runtime directory to Python path for imports
-runtime_dir = Path(__file__).parent.parent.parent.parent.parent
-sys.path.insert(0, str(runtime_dir))
-
-from runtime.muxi.runtime.secrets import SecretsManager
-
 
 async def add_secret_to_formation(formation_path: str, secret_name: str, secret_value: str):
     """Add a secret to the formation's secrets store."""
-    if formation_path.endswith('.yaml'):
+    if formation_path.endswith(".yaml"):
         formation_dir = Path(formation_path).parent
     else:
         formation_dir = Path(formation_path)
@@ -57,7 +53,7 @@ async def add_secret_to_formation(formation_path: str, secret_name: str, secret_
 
 async def list_secrets_in_formation(formation_path: str):
     """List all secrets in the formation."""
-    if formation_path.endswith('.yaml'):
+    if formation_path.endswith(".yaml"):
         formation_dir = Path(formation_path).parent
     else:
         formation_dir = Path(formation_path)
@@ -103,11 +99,11 @@ Examples:
   %(prog)s formation.yaml WEATHER_API_KEY "your-weather-key"
   %(prog)s examples/configs list
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("formation_path", help="Path to formation directory or YAML file")
-    parser.add_argument("command", nargs='?', help="SECRET_NAME to add, or 'list' to show all secrets")
-    parser.add_argument("value", nargs='?', help="Secret value (required when adding a secret)")
+    parser.add_argument("command", nargs="?", help="SECRET_NAME to add, or 'list' to show secrets")
+    parser.add_argument("value", nargs="?", help="Secret value (required when adding a secret)")
 
     args = parser.parse_args()
 

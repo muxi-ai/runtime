@@ -47,10 +47,8 @@
 # =============================================================================
 
 import os
-import glob
-import yaml
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
 from loguru import logger
 
@@ -70,11 +68,7 @@ class FormationLoader:
         """Initialize the formation loader."""
         self.config_loader = ConfigLoader()
 
-    async def load(
-        self,
-        path: str,
-        secrets_manager: Optional[Any] = None
-    ) -> Dict[str, Any]:
+    async def load(self, path: str, secrets_manager: Optional[Any] = None) -> Dict[str, Any]:
         """
         Load formation configuration from either a file or directory.
 
@@ -106,9 +100,7 @@ class FormationLoader:
             raise ValueError(f"Invalid formation path: {path} (not a file or directory)")
 
     async def _load_flattened_formation(
-        self,
-        file_path: str,
-        secrets_manager: Optional[Any] = None
+        self, file_path: str, secrets_manager: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Load a flattened formation file.
@@ -132,9 +124,7 @@ class FormationLoader:
         return config
 
     async def _load_modular_formation(
-        self,
-        directory_path: str,
-        secrets_manager: Optional[Any] = None
+        self, directory_path: str, secrets_manager: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Load a modular formation from a directory structure.
@@ -168,9 +158,7 @@ class FormationLoader:
         # Load main formation.yaml file
         main_config_path = formation_dir / "formation.yaml"
         if not main_config_path.exists():
-            raise FileNotFoundError(
-                f"Main formation.yaml not found in directory: {directory_path}"
-            )
+            raise FileNotFoundError(f"Main formation.yaml not found in directory: {directory_path}")
 
         # Load the main configuration
         main_config = self.config_loader.load(str(main_config_path))
@@ -188,10 +176,7 @@ class FormationLoader:
         return main_config
 
     async def _discover_and_merge_agents(
-        self,
-        config: Dict[str, Any],
-        formation_dir: Path,
-        secrets_manager: Optional[Any] = None
+        self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None
     ) -> None:
         """
         Discover agent configurations in the agents/ directory and merge them.
@@ -224,7 +209,9 @@ class FormationLoader:
             try:
                 logger.debug(f"Loading agent config: {agent_file}")
                 agent_config = self.config_loader.load(str(agent_file))
-                agent_config = await self.config_loader.process_secrets(agent_config, secrets_manager)
+                agent_config = await self.config_loader.process_secrets(
+                    agent_config, secrets_manager
+                )
 
                 # Ensure agent has an ID (use filename if not specified)
                 if "id" not in agent_config:
@@ -240,10 +227,7 @@ class FormationLoader:
         logger.info(f"✅ Discovered {len(config['agents'])} agents from agents/ directory")
 
     async def _discover_and_merge_mcp_servers(
-        self,
-        config: Dict[str, Any],
-        formation_dir: Path,
-        secrets_manager: Optional[Any] = None
+        self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None
     ) -> None:
         """
         Discover MCP server configurations in the mcp/ directory and merge them.
@@ -291,13 +275,12 @@ class FormationLoader:
                 logger.error(f"Failed to load MCP server config from {mcp_file}: {e}")
                 continue
 
-        logger.info(f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory")
+        logger.info(
+            f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
+        )
 
     async def _discover_and_merge_a2a_services(
-        self,
-        config: Dict[str, Any],
-        formation_dir: Path,
-        secrets_manager: Optional[Any] = None
+        self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None
     ) -> None:
         """
         Discover A2A service configurations in the a2a/ directory and merge them.
@@ -347,12 +330,13 @@ class FormationLoader:
                 logger.error(f"Failed to load A2A service config from {a2a_file}: {e}")
                 continue
 
-        logger.info(f"✅ Discovered {len(config['a2a']['outbound']['services'])} A2A services from a2a/ directory")
+        logger.info(
+            f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
+            "A2A services from a2a/ directory"
+        )
 
     def _resolve_knowledge_paths(
-        self,
-        config: Dict[str, Any],
-        formation_dir: str
+        self, config: Dict[str, Any], formation_dir: str
     ) -> Dict[str, Any]:
         """
         Resolve knowledge paths to be relative to formation directory.
@@ -385,7 +369,9 @@ class FormationLoader:
                         sources = knowledge_config.get("sources", [])
                         for source in sources:
                             if "path" in source:
-                                source["path"] = self._resolve_single_path(source["path"], formation_dir)
+                                source["path"] = self._resolve_single_path(
+                                    source["path"], formation_dir
+                                )
 
         return config
 

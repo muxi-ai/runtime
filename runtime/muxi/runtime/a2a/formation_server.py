@@ -19,7 +19,7 @@ from contextlib import closing
 from typing import Dict, Any, Optional, List
 import uuid
 
-from fastapi import FastAPI, Path, Request, Depends, Header, HTTPException
+from fastapi import FastAPI, Path, Request, Depends
 import uvicorn
 from pydantic import BaseModel
 
@@ -28,6 +28,7 @@ from loguru import logger
 
 class A2AMessageRequest(BaseModel):
     """A2A message request format"""
+
     message: str
     message_type: str = "request"
     context: Optional[Dict[str, Any]] = None
@@ -36,6 +37,7 @@ class A2AMessageRequest(BaseModel):
 
 class A2AMessageResponse(BaseModel):
     """A2A message response format"""
+
     status: str
     response: Optional[str] = None
     message_id: Optional[str] = None
@@ -58,7 +60,7 @@ class A2AFormationServer:
         host: str = "0.0.0.0",
         trusted_endpoints: Optional[List[str]] = None,
         auth_mode: str = "none",
-        formation_name: str = "default"
+        formation_name: str = "default",
     ):
         """
         Initialize the A2A Formation Server.
@@ -85,6 +87,7 @@ class A2AFormationServer:
 
         # Initialize authentication
         from .inbound_auth import A2AInboundAuthenticator
+
         self.authenticator = A2AInboundAuthenticator(auth_mode)
 
         # Initialize FastAPI app
@@ -109,7 +112,7 @@ class A2AFormationServer:
                 "status": "healthy",
                 "formation": self.formation_name,
                 "agents": list(self.overlord.agents.keys()) if self.overlord else [],
-                "timestamp": asyncio.get_event_loop().time()
+                "timestamp": asyncio.get_event_loop().time(),
             }
 
         # Formation info endpoint
@@ -120,18 +123,18 @@ class A2AFormationServer:
             if self.overlord:
                 for agent_id, agent in self.overlord.agents.items():
                     # Only include agents with external A2A enabled
-                    if getattr(agent, 'a2a_external', True):
+                    if getattr(agent, "a2a_external", True):
                         agents_info[agent_id] = {
                             "description": self.overlord.agent_descriptions.get(agent_id, ""),
-                            "capabilities": getattr(agent, 'capabilities', []),
-                            "endpoint": f"/agents/{agent_id}/message"
+                            "capabilities": getattr(agent, "capabilities", []),
+                            "endpoint": f"/agents/{agent_id}/message",
                         }
 
             return {
                 "formation": self.formation_name,
                 "server_mode": self.auth_mode,
                 "agents": agents_info,
-                "total_agents": len(agents_info)
+                "total_agents": len(agents_info),
             }
 
         # Agent discovery endpoint (A2A standard)
@@ -142,20 +145,17 @@ class A2AFormationServer:
             if self.overlord:
                 for agent_id, agent in self.overlord.agents.items():
                     # Only include agents with external A2A enabled
-                    if getattr(agent, 'a2a_external', True):
+                    if getattr(agent, "a2a_external", True):
                         agent_cards.append(self._create_agent_card(agent_id, agent))
 
-            return {
-                "agents": agent_cards,
-                "formation": self.formation_name
-            }
+            return {"agents": agent_cards, "formation": self.formation_name}
 
         # Main A2A message endpoint for specific agents
         @self.app.post("/agents/{agent_id}/message")
         async def handle_agent_message(
             agent_id: str = Path(..., description="ID of the target agent"),
             request: A2AMessageRequest = ...,
-            http_request: Request = Depends(lambda: None)
+            http_request: Request = Depends(lambda: None),
         ) -> A2AMessageResponse:
             """
             Handle A2A message for a specific agent.
@@ -170,7 +170,7 @@ class A2AFormationServer:
         async def handle_legacy_message(
             agent_id: str = Path(..., description="ID of the target agent"),
             request: A2AMessageRequest = ...,
-            http_request: Request = Depends(lambda: None)
+            http_request: Request = Depends(lambda: None),
         ) -> A2AMessageResponse:
             """Legacy endpoint for backward compatibility"""
             return await self._handle_a2a_message(agent_id, request, http_request)
@@ -191,14 +191,18 @@ class A2AFormationServer:
         try:
             # Authenticate the request if authentication is enabled
             if http_request and self.auth_mode != "none":
-                authenticated, client_id, auth_error = await self.authenticator.authenticate_request(http_request)
+                authenticated, client_id, auth_error = (
+                    await self.authenticator.authenticate_request(http_request)
+                )
 
                 if not authenticated:
-                    logger.warning(f"Authentication failed for A2A request to {agent_id}: {auth_error}")
+                    logger.warning(
+                        f"Authentication failed for A2A request to {agent_id}: {auth_error}"
+                    )
                     return {
                         "status": "error",
                         "error": f"Authentication failed: {auth_error}",
-                        "message_id": message_id
+                        "message_id": message_id,
                     }
 
                 logger.debug(f"A2A request authenticated for client: {client_id}")
@@ -209,14 +213,8 @@ class A2AFormationServer:
 
             # Validate trusted endpoints if configured
             if self.trusted_endpoints and client_host not in self.trusted_endpoints:
-                logger.warning(
-                    f"Untrusted client {client_host} attempted A2A communication"
-                )
-                return {
-                    "status": "error",
-                    "error": "Untrusted client",
-                    "message_id": message_id
-                }
+                logger.warning(f"Untrusted client {client_host} attempted A2A communication")
+                return {"status": "error", "error": "Untrusted client", "message_id": message_id}
 
             # Check if agent exists in the formation
             if not self.overlord or agent_id not in self.overlord.agents:
@@ -224,19 +222,19 @@ class A2AFormationServer:
                 return {
                     "status": "error",
                     "error": f"Agent {agent_id} not found",
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
 
             # Get the target agent directly
             agent = self.overlord.agents[agent_id]
 
             # Check if agent accepts external A2A messages
-            if not getattr(agent, 'a2a_external', True):
+            if not getattr(agent, "a2a_external", True):
                 logger.warning(f"Agent {agent_id} not configured for external A2A")
                 return {
                     "status": "error",
                     "error": f"Agent {agent_id} not configured for external A2A",
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
 
             # Log the incoming A2A message
@@ -250,7 +248,7 @@ class A2AFormationServer:
                 message=request.message,
                 message_type=request.message_type,
                 context=request.context,
-                message_id=message_id
+                message_id=message_id,
             )
 
             # Return successful response
@@ -263,7 +261,7 @@ class A2AFormationServer:
                     "status": "success",
                     "response": response_content,  # Extract the actual content string
                     "agent_id": agent_id,
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
             else:
                 # Handle case where agent doesn't return a response (e.g., notifications)
@@ -271,7 +269,7 @@ class A2AFormationServer:
                     "status": "success",
                     "message": "Message delivered successfully",
                     "agent_id": agent_id,
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
 
         except Exception as e:
@@ -280,7 +278,7 @@ class A2AFormationServer:
                 "status": "error",
                 "error": f"Message handling failed: {str(e)}",
                 "agent_id": agent_id,
-                "message_id": message_id
+                "message_id": message_id,
             }
 
     def _create_agent_card(self, agent_id: str, agent) -> Dict[str, Any]:
@@ -295,25 +293,22 @@ class A2AFormationServer:
             "capabilities": {
                 "messaging": {
                     "enabled": True,
-                    "description": "Agent can receive and process A2A messages"
+                    "description": "Agent can receive and process A2A messages",
                 },
                 "tools": {
-                    "enabled": hasattr(agent, 'get_capabilities'),
-                    "description": "Agent has tool capabilities"
-                }
+                    "enabled": hasattr(agent, "get_capabilities"),
+                    "description": "Agent has tool capabilities",
+                },
             },
-            "authentication": {
-                "type": self.auth_mode,
-                "required": self.auth_mode != "none"
-            },
+            "authentication": {"type": self.auth_mode, "required": self.auth_mode != "none"},
             "formation": self.formation_name,
-            "agent_id": agent_id
+            "agent_id": agent_id,
         }
 
     def _find_free_port(self) -> int:
         """Find a free port for the server (fallback if configured port unavailable)"""
         with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-            s.bind(('', 0))
+            s.bind(("", 0))
             s.listen(1)
             port = s.getsockname()[1]
         return port
@@ -340,11 +335,7 @@ class A2AFormationServer:
 
             # Create uvicorn config
             config = uvicorn.Config(
-                app=self.app,
-                host=self.host,
-                port=self.port,
-                log_level="info",
-                access_log=True
+                app=self.app, host=self.host, port=self.port, log_level="info", access_log=True
             )
 
             # Start server
@@ -365,7 +356,7 @@ class A2AFormationServer:
                 "port": self.port,
                 "endpoint": f"http://{self.host}:{self.port}",
                 "agents": list(self.overlord.agents.keys()) if self.overlord else [],
-                "auth_mode": self.auth_mode
+                "auth_mode": self.auth_mode,
             }
 
         except Exception as e:
@@ -395,11 +386,7 @@ class A2AFormationServer:
             self.is_running = False
             logger.info(f"A2A Formation Server stopped on port {self.port}")
 
-            return {
-                "status": "stopped",
-                "formation": self.formation_name,
-                "port": self.port
-            }
+            return {"status": "stopped", "formation": self.formation_name, "port": self.port}
 
         except Exception as e:
             logger.error(f"Error stopping A2A Formation Server: {e}")
@@ -415,7 +402,7 @@ class A2AFormationServer:
             "endpoint": f"http://{self.host}:{self.port}" if self.is_running else None,
             "agents": list(self.overlord.agents.keys()) if self.overlord else [],
             "auth_mode": self.auth_mode,
-            "trusted_endpoints": self.trusted_endpoints
+            "trusted_endpoints": self.trusted_endpoints,
         }
 
     async def health_check(self) -> bool:

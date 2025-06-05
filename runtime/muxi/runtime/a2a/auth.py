@@ -26,6 +26,7 @@ try:
     import jwt
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
+
     JWT_AVAILABLE = True
 except ImportError:
     JWT_AVAILABLE = False
@@ -35,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 class AuthType(str, Enum):
     """Supported authentication types for A2A communication"""
+
     NONE = "none"
     API_KEY = "apiKey"
     BEARER = "bearer"
@@ -47,6 +49,7 @@ class AuthType(str, Enum):
 @dataclass
 class AuthCredentials:
     """Container for authentication credentials"""
+
     auth_type: AuthType
     credentials: Dict[str, Any] = field(default_factory=dict)
 
@@ -60,7 +63,9 @@ class AuthCredentials:
                 raise ValueError("Bearer authentication requires 'token' credential")
         elif self.auth_type == AuthType.BASIC:
             if "username" not in self.credentials or "password" not in self.credentials:
-                raise ValueError("Basic authentication requires 'username' and 'password' credentials")
+                raise ValueError(
+                    "Basic authentication requires 'username' and 'password' credentials"
+                )
         elif self.auth_type == AuthType.OAUTH2:
             required = ["client_id", "client_secret"]
             missing = [req for req in required if req not in self.credentials]
@@ -93,47 +98,48 @@ class A2AAuthManager:
             # Example API key for billing service
             "external-billing-service": AuthCredentials(
                 auth_type=AuthType.API_KEY,
-                credentials={"api_key": os.getenv("BILLING_API_KEY", "test-billing-key-123")}
+                credentials={"api_key": os.getenv("BILLING_API_KEY", "test-billing-key-123")},
             ),
-
             # Example bearer token for analytics
             "analytics-engine": AuthCredentials(
                 auth_type=AuthType.BEARER,
-                credentials={"token": os.getenv("ANALYTICS_TOKEN", "test-analytics-jwt-token")}
+                credentials={"token": os.getenv("ANALYTICS_TOKEN", "test-analytics-jwt-token")},
             ),
-
             # Example OAuth2 for notification hub
             "notification-hub": AuthCredentials(
                 auth_type=AuthType.OAUTH2,
                 credentials={
                     "client_id": os.getenv("NOTIFICATION_CLIENT_ID", "test-client-id"),
                     "client_secret": os.getenv("NOTIFICATION_CLIENT_SECRET", "test-client-secret"),
-                    "token_url": os.getenv("NOTIFICATION_TOKEN_URL", "https://notify.cloudservice.net/oauth/token")
-                }
+                    "token_url": os.getenv(
+                        "NOTIFICATION_TOKEN_URL", "https://notify.cloudservice.net/oauth/token"
+                    ),
+                },
             ),
-
             # Example API key for document processor
             "document-processor": AuthCredentials(
                 auth_type=AuthType.API_KEY,
-                credentials={"api_key": os.getenv("DOCUMENT_API_KEY", "test-doc-api-key-456")}
+                credentials={"api_key": os.getenv("DOCUMENT_API_KEY", "test-doc-api-key-456")},
             ),
-
             # Example HMAC for secure messaging service
             "secure-messaging": AuthCredentials(
                 auth_type=AuthType.HMAC,
-                credentials={"secret": os.getenv("SECURE_MESSAGING_SECRET", "test-hmac-secret-123")}
+                credentials={
+                    "secret": os.getenv("SECURE_MESSAGING_SECRET", "test-hmac-secret-123")
+                },
             ),
-
             # Example JWT for auth service
             "auth-service": AuthCredentials(
                 auth_type=AuthType.JWT,
                 credentials={
-                    "private_key": os.getenv("AUTH_SERVICE_PRIVATE_KEY", self._get_test_private_key()),
+                    "private_key": os.getenv(
+                        "AUTH_SERVICE_PRIVATE_KEY", self._get_test_private_key()
+                    ),
                     "algorithm": "RS256",
                     "issuer": "muxi-a2a",
-                    "audience": "a2a-network"
-                }
-            )
+                    "audience": "a2a-network",
+                },
+            ),
         }
 
         for agent_id, creds in default_creds.items():
@@ -159,10 +165,10 @@ class A2AAuthManager:
             pem = private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption()
+                encryption_algorithm=serialization.NoEncryption(),
             )
 
-            return pem.decode('utf-8')
+            return pem.decode("utf-8")
         except Exception as e:
             logger.warning(f"Failed to generate test private key: {e}")
             return "test-private-key-placeholder"
@@ -200,11 +206,7 @@ class A2AAuthManager:
         return agent_id in self._credentials
 
     async def apply_authentication(
-        self,
-        agent_id: str,
-        auth_type: AuthType,
-        headers: Dict[str, str],
-        required: bool = False
+        self, agent_id: str, auth_type: AuthType, headers: Dict[str, str], required: bool = False
     ) -> Tuple[bool, Dict[str, str]]:
         """
         Apply authentication to HTTP headers
@@ -235,7 +237,9 @@ class A2AAuthManager:
 
         # Verify credential type matches requirement
         if creds.auth_type != auth_type:
-            logger.error(f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}")
+            logger.error(
+                f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
+            )
             if required:
                 return False, headers
             else:
@@ -264,6 +268,7 @@ class A2AAuthManager:
 
             elif auth_type == AuthType.BASIC:
                 import base64
+
                 username = creds.credentials["username"]
                 password = creds.credentials["password"]
                 credentials_str = f"{username}:{password}"
@@ -284,7 +289,10 @@ class A2AAuthManager:
             elif auth_type == AuthType.HMAC:
                 # HMAC signature authentication - need URL, method, and payload
                 # This will be handled by the new method with additional parameters
-                logger.error("HMAC authentication requires URL, method, and payload - use apply_authentication_with_context")
+                logger.error(
+                    "HMAC authentication requires URL, method, and payload"
+                    " - use apply_authentication_with_context instead"
+                )
                 return False, headers
 
             elif auth_type == AuthType.JWT:
@@ -311,7 +319,7 @@ class A2AAuthManager:
         url: str,
         method: str = "POST",
         payload: Optional[str] = None,
-        required: bool = False
+        required: bool = False,
     ) -> Tuple[bool, Dict[str, str]]:
         """
         Apply authentication with full request context (needed for HMAC)
@@ -345,7 +353,9 @@ class A2AAuthManager:
 
         # Verify credential type matches requirement
         if creds.auth_type != auth_type:
-            logger.error(f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}")
+            logger.error(
+                f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
+            )
             if required:
                 return False, headers
             else:
@@ -388,7 +398,7 @@ class A2AAuthManager:
         credentials: AuthCredentials,
         url: str,
         method: str,
-        payload: Optional[str] = None
+        payload: Optional[str] = None,
     ) -> bool:
         """Apply HMAC signature authentication"""
         try:
@@ -405,9 +415,7 @@ class A2AAuthManager:
 
             # Create HMAC signature
             signature = hmac.new(
-                secret.encode(),
-                signature_string.encode(),
-                hashlib.sha256
+                secret.encode(), signature_string.encode(), hashlib.sha256
             ).hexdigest()
 
             # Add headers
@@ -495,16 +503,18 @@ class A2AAuthManager:
                     data={
                         "grant_type": "client_credentials",
                         "client_id": client_id,
-                        "client_secret": client_secret
+                        "client_secret": client_secret,
                     },
-                    headers={"Content-Type": "application/x-www-form-urlencoded"}
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
                 )
 
                 if response.status_code == 200:
                     token_data = response.json()
                     return token_data.get("access_token")
                 else:
-                    logger.error(f"OAuth2 token request failed: {response.status_code} {response.text}")
+                    logger.error(
+                        f"OAuth2 token request failed: {response.status_code} {response.text}"
+                    )
                     return None
 
         except Exception as e:
@@ -524,6 +534,7 @@ class A2AAuthManager:
 
 # Global auth manager instance
 _auth_manager = None
+
 
 def get_auth_manager() -> A2AAuthManager:
     """Get the global authentication manager instance"""

@@ -195,22 +195,22 @@ class Agent:
         if isinstance(raw_response, str):
             content = raw_response
             logger.debug("Used string path")
-        elif hasattr(raw_response, 'choices') and raw_response.choices:
+        elif hasattr(raw_response, "choices") and raw_response.choices:
             # Handle ChatCompletionResponse object
             message = raw_response.choices[0].message
             logger.debug(f"Message type: {type(message)}")
             logger.debug(f"Message: {message}")
             if isinstance(message, dict):
-                content = message.get('content', '')
+                content = message.get("content", "")
                 logger.debug("Used ChatCompletionResponse dict path")
             else:
                 # Handle message as object with content attribute/property
-                content = getattr(message, 'content', '')
+                content = getattr(message, "content", "")
                 logger.debug("Used ChatCompletionResponse object path")
             logger.debug("Used ChatCompletionResponse path")
-        elif isinstance(raw_response, dict) and 'choices' in raw_response:
+        elif isinstance(raw_response, dict) and "choices" in raw_response:
             # Handle dict response format
-            content = raw_response['choices'][0]['message']['content']
+            content = raw_response["choices"][0]["message"]["content"]
             logger.debug("Used dict path")
         else:
             # Try to extract content from string representation if it's embedded
@@ -218,6 +218,7 @@ class Agent:
             if "content': '" in response_str or 'content": "' in response_str:
                 # Try to extract content from string representation
                 import re
+
                 pattern = r"'content': '([^']*)'|\"content\": \"([^']*)\""
                 content_match = re.search(pattern, response_str)
                 if content_match:
@@ -354,12 +355,11 @@ class Agent:
                 }
             }
         """
-        if not self.overlord or not hasattr(self.overlord, 'get_available_agents_for_a2a'):
+        if not self.overlord or not hasattr(self.overlord, "get_available_agents_for_a2a"):
             return {}
 
         return self.overlord.get_available_agents_for_a2a(
-            requesting_agent_id=self.agent_id,
-            capability_filter=capability_filter
+            requesting_agent_id=self.agent_id, capability_filter=capability_filter
         )
 
     async def invoke_tool(
@@ -399,7 +399,7 @@ class Agent:
         message_type: str = "request",
         context: Optional[Dict[str, Any]] = None,
         wait_for_response: bool = True,
-        timeout: int = 30
+        timeout: int = 30,
     ) -> Optional[Dict[str, Any]]:
         """
         Send an A2A (Agent-to-Agent) message directly to another agent.
@@ -439,13 +439,12 @@ class Agent:
             raise RuntimeError("Agent has no overlord reference for A2A communication")
 
         # Check if we can send A2A messages
-        if not getattr(self, 'a2a_internal', True):
-            raise RuntimeError(
-                f"Agent {self.agent_id} is not configured for A2A communication"
-            )
+        if not getattr(self, "a2a_internal", True):
+            raise RuntimeError(f"Agent {self.agent_id} is not configured for A2A communication")
 
         # Generate message ID for tracking
         import uuid
+
         message_id = str(uuid.uuid4())
 
         # First, try to find the target agent locally
@@ -457,7 +456,7 @@ class Agent:
                 context=context,
                 wait_for_response=wait_for_response,
                 timeout=timeout,
-                message_id=message_id
+                message_id=message_id,
             )
 
         # If not local, try external communication
@@ -468,7 +467,7 @@ class Agent:
             context=context,
             wait_for_response=wait_for_response,
             timeout=timeout,
-            message_id=message_id
+            message_id=message_id,
         )
 
     async def _send_local_a2a_message(
@@ -479,13 +478,13 @@ class Agent:
         context: Optional[Dict[str, Any]],
         wait_for_response: bool,
         timeout: int,
-        message_id: str
+        message_id: str,
     ) -> Optional[Dict[str, Any]]:
         """Send A2A message to a local agent directly."""
         target_agent = self.overlord.agents[target_agent_id]
 
         # Check if target agent accepts internal A2A
-        if not getattr(target_agent, 'a2a_internal', True):
+        if not getattr(target_agent, "a2a_internal", True):
             raise RuntimeError(
                 f"Target agent '{target_agent_id}' is not configured for A2A communication"
             )
@@ -504,9 +503,9 @@ class Agent:
                     message=message,
                     message_type=message_type,
                     context=context,
-                    message_id=message_id
+                    message_id=message_id,
                 ),
-                timeout=timeout
+                timeout=timeout,
             )
 
             # Return response if this was a request and caller wants to wait
@@ -524,7 +523,7 @@ class Agent:
                 return {
                     "status": "error",
                     "error": f"Message timed out after {timeout} seconds",
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
             else:
                 raise
@@ -534,7 +533,7 @@ class Agent:
                 return {
                     "status": "error",
                     "error": f"Message failed: {str(e)}",
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
             else:
                 raise
@@ -547,16 +546,16 @@ class Agent:
         context: Optional[Dict[str, Any]],
         wait_for_response: bool,
         timeout: int,
-        message_id: str
+        message_id: str,
     ) -> Optional[Dict[str, Any]]:
         """Send A2A message to an external agent via registry client."""
         # Get registry client from overlord
-        registry_client = getattr(self.overlord, 'external_registry_client', None)
+        registry_client = getattr(self.overlord, "external_registry_client", None)
         if not registry_client:
             raise RuntimeError("No external registry client available for external A2A")
 
         # Check if this agent can send external messages
-        if not getattr(self, 'a2a_external', True):
+        if not getattr(self, "a2a_external", True):
             raise RuntimeError(
                 f"Agent {self.agent_id} is not configured for external A2A communication"
             )
@@ -580,10 +579,10 @@ class Agent:
                 # Multiple registries
                 for registry_url, agents in discovered_agents.items():
                     for agent_card in agents:
-                        if ((hasattr(agent_card, 'name') and
-                             agent_card.name == target_agent_id) or
-                            (hasattr(agent_card, 'muxi_agent_id') and
-                             agent_card.muxi_agent_id == target_agent_id)):
+                        if (hasattr(agent_card, "name") and agent_card.name == target_agent_id) or (
+                            hasattr(agent_card, "muxi_agent_id")
+                            and agent_card.muxi_agent_id == target_agent_id
+                        ):
                             all_matches.append(agent_card)
                             logger.debug(
                                 f"Found potential agent {target_agent_id} at {agent_card.url}"
@@ -591,14 +590,12 @@ class Agent:
             else:
                 # Single registry
                 for agent_card in discovered_agents:
-                    if ((hasattr(agent_card, 'name') and
-                         agent_card.name == target_agent_id) or
-                        (hasattr(agent_card, 'muxi_agent_id') and
-                         agent_card.muxi_agent_id == target_agent_id)):
+                    if (hasattr(agent_card, "name") and agent_card.name == target_agent_id) or (
+                        hasattr(agent_card, "muxi_agent_id")
+                        and agent_card.muxi_agent_id == target_agent_id
+                    ):
                         all_matches.append(agent_card)
-                        logger.debug(
-                            f"Found potential agent {target_agent_id} at {agent_card.url}"
-                        )
+                        logger.debug(f"Found potential agent {target_agent_id} at {agent_card.url}")
 
             # Handle duplicate agent registrations by preferring specific criteria
             if all_matches:
@@ -609,13 +606,12 @@ class Agent:
                     # with our own formation's port
                     # Get our own formation port to avoid selecting ourselves
                     our_port = "8080"  # Default
-                    if (self.overlord and
-                            hasattr(self.overlord, 'formation_config')):
+                    if self.overlord and hasattr(self.overlord, "formation_config"):
                         formation_config = self.overlord.formation_config
                         if formation_config:
-                            a2a_config = formation_config.get('a2a', {})
-                            inbound_config = a2a_config.get('inbound', {})
-                            our_port = str(inbound_config.get('port', 8080))
+                            a2a_config = formation_config.get("a2a", {})
+                            inbound_config = a2a_config.get("inbound", {})
+                            our_port = str(inbound_config.get("port", 8080))
 
                     # Prefer agents that are NOT on our own formation port
                     preferred_match = None
@@ -638,11 +634,7 @@ class Agent:
                 error_msg = f"Agent {target_agent_id} not found in external registries"
                 logger.error(error_msg)
                 if message_type == "request" and wait_for_response:
-                    return {
-                        "status": "error",
-                        "error": error_msg,
-                        "message_id": message_id
-                    }
+                    return {"status": "error", "error": error_msg, "message_id": message_id}
                 else:
                     raise RuntimeError(error_msg)
 
@@ -651,7 +643,7 @@ class Agent:
                 "message": message if isinstance(message, str) else str(message),
                 "message_type": message_type,
                 "context": context or {},
-                "message_id": message_id
+                "message_id": message_id,
             }
 
             # 3. Apply authentication based on discovered agent requirements
@@ -670,8 +662,14 @@ class Agent:
                     # Multiple registries - search all
                     for registry_url, agent_list in discovered_agents.items():
                         for agent_card in agent_list:
-                            if ((hasattr(agent_card, 'name') and agent_card.name == target_agent_id) or
-                                (hasattr(agent_card, 'muxi_agent_id') and agent_card.muxi_agent_id == target_agent_id)):
+                            has_name = (
+                                hasattr(agent_card, "name") and agent_card.name == target_agent_id
+                            )
+                            has_id = (
+                                hasattr(agent_card, "muxi_agent_id")
+                                and agent_card.muxi_agent_id == target_agent_id
+                            )
+                            if has_name or has_id:
                                 matching_agent = agent_card
                                 break
                         if matching_agent:
@@ -679,17 +677,36 @@ class Agent:
                 else:
                     # Single registry
                     for agent_card in discovered_agents:
-                        if ((hasattr(agent_card, 'name') and agent_card.name == target_agent_id) or
-                            (hasattr(agent_card, 'muxi_agent_id') and agent_card.muxi_agent_id == target_agent_id)):
+                        has_name = (
+                            hasattr(agent_card, "name") and agent_card.name == target_agent_id
+                        )
+                        has_id = (
+                            hasattr(agent_card, "muxi_agent_id")
+                            and agent_card.muxi_agent_id == target_agent_id
+                        )
+                        if has_name or has_id:
                             matching_agent = agent_card
                             break
 
             # Extract authentication requirements
-            if matching_agent and hasattr(matching_agent, 'authentication') and matching_agent.authentication:
+            has_auth = (
+                matching_agent
+                and hasattr(matching_agent, "authentication")
+                and matching_agent.authentication
+            )
+            if has_auth:
                 auth_info = matching_agent.authentication
-                auth_type = AuthType(auth_info.type.value if hasattr(auth_info.type, 'value') else str(auth_info.type))
+                auth_type_value = (
+                    auth_info.type.value
+                    if hasattr(auth_info.type, "value")
+                    else str(auth_info.type)
+                )
+                auth_type = AuthType(auth_type_value)
                 auth_required = auth_info.required
-                logger.debug(f"Agent {target_agent_id} requires {auth_type} authentication (required: {auth_required})")
+                logger.debug(
+                    f"Agent {target_agent_id} requires {auth_type} authentication "
+                    f"(required: {auth_required})"
+                )
             else:
                 logger.debug(f"No authentication requirements found for {target_agent_id}")
 
@@ -707,7 +724,13 @@ class Agent:
                 payload_json = json.dumps(message_payload)
 
                 auth_success, headers = await auth_manager.apply_authentication_with_context(
-                    target_agent_id, auth_type, headers, endpoint_url, "POST", payload_json, auth_required
+                    target_agent_id,
+                    auth_type,
+                    headers,
+                    endpoint_url,
+                    "POST",
+                    payload_json,
+                    auth_required,
                 )
             else:
                 auth_success, headers = await auth_manager.apply_authentication(
@@ -718,11 +741,7 @@ class Agent:
                 error_msg = f"Authentication failed for {target_agent_id} (requires {auth_type})"
                 logger.error(error_msg)
                 if message_type == "request" and wait_for_response:
-                    return {
-                        "status": "error",
-                        "error": error_msg,
-                        "message_id": message_id
-                    }
+                    return {"status": "error", "error": error_msg, "message_id": message_id}
                 else:
                     raise RuntimeError(error_msg)
 
@@ -748,11 +767,7 @@ class Agent:
                 logger.debug(f"Using {auth_type} authentication for {target_agent_id}")
 
             async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.post(
-                    endpoint_url,
-                    json=message_payload,
-                    headers=headers
-                )
+                response = await client.post(endpoint_url, json=message_payload, headers=headers)
 
                 # 4. Handle HTTP response
                 if response.status_code == 200:
@@ -772,11 +787,7 @@ class Agent:
                     logger.error(f"External A2A request failed: {error_msg}")
 
                     if message_type == "request" and wait_for_response:
-                        return {
-                            "status": "error",
-                            "error": error_msg,
-                            "message_id": message_id
-                        }
+                        return {"status": "error", "error": error_msg, "message_id": message_id}
                     else:
                         raise RuntimeError(f"External A2A request failed: {error_msg}")
 
@@ -784,11 +795,7 @@ class Agent:
             error_msg = f"Request timed out after {timeout} seconds"
             logger.error(f"External A2A message timed out: {error_msg}")
             if message_type == "request" and wait_for_response:
-                return {
-                    "status": "error",
-                    "error": error_msg,
-                    "message_id": message_id
-                }
+                return {"status": "error", "error": error_msg, "message_id": message_id}
             else:
                 raise RuntimeError(error_msg)
 
@@ -798,7 +805,7 @@ class Agent:
                 return {
                     "status": "error",
                     "error": f"External message failed: {str(e)}",
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
             else:
                 raise
@@ -809,7 +816,7 @@ class Agent:
         message: Union[str, Dict[str, Any]],
         message_type: str,
         context: Optional[Dict[str, Any]] = None,
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Handle an incoming A2A message from another agent.
@@ -859,7 +866,7 @@ class Agent:
                     "status": "error",
                     "error": f"Failed to process message: {str(e)}",
                     "agent_id": self.agent_id,
-                    "message_id": message_id
+                    "message_id": message_id,
                 }
             return None
 
@@ -868,7 +875,7 @@ class Agent:
         source_agent_id: str,
         message: Union[str, Dict[str, Any]],
         context: Dict[str, Any],
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Handle a consultation request from another agent."""
         topic = context.get("topic", str(message))
@@ -884,18 +891,18 @@ class Agent:
         if consultation_context:
             prompt_parts.append(f"Context: {consultation_context}")
 
-        prompt_parts.extend([
-            "",
-            "Please provide expert advice and helpful guidance on this topic.",
-            "Be specific, actionable, and professional in your response."
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "Please provide expert advice and helpful guidance on this topic.",
+                "Be specific, actionable, and professional in your response.",
+            ]
+        )
 
         consultation_prompt = "\n".join(prompt_parts)
 
         # Process the consultation through the agent's model directly
-        raw_response = await self.model.chat(
-            [{"role": "user", "content": consultation_prompt}]
-        )
+        raw_response = await self.model.chat([{"role": "user", "content": consultation_prompt}])
 
         # Debug: Log what we received
         logger.debug(f"Consultation raw response type: {type(raw_response)}")
@@ -909,7 +916,7 @@ class Agent:
             if isinstance(raw_response, str):
                 content = raw_response
                 logger.debug("Consultation: Used string path")
-            elif hasattr(raw_response, 'choices') and raw_response.choices:
+            elif hasattr(raw_response, "choices") and raw_response.choices:
                 # Handle ChatCompletionResponse object
                 choice = raw_response.choices[0]
                 message_obj = choice.message
@@ -917,20 +924,21 @@ class Agent:
                 logger.debug(f"Consultation message obj type: {type(message_obj)}")
 
                 # Try multiple ways to extract content
-                if hasattr(message_obj, 'content') and message_obj.content:
+                if hasattr(message_obj, "content") and message_obj.content:
                     content = str(message_obj.content)
                     logger.debug("Consultation: Used message.content attribute")
-                elif isinstance(message_obj, dict) and 'content' in message_obj:
-                    content = str(message_obj['content'])
+                elif isinstance(message_obj, dict) and "content" in message_obj:
+                    content = str(message_obj["content"])
                     logger.debug("Consultation: Used message dict content")
-                elif hasattr(message_obj, 'get') and message_obj.get('content'):
-                    content = str(message_obj.get('content'))
+                elif hasattr(message_obj, "get") and message_obj.get("content"):
+                    content = str(message_obj.get("content"))
                     logger.debug("Consultation: Used message.get content")
                 else:
                     # Convert the message object to string and try to extract content
                     message_str = str(message_obj)
                     if "'content':" in message_str:
                         import re
+
                         match = re.search(r"'content':\s*'([^']*)'", message_str)
                         if match:
                             content = match.group(1)
@@ -941,10 +949,10 @@ class Agent:
                     else:
                         content = f"Consultation response for topic: {topic}"
                         logger.warning(f"Consultation: No content found in: {message_str[:200]}")
-            elif isinstance(raw_response, dict) and 'choices' in raw_response:
+            elif isinstance(raw_response, dict) and "choices" in raw_response:
                 # Handle dict response format
                 try:
-                    content = str(raw_response['choices'][0]['message']['content'])
+                    content = str(raw_response["choices"][0]["message"]["content"])
                     logger.debug("Consultation: Used dict path")
                 except (KeyError, IndexError) as e:
                     logger.error(f"Consultation: Error extracting from dict: {e}")
@@ -979,7 +987,7 @@ class Agent:
             "response": content,  # Clean string for A2A protocol compatibility
             "consultation_topic": topic,
             "expert_agent": self.agent_id,
-            "message_id": message_id
+            "message_id": message_id,
         }
 
         return response_dict
@@ -989,7 +997,7 @@ class Agent:
         source_agent_id: str,
         message: Union[str, Dict[str, Any]],
         context: Dict[str, Any],
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
     ) -> None:
         """Handle information sharing notification from another agent."""
         topic = context.get("topic", "general")
@@ -999,7 +1007,7 @@ class Agent:
         log_parts = [
             f"Agent {self.agent_id} received shared information from {source_agent_id}",
             f"Topic: {topic}",
-            f"Content: {message}"
+            f"Content: {message}",
         ]
 
         if relevance_reason:
@@ -1016,9 +1024,9 @@ class Agent:
                         "type": "shared_information",
                         "source_agent": source_agent_id,
                         "topic": topic,
-                        "relevance_reason": relevance_reason
+                        "relevance_reason": relevance_reason,
                     },
-                    agent_id=self.agent_id
+                    agent_id=self.agent_id,
                 )
             except Exception as e:
                 logger.warning(f"Failed to store shared information: {e}")
@@ -1030,7 +1038,7 @@ class Agent:
         source_agent_id: str,
         message: Union[str, Dict[str, Any]],
         context: Dict[str, Any],
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Handle peer coordination request from another agent."""
         coordination_type = context.get("coordination_type", "sync")
@@ -1047,8 +1055,7 @@ class Agent:
             response_content = f"Acknowledged coordination request: {coordination_type}"
 
         logger.info(
-            f"Agent {self.agent_id} coordinated with {source_agent_id} "
-            f"({coordination_type})"
+            f"Agent {self.agent_id} coordinated with {source_agent_id} " f"({coordination_type})"
         )
 
         return {
@@ -1056,12 +1063,10 @@ class Agent:
             "response": response_content,
             "coordination_type": coordination_type,
             "coordinated_with": self.agent_id,
-            "message_id": message_id
+            "message_id": message_id,
         }
 
-    async def _handle_task_handoff(
-        self, source_agent_id: str, details: Dict[str, Any]
-    ) -> str:
+    async def _handle_task_handoff(self, source_agent_id: str, details: Dict[str, Any]) -> str:
         """Handle a task handoff coordination."""
         task = details.get("task", "Unknown task")
         next_step = details.get("next_step", "Continue work")
@@ -1070,7 +1075,7 @@ class Agent:
         response_parts = [
             f"Task handoff acknowledged from {source_agent_id}",
             f"Completed task: {task}",
-            f"Next step: {next_step}"
+            f"Next step: {next_step}",
         ]
 
         if artifacts:
@@ -1080,9 +1085,7 @@ class Agent:
 
         return "\n".join(response_parts)
 
-    async def _handle_synchronization(
-        self, source_agent_id: str, details: Dict[str, Any]
-    ) -> str:
+    async def _handle_synchronization(self, source_agent_id: str, details: Dict[str, Any]) -> str:
         """Handle a synchronization coordination."""
         sync_point = details.get("sync_point", "general")
         status = details.get("status", "in_progress")
@@ -1099,9 +1102,7 @@ class Agent:
         work_area = details.get("work_area", "general")
         dependencies = details.get("dependencies", [])
 
-        response_parts = [
-            f"Parallel coordination with {source_agent_id} on {work_area}"
-        ]
+        response_parts = [f"Parallel coordination with {source_agent_id} on {work_area}"]
 
         if dependencies:
             response_parts.append(f"Shared dependencies: {', '.join(dependencies)}")
@@ -1116,7 +1117,7 @@ class Agent:
         message: Union[str, Dict[str, Any]],
         message_type: str,
         context: Optional[Dict[str, Any]],
-        message_id: Optional[str] = None
+        message_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         """Handle generic A2A messages (fallback for non-collaboration patterns)."""
         if message_type == "request":
@@ -1126,9 +1127,7 @@ class Agent:
             if context:
                 prompt_parts.append(f"Context: {context}")
 
-            prompt_parts.append(
-                "Please provide a helpful response to this agent-to-agent request."
-            )
+            prompt_parts.append("Please provide a helpful response to this agent-to-agent request.")
 
             full_prompt = "\n".join(prompt_parts)
 
@@ -1139,7 +1138,7 @@ class Agent:
                 "status": "success",
                 "response": response.content,
                 "agent_id": self.agent_id,
-                "message_id": message_id
+                "message_id": message_id,
             }
 
         elif message_type == "notification":
@@ -1163,7 +1162,7 @@ class Agent:
         target_agent_id: str,
         topic: str,
         context: Optional[Dict[str, Any]] = None,
-        timeout: int = 30
+        timeout: int = 30,
     ) -> Optional[Dict[str, Any]]:
         """
         Request consultation/help from another agent on a specific topic.
@@ -1191,7 +1190,7 @@ class Agent:
             "collaboration_type": "consultation",
             "topic": topic,
             "context": context or {},
-            "requester_id": self.agent_id
+            "requester_id": self.agent_id,
         }
 
         try:
@@ -1201,7 +1200,7 @@ class Agent:
                 message_type="request",
                 context=consultation_data,
                 wait_for_response=True,
-                timeout=timeout
+                timeout=timeout,
             )
 
             if response and response.get("status") == "success":
@@ -1226,7 +1225,7 @@ class Agent:
         target_agent_id: str,
         information: Union[str, Dict[str, Any]],
         topic: str,
-        relevance_reason: Optional[str] = None
+        relevance_reason: Optional[str] = None,
     ) -> bool:
         """
         Proactively share information with another agent.
@@ -1256,7 +1255,7 @@ class Agent:
             "topic": topic,
             "relevance_reason": relevance_reason,
             "shared_by": self.agent_id,
-            "timestamp": datetime.datetime.now().isoformat()
+            "timestamp": datetime.datetime.now().isoformat(),
         }
 
         try:
@@ -1265,7 +1264,7 @@ class Agent:
                 message=information,
                 message_type="notification",
                 context=sharing_data,
-                wait_for_response=False
+                wait_for_response=False,
             )
 
             logger.info(
@@ -1279,9 +1278,7 @@ class Agent:
             return False
 
     async def register_expertise(
-        self,
-        expertise_areas: List[str],
-        proficiency_levels: Optional[Dict[str, str]] = None
+        self, expertise_areas: List[str], proficiency_levels: Optional[Dict[str, str]] = None
     ) -> bool:
         """
         Register areas of expertise with the overlord for discovery by other agents.
@@ -1306,7 +1303,7 @@ class Agent:
             ...     }
             ... )
         """
-        if not self.overlord or not hasattr(self.overlord, 'register_agent_expertise'):
+        if not self.overlord or not hasattr(self.overlord, "register_agent_expertise"):
             logger.warning("Overlord does not support expertise registry")
             return False
 
@@ -1314,16 +1311,14 @@ class Agent:
             return await self.overlord.register_agent_expertise(
                 agent_id=self.agent_id,
                 expertise_areas=expertise_areas,
-                proficiency_levels=proficiency_levels or {}
+                proficiency_levels=proficiency_levels or {},
             )
         except Exception as e:
             logger.error(f"Expertise registration error: {e}")
             return False
 
     async def find_expert(
-        self,
-        topic: str,
-        min_proficiency: str = "intermediate"
+        self, topic: str, min_proficiency: str = "intermediate"
     ) -> Dict[str, Dict[str, Any]]:
         """
         Find agents with expertise in a specific topic.
@@ -1352,25 +1347,19 @@ class Agent:
                 }
             }
         """
-        if not self.overlord or not hasattr(self.overlord, 'find_experts'):
+        if not self.overlord or not hasattr(self.overlord, "find_experts"):
             return {}
 
         try:
             return await self.overlord.find_experts(
-                topic=topic,
-                min_proficiency=min_proficiency,
-                requesting_agent_id=self.agent_id
+                topic=topic, min_proficiency=min_proficiency, requesting_agent_id=self.agent_id
             )
         except Exception as e:
             logger.error(f"Expert discovery error: {e}")
             return {}
 
     async def coordinate_with_peer(
-        self,
-        peer_agent_id: str,
-        coordination_type: str,
-        details: Dict[str, Any],
-        timeout: int = 30
+        self, peer_agent_id: str, coordination_type: str, details: Dict[str, Any], timeout: int = 30
     ) -> Optional[Dict[str, Any]]:
         """
         Coordinate work with a peer agent on interdependent tasks.
@@ -1402,7 +1391,7 @@ class Agent:
             "collaboration_type": "peer_coordination",
             "coordination_type": coordination_type,
             "details": details,
-            "coordinator_id": self.agent_id
+            "coordinator_id": self.agent_id,
         }
 
         try:
@@ -1412,7 +1401,7 @@ class Agent:
                 message_type="request",
                 context=coordination_data,
                 wait_for_response=True,
-                timeout=timeout
+                timeout=timeout,
             )
 
             if response and response.get("status") == "success":
