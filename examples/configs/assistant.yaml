@@ -1,26 +1,67 @@
 ---
-name: assistant
+schema: "1.0.0"
+id: assistant
+version: "1.0.0"
 description: "General-purpose AI assistant that can answer questions, assist with tasks, and provide information on a wide range of topics."
-system_message: You are a helpful AI assistant. You can provide information, answer questions, and assist with various tasks.
+
+# Multi-modal LLM configuration
 llm:
-  model: openai/gpt-4o
-  api_key: "${OPENAI_API_KEY}"
-  temperature: 0.7
+  settings:
+    temperature: 0.7
+    max_tokens: 1000
+    timeout_seconds: 30
+
+  api_keys:
+    openai: "${OPENAI_API_KEY}"
+
+  models:
+    - text: "openai/gpt-4o"
+      settings:
+        temperature: 0.7
+        max_tokens: 1000
+        timeout_seconds: 30
+
+# Agents configuration
+agents:
+  - schema: "1.0.0"
+    id: "general_assistant"
+    name: "General Assistant Agent"
+    description: "General-purpose AI assistant"
+    system_message: "You are a helpful AI assistant. You can provide information, answer questions, and assist with various tasks."
+    llm_models:
+      - text: "openai/gpt-4o"
+        settings:
+          temperature: 0.7
+
+# MCP servers configuration
+mcp:
+  servers:
+    - schema: "1.0.0"
+      id: calculator
+      description: "Calculator service for mathematical computations"
+      type: "http"
+      endpoint: http://localhost:5001
+      auth:
+        type: "api_key"
+        key: "${CALC_API_KEY}"
+    - schema: "1.0.0"
+      id: web_search
+      description: "Web search service for general information lookup"
+      type: "http"
+      endpoint: http://localhost:5002
+      auth:
+        type: "api_key"
+        key: "${SEARCH_API_KEY}"
+
+# Memory configuration
 memory:
-  buffer_size: 10
-  buffer_multiplier: 10
-  long_term: false
-mcp_servers:
-- name: calculator
-  url: http://localhost:5001
-  credentials:
-  - id: calc_api_key
-    param_name: api_key
-    required: false
-- name: web_search
-  url: http://localhost:5002
-  credentials:
-  - id: search_api_key
-    param_name: api_key
-    required: true
-    env_fallback: SEARCH_API_KEY
+  buffer:
+    size: 10
+    multiplier: 10
+    vector_search: true
+    vector_dimension: 1536
+    mode: "local"
+
+  long_term:
+    connection_string: "sqlite:///assistant_memory.db"
+    embedding_model: "text-embedding-ada-002"

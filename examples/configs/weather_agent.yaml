@@ -1,22 +1,67 @@
 ---
-name: weather_assistant
+schema: "1.0.0"
+id: weather_assistant
+version: "1.0.0"
 description: "Specialized in providing weather forecasts, answering questions about climate and weather phenomena, and reporting current conditions in various locations worldwide."
-system_message: You are a helpful assistant that can check the weather. Use the Weather
-  API when asked about weather conditions.
+
+# Multi-modal LLM configuration
 llm:
-  model: openai/gpt-4o
-  api_key: "${{ secrets.OPENAI_API_KEY }}"
-  temperature: 0.7
+  settings:
+    temperature: 0.7
+    max_tokens: 1000
+    timeout_seconds: 30
+
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-4o"
+      settings:
+        temperature: 0.7
+        max_tokens: 1000
+        timeout_seconds: 30
+
+# Agents configuration
+agents:
+  - schema: "1.0.0"
+    id: "weather_expert"
+    name: "Weather Expert Agent"
+    description: "Weather forecasting specialist"
+    system_message: "You are a helpful assistant that can check the weather. Use the Weather API when asked about weather conditions."
+    llm_models:
+      - text: "openai/gpt-4o"
+        settings:
+          temperature: 0.7
+
+# MCP servers configuration
+mcp:
+  servers:
+    - schema: "1.0.0"
+      id: weather
+      description: "Weather data service providing forecasts and current conditions"
+      type: "http"
+      endpoint: http://localhost:5001
+      auth:
+        type: "api_key"
+        key: "${{ secrets.WEATHER_API_KEY }}"
+    - schema: "1.0.0"
+      id: web_search
+      description: "Web search service for general information lookup"
+      type: "http"
+      endpoint: http://localhost:5002
+      auth:
+        type: "api_key"
+        key: "${{ secrets.SEARCH_API_KEY }}"
+
+# Memory configuration
 memory:
-  buffer_size: 10
-  buffer_multiplier: 10
-  long_term: true
-mcp_servers:
-- name: weather
-  url: http://localhost:5001
-  credentials:
-    api_key: "${{ secrets.WEATHER_API_KEY }}"
-- name: web_search
-  url: http://localhost:5002
-  credentials:
-    api_key: "${{ secrets.SEARCH_API_KEY }}"
+  buffer:
+    size: 10
+    multiplier: 10
+    vector_search: true
+    vector_dimension: 1536
+    mode: "local"
+
+  long_term:
+    connection_string: "sqlite:///weather_memory.db"
+    embedding_model: "text-embedding-ada-002"
