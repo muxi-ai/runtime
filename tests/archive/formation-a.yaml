@@ -1,0 +1,55 @@
+schema: "1.0.0"
+id: "formation-a"
+description: "Formation A - Research Specialists"
+version: "1.0.0"
+
+# LLM Configuration
+llm:
+  # Global model settings
+  settings:
+    temperature: 0.7
+    max_tokens: 1000
+    timeout_seconds: 30
+
+  # API Key Configuration
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+
+  # Model definitions by capability
+  models:
+    - text: "openai/gpt-4o-mini"
+
+# Agent definitions
+agents:
+  - schema: "1.0.0"
+    id: "research-agent"
+    name: "Research Specialist Agent"
+    description: "Specialized in research, data gathering, and analysis with delegation capabilities"
+    system_message: "You are a research specialist agent that excels at gathering information, conducting analysis, and providing comprehensive research insights. You can delegate writing tasks to other agents when needed."
+    a2a:
+      internal: true
+      external: true
+
+# A2A Configuration
+a2a:
+  # External Registries for cross-formation communication
+  registries:
+    - "http://localhost:9090"
+
+  # Server Configuration
+  server:
+    enabled: true
+    port: 8080
+    host: "127.0.0.1"
+    trusted_endpoints:
+      - "localhost"
+      - "127.0.0.1"
+    mode: "none"  # No authentication for testing
+
+# Memory Configuration
+memory:
+  buffer_size: 20
+  long_term: "sqlite:///formation_a.db"
+
+# Secrets (managed by SecretsManager)
+# Store secrets: muxi secrets store OPENAI_API_KEY your_key_here

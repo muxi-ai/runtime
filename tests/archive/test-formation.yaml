@@ -1,0 +1,63 @@
+schema: "1.0.0"
+id: "test-formation"
+description: "Test formation for external A2A registry integration"
+version: "1.0.0"
+
+# LLM Configuration
+llm:
+  # Global model settings
+  settings:
+    temperature: 0.7
+    max_tokens: 1000
+    timeout_seconds: 30
+
+  # API Key Configuration
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+
+  # Model definitions by capability
+  models:
+    - text: "openai/gpt-4o-mini"
+
+# Agent definitions
+agents:
+  - schema: "1.0.0"
+    id: "weather-specialist"
+    name: "Weather Specialist Agent"
+    description: "Provides weather information, forecasts, and weather-related advice"
+    system_message: "You are a weather specialist agent that provides weather information and forecasts."
+    a2a:
+      internal: true
+      external: true
+
+  - schema: "1.0.0"
+    id: "travel-planner"
+    name: "Travel Planner Agent"
+    description: "Helps plan trips, book accommodations, and provides travel recommendations"
+    system_message: "You are a travel planning agent that helps with itineraries and travel advice."
+    a2a:
+      internal: true
+      external: true
+
+# A2A Configuration
+a2a:
+  # External Registries for cross-formation communication
+  registries:
+    - "http://localhost:9090"
+
+  # Server Configuration
+  server:
+    enabled: true                               # Accept external agent requests
+    port: 8181                                  # Port for A2A server
+    trusted_endpoints:                          # Trusted external endpoints
+      - "localhost"
+      - "127.0.0.1"
+    mode: "none"                               # No authentication for testing
+
+# Memory Configuration
+memory:
+  buffer_size: 20
+  long_term: "sqlite:///test_formation.db"
+
+# Environment variables are loaded from .env or system environment
+# No explicit environment section needed for secrets

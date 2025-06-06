@@ -1,5 +1,7 @@
 ---
-agent_id: assistant
+schema: "1.0.0"
+id: assistant
+name: Assistant
 description: A helpful assistant with default SQLite-based long-term memory
 llm:
   model: openai/gpt-4o

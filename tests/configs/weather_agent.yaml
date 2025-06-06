@@ -14,7 +14,7 @@ memory:
 mcp_servers:
 - name: weather_api
   url: http://localhost:5001
-  credentials:
+  auth:
   - id: weather_api_key
     param_name: api_key
     required: true
