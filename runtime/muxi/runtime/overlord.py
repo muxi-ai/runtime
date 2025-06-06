@@ -150,7 +150,8 @@ class Overlord:
         """
         # Initialize agent storage
         self.agents: Dict[str, Agent] = {}
-        self.agent_descriptions: Dict[str, str] = {}
+        self.agent_descriptions: Dict[str, str] = {}  # Legacy compatibility
+        self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
         self.default_agent_id: Optional[str] = None
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
 
@@ -266,7 +267,7 @@ class Overlord:
             system_prompt_path = os.path.join(current_dir, "utils", "system_prompt.md")
 
             if os.path.exists(system_prompt_path):
-                with open(system_prompt_path, 'r', encoding='utf-8') as f:
+                with open(system_prompt_path, "r", encoding="utf-8") as f:
                     self._default_system_prompt = f.read().strip()
                 logger.debug(f"Loaded default system prompt from {system_prompt_path}")
             else:
@@ -312,8 +313,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
             if not validation_result.is_valid:
                 error_msg = (
-                    f"Formation validation failed:\n"
-                    f"{validation_result.detailed_report()}"
+                    f"Formation validation failed:\n" f"{validation_result.detailed_report()}"
                 )
                 logger.error(error_msg)
                 raise ValueError(error_msg)
@@ -321,8 +321,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             # Log warnings if any
             if validation_result.warnings:
                 logger.warning(
-                    f"Formation validation warnings:\n"
-                    f"{validation_result.detailed_report()}"
+                    f"Formation validation warnings:\n" f"{validation_result.detailed_report()}"
                 )
 
             # Load formation configuration
@@ -359,23 +358,23 @@ Analyze incoming user messages and determine which specialized agent is best equ
             validation_result = validate_formation(formation_path, self.secrets_manager)
 
             return {
-                'is_valid': validation_result.is_valid,
-                'errors': validation_result.errors,
-                'warnings': validation_result.warnings,
-                'suggestions': validation_result.suggestions,
-                'summary': validation_result.summary(),
-                'detailed_report': validation_result.detailed_report()
+                "is_valid": validation_result.is_valid,
+                "errors": validation_result.errors,
+                "warnings": validation_result.warnings,
+                "suggestions": validation_result.suggestions,
+                "summary": validation_result.summary(),
+                "detailed_report": validation_result.detailed_report(),
             }
 
         except Exception as e:
             logger.error(f"Failed to validate formation {formation_path}: {e}")
             return {
-                'is_valid': False,
-                'errors': [str(e)],
-                'warnings': [],
-                'suggestions': [],
-                'summary': f"❌ Validation failed: {str(e)}",
-                'detailed_report': f"Validation failed with exception: {str(e)}"
+                "is_valid": False,
+                "errors": [str(e)],
+                "warnings": [],
+                "suggestions": [],
+                "summary": f"❌ Validation failed: {str(e)}",
+                "detailed_report": f"Validation failed with exception: {str(e)}",
             }
 
     async def _apply_formation_config(self) -> None:
@@ -401,17 +400,25 @@ Analyze incoming user messages and determine which specialized agent is best equ
         await self._initialize_logging_config()
 
         # Create agents from configuration
-        agents_config = config.get('agents', [])
+        agents_config = config.get("agents", [])
         for agent_config in agents_config:
             try:
-                await self._create_agent_from_config(agent_config)
+                # Check if agent is active (default to True)
+                agent_id = agent_config.get("id", "unknown")
+                is_active = agent_config.get("active", True)
+
+                if is_active:
+                    await self._create_agent_from_config(agent_config)
+                    logger.info(f"✅ Agent {agent_id} loaded")
+                else:
+                    logger.info(f"🔇 Agent {agent_id} skipped (disabled)")
             except Exception as e:
                 logger.error(f"Failed to create agent from config: {e}")
                 continue
 
         # Register MCP servers from configuration
-        mcp_config = config.get('mcp', {})
-        servers = mcp_config.get('servers', [])
+        mcp_config = config.get("mcp", {})
+        servers = mcp_config.get("servers", [])
         for server_config in servers:
             try:
                 await self._register_mcp_server_from_config(server_config)
@@ -420,7 +427,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 continue
 
         # Apply A2A configuration
-        a2a_config = config.get('a2a', {})
+        a2a_config = config.get("a2a", {})
         if a2a_config:
             try:
                 await self._apply_a2a_config(a2a_config)
@@ -436,28 +443,28 @@ Analyze incoming user messages and determine which specialized agent is best equ
         This processes the new capability-based LLM schema and sets up model
         resolution for different capabilities like text, vision, transcription, etc.
         """
-        llm_config = self.formation_config.get('llm', {})
+        llm_config = self.formation_config.get("llm", {})
 
         # Initialize model cache for capability-based resolution
         self._model_cache = {}
         self._capability_models = {}
 
         # Process models by capability
-        models_config = llm_config.get('models', [])
+        models_config = llm_config.get("models", [])
         for model_config in models_config:
             for capability, model_name in model_config.items():
-                if capability in ['api_key', 'settings']:
+                if capability in ["api_key", "settings"]:
                     continue  # Skip metadata
 
                 self._capability_models[capability] = {
-                    'model': model_name,
-                    'api_key': model_config.get('api_key'),
-                    'settings': model_config.get('settings', {})
+                    "model": model_name,
+                    "api_key": model_config.get("api_key"),
+                    "settings": model_config.get("settings", {}),
                 }
 
         # Store global settings and api_keys for later use
-        self._global_llm_settings = llm_config.get('settings', {})
-        self._global_api_keys = llm_config.get('api_keys', {})
+        self._global_llm_settings = llm_config.get("settings", {})
+        self._global_api_keys = llm_config.get("api_keys", {})
 
         capabilities = list(self._capability_models.keys())
         logger.info(f"✅ Initialized LLM config with capabilities: {capabilities}")
@@ -469,12 +476,12 @@ Analyze incoming user messages and determine which specialized agent is best equ
         This processes the auth.api_keys structure and updates the overlord's
         API keys if they are provided in the formation config.
         """
-        auth_config = self.formation_config.get('auth', {})
-        auth_api_keys = auth_config.get('api_keys', {})
+        auth_config = self.formation_config.get("auth", {})
+        auth_api_keys = auth_config.get("api_keys", {})
 
         # Update admin and user API keys from formation config if provided
-        if 'admin_key' in auth_api_keys:
-            admin_key = auth_api_keys['admin_key']
+        if "admin_key" in auth_api_keys:
+            admin_key = auth_api_keys["admin_key"]
             # Interpolate secrets if needed
             if admin_key and "${{ secrets." in admin_key:
                 try:
@@ -486,8 +493,8 @@ Analyze incoming user messages and determine which specialized agent is best equ
             self.admin_api_key = admin_key
             logger.info("✅ Updated admin API key from formation config")
 
-        if 'user_key' in auth_api_keys:
-            user_key = auth_api_keys['user_key']
+        if "user_key" in auth_api_keys:
+            user_key = auth_api_keys["user_key"]
             # Interpolate secrets if needed
             if user_key and "${{ secrets." in user_key:
                 try:
@@ -510,19 +517,19 @@ Analyze incoming user messages and determine which specialized agent is best equ
         and initializes or updates the overlord's memory systems according
         to the new schema specifications.
         """
-        memory_config = self.formation_config.get('memory', {})
+        memory_config = self.formation_config.get("memory", {})
 
         if not memory_config:
             logger.debug("No memory configuration found in formation")
             return
 
         # Initialize buffer memory configuration
-        buffer_config = memory_config.get('buffer', {})
+        buffer_config = memory_config.get("buffer", {})
         if buffer_config and not self.buffer_memory:
             await self._initialize_buffer_memory(buffer_config)
 
         # Initialize long-term memory configuration
-        long_term_config = memory_config.get('long_term', {})
+        long_term_config = memory_config.get("long_term", {})
         if long_term_config and not self.long_term_memory:
             await self._initialize_long_term_memory(long_term_config)
 
@@ -536,7 +543,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         This processes the logging configuration according to SCHEMA_GUIDE.md
         and configures the logging system for the formation.
         """
-        logging_config = self.formation_config.get('logging', {})
+        logging_config = self.formation_config.get("logging", {})
 
         if not logging_config:
             logger.debug("No logging configuration found in formation")
@@ -547,20 +554,20 @@ Analyze incoming user messages and determine which specialized agent is best equ
             from .config.logging import LoggingConfig, configure_logging
 
             # Extract logging configuration
-            level = logging_config.get('level', 'info')
-            format_type = logging_config.get('format', 'jsonl')
-            output = logging_config.get('output', 'stdout')
-            path = logging_config.get('path')
-            stream_url = logging_config.get('stream_url')
-            log_categories = logging_config.get('log', [])
-            exclude_categories = logging_config.get('exclude', [])
+            level = logging_config.get("level", "info")
+            format_type = logging_config.get("format", "jsonl")
+            output = logging_config.get("output", "stdout")
+            path = logging_config.get("path")
+            stream_url = logging_config.get("stream_url")
+            log_categories = logging_config.get("log", [])
+            exclude_categories = logging_config.get("exclude", [])
 
             # Convert SCHEMA_GUIDE.md format to LoggingConfig format
             # Map the new schema format to the existing LoggingConfig
             config = LoggingConfig(
                 level=level.upper(),  # Convert to uppercase for standard logging
-                file=path if output == 'file' else None,
-                format=self._convert_logging_format(format_type)
+                file=path if output == "file" else None,
+                format=self._convert_logging_format(format_type),
             )
 
             # Configure the logging system
@@ -568,17 +575,19 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
             # Store logging configuration for potential future use
             self._logging_config = {
-                'level': level,
-                'format': format_type,
-                'output': output,
-                'path': path,
-                'stream_url': stream_url,
-                'log_categories': log_categories,
-                'exclude_categories': exclude_categories
+                "level": level,
+                "format": format_type,
+                "output": output,
+                "path": path,
+                "stream_url": stream_url,
+                "log_categories": log_categories,
+                "exclude_categories": exclude_categories,
             }
 
-            logger.info(f"✅ Initialized logging configuration "
-                       f"(level={level}, format={format_type}, output={output})")
+            logger.info(
+                f"✅ Initialized logging configuration "
+                f"(level={level}, format={format_type}, output={output})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize logging configuration: {e}")
@@ -593,9 +602,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
         Returns:
             Format string for LoggingConfig
         """
-        if schema_format == 'jsonl':
+        if schema_format == "jsonl":
             return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
-        elif schema_format == 'text':
+        elif schema_format == "text":
             return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
         else:
             # Default format
@@ -607,18 +616,18 @@ Analyze incoming user messages and determine which specialized agent is best equ
             from .memory.buffer import BufferMemory
 
             # Extract buffer configuration
-            size = buffer_config.get('size', 10)
-            multiplier = buffer_config.get('multiplier', 10)
-            vector_search = buffer_config.get('vector_search', True)
-            dimension = buffer_config.get('vector_dimension', 1536)
-            mode = buffer_config.get('mode', 'local')
-            remote_config = buffer_config.get('remote', {})
+            size = buffer_config.get("size", 10)
+            multiplier = buffer_config.get("multiplier", 10)
+            vector_search = buffer_config.get("vector_search", True)
+            dimension = buffer_config.get("vector_dimension", 1536)
+            mode = buffer_config.get("mode", "local")
+            remote_config = buffer_config.get("remote", {})
 
             # Get embedding model for vector search if enabled
             embedding_model = None
             if vector_search:
                 try:
-                    embedding_model = await self.get_model_for_capability('embedding')
+                    embedding_model = await self.get_model_for_capability("embedding")
                 except Exception as e:
                     logger.warning(f"Could not get embedding model for buffer memory: {e}")
                     vector_search = False
@@ -630,11 +639,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 dimension=dimension,
                 model=embedding_model,
                 mode=mode,
-                remote=remote_config if mode == 'remote' else None
+                remote=remote_config if mode == "remote" else None,
             )
 
-            logger.info(f"✅ Initialized buffer memory (size={size}, multiplier={multiplier}, "
-                       f"vector_search={vector_search}, mode={mode})")
+            logger.info(
+                f"✅ Initialized buffer memory (size={size}, multiplier={multiplier}, "
+                f"vector_search={vector_search}, mode={mode})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize buffer memory: {e}")
@@ -642,8 +653,8 @@ Analyze incoming user messages and determine which specialized agent is best equ
     async def _initialize_long_term_memory(self, long_term_config: Dict[str, Any]) -> None:
         """Initialize long-term memory from configuration."""
         try:
-            connection_string = long_term_config.get('connection_string')
-            embedding_model_name = long_term_config.get('embedding_model')
+            connection_string = long_term_config.get("connection_string")
+            embedding_model_name = long_term_config.get("embedding_model")
 
             if not connection_string:
                 logger.warning("No connection_string provided for long-term memory")
@@ -670,31 +681,36 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     logger.warning(f"Could not create embedding model {embedding_model_name}: {e}")
                     try:
                         # Fall back to default embedding capability
-                        embedding_model = await self.get_model_for_capability('embedding')
+                        embedding_model = await self.get_model_for_capability("embedding")
                     except Exception as e2:
                         logger.warning(f"Could not get default embedding model: {e2}")
 
             # Determine memory type based on connection string
-            if connection_string.startswith('postgresql://') or connection_string.startswith('postgres://'):
+            if connection_string.startswith("postgresql://") or connection_string.startswith(
+                "postgres://"
+            ):
                 from .memory.memobase import Memobase
+
                 self.long_term_memory = Memobase(
-                    connection_string=connection_string,
-                    model=embedding_model
+                    connection_string=connection_string, model=embedding_model
                 )
                 logger.info("✅ Initialized PostgreSQL-based long-term memory (Memobase)")
-            elif connection_string.startswith('sqlite://') or connection_string.endswith('.db'):
+            elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
                 from .memory.sqlite import SQLiteMemory
+
                 # Remove sqlite:// prefix if present
-                db_path = connection_string.replace('sqlite://', '')
+                db_path = connection_string.replace("sqlite://", "")
                 self.long_term_memory = SQLiteMemory(db_path=db_path)
 
                 # Set the embedding provider after initialization
                 if embedding_model:
                     try:
-                        embedding_llm = await self.get_model_for_capability('embedding')
+                        embedding_llm = await self.get_model_for_capability("embedding")
                         self.long_term_memory.embedding_provider = embedding_llm
                     except Exception as e:
-                        logger.warning(f"Could not set embedding provider for long-term memory: {e}")
+                        logger.warning(
+                            f"Could not set embedding provider for long-term memory: {e}"
+                        )
 
                 logger.info(f"✅ Initialized SQLite-based long-term memory ({db_path})")
             else:
@@ -704,9 +720,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             logger.error(f"Failed to initialize long-term memory: {e}")
 
     async def get_model_for_capability(
-        self,
-        capability: str,
-        agent_id: Optional[str] = None
+        self, capability: str, agent_id: Optional[str] = None
     ) -> LLM:
         """
         Get a model for a specific capability with optional agent override.
@@ -737,11 +751,11 @@ Analyze incoming user messages and determine which specialized agent is best equ
         model_config = None
 
         # Check for agent-specific model override
-        if agent_id and hasattr(self, 'agents') and agent_id in self.agents:
+        if agent_id and hasattr(self, "agents") and agent_id in self.agents:
             agent = self.agents[agent_id]
             # Look for agent-specific model configuration
             # This would come from agent config in formation
-            if hasattr(agent, 'models') and capability in agent.models:
+            if hasattr(agent, "models") and capability in agent.models:
                 model_config = agent.models[capability]
 
         # Fall back to formation default for this capability
@@ -749,8 +763,8 @@ Analyze incoming user messages and determine which specialized agent is best equ
             model_config = self._capability_models[capability]
 
         # Fall back to text capability if current capability not found
-        if not model_config and capability != 'text' and 'text' in self._capability_models:
-            model_config = self._capability_models['text']
+        if not model_config and capability != "text" and "text" in self._capability_models:
+            model_config = self._capability_models["text"]
             logger.warning(f"No {capability} model found, falling back to text model")
 
         # If still no model config, raise error
@@ -758,20 +772,17 @@ Analyze incoming user messages and determine which specialized agent is best equ
             raise ValueError(f"No model found for capability: {capability}")
 
         # Extract model configuration
-        model_name = model_config['model']
-        api_key = model_config.get('api_key')
-        model_settings = model_config.get('settings', {})
+        model_name = model_config["model"]
+        api_key = model_config.get("api_key")
+        model_settings = model_config.get("settings", {})
 
         # Apply global settings with model-specific overrides
-        final_settings = {
-            **self._global_llm_settings,
-            **model_settings
-        }
+        final_settings = {**self._global_llm_settings, **model_settings}
 
         # Resolve API key - model-specific > global > environment
         final_api_key = api_key
-        if not final_api_key and '/' in model_name:
-            provider = model_name.split('/')[0]
+        if not final_api_key and "/" in model_name:
+            provider = model_name.split("/")[0]
             final_api_key = self._global_api_keys.get(provider)
 
         # Interpolate secrets if needed
@@ -783,11 +794,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 logger.warning(f"Failed to interpolate secrets in api_key: {e}")
 
         # Create model instance
-        model = LLM(
-            model=model_name,
-            api_key=final_api_key,
-            **final_settings
-        )
+        model = LLM(model=model_name, api_key=final_api_key, **final_settings)
 
         # Cache the model
         self._model_cache[cache_key] = model
@@ -802,26 +809,53 @@ Analyze incoming user messages and determine which specialized agent is best equ
         Args:
             agent_config: Agent configuration dictionary
         """
-        agent_id = agent_config.get('id')
+        agent_id = agent_config.get("id")
         if not agent_id:
             logger.error("Agent configuration missing id")
             return
 
-        # Create model from configuration
-        model_config = agent_config.get('model', {})
-        model = await self.create_model(**model_config)
+        # Create model from configuration (support both new and legacy formats)
+        if "llm_models" in agent_config:
+            # New schema format
+            llm_models = agent_config["llm_models"]
+            if llm_models and len(llm_models) > 0:
+                text_model = llm_models[0]  # Use first model for text capability
+                model_name = text_model.get("text", "openai/gpt-4o-mini")
+                settings = text_model.get("settings", {})
+                model = await self.create_model(model=model_name, **settings)
+            else:
+                model = await self.create_model()
+        else:
+            # Legacy model format
+            model_config = agent_config.get("model", {})
+            model = await self.create_model(**model_config)
 
         # Extract other agent parameters
-        system_message = agent_config.get('system_message')
-        description = agent_config.get('description')
+        system_message = agent_config.get("system_message")
+        description = agent_config.get("description")
+        name = agent_config.get("name", agent_id)
+        role = agent_config.get("role")
+        specialties = agent_config.get("specialties", [])
 
         # Create the agent
-        self.create_agent(
-            agent_id=agent_id,
-            model=model,
-            system_message=system_message,
-            description=description
+        agent = self.create_agent(
+            agent_id=agent_id, model=model, system_message=system_message, description=description
         )
+
+        # Set enhanced metadata attributes on the agent
+        agent.name = name
+        agent.role = role
+        agent.specialties = specialties
+
+        # Update the stored metadata with the correct values
+        if agent_id in self.agent_metadata:
+            self.agent_metadata[agent_id].update(
+                {
+                    "name": name,
+                    "role": role,
+                    "specialties": specialties,
+                }
+            )
 
         logger.info(f"✅ Created agent from config: {agent_id}")
 
@@ -832,22 +866,19 @@ Analyze incoming user messages and determine which specialized agent is best equ
         Args:
             server_config: MCP server configuration dictionary
         """
-        server_id = server_config.get('id')
+        server_id = server_config.get("id")
         if not server_id:
             logger.error("MCP server configuration missing id")
             return
 
         # Extract server parameters
-        url = server_config.get('url')
-        command = server_config.get('command')
-        credentials = server_config.get('auth')
+        url = server_config.get("url")
+        command = server_config.get("command")
+        credentials = server_config.get("auth")
 
         # Register the MCP server
         await self.register_mcp_server(
-            server_id=server_id,
-            url=url,
-            command=command,
-            credentials=credentials
+            server_id=server_id, url=url, command=command, credentials=credentials
         )
 
         logger.info(f"✅ Registered MCP server from config: {server_id}")
@@ -860,13 +891,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
             a2a_config: A2A configuration dictionary
         """
         # Handle outbound configuration
-        outbound_config = a2a_config.get('outbound', {})
+        outbound_config = a2a_config.get("outbound", {})
         if outbound_config:
-            services = outbound_config.get('services', [])
+            services = outbound_config.get("services", [])
             for service_config in services:
                 try:
                     # Apply outbound service configuration
-                    service_id = service_config.get('id')
+                    service_id = service_config.get("id")
                     logger.info(f"✅ Applied A2A outbound service config: {service_id}")
                 except Exception as e:
                     logger.error(f"Failed to apply A2A service config: {e}")
@@ -877,38 +908,38 @@ Analyze incoming user messages and determine which specialized agent is best equ
         """Initialize the model used for agent routing decisions."""
         try:
             # Get overlord configuration from formation config
-            overlord_config = self.formation_config.get('overlord', {})
+            overlord_config = self.formation_config.get("overlord", {})
 
             # Try new overlord.llm structure first
-            llm_config = overlord_config.get('llm', {})
+            llm_config = overlord_config.get("llm", {})
             if llm_config:
                 # New overlord.llm config structure
                 self.routing_model = self.create_model(
-                    model=llm_config.get('model', 'openai/gpt-4o-mini'),
-                    temperature=llm_config.get('settings', {}).get('temperature', 0.2),
-                    max_tokens=llm_config.get('settings', {}).get('max_tokens', 2000),
-                    api_key=llm_config.get('api_key')
+                    model=llm_config.get("model", "openai/gpt-4o-mini"),
+                    temperature=llm_config.get("settings", {}).get("temperature", 0.2),
+                    max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
+                    api_key=llm_config.get("api_key"),
                 )
 
                 # Set custom system message if provided
-                overlord_system_message = overlord_config.get('system_message')
+                overlord_system_message = overlord_config.get("system_message")
                 if overlord_system_message:
                     self.routing_system_message = overlord_system_message
                 else:
                     self.routing_system_message = None
 
                 # Configure overlord behavior from overlord.config
-                config_section = overlord_config.get('config', {})
+                config_section = overlord_config.get("config", {})
 
                 # Caching configuration
-                caching_config = config_section.get('caching', {})
-                self.routing_cache_enabled = caching_config.get('enabled', True)
-                self.routing_cache_ttl = caching_config.get('ttl', 3600)
+                caching_config = config_section.get("caching", {})
+                self.routing_cache_enabled = caching_config.get("enabled", True)
+                self.routing_cache_ttl = caching_config.get("ttl", 3600)
 
                 # Additional configuration fields
-                self.max_extraction_tokens = config_section.get('max_extraction_tokens', 500)
-                self.max_tool_calls = config_section.get('max_tool_calls', -1)
-                self.response_format = config_section.get('response_format', 'markdown')
+                self.max_extraction_tokens = config_section.get("max_extraction_tokens", 500)
+                self.max_tool_calls = config_section.get("max_tool_calls", -1)
+                self.response_format = config_section.get("response_format", "markdown")
 
                 # Initialize cache expiry tracking if TTL is configured
                 if self.routing_cache_ttl > 0:
@@ -916,24 +947,24 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
             else:
                 # Fall back to legacy overlord.routing structure for compatibility
-                routing_data = overlord_config.get('routing', {})
+                routing_data = overlord_config.get("routing", {})
                 if routing_data:
                     self.routing_model = self.create_model(
-                        model=routing_data.get('model', 'openai/gpt-4o-mini'),
-                        temperature=routing_data.get('settings', {}).get('temperature', 0.2),
-                        max_tokens=routing_data.get('settings', {}).get('max_tokens', 2000),
-                        api_key=routing_data.get('api_key')
+                        model=routing_data.get("model", "openai/gpt-4o-mini"),
+                        temperature=routing_data.get("settings", {}).get("temperature", 0.2),
+                        max_tokens=routing_data.get("settings", {}).get("max_tokens", 2000),
+                        api_key=routing_data.get("api_key"),
                     )
 
                     # Legacy caching config
-                    self.routing_cache_enabled = routing_data.get('use_caching', True)
-                    self.routing_cache_ttl = routing_data.get('cache_ttl', 3600)
-                    self.routing_system_message = routing_data.get('system_message')
+                    self.routing_cache_enabled = routing_data.get("use_caching", True)
+                    self.routing_cache_ttl = routing_data.get("cache_ttl", 3600)
+                    self.routing_system_message = routing_data.get("system_message")
 
                     # Default values for new config fields when using legacy format
                     self.max_extraction_tokens = 500
                     self.max_tool_calls = -1
-                    self.response_format = 'markdown'
+                    self.response_format = "markdown"
 
                     # Initialize cache expiry tracking if TTL is configured
                     if self.routing_cache_ttl > 0:
@@ -943,7 +974,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     # No overlord config - try to get text model from formation
                     try:
                         self.routing_model = asyncio.create_task(
-                            self.get_model_for_capability('text')
+                            self.get_model_for_capability("text")
                         )
                         logger.info("Using capability-based text model for routing")
                     except Exception:
@@ -956,12 +987,14 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     self.routing_system_message = None
                     self.max_extraction_tokens = 500
                     self.max_tool_calls = -1
-                    self.response_format = 'markdown'
+                    self.response_format = "markdown"
                     self._routing_cache_expiry: Dict[str, float] = {}
 
-            logger.info(f"✅ Initialized overlord routing model with cache_enabled={self.routing_cache_enabled}, "
-                       f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens}, "
-                       f"max_tool_calls={self.max_tool_calls}, response_format={self.response_format}")
+            logger.info(
+                f"✅ Initialized overlord routing model with cache_enabled={self.routing_cache_enabled}, "
+                f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens}, "
+                f"max_tool_calls={self.max_tool_calls}, response_format={self.response_format}"
+            )
 
         except Exception as e:
             # If initialization fails, log error but continue (routing will fall back to default)
@@ -972,7 +1005,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             self.routing_system_message = None
             self.max_extraction_tokens = 500
             self.max_tool_calls = -1
-            self.response_format = 'markdown'
+            self.response_format = "markdown"
             self._routing_cache_expiry: Dict[str, float] = {}
 
     async def create_model(
@@ -1021,7 +1054,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             api_key=final_api_key,
             temperature=temperature,
             max_tokens=max_tokens,
-            **kwargs
+            **kwargs,
         )
 
     def create_agent(
@@ -1083,6 +1116,14 @@ Analyze incoming user messages and determine which specialized agent is best equ
         self.agents[agent_id] = agent
         self.agent_descriptions[agent_id] = description or system_message or f"Agent {agent_id}"
 
+        # Store enhanced agent metadata for intelligent routing
+        self.agent_metadata[agent_id] = {
+            "name": getattr(agent, "name", agent_id),
+            "role": getattr(agent, "role", None),
+            "specialties": getattr(agent, "specialties", []),
+            "description": description or system_message or f"Agent {agent_id}",
+        }
+
         # Set as default if requested or if it's the first agent
         if set_as_default or len(self.agents) == 1:
             self.default_agent_id = agent_id
@@ -1090,13 +1131,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
         logger.info(f"Created agent with ID '{agent_id}'")
 
         # Track agents that need external registration (but don't register yet)
-        a2a_config = self.formation_config.get('a2a', {}) if self.formation_config else {}
-        inbound_config = a2a_config.get('inbound', {})
-        inbound_enabled = inbound_config.get('enabled', False)
+        a2a_config = self.formation_config.get("a2a", {}) if self.formation_config else {}
+        inbound_config = a2a_config.get("inbound", {})
+        inbound_enabled = inbound_config.get("enabled", False)
 
         if inbound_enabled and a2a_external:
             # Store for later registration after formation server starts
-            if not hasattr(self, 'pending_external_registrations'):
+            if not hasattr(self, "pending_external_registrations"):
                 self.pending_external_registrations = set()
             self.pending_external_registrations.add(agent_id)
             logger.info(
@@ -1136,8 +1177,16 @@ Analyze incoming user messages and determine which specialized agent is best equ
         # Store the agent
         self.agents[agent.agent_id] = agent
 
-        # Store description for routing
+        # Store description for routing (legacy)
         self.agent_descriptions[agent.agent_id] = agent.system_message or ""
+
+        # Store enhanced agent metadata for intelligent routing
+        self.agent_metadata[agent.agent_id] = {
+            "name": getattr(agent, "name", agent.agent_id),
+            "role": getattr(agent, "role", None),
+            "specialties": getattr(agent, "specialties", []),
+            "description": agent.system_message or "",
+        }
 
         # Set as default if requested or if it's the first agent
         if set_as_default or len(self.agents) == 1:
@@ -1666,9 +1715,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         if self.external_registry_client:
             try:
                 # Run deregistration in background - don't block removal
-                asyncio.create_task(
-                    self.deregister_agent_from_external_registry(agent_id)
-                )
+                asyncio.create_task(self.deregister_agent_from_external_registry(agent_id))
                 logger.debug(f"Scheduled external registry deregistration for agent {agent_id}")
             except Exception as e:
                 # Log warning but don't fail the removal
@@ -1813,12 +1860,12 @@ Analyze incoming user messages and determine which specialized agent is best equ
             raise ValueError("No agents available")
 
         # Get caching configuration
-        overlord_config = self.formation_config.get('overlord', {})
-        config_section = overlord_config.get('config', {})
-        caching_config = config_section.get('caching', {})
+        overlord_config = self.formation_config.get("overlord", {})
+        config_section = overlord_config.get("config", {})
+        caching_config = config_section.get("caching", {})
 
-        caching_enabled = caching_config.get('enabled', True)  # Default: enabled
-        cache_ttl = caching_config.get('ttl', 3600)  # Default: 3600 seconds (1 hour)
+        caching_enabled = caching_config.get("enabled", True)  # Default: enabled
+        cache_ttl = caching_config.get("ttl", 3600)  # Default: 3600 seconds (1 hour)
 
         # Check if we've seen this message before (use cached routing decision)
         if caching_enabled and message in self._routing_cache:
@@ -1830,8 +1877,8 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 return cached_entry
             elif isinstance(cached_entry, dict):
                 # New format with timestamp
-                cached_time = cached_entry.get('timestamp', 0)
-                cached_agent = cached_entry.get('agent_id')
+                cached_time = cached_entry.get("timestamp", 0)
+                cached_agent = cached_entry.get("agent_id")
 
                 # Check if cache entry is still valid (within TTL)
                 if time.time() - cached_time < cache_ttl:
@@ -1871,8 +1918,8 @@ Analyze incoming user messages and determine which specialized agent is best equ
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
                 self._routing_cache[message] = {
-                    'agent_id': selected_agent_id,
-                    'timestamp': time.time()
+                    "agent_id": selected_agent_id,
+                    "timestamp": time.time(),
                 }
 
             return selected_agent_id
@@ -1897,25 +1944,51 @@ Analyze incoming user messages and determine which specialized agent is best equ
         Returns:
             A formatted prompt string for the routing model.
         """
-        # Get agent descriptions
+        # Get enhanced agent descriptions with metadata
         agent_descriptions = []
-        for agent_id, description in self.agent_descriptions.items():
-            agent_descriptions.append(f"{agent_id}: {description}")
+        for agent_id in self.agents.keys():
+            # Use enhanced metadata if available, fall back to legacy description
+            if agent_id in self.agent_metadata:
+                metadata = self.agent_metadata[agent_id]
+                name = metadata["name"]
+                role = metadata["role"]
+                specialties = metadata["specialties"]
+                description = metadata["description"]
+
+                # Format: "ID: Name (Role) - Specialties: [list] - Description"
+                agent_line = f"{agent_id}: {name}"
+                if role:
+                    agent_line += f" ({role})"
+                if specialties:
+                    specialty_list = ", ".join(specialties)
+                    agent_line += f" - Specialties: {specialty_list}"
+                if description:
+                    agent_line += f" - {description}"
+
+                agent_descriptions.append(agent_line)
+            else:
+                # Fallback to legacy format
+                desc = self.agent_descriptions.get(agent_id, f"Agent {agent_id}")
+                agent_descriptions.append(f"{agent_id}: {desc}")
 
         # Use the loaded default system prompt with current date/time
-        default_prompt = getattr(self, '_default_system_prompt',
-                                "You are an intelligent message router for a multi-agent system. "
-                                "Analyze incoming user messages and determine which specialized agent "
-                                "is best equipped to handle each request.")
+        default_prompt = getattr(
+            self,
+            "_default_system_prompt",
+            "You are an intelligent message router for a multi-agent system. "
+            "Analyze incoming user messages and determine which specialized agent "
+            "is best equipped to handle each request.",
+        )
 
         # Add current date/time to the prompt
         current_time = datetime.datetime.now()
         date_time_str = current_time.strftime("Today is %d %m %Y, %H:%M")
         default_prefix = f"{date_time_str}\n\n{default_prompt}\n\n"
+        default_prefix += f"Always try to use {self.response_format} in responses.\n\n"
 
         # Check for custom system message from overlord configuration
-        overlord_config = self.formation_config.get('overlord', {})
-        custom_system_message = overlord_config.get('system_message')
+        overlord_config = self.formation_config.get("overlord", {})
+        custom_system_message = overlord_config.get("system_message")
 
         if custom_system_message:
             # Use default prefix + custom system message
@@ -2041,9 +2114,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         }
 
     def get_available_agents_for_a2a(
-        self,
-        requesting_agent_id: str,
-        capability_filter: Optional[List[str]] = None
+        self, requesting_agent_id: str, capability_filter: Optional[List[str]] = None
     ) -> Dict[str, Dict[str, Any]]:
         """
         Get available agents for A2A (Agent-to-Agent) communication.
@@ -2083,14 +2154,14 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
             # Check if agent participates in internal A2A communication
             # Default to True if not specified (backwards compatibility)
-            if not getattr(agent, 'a2a_internal', True):
+            if not getattr(agent, "a2a_internal", True):
                 continue
 
             # Get agent capabilities if available
             capabilities = []
-            if hasattr(agent, 'get_capabilities'):
+            if hasattr(agent, "get_capabilities"):
                 capabilities = agent.get_capabilities()
-            elif hasattr(agent, 'capabilities'):
+            elif hasattr(agent, "capabilities"):
                 capabilities = agent.capabilities
 
             # Apply capability filter if specified
@@ -2100,9 +2171,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
             # Add agent to available list
             available_agents[agent_id] = {
-                'description': self.agent_descriptions.get(agent_id, ''),
-                'capabilities': capabilities,
-                'status': 'active'  # If it's in the registry, it's active
+                "description": self.agent_descriptions.get(agent_id, ""),
+                "capabilities": capabilities,
+                "status": "active",  # If it's in the registry, it's active
             }
 
         return available_agents
@@ -2681,23 +2752,23 @@ Analyze incoming user messages and determine which specialized agent is best equ
         agent_capabilities = {}
 
         for agent_id, agent in self.agents.items():
-            if getattr(agent, 'a2a_internal', True):
+            if getattr(agent, "a2a_internal", True):
                 a2a_enabled += 1
                 # Get agent capabilities if available
                 capabilities = []
-                if hasattr(agent, 'get_capabilities'):
+                if hasattr(agent, "get_capabilities"):
                     capabilities = agent.get_capabilities()
-                elif hasattr(agent, 'capabilities'):
+                elif hasattr(agent, "capabilities"):
                     capabilities = agent.capabilities
                 agent_capabilities[agent_id] = capabilities
             else:
                 a2a_disabled += 1
 
         return {
-            'total_agents': total_agents,
-            'a2a_enabled_agents': a2a_enabled,
-            'a2a_disabled_agents': a2a_disabled,
-            'agent_capabilities': agent_capabilities
+            "total_agents": total_agents,
+            "a2a_enabled_agents": a2a_enabled,
+            "a2a_disabled_agents": a2a_disabled,
+            "agent_capabilities": agent_capabilities,
         }
 
     # =========================================================================
@@ -2708,7 +2779,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         self,
         agent_id: str,
         expertise_areas: List[str],
-        proficiency_levels: Optional[Dict[str, str]] = None
+        proficiency_levels: Optional[Dict[str, str]] = None,
     ) -> bool:
         """
         Register areas of expertise for an agent.
@@ -2742,7 +2813,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         try:
             # Get agent information
             agent = self.agents[agent_id]
-            agent_description = getattr(agent, 'name', agent_id)
+            agent_description = getattr(agent, "name", agent_id)
 
             # Create expertise record
             expertise_record = {
@@ -2750,15 +2821,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 "description": agent_description,
                 "expertise_areas": expertise_areas,
                 "proficiency_levels": proficiency_levels or {},
-                "registered_at": datetime.datetime.now().isoformat()
+                "registered_at": datetime.datetime.now().isoformat(),
             }
 
             # Store in registry
             self._agent_expertise[agent_id] = expertise_record
 
-            logger.info(
-                f"Registered expertise for agent {agent_id}: {', '.join(expertise_areas)}"
-            )
+            logger.info(f"Registered expertise for agent {agent_id}: {', '.join(expertise_areas)}")
             return True
 
         except Exception as e:
@@ -2769,7 +2838,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         self,
         topic: str,
         min_proficiency: str = "intermediate",
-        requesting_agent_id: Optional[str] = None
+        requesting_agent_id: Optional[str] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """
         Find agents with expertise in a specific topic.
@@ -2794,9 +2863,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         experts = {}
         proficiency_order = ["novice", "intermediate", "expert", "master"]
         min_level_index = (
-            proficiency_order.index(min_proficiency)
-            if min_proficiency in proficiency_order
-            else 1
+            proficiency_order.index(min_proficiency) if min_proficiency in proficiency_order else 1
         )
 
         try:
@@ -2824,13 +2891,10 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     topic_proficiency = None
                     for area in expertise_areas:
                         is_topic_match = (
-                            topic.lower() in area.lower() or
-                            area.lower() in topic.lower()
+                            topic.lower() in area.lower() or area.lower() in topic.lower()
                         )
                         if is_topic_match:
-                            topic_proficiency = proficiency_levels.get(
-                                area, "intermediate"
-                            )
+                            topic_proficiency = proficiency_levels.get(area, "intermediate")
                             break
 
                     if topic_proficiency:
@@ -2842,12 +2906,10 @@ Analyze incoming user messages and determine which specialized agent is best equ
                         if topic_level_index >= min_level_index:
                             experts[agent_id] = {
                                 "agent_id": agent_id,
-                                "description": expertise_record.get(
-                                    "description", agent_id
-                                ),
+                                "description": expertise_record.get("description", agent_id),
                                 "proficiency": topic_proficiency,
                                 "expertise_areas": expertise_areas,
-                                "available": True
+                                "available": True,
                             }
 
             logger.info(
@@ -2878,11 +2940,11 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 "expertise_by_agent": {
                     agent_id: {
                         "areas": len(record.get("expertise_areas", [])),
-                        "proficiencies": list(record.get("proficiency_levels", {}).values())
+                        "proficiencies": list(record.get("proficiency_levels", {}).values()),
                     }
                     for agent_id, record in self._agent_expertise.items()
                 },
-                "most_common_expertise": self._get_most_common_expertise_areas()
+                "most_common_expertise": self._get_most_common_expertise_areas(),
             }
 
             return stats
@@ -2901,10 +2963,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
         # Sort by count and return top areas
         sorted_areas = sorted(area_counts.items(), key=lambda x: x[1], reverse=True)
-        return [
-            {"area": area, "agent_count": count}
-            for area, count in sorted_areas[:10]  # Top 10
-        ]
+        return [{"area": area, "agent_count": count} for area, count in sorted_areas[:10]]  # Top 10
 
     def _initialize_external_registry_client(self):
         """
@@ -2918,23 +2977,23 @@ Analyze incoming user messages and determine which specialized agent is best equ
             return
 
         # Get A2A configuration from formation
-        a2a_config = self.formation_config.get('a2a', {})
+        a2a_config = self.formation_config.get("a2a", {})
 
         # Check if A2A is globally enabled
-        a2a_enabled = a2a_config.get('enabled', True)
+        a2a_enabled = a2a_config.get("enabled", True)
         if a2a_enabled is False:
             logger.info("A2A communication is globally disabled in formation config")
             return
 
-        outbound_config = a2a_config.get('outbound', {})
+        outbound_config = a2a_config.get("outbound", {})
 
         # Check if outbound is enabled
-        outbound_enabled = outbound_config.get('enabled', True)
+        outbound_enabled = outbound_config.get("enabled", True)
         if not outbound_enabled:
             logger.info("A2A outbound communication is disabled in formation config")
             return
 
-        registries = outbound_config.get('registries', [])
+        registries = outbound_config.get("registries", [])
 
         if not registries:
             logger.debug("No outbound registries configured in formation")
@@ -2967,9 +3026,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
         try:
             healthy_registries = await self.external_registry_client.health_check_all()
             if healthy_registries:
-                logger.info(
-                    f"External registries healthy: {list(healthy_registries.keys())}"
-                )
+                logger.info(f"External registries healthy: {list(healthy_registries.keys())}")
             else:
                 logger.warning("No external registries are currently healthy")
         except Exception as e:
@@ -2987,23 +3044,23 @@ Analyze incoming user messages and determine which specialized agent is best equ
             return
 
         # Get A2A configuration from formation
-        a2a_config = self.formation_config.get('a2a', {})
+        a2a_config = self.formation_config.get("a2a", {})
 
         # Check if A2A is globally enabled
-        a2a_enabled = a2a_config.get('enabled', True)
+        a2a_enabled = a2a_config.get("enabled", True)
         if a2a_enabled is False:
             logger.info("A2A communication is globally disabled in formation config")
             return
 
-        inbound_config = a2a_config.get('inbound', {})
+        inbound_config = a2a_config.get("inbound", {})
 
         # Check if inbound is enabled
-        inbound_enabled = inbound_config.get('enabled', False)
+        inbound_enabled = inbound_config.get("enabled", False)
         if not inbound_enabled:
             logger.info("A2A inbound communication is disabled in formation config")
             return
 
-        registries = inbound_config.get('registries', [])
+        registries = inbound_config.get("registries", [])
 
         if not registries:
             logger.debug("No inbound registries configured in formation")
@@ -3040,21 +3097,21 @@ Analyze incoming user messages and determine which specialized agent is best equ
         agent = self.agents[agent_id]
 
         # Check if agent is configured for external A2A
-        if not getattr(agent, 'a2a_external', True):
+        if not getattr(agent, "a2a_external", True):
             logger.debug(f"Agent {agent_id} is not configured for external A2A")
             return False
 
         # Check formation-level A2A configuration
-        a2a_config = self.formation_config.get('a2a', {})
+        a2a_config = self.formation_config.get("a2a", {})
 
         # Check if A2A is globally enabled
-        a2a_enabled = a2a_config.get('enabled', True)
+        a2a_enabled = a2a_config.get("enabled", True)
         if a2a_enabled is False:
             logger.debug("A2A communication is globally disabled in formation config")
             return False
 
-        inbound_config = a2a_config.get('inbound', {})
-        if not inbound_config.get('enabled', False):
+        inbound_config = a2a_config.get("inbound", {})
+        if not inbound_config.get("enabled", False):
             logger.debug("A2A inbound communication is disabled in formation config")
             return False
 
@@ -3070,9 +3127,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 # Use the actual port the formation server is running on
                 formation_port = self.formation_server.port
             elif self.formation_config:
-                a2a_config = self.formation_config.get('a2a', {})
-                inbound_config = a2a_config.get('inbound', {})
-                formation_port = inbound_config.get('port', 8080)
+                a2a_config = self.formation_config.get("a2a", {})
+                inbound_config = a2a_config.get("inbound", {})
+                formation_port = inbound_config.get("port", 8080)
 
             agent_card = AgentCard(
                 name=agent_id,
@@ -3081,17 +3138,15 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 url=f"http://localhost:{formation_port}/{agent_id}",
                 muxi_agent_id=agent_id,
                 muxi_formation=(
-                    self.formation_config.get('id', 'unknown')
+                    self.formation_config.get("id", "unknown")
                     if self.formation_config
-                    else 'unknown'
-                )
+                    else "unknown"
+                ),
             )
 
             # Add basic capabilities
             tools_capability = A2ACapability(
-                name="tools",
-                description="Agent can use tools and process requests",
-                enabled=True
+                name="tools", description="Agent can use tools and process requests", enabled=True
             )
             agent_card.add_capability(tools_capability)
 
@@ -3099,13 +3154,11 @@ Analyze incoming user messages and determine which specialized agent is best equ
             agent_card.authentication = A2AAuthentication(
                 type=AuthType.NONE,
                 description="No authentication required for testing",
-                required=False
+                required=False,
             )
 
             # Register with all inbound registries
-            responses = await self.inbound_registry_client.register_agent(
-                agent_card
-            )
+            responses = await self.inbound_registry_client.register_agent(agent_card)
 
             # Check if at least one registration was successful
             success_count = sum(1 for resp in responses.values() if resp.success)
@@ -3117,15 +3170,11 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 )
                 return True
             else:
-                logger.warning(
-                    f"Failed to register agent {agent_id} with any external registry"
-                )
+                logger.warning(f"Failed to register agent {agent_id} with any external registry")
                 return False
 
         except Exception as e:
-            logger.error(
-                f"Error registering agent {agent_id} with external registry: {e}"
-            )
+            logger.error(f"Error registering agent {agent_id} with external registry: {e}")
             return False
 
     async def deregister_agent_from_external_registry(self, agent_id: str) -> bool:
@@ -3145,9 +3194,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
             # Get the formation server port from formation config
             formation_port = 8080  # Default fallback
             if self.formation_config:
-                a2a_config = self.formation_config.get('a2a', {})
-                inbound_config = a2a_config.get('inbound', {})
-                formation_port = inbound_config.get('port', 8080)
+                a2a_config = self.formation_config.get("a2a", {})
+                inbound_config = a2a_config.get("inbound", {})
+                formation_port = inbound_config.get("port", 8080)
 
             responses = await self.inbound_registry_client.deregister_agent(
                 f"http://localhost:{formation_port}/{agent_id}"
@@ -3161,21 +3210,15 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 )
                 return True
             else:
-                logger.warning(
-                    f"Failed to deregister agent {agent_id} from any external registry"
-                )
+                logger.warning(f"Failed to deregister agent {agent_id} from any external registry")
                 return False
 
         except Exception as e:
-            logger.error(
-                f"Error deregistering agent {agent_id} from external registry: {e}"
-            )
+            logger.error(f"Error deregistering agent {agent_id} from external registry: {e}")
             return False
 
     async def discover_external_agents(
-        self,
-        capability: Optional[str] = None,
-        limit: int = 10
+        self, capability: Optional[str] = None, limit: int = 10
     ) -> List[AgentCard]:
         """
         Discover agents from external registries.
@@ -3205,7 +3248,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             if capability:
                 filtered_agents = []
                 for agent in all_agents:
-                    agent_capabilities = getattr(agent, 'capabilities', {})
+                    agent_capabilities = getattr(agent, "capabilities", {})
                     if capability in agent_capabilities:
                         filtered_agents.append(agent)
                 all_agents = filtered_agents
@@ -3235,8 +3278,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
             if self.external_registry_client:
                 # Get all agent IDs that might be registered externally
                 agents_to_deregister = [
-                    agent_id for agent_id, agent in self.agents.items()
-                    if getattr(agent, 'a2a_external', True)
+                    agent_id
+                    for agent_id, agent in self.agents.items()
+                    if getattr(agent, "a2a_external", True)
                 ]
 
                 if agents_to_deregister:
@@ -3256,8 +3300,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     except RuntimeError:
                         # No running event loop, which is fine during shutdown
                         logger.debug(
-                            "No running event loop for cleanup, "
-                            "skipping external deregistration"
+                            "No running event loop for cleanup, " "skipping external deregistration"
                         )
 
         except Exception as e:
@@ -3276,8 +3319,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
             # Deregister all external agents
             if self.external_registry_client:
                 agents_to_deregister = [
-                    agent_id for agent_id, agent in self.agents.items()
-                    if getattr(agent, 'a2a_external', True)
+                    agent_id
+                    for agent_id, agent in self.agents.items()
+                    if getattr(agent, "a2a_external", True)
                 ]
 
                 if agents_to_deregister:
@@ -3295,7 +3339,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     try:
                         await asyncio.wait_for(
                             asyncio.gather(*deregister_tasks, return_exceptions=True),
-                            timeout=10.0  # 10 second timeout for cleanup
+                            timeout=10.0,  # 10 second timeout for cleanup
                         )
                         logger.info("Successfully deregistered all agents from external registries")
                     except asyncio.TimeoutError:
@@ -3305,9 +3349,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 await self.external_registry_client.close()
 
             # Close other resources
-            if hasattr(self, '_mcp_service') and self._mcp_service:
+            if hasattr(self, "_mcp_service") and self._mcp_service:
                 # Close MCP service if it has a close method
-                if hasattr(self._mcp_service, 'close'):
+                if hasattr(self._mcp_service, "close"):
                     await self._mcp_service.close()
 
             logger.info("Overlord shutdown complete")
@@ -3329,6 +3373,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             logger.info(f"Received signal {signum}, initiating shutdown...")
             try:
                 import asyncio
+
                 loop = asyncio.get_running_loop()
                 loop.create_task(self.shutdown())
             except RuntimeError:
@@ -3374,16 +3419,16 @@ Analyze incoming user messages and determine which specialized agent is best equ
             return
 
         # Get A2A configuration from formation
-        a2a_config = self.formation_config.get('a2a', {})
+        a2a_config = self.formation_config.get("a2a", {})
 
         # Check if A2A is globally enabled
-        a2a_enabled = a2a_config.get('enabled', True)
+        a2a_enabled = a2a_config.get("enabled", True)
         if a2a_enabled is False:
             logger.info("A2A communication is globally disabled in formation config")
             return
 
-        inbound_config = a2a_config.get('inbound', {})
-        inbound_enabled = inbound_config.get('enabled', False)
+        inbound_config = a2a_config.get("inbound", {})
+        inbound_enabled = inbound_config.get("enabled", False)
 
         if not inbound_enabled:
             logger.info("A2A Formation Server is disabled in formation config")
@@ -3391,11 +3436,11 @@ Analyze incoming user messages and determine which specialized agent is best equ
 
         try:
             # Extract inbound server configuration
-            port = inbound_config.get('port', 8181)
-            host = inbound_config.get('host', '0.0.0.0')
-            trusted_endpoints = inbound_config.get('trusted_endpoints', [])
-            auth_mode = inbound_config.get('mode', 'none')
-            formation_name = self.formation_config.get('id', 'default')
+            port = inbound_config.get("port", 8181)
+            host = inbound_config.get("host", "0.0.0.0")
+            trusted_endpoints = inbound_config.get("trusted_endpoints", [])
+            auth_mode = inbound_config.get("mode", "none")
+            formation_name = self.formation_config.get("id", "default")
 
             # Create A2A Formation Server
             self.formation_server = A2AFormationServer(
@@ -3404,7 +3449,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 host=host,
                 trusted_endpoints=trusted_endpoints,
                 auth_mode=auth_mode,
-                formation_name=formation_name
+                formation_name=formation_name,
             )
             logger.info("A2A Formation Server initialized successfully")
         except Exception as e:
@@ -3421,18 +3466,17 @@ Analyze incoming user messages and determine which specialized agent is best equ
             Server startup information or error status
         """
         if not self.formation_server:
-            return {
-                "status": "error",
-                "message": "A2A Formation Server not configured"
-            }
+            return {"status": "error", "message": "A2A Formation Server not configured"}
 
         try:
             result = await self.formation_server.start()
             logger.info(f"A2A Formation Server started: {result}")
 
             # Now that the formation server is running, register all pending agents
-            if (hasattr(self, 'pending_external_registrations') and
-                    self.pending_external_registrations):
+            if (
+                hasattr(self, "pending_external_registrations")
+                and self.pending_external_registrations
+            ):
                 pending_agents = list(self.pending_external_registrations)
                 logger.info(
                     f"Registering {len(pending_agents)} pending agents "
@@ -3448,9 +3492,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
                             # Remove from pending list on successful registration
                             self.pending_external_registrations.discard(agent_id)
                     except Exception as e:
-                        logger.error(
-                            f"Failed to register pending agent {agent_id}: {e}"
-                        )
+                        logger.error(f"Failed to register pending agent {agent_id}: {e}")
                         registration_results.append((agent_id, False))
 
                 successful_registrations = [
@@ -3464,10 +3506,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             return result
         except Exception as e:
             logger.error(f"Failed to start A2A Formation Server: {e}")
-            return {
-                "status": "error",
-                "message": f"Failed to start server: {e}"
-            }
+            return {"status": "error", "message": f"Failed to start server: {e}"}
 
     async def stop_formation_server(self) -> Dict[str, Any]:
         """
@@ -3477,10 +3516,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             Server shutdown information or error status
         """
         if not self.formation_server:
-            return {
-                "status": "error",
-                "message": "A2A Formation Server not configured"
-            }
+            return {"status": "error", "message": "A2A Formation Server not configured"}
 
         try:
             result = await self.formation_server.stop()
@@ -3488,10 +3524,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
             return result
         except Exception as e:
             logger.error(f"Failed to stop A2A Formation Server: {e}")
-            return {
-                "status": "error",
-                "message": f"Failed to stop server: {e}"
-            }
+            return {"status": "error", "message": f"Failed to stop server: {e}"}
 
     async def get_formation_server_status(self) -> Dict[str, Any]:
         """
@@ -3501,19 +3534,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
             Server status information
         """
         if not self.formation_server:
-            return {
-                "status": "not_configured",
-                "message": "A2A Formation Server not configured"
-            }
+            return {"status": "not_configured", "message": "A2A Formation Server not configured"}
 
         try:
             return await self.formation_server.get_status()
         except Exception as e:
             logger.error(f"Failed to get A2A Formation Server status: {e}")
-            return {
-                "status": "error",
-                "message": f"Failed to get status: {e}"
-            }
+            return {"status": "error", "message": f"Failed to get status: {e}"}
 
     async def _initialize_outbound_services(self):
         """
@@ -3527,22 +3554,22 @@ Analyze incoming user messages and determine which specialized agent is best equ
             return
 
         # Get A2A configuration from formation
-        a2a_config = self.formation_config.get('a2a', {})
+        a2a_config = self.formation_config.get("a2a", {})
 
         # Check if A2A is globally enabled
-        a2a_enabled = a2a_config.get('enabled', True)
+        a2a_enabled = a2a_config.get("enabled", True)
         if a2a_enabled is False:
             logger.debug("A2A communication is globally disabled")
             return
 
-        outbound_config = a2a_config.get('outbound', {})
+        outbound_config = a2a_config.get("outbound", {})
 
         # Check if outbound is enabled
-        if not outbound_config.get('enabled', True):
+        if not outbound_config.get("enabled", True):
             logger.debug("A2A outbound communication is disabled")
             return
 
-        services = outbound_config.get('services', [])
+        services = outbound_config.get("services", [])
 
         if not services:
             logger.debug("No outbound services configured in formation")
@@ -3557,13 +3584,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
             logger.info(f"Initializing {len(services)} outbound services...")
 
             for service in services:
-                service_id = service.get('id')
+                service_id = service.get("id")
                 if not service_id:
                     logger.warning("Outbound service missing service_id, skipping")
                     continue
 
                 # Get auth configuration (not 'credentials'!)
-                auth_config = service.get('auth', {})
+                auth_config = service.get("auth", {})
                 logger.debug(f"Processing auth config for outbound service: {service_id}")
 
                 if not auth_config:
@@ -3573,14 +3600,15 @@ Analyze incoming user messages and determine which specialized agent is best equ
                 # Store auth credentials in secrets manager with service prefix
                 for auth_key, auth_value in auth_config.items():
                     # Skip 'type' field, only store actual credential values
-                    if auth_key == 'type':
+                    if auth_key == "type":
                         continue
 
                     secret_name = f"OUTBOUND_{service_id.upper()}_{auth_key.upper()}"
 
                     # Store direct credential values (secrets refs handled by interpolation)
-                    is_secret_ref = (isinstance(auth_value, str) and
-                                     auth_value.startswith('${{ secrets.'))
+                    is_secret_ref = isinstance(auth_value, str) and auth_value.startswith(
+                        "${{ secrets."
+                    )
                     if not is_secret_ref:
                         await self.store_secret(secret_name, auth_value)
                         logger.debug(f"Stored credential for {secret_name}")

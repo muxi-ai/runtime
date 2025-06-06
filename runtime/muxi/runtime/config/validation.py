@@ -356,7 +356,8 @@ class FormationValidator:
                         # Check for unknown agent fields
             known_agent_fields = {
                 'schema', 'id', 'name', 'description', 'system_message', 'llm_models',
-                'model', 'llm', 'knowledge', 'mcp_access', 'mcp_servers', 'a2a', 'role', 'specialization'
+                'model', 'llm', 'knowledge', 'mcp_access', 'mcp_servers', 'a2a', 'role',
+                'specialization', 'specialties', 'active', 'author', 'url', 'license', 'version'
             }
             unknown_fields = set(agent_config.keys()) - known_agent_fields
             if unknown_fields:

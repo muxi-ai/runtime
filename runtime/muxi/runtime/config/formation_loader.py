@@ -116,6 +116,9 @@ class FormationLoader:
         config = self.config_loader.load(file_path)
         config = await self.config_loader.process_secrets(config, secrets_manager)
 
+        # Filter inline agents by active field
+        self._filter_inline_agents_by_active(config)
+
         # Resolve knowledge paths relative to formation file directory
         formation_dir = os.path.dirname(os.path.abspath(file_path))
         config = self._resolve_knowledge_paths(config, formation_dir)
@@ -163,6 +166,9 @@ class FormationLoader:
         # Load the main configuration
         main_config = self.config_loader.load(str(main_config_path))
         main_config = await self.config_loader.process_secrets(main_config, secrets_manager)
+
+        # Filter inline agents by active field before merging external agents
+        self._filter_inline_agents_by_active(main_config)
 
         # Auto-discover and merge component configurations
         await self._discover_and_merge_agents(main_config, formation_dir, secrets_manager)
@@ -217,14 +223,51 @@ class FormationLoader:
                 if "id" not in agent_config:
                     agent_config["id"] = agent_file.stem
 
-                config["agents"].append(agent_config)
-                logger.info(f"✅ Discovered agent: {agent_config.get('id', agent_file.stem)}")
+                # Check if agent is active (default to True)
+                agent_id = agent_config.get('id', agent_file.stem)
+                is_active = agent_config.get('active', True)
+
+                if is_active:
+                    config["agents"].append(agent_config)
+                    logger.info(f"✅ Agent {agent_id} loaded")
+                else:
+                    logger.info(f"🔇 Agent {agent_id} skipped (disabled)")
 
             except Exception as e:
                 logger.error(f"Failed to load agent config from {agent_file}: {e}")
                 continue
 
         logger.info(f"✅ Discovered {len(config['agents'])} agents from agents/ directory")
+
+    def _filter_inline_agents_by_active(self, config: Dict[str, Any]) -> None:
+        """
+        Filter inline agents based on the active field.
+
+        Args:
+            config: Formation configuration to filter inline agents in
+        """
+        if "agents" not in config:
+            return
+
+        agents = config["agents"]
+        if not isinstance(agents, list):
+            return
+
+        filtered_agents = []
+        for agent_config in agents:
+            if not isinstance(agent_config, dict):
+                continue
+
+            agent_id = agent_config.get('id', 'unknown')
+            is_active = agent_config.get('active', True)
+
+            if is_active:
+                filtered_agents.append(agent_config)
+                logger.info(f"✅ Agent {agent_id} loaded")
+            else:
+                logger.info(f"🔇 Agent {agent_id} skipped (disabled)")
+
+        config["agents"] = filtered_agents
 
     async def _discover_and_merge_mcp_servers(
         self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None

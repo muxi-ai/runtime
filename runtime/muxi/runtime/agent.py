@@ -103,6 +103,10 @@ class Agent:
         self.agent_id = agent_id or str(uuid.uuid4())
         self.name = name or f"Agent-{self.agent_id}"
 
+        # Initialize role and specialties for enhanced routing
+        self.role = None  # Will be set from config during agent creation
+        self.specialties = []  # Will be set from config during agent creation
+
         # Set up system message
         self.system_message = system_message or (
             "You are a helpful assistant that responds accurately to user queries. "

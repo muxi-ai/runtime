@@ -194,6 +194,16 @@ class AgentCardGenerator:
                 enabled=True
             ))
 
+        # Add specialties as capabilities
+        specialties = config.get('specialties', [])
+        for specialty in specialties:
+            card.add_capability(A2ACapability(
+                name=f"specialty_{specialty.lower().replace(' ', '_')}",
+                description=f"Specialized knowledge in {specialty}",
+                enabled=True,
+                metadata={"category": "specialty", "domain": specialty}
+            ))
+
         # Add custom capabilities from config
         custom_capabilities = config.get('capabilities', {})
         for cap_name, cap_config in custom_capabilities.items():
@@ -274,6 +284,10 @@ class AgentCardGenerator:
         # Add tags if present
         if 'tags' in config:
             metadata['tags'] = config['tags']
+
+        # Add role information
+        if 'role' in config:
+            metadata['role'] = config['role']
 
         # Add author information
         if 'author' in config:
