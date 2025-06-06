@@ -31,8 +31,8 @@
 #
 #   # Created from formation YAML data in Overlord
 #   routing_config = RoutingConfig(
-#       provider=yaml_data.get('provider', 'openai'),
-#       model=yaml_data.get('name', 'gpt-4o-mini')
+#       model=yaml_data.get('model', 'openai/gpt-4o-mini'),
+#       temperature=yaml_data.get('settings', {}).get('temperature', 0.2)
 #   )
 # =============================================================================
 
@@ -51,14 +51,9 @@ class RoutingConfig(BaseModel):
     with sensible defaults when not specified.
     """
 
-    provider: str = Field(
-        default="openai",
-        description="The LLM provider to use for routing decisions",
-    )
-
     model: str = Field(
-        default="gpt-4o-mini",
-        description="The specific model to use for routing decisions (smaller models preferred)",
+        default="openai/gpt-4o-mini",
+        description="The model to use for routing decisions in OneLLM format (provider/model)",
     )
 
     temperature: float = Field(
@@ -81,13 +76,13 @@ class RoutingConfig(BaseModel):
         description="Time to live for cached routing decisions in seconds",
     )
 
-    system_prompt: str = Field(
+    system_message: str = Field(
         default=(
             "You are a routing assistant that determines which agent should handle a user message. "
             "Based on the user's message and the available agents' descriptions, select the most "
             "appropriate agent to handle the request. Respond with just the agent ID."
         ),
-        description="System prompt that guides the routing model's behavior",
+        description="System message that guides the routing model's behavior",
     )
 
 

@@ -120,7 +120,7 @@ class FormationLoader:
         formation_dir = os.path.dirname(os.path.abspath(file_path))
         config = self._resolve_knowledge_paths(config, formation_dir)
 
-        logger.info(f"✅ Loaded flattened formation: {config.get('name', 'unnamed')}")
+        logger.info(f"✅ Loaded flattened formation: {config.get('id', 'unnamed')}")
         return config
 
     async def _load_modular_formation(
@@ -172,7 +172,7 @@ class FormationLoader:
         # Resolve knowledge paths relative to formation directory
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
 
-        logger.info(f"✅ Loaded modular formation: {main_config.get('name', 'unnamed')}")
+        logger.info(f"✅ Loaded modular formation: {main_config.get('id', 'unnamed')}")
         return main_config
 
     async def _discover_and_merge_agents(

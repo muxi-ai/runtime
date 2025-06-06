@@ -174,11 +174,13 @@ class CredentialManager:
         Raises:
             ValueError: If a required credential is not found in any available source.
         """
-        if "credentials" not in mcp_config:
+
+        auth_config = mcp_config.get("auth")
+        if not auth_config:
             return mcp_config
 
-        # Get credentials configuration
-        credentials_config = mcp_config["credentials"]
+        # Get auth configuration
+        credentials_config = auth_config
         result_args = mcp_config.get("args", {}).copy()
 
         # Handle single credential object

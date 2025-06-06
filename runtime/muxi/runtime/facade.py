@@ -484,7 +484,8 @@ class Muxi:
         for server in mcp_servers:
             name = server.get("name")
             url = server.get("url")
-            credentials = server.get("credentials", [])
+            # Support both 'auth' (new) and 'credentials' (legacy) fields
+            credentials = server.get("auth", []) or server.get("credentials", [])
 
             if name and url:
                 # Process credentials

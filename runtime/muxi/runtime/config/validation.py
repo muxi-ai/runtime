@@ -100,10 +100,11 @@ class FormationValidator:
     and providing suggestions for improvements.
     """
 
-    REQUIRED_FORMATION_FIELDS = ['name', 'version']
-    REQUIRED_AGENT_FIELDS = ['agent_id', 'model']
+    REQUIRED_FORMATION_FIELDS = ['schema', 'id', 'description']
+    REQUIRED_AGENT_FIELDS = ['schema', 'id', 'name', 'description']
     REQUIRED_MODEL_FIELDS = ['provider']
-    REQUIRED_MCP_SERVER_FIELDS = ['id']
+    REQUIRED_MCP_SERVER_FIELDS = ['schema', 'id', 'description', 'type']
+    REQUIRED_A2A_SERVICE_FIELDS = ['schema', 'id', 'name', 'description', 'url']
 
     def __init__(self):
         self.result = ValidationResult()
@@ -134,7 +135,11 @@ class FormationValidator:
 
             # Determine formation type and validate accordingly
             if formation_path.is_file():
-                self._validate_flattened_formation(formation_path, secrets_manager)
+                # Check if this is an agent file based on content
+                if self._is_agent_file(formation_path):
+                    self._validate_agent_file(formation_path)
+                else:
+                    self._validate_flattened_formation(formation_path, secrets_manager)
             elif formation_path.is_dir():
                 self._validate_modular_formation(formation_path, secrets_manager)
             else:
@@ -230,6 +235,55 @@ class FormationValidator:
         except Exception as e:
             self.result.add_error(f"Error validating modular formation: {str(e)}")
 
+    def _is_agent_file(self, file_path: Path) -> bool:
+        """Check if a file is an agent configuration file."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                if file_path.suffix.lower() in ['.yaml', '.yml']:
+                    config = yaml.safe_load(f)
+                elif file_path.suffix.lower() == '.json':
+                    config = json.load(f)
+                else:
+                    return False
+
+            if not isinstance(config, dict):
+                return False
+
+            # Check if it has agent-specific fields and lacks formation-specific fields
+            has_agent_fields = any(field in config for field in ['name', 'llm_models', 'system_message'])
+            lacks_formation_fields = not any(field in config for field in ['agents', 'overlord', 'mcp'])
+
+            return has_agent_fields and lacks_formation_fields
+
+        except Exception:
+            return False
+
+    def _validate_agent_file(self, file_path: Path) -> None:
+        """Validate a standalone agent configuration file."""
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                if file_path.suffix.lower() in ['.yaml', '.yml']:
+                    config = yaml.safe_load(f)
+                elif file_path.suffix.lower() == '.json':
+                    config = json.load(f)
+                else:
+                    self.result.add_error(f"Unsupported file format: {file_path.suffix}")
+                    return
+
+            if not isinstance(config, dict):
+                self.result.add_error("Agent configuration must be a dictionary")
+                return
+
+            # Validate as a single agent
+            self._validate_agents([config])
+
+        except yaml.YAMLError as e:
+            self.result.add_error(f"YAML parsing error: {str(e)}")
+        except json.JSONDecodeError as e:
+            self.result.add_error(f"JSON parsing error: {str(e)}")
+        except Exception as e:
+            self.result.add_error(f"Error validating agent file: {str(e)}")
+
     def _validate_formation_structure(self, config: Dict[str, Any]) -> None:
         """Validate basic formation structure."""
         # Check required fields
@@ -237,11 +291,11 @@ class FormationValidator:
             if field not in config:
                 self.result.add_error(f"Missing required formation field: {field}")
 
-        # Validate name
-        if 'name' in config:
-            name = config['name']
-            if not isinstance(name, str) or not name.strip():
-                self.result.add_error("Formation name must be a non-empty string")
+        # Validate id
+        if 'id' in config:
+            formation_id = config['id']
+            if not isinstance(formation_id, str) or not formation_id.strip():
+                self.result.add_error("Formation id must be a non-empty string")
 
         # Validate version
         if 'version' in config:
@@ -251,12 +305,29 @@ class FormationValidator:
 
         # Check for unknown top-level fields
         known_fields = {
-            'name', 'version', 'description', 'author', 'agents', 'mcp',
-            'a2a', 'knowledge', 'overlord', 'secrets'
+            'schema', 'id', 'version', 'description', 'author', 'url', 'license',
+            'system_message', 'auth', 'llm', 'overlord', 'memory', 'logging',
+            'a2a', 'mcp', 'agents', 'knowledge', 'secrets'
         }
         unknown_fields = set(config.keys()) - known_fields
         if unknown_fields:
             self.result.add_warning(f"Unknown formation fields: {list(unknown_fields)}")
+
+        # Validate LLM configuration
+        if 'llm' in config:
+            self._validate_llm_config(config['llm'])
+
+        # Validate memory configuration
+        if 'memory' in config:
+            self._validate_memory_config(config['memory'])
+
+        # Validate logging configuration
+        if 'logging' in config:
+            self._validate_logging_config(config['logging'])
+
+        # Validate overlord configuration
+        if 'overlord' in config:
+            self._validate_overlord_config(config['overlord'])
 
     def _validate_agents(self, agents_config: List[Dict[str, Any]]) -> None:
         """Validate agents configuration."""
@@ -275,20 +346,39 @@ class FormationValidator:
                 if field not in agent_config:
                     self.result.add_error(f"Agent {i} missing required field: {field}")
 
-            # Validate agent_id uniqueness
-            agent_id = agent_config.get('agent_id')
+            # Validate agent id uniqueness
+            agent_id = agent_config.get('id')
             if agent_id:
                 if agent_id in agent_ids:
-                    self.result.add_error(f"Duplicate agent_id: {agent_id}")
+                    self.result.add_error(f"Duplicate agent id: {agent_id}")
                 agent_ids.add(agent_id)
 
-            # Validate model configuration
+                        # Check for unknown agent fields
+            known_agent_fields = {
+                'schema', 'id', 'name', 'description', 'system_message', 'llm_models',
+                'model', 'llm', 'knowledge', 'mcp_access', 'mcp_servers', 'a2a', 'role', 'specialization'
+            }
+            unknown_fields = set(agent_config.keys()) - known_agent_fields
+            if unknown_fields:
+                self.result.add_warning(
+                    f"Agent {agent_id or i} has unknown fields: {list(unknown_fields)}"
+                )
+
+            # Validate LLM models configuration (new schema)
+            if 'llm_models' in agent_config:
+                self._validate_llm_models(agent_config['llm_models'])
+
+            # Legacy model validation (for backward compatibility warnings)
             if 'model' in agent_config:
-                self._validate_model_config(agent_config['model'], f"Agent {agent_id or i}")
+                self.result.add_warning(f"Agent {agent_id or i} uses deprecated 'model' field. Use 'llm_models' instead.")
 
             # Validate knowledge configuration
             if 'knowledge' in agent_config:
                 self._validate_agent_knowledge_config(agent_config['knowledge'])
+
+            # Validate agent-level MCP servers
+            if 'mcp_servers' in agent_config:
+                self._validate_agent_mcp_servers(agent_config['mcp_servers'], agent_id or i)
 
     def _validate_model_config(self, model_config: Dict[str, Any], context: str) -> None:
         """Validate model configuration."""
@@ -309,7 +399,7 @@ class FormationValidator:
                 self.result.add_warning(f"{context} uses unknown provider: {provider}")
 
     def _validate_mcp_config(self, mcp_config: Dict[str, Any]) -> None:
-        """Validate MCP configuration."""
+        """Validate MCP configuration according to SCHEMA_GUIDE.md."""
         if not isinstance(mcp_config, dict):
             self.result.add_error("MCP configuration must be a dictionary")
             return
@@ -327,31 +417,263 @@ class FormationValidator:
                     self.result.add_error(f"MCP server {i} configuration must be a dictionary")
                     continue
 
-                # Check required fields
-                for field in self.REQUIRED_MCP_SERVER_FIELDS:
-                    if field not in server_config:
-                        self.result.add_error(f"MCP server {i} missing required field: {field}")
+                self._validate_single_mcp_server(server_config, i, server_ids)
 
-                # Validate server_id uniqueness
-                server_id = server_config.get('id')
-                if server_id:
-                    if server_id in server_ids:
-                        self.result.add_error(f"Duplicate MCP server id: {server_id}")
-                    server_ids.add(server_id)
+    def _validate_single_mcp_server(
+        self,
+        server_config: Dict[str, Any],
+        index: int,
+        server_ids: set
+    ) -> None:
+        """Validate a single MCP server configuration according to SCHEMA_GUIDE.md."""
+        # Check required fields
+        for field in self.REQUIRED_MCP_SERVER_FIELDS:
+            if field not in server_config:
+                self.result.add_error(f"MCP server {index} missing required field: {field}")
 
-                # Validate transport configuration
-                has_url = 'url' in server_config
-                has_command = 'command' in server_config
+        # Validate server_id uniqueness
+        server_id = server_config.get('id')
+        if server_id:
+            if server_id in server_ids:
+                self.result.add_error(f"Duplicate MCP server id: {server_id}")
+            server_ids.add(server_id)
 
-                if not has_url and not has_command:
-                    self.result.add_error(
-                        f"MCP server {server_id or i} must have either 'url' or 'command'"
-                    )
-                elif has_url and has_command:
-                    self.result.add_warning(
-                        f"MCP server {server_id or i} has both 'url' and 'command' - "
-                        f"'url' will be used"
-                    )
+        # Validate optional metadata fields
+        self._validate_mcp_metadata_fields(server_config, server_id or index)
+
+        # Validate type-specific configuration
+        server_type = server_config.get('type')
+        if server_type == 'http':
+            self._validate_http_mcp_server(server_config, server_id or index)
+        elif server_type == 'command':
+            self._validate_command_mcp_server(server_config, server_id or index)
+        elif server_type:
+            self.result.add_error(
+                f"MCP server {server_id or index} has invalid type '{server_type}'. "
+                "Valid types are: 'http', 'command'"
+            )
+
+        # Validate authentication configuration
+        if 'auth' in server_config:
+            self._validate_mcp_auth_config(server_config['auth'], server_id or index)
+
+        # Check for legacy fields
+        if 'url' in server_config:
+            self.result.add_warning(
+                f"MCP server {server_id or index} uses deprecated 'url' field. "
+                "Use 'endpoint' for HTTP servers."
+            )
+
+    def _validate_mcp_metadata_fields(
+        self,
+        server_config: Dict[str, Any],
+        server_identifier: Union[str, int]
+    ) -> None:
+        """Validate optional MCP server metadata fields."""
+        # Validate active field
+        if 'active' in server_config:
+            if not isinstance(server_config['active'], bool):
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'active' field must be a boolean"
+                )
+
+        # Validate version field
+        if 'version' in server_config:
+            if not isinstance(server_config['version'], str):
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'version' field must be a string"
+                )
+
+        # Validate author field
+        if 'author' in server_config:
+            if not isinstance(server_config['author'], str):
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'author' field must be a string"
+                )
+
+        # Validate url field (different from endpoint)
+        if 'url' in server_config and server_config['url'] != server_config.get('endpoint'):
+            if not isinstance(server_config['url'], str):
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'url' field must be a string"
+                )
+
+        # Validate license field
+        if 'license' in server_config:
+            if not isinstance(server_config['license'], str):
+                self.result.add_error(
+                    f"MCP server {server_identifier} 'license' field must be a string"
+                )
+
+    def _validate_http_mcp_server(
+        self,
+        server_config: Dict[str, Any],
+        server_identifier: Union[str, int]
+    ) -> None:
+        """Validate HTTP MCP server specific configuration."""
+        # Endpoint is required for HTTP servers
+        if 'endpoint' not in server_config:
+            self.result.add_error(
+                f"HTTP MCP server {server_identifier} must have 'endpoint' field"
+            )
+        else:
+            endpoint = server_config['endpoint']
+            if not isinstance(endpoint, str):
+                self.result.add_error(
+                    f"HTTP MCP server {server_identifier} 'endpoint' must be a string"
+                )
+            elif not (endpoint.startswith('http://') or endpoint.startswith('https://')):
+                self.result.add_error(
+                    f"HTTP MCP server {server_identifier} 'endpoint' must start with "
+                    "http:// or https://"
+                )
+
+        # Validate optional timeout and retry settings
+        if 'timeout_seconds' in server_config:
+            timeout = server_config['timeout_seconds']
+            if not isinstance(timeout, int) or timeout <= 0:
+                self.result.add_error(
+                    f"HTTP MCP server {server_identifier} 'timeout_seconds' "
+                    "must be a positive integer"
+                )
+
+        if 'retry_attempts' in server_config:
+            retries = server_config['retry_attempts']
+            if not isinstance(retries, int) or retries < 0:
+                self.result.add_error(
+                    f"HTTP MCP server {server_identifier} 'retry_attempts' "
+                    "must be a non-negative integer"
+                )
+
+    def _validate_command_mcp_server(
+        self,
+        server_config: Dict[str, Any],
+        server_identifier: Union[str, int]
+    ) -> None:
+        """Validate command MCP server specific configuration."""
+        # Command is required for command servers
+        if 'command' not in server_config:
+            self.result.add_error(
+                f"Command MCP server {server_identifier} must have 'command' field"
+            )
+        else:
+            command = server_config['command']
+            if not isinstance(command, str):
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'command' must be a string"
+                )
+
+        # Validate optional command configuration
+        if 'args' in server_config:
+            args = server_config['args']
+            if not isinstance(args, list):
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'args' must be a list"
+                )
+            else:
+                for i, arg in enumerate(args):
+                    if not isinstance(arg, str):
+                        self.result.add_error(
+                            f"Command MCP server {server_identifier} arg {i} must be a string"
+                        )
+
+        if 'working_directory' in server_config:
+            wd = server_config['working_directory']
+            if not isinstance(wd, str):
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'working_directory' "
+                    "must be a string"
+                )
+
+        if 'install' in server_config:
+            install = server_config['install']
+            if not isinstance(install, str):
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'install' must be a string"
+                )
+
+        if 'timeout_seconds' in server_config:
+            timeout = server_config['timeout_seconds']
+            if not isinstance(timeout, int) or timeout <= 0:
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'timeout_seconds' "
+                    "must be a positive integer"
+                )
+
+        if 'max_retries' in server_config:
+            retries = server_config['max_retries']
+            if not isinstance(retries, int) or retries < 0:
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'max_retries' "
+                    "must be a non-negative integer"
+                )
+
+        # Validate environment variables
+        if 'env' in server_config:
+            env = server_config['env']
+            if not isinstance(env, dict):
+                self.result.add_error(
+                    f"Command MCP server {server_identifier} 'env' must be a dictionary"
+                )
+            else:
+                for key, value in env.items():
+                    if not isinstance(key, str):
+                        self.result.add_error(
+                            f"Command MCP server {server_identifier} env key must be a string"
+                        )
+                    if not isinstance(value, str):
+                        self.result.add_error(
+                            f"Command MCP server {server_identifier} env value must be a string"
+                        )
+
+    def _validate_mcp_auth_config(
+        self,
+        auth_config: Dict[str, Any],
+        server_identifier: Union[str, int]
+    ) -> None:
+        """Validate MCP server authentication configuration."""
+        if not isinstance(auth_config, dict):
+            self.result.add_error(
+                f"MCP server {server_identifier} auth configuration must be a dictionary"
+            )
+            return
+
+        # Validate auth type
+        auth_type = auth_config.get('type', 'none')
+        valid_auth_types = ['none', 'api_key', 'bearer', 'basic']
+        if auth_type not in valid_auth_types:
+            self.result.add_error(
+                f"MCP server {server_identifier} invalid auth type '{auth_type}'. "
+                f"Valid types: {', '.join(valid_auth_types)}"
+            )
+            return
+
+        # Validate type-specific auth fields
+        if auth_type == 'api_key':
+            if 'key' not in auth_config:
+                self.result.add_error(
+                    f"MCP server {server_identifier} api_key auth requires 'key' field"
+                )
+            if 'header' in auth_config and not isinstance(auth_config['header'], str):
+                self.result.add_error(
+                    f"MCP server {server_identifier} auth 'header' must be a string"
+                )
+
+        elif auth_type == 'bearer':
+            if 'token' not in auth_config:
+                self.result.add_error(
+                    f"MCP server {server_identifier} bearer auth requires 'token' field"
+                )
+
+        elif auth_type == 'basic':
+            if 'username' not in auth_config:
+                self.result.add_error(
+                    f"MCP server {server_identifier} basic auth requires 'username' field"
+                )
+            if 'password' not in auth_config:
+                self.result.add_error(
+                    f"MCP server {server_identifier} basic auth requires 'password' field"
+                )
 
     def _validate_a2a_config(self, a2a_config: Dict[str, Any]) -> None:
         """Validate A2A configuration."""
@@ -385,12 +707,16 @@ class FormationValidator:
                         self.result.add_error(f"A2A service {i} configuration must be a dictionary")
                         continue
 
-                    # Check for service id
+                    # Check for service id and duplicates
                     service_id = service_config.get('id')
                     if service_id:
                         if service_id in service_ids:
                             self.result.add_error(f"Duplicate A2A service id: {service_id}")
                         service_ids.add(service_id)
+
+                    # Comprehensive validation using the detailed A2A service validator
+                    service_identifier = f"formation a2a.outbound.services[{i}]"
+                    self._validate_a2a_service_config(service_config, service_identifier)
 
     def _validate_knowledge_config(self, knowledge_config: Dict[str, Any], base_path: Path) -> None:
         """Validate knowledge configuration."""
@@ -426,16 +752,194 @@ class FormationValidator:
                     self.result.add_warning(f"Knowledge source path does not exist: {path}")
 
     def _validate_agent_knowledge_config(self, knowledge_config: Dict[str, Any]) -> None:
-        """Validate agent-level knowledge configuration."""
+        """Validate agent-level knowledge configuration according to SCHEMA_GUIDE.md."""
         if not isinstance(knowledge_config, dict):
             self.result.add_error("Agent knowledge configuration must be a dictionary")
             return
 
-        # Basic structure validation
+        # Validate enabled field
         if 'enabled' in knowledge_config:
             enabled = knowledge_config['enabled']
             if not isinstance(enabled, bool):
                 self.result.add_error("Agent knowledge 'enabled' must be a boolean")
+
+        # Validate sources array
+        if 'sources' in knowledge_config:
+            sources = knowledge_config['sources']
+            if not isinstance(sources, list):
+                self.result.add_error("Agent knowledge 'sources' must be a list")
+                return
+
+            for i, source in enumerate(sources):
+                if not isinstance(source, dict):
+                    self.result.add_error(f"Agent knowledge source {i} must be a dictionary")
+                    continue
+
+                # Validate required fields for each source
+                if 'path' not in source:
+                    self.result.add_error(
+                        f"Agent knowledge source {i} missing required field: 'path'"
+                    )
+                else:
+                    path = source['path']
+                    if not isinstance(path, str):
+                        self.result.add_error(
+                            f"Agent knowledge source {i} 'path' must be a string"
+                        )
+                    elif not path.strip():
+                        self.result.add_error(
+                            f"Agent knowledge source {i} 'path' cannot be empty"
+                        )
+
+                if 'description' not in source:
+                    self.result.add_error(
+                        f"Agent knowledge source {i} missing required field: 'description'"
+                    )
+                else:
+                    description = source['description']
+                    if not isinstance(description, str):
+                        self.result.add_error(
+                            f"Agent knowledge source {i} 'description' must be a string"
+                        )
+                    elif not description.strip():
+                        self.result.add_error(
+                            f"Agent knowledge source {i} 'description' cannot be empty"
+                        )
+
+        # Check for unknown fields and provide suggestions
+        known_fields = {'enabled', 'sources'}
+        unknown_fields = set(knowledge_config.keys()) - known_fields
+        if unknown_fields:
+            unknown_list = ', '.join(unknown_fields)
+            self.result.add_warning(
+                f"Agent knowledge configuration contains unknown fields: {unknown_list}"
+            )
+
+    def _validate_agent_mcp_servers(self, mcp_servers: List[Dict[str, Any]], agent_identifier: Union[str, int]) -> None:
+        """Validate agent-level MCP servers configuration according to SCHEMA_GUIDE.md."""
+        if not isinstance(mcp_servers, list):
+            self.result.add_error(f"Agent {agent_identifier} mcp_servers must be a list")
+            return
+
+        server_ids = set()
+        for i, server_config in enumerate(mcp_servers):
+            if not isinstance(server_config, dict):
+                self.result.add_error(
+                    f"Agent {agent_identifier} MCP server {i} configuration must be a dictionary"
+                )
+                continue
+
+            # Check required fields for agent-level MCP servers
+            required_fields = ['id', 'description', 'type']
+            for field in required_fields:
+                if field not in server_config:
+                    self.result.add_error(
+                        f"Agent {agent_identifier} MCP server {i} missing required field: {field}"
+                    )
+
+            # Validate server_id uniqueness within this agent
+            server_id = server_config.get('id')
+            if server_id:
+                if server_id in server_ids:
+                    self.result.add_error(
+                        f"Agent {agent_identifier} has duplicate MCP server id: {server_id}"
+                    )
+                server_ids.add(server_id)
+
+            # Validate type-specific configuration
+            self._validate_agent_mcp_server_type(server_config, agent_identifier, server_id or i)
+
+            # Validate optional agent-specific overrides
+            self._validate_agent_mcp_overrides(server_config, agent_identifier, server_id or i)
+
+    def _validate_agent_mcp_server_type(
+        self,
+        server_config: Dict[str, Any],
+        agent_identifier: Union[str, int],
+        server_identifier: Union[str, int]
+    ) -> None:
+        """Validate type-specific configuration for agent-level MCP servers."""
+        server_type = server_config.get('type')
+
+        if server_type == 'http':
+            # HTTP servers require endpoint
+            if 'endpoint' not in server_config:
+                self.result.add_error(
+                    f"Agent {agent_identifier} HTTP MCP server {server_identifier} "
+                    "must have 'endpoint' field"
+                )
+            else:
+                endpoint = server_config['endpoint']
+                if not isinstance(endpoint, str):
+                    self.result.add_error(
+                        f"Agent {agent_identifier} HTTP MCP server {server_identifier} "
+                        "'endpoint' must be a string"
+                    )
+                elif not (endpoint.startswith('http://') or endpoint.startswith('https://')):
+                    self.result.add_error(
+                        f"Agent {agent_identifier} HTTP MCP server {server_identifier} "
+                        "'endpoint' must start with http:// or https://"
+                    )
+
+        elif server_type == 'command':
+            # Command servers require command
+            if 'command' not in server_config:
+                self.result.add_error(
+                    f"Agent {agent_identifier} command MCP server {server_identifier} "
+                    "must have 'command' field"
+                )
+            else:
+                command = server_config['command']
+                if not isinstance(command, (str, list)):
+                    self.result.add_error(
+                        f"Agent {agent_identifier} command MCP server {server_identifier} "
+                        "'command' must be a string or list of strings"
+                    )
+
+        elif server_type:
+            self.result.add_error(
+                f"Agent {agent_identifier} MCP server {server_identifier} has invalid type "
+                f"'{server_type}'. Valid types are: 'http', 'command'"
+            )
+
+    def _validate_agent_mcp_overrides(
+        self,
+        server_config: Dict[str, Any],
+        agent_identifier: Union[str, int],
+        server_identifier: Union[str, int]
+    ) -> None:
+        """Validate agent-specific MCP server override fields."""
+        # Validate retry_attempts override
+        if 'retry_attempts' in server_config:
+            retry_attempts = server_config['retry_attempts']
+            if not isinstance(retry_attempts, int) or retry_attempts < 0:
+                self.result.add_error(
+                    f"Agent {agent_identifier} MCP server {server_identifier} "
+                    "'retry_attempts' must be a non-negative integer"
+                )
+
+        # Validate timeout_seconds override
+        if 'timeout_seconds' in server_config:
+            timeout_seconds = server_config['timeout_seconds']
+            if not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
+                self.result.add_error(
+                    f"Agent {agent_identifier} MCP server {server_identifier} "
+                    "'timeout_seconds' must be a positive integer"
+                )
+
+        # Validate active override
+        if 'active' in server_config:
+            active = server_config['active']
+            if not isinstance(active, bool):
+                self.result.add_error(
+                    f"Agent {agent_identifier} MCP server {server_identifier} "
+                    "'active' must be a boolean"
+                )
+
+        # Validate authentication configuration
+        if 'auth' in server_config:
+            self._validate_mcp_auth_config(server_config['auth'],
+                                         f"Agent {agent_identifier} MCP server {server_identifier}")
 
     def _validate_agents_directory(self, agents_dir: Path) -> None:
         """Validate agents directory in modular formation."""
@@ -461,9 +965,9 @@ class FormationValidator:
                     agent_config = yaml.safe_load(f)
 
                 if isinstance(agent_config, dict):
-                    # Set agent_id from filename if not provided
-                    if 'agent_id' not in agent_config:
-                        agent_config['agent_id'] = agent_file.stem
+                    # Set agent id from filename if not provided
+                    if 'id' not in agent_config:
+                        agent_config['id'] = agent_file.stem
 
                     self._validate_agents([agent_config])
                 else:
@@ -523,6 +1027,33 @@ class FormationValidator:
         a2a_files = list(a2a_dir.glob('*.yaml')) + list(a2a_dir.glob('*.yml'))
         if not a2a_files:
             self.result.add_warning("No A2A configuration files found in a2a/ directory")
+            return
+
+        # Validate each A2A service file
+        service_ids = set()
+        for a2a_file in a2a_files:
+            try:
+                with open(a2a_file, 'r', encoding='utf-8') as f:
+                    a2a_config = yaml.safe_load(f)
+
+                if not isinstance(a2a_config, dict):
+                    self.result.add_error(f"A2A service file {a2a_file.name} must contain a dictionary")
+                    continue
+
+                # Validate A2A service configuration
+                self._validate_a2a_service_config(a2a_config, a2a_file.name)
+
+                # Check for duplicate service IDs
+                service_id = a2a_config.get('id')
+                if service_id:
+                    if service_id in service_ids:
+                        self.result.add_error(f"Duplicate A2A service id: {service_id}")
+                    service_ids.add(service_id)
+
+            except yaml.YAMLError as e:
+                self.result.add_error(f"YAML parsing error in {a2a_file.name}: {str(e)}")
+            except Exception as e:
+                self.result.add_error(f"Error validating A2A service {a2a_file.name}: {str(e)}")
 
     def _validate_knowledge_directory(self, knowledge_dir: Path) -> None:
         """Validate knowledge directory in modular formation."""
@@ -542,6 +1073,681 @@ class FormationValidator:
         )
         if not knowledge_files:
             self.result.add_warning("No knowledge files found in knowledge/ directory")
+
+    def _validate_llm_config(self, llm_config: Dict[str, Any]) -> None:
+        """Validate LLM configuration according to SCHEMA_GUIDE.md."""
+        if not isinstance(llm_config, dict):
+            self.result.add_error("LLM configuration must be a dictionary")
+            return
+
+        # Check for unknown top-level LLM fields
+        known_llm_fields = {'settings', 'api_keys', 'models'}
+        unknown_fields = set(llm_config.keys()) - known_llm_fields
+        if unknown_fields:
+            self.result.add_warning(f"Unknown LLM fields: {list(unknown_fields)}")
+
+        # Validate global settings
+        if 'settings' in llm_config:
+            self._validate_llm_global_settings(llm_config['settings'])
+
+        # Validate API keys
+        if 'api_keys' in llm_config:
+            self._validate_llm_api_keys(llm_config['api_keys'])
+
+        # Validate models
+        if 'models' in llm_config:
+            self._validate_llm_models(llm_config['models'])
+
+    def _validate_llm_global_settings(self, settings: Dict[str, Any]) -> None:
+        """Validate LLM global settings."""
+        if not isinstance(settings, dict):
+            self.result.add_error("LLM settings must be a dictionary")
+            return
+
+        # Validate temperature
+        if 'temperature' in settings:
+            temp = settings['temperature']
+            if not isinstance(temp, (int, float)) or not (0.0 <= temp <= 1.0):
+                self.result.add_error("LLM temperature must be a number between 0.0 and 1.0")
+
+        # Validate max_tokens
+        if 'max_tokens' in settings:
+            max_tokens = settings['max_tokens']
+            if not isinstance(max_tokens, int) or max_tokens <= 0:
+                self.result.add_error("LLM max_tokens must be a positive integer")
+
+        # Validate timeout_seconds
+        if 'timeout_seconds' in settings:
+            timeout = settings['timeout_seconds']
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                self.result.add_error("LLM timeout_seconds must be a positive number")
+
+    def _validate_llm_api_keys(self, api_keys: Dict[str, Any]) -> None:
+        """Validate LLM API keys configuration."""
+        if not isinstance(api_keys, dict):
+            self.result.add_error("LLM api_keys must be a dictionary")
+            return
+
+        known_providers = {'openai', 'anthropic', 'other'}
+        for provider, key in api_keys.items():
+            if provider not in known_providers:
+                self.result.add_warning(f"Unknown API key provider: {provider}")
+
+            if not isinstance(key, str):
+                self.result.add_error(f"API key for {provider} must be a string")
+
+    def _validate_llm_models(self, models: List[Dict[str, Any]]) -> None:
+        """Validate LLM models configuration."""
+        if not isinstance(models, list):
+            self.result.add_error("LLM models must be a list")
+            return
+
+        capabilities_seen = set()
+        for i, model_config in enumerate(models):
+            if not isinstance(model_config, dict):
+                self.result.add_error(f"LLM model {i} must be a dictionary")
+                continue
+
+            # Find the capability (text, vision, audio, documents, embedding)
+            known_capabilities = {'text', 'vision', 'audio', 'documents', 'embedding'}
+            capability_fields = set(model_config.keys()) & known_capabilities
+
+            if not capability_fields:
+                self.result.add_error(
+                    f"LLM model {i} must specify at least one capability: {list(known_capabilities)}"
+                )
+                continue
+
+            if len(capability_fields) > 1:
+                self.result.add_error(
+                    f"LLM model {i} can only specify one capability per model entry, "
+                    f"found: {list(capability_fields)}"
+                )
+                continue
+
+            capability = list(capability_fields)[0]
+            model_name = model_config[capability]
+
+            # Check for duplicate capabilities
+            if capability in capabilities_seen:
+                self.result.add_warning(
+                    f"Multiple models defined for capability '{capability}' - "
+                    f"last one will be used"
+                )
+            capabilities_seen.add(capability)
+
+            # Validate model name
+            if not isinstance(model_name, str) or not model_name.strip():
+                self.result.add_error(
+                    f"LLM model name for {capability} must be a non-empty string"
+                )
+
+            # Validate model-specific API key if provided
+            if 'api_key' in model_config:
+                api_key = model_config['api_key']
+                if not isinstance(api_key, str):
+                    self.result.add_error(f"API key for {capability} model must be a string")
+
+            # Validate model-specific settings
+            if 'settings' in model_config:
+                self._validate_model_capability_settings(model_config['settings'], capability)
+
+    def _validate_model_capability_settings(self, settings: Dict[str, Any], capability: str) -> None:
+        """Validate model capability-specific settings."""
+        if not isinstance(settings, dict):
+            self.result.add_error(f"Settings for {capability} model must be a dictionary")
+            return
+
+        # Validate common settings
+        if 'temperature' in settings:
+            temp = settings['temperature']
+            if not isinstance(temp, (int, float)) or not (0.0 <= temp <= 1.0):
+                self.result.add_error(
+                    f"Temperature for {capability} model must be between 0.0 and 1.0"
+                )
+
+        if 'max_tokens' in settings:
+            max_tokens = settings['max_tokens']
+            if not isinstance(max_tokens, int) or max_tokens <= 0:
+                self.result.add_error(
+                    f"max_tokens for {capability} model must be a positive integer"
+                )
+
+        if 'timeout_seconds' in settings:
+            timeout = settings['timeout_seconds']
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                self.result.add_error(
+                    f"timeout_seconds for {capability} model must be a positive number"
+                )
+
+        # Validate capability-specific settings
+        if capability == 'vision':
+            self._validate_vision_settings(settings)
+        elif capability == 'audio':
+            self._validate_audio_settings(settings)
+        elif capability == 'documents':
+            self._validate_documents_settings(settings)
+
+    def _validate_vision_settings(self, settings: Dict[str, Any]) -> None:
+        """Validate vision model settings."""
+        if 'image' in settings:
+            image_settings = settings['image']
+            if not isinstance(image_settings, dict):
+                self.result.add_error("Vision image settings must be a dictionary")
+                return
+
+            # Validate max_size_mb
+            if 'max_size_mb' in image_settings:
+                max_size = image_settings['max_size_mb']
+                if not isinstance(max_size, (int, float)) or max_size <= 0:
+                    self.result.add_error("Vision max_size_mb must be a positive number")
+
+            # Validate preprocessing settings
+            if 'preprocessing' in image_settings:
+                preprocessing = image_settings['preprocessing']
+                if not isinstance(preprocessing, dict):
+                    self.result.add_error("Vision preprocessing settings must be a dictionary")
+                    return
+
+                if 'resize' in preprocessing:
+                    resize = preprocessing['resize']
+                    if not isinstance(resize, bool):
+                        self.result.add_error("Vision resize setting must be a boolean")
+
+                if 'max_width' in preprocessing:
+                    width = preprocessing['max_width']
+                    if not isinstance(width, int) or width <= 0:
+                        self.result.add_error("Vision max_width must be a positive integer")
+
+                if 'max_height' in preprocessing:
+                    height = preprocessing['max_height']
+                    if not isinstance(height, int) or height <= 0:
+                        self.result.add_error("Vision max_height must be a positive integer")
+
+    def _validate_audio_settings(self, settings: Dict[str, Any]) -> None:
+        """Validate audio model settings."""
+        if 'max_size_mb' in settings:
+            max_size = settings['max_size_mb']
+            if not isinstance(max_size, (int, float)) or max_size <= 0:
+                self.result.add_error("Audio max_size_mb must be a positive number")
+
+        if 'language' in settings:
+            language = settings['language']
+            if not isinstance(language, str) or not language.strip():
+                self.result.add_error("Audio language must be a non-empty string")
+
+    def _validate_documents_settings(self, settings: Dict[str, Any]) -> None:
+        """Validate documents model settings."""
+        if 'max_size_mb' in settings:
+            max_size = settings['max_size_mb']
+            if not isinstance(max_size, (int, float)) or max_size <= 0:
+                self.result.add_error("Documents max_size_mb must be a positive number")
+
+        if 'extraction' in settings:
+            extraction = settings['extraction']
+            if not isinstance(extraction, dict):
+                self.result.add_error("Documents extraction settings must be a dictionary")
+                return
+
+            if 'chunk_size' in extraction:
+                chunk_size = extraction['chunk_size']
+                if not isinstance(chunk_size, int) or chunk_size <= 0:
+                    self.result.add_error("Documents chunk_size must be a positive integer")
+
+            if 'overlap' in extraction:
+                overlap = extraction['overlap']
+                if not isinstance(overlap, int) or overlap < 0:
+                    self.result.add_error("Documents overlap must be a non-negative integer")
+
+    def _validate_memory_config(self, memory_config: Dict[str, Any]) -> None:
+        """Validate memory configuration."""
+        if not isinstance(memory_config, dict):
+            self.result.add_error("Memory configuration must be a dictionary")
+            return
+
+        # Validate buffer memory configuration
+        if 'buffer' in memory_config:
+            buffer_config = memory_config['buffer']
+            if not isinstance(buffer_config, dict):
+                self.result.add_error("Memory buffer configuration must be a dictionary")
+            else:
+                self._validate_buffer_memory_config(buffer_config)
+
+        # Validate long-term memory configuration
+        if 'long_term' in memory_config:
+            long_term_config = memory_config['long_term']
+            if not isinstance(long_term_config, dict):
+                self.result.add_error("Memory long_term configuration must be a dictionary")
+            else:
+                self._validate_long_term_memory_config(long_term_config)
+
+    def _validate_buffer_memory_config(self, buffer_config: Dict[str, Any]) -> None:
+        """Validate buffer memory configuration."""
+        # Validate size and multiplier
+        if 'size' in buffer_config:
+            size = buffer_config['size']
+            if not isinstance(size, int) or size <= 0:
+                self.result.add_error("Buffer memory size must be a positive integer")
+
+        if 'multiplier' in buffer_config:
+            multiplier = buffer_config['multiplier']
+            if not isinstance(multiplier, int) or multiplier <= 0:
+                self.result.add_error("Buffer memory multiplier must be a positive integer")
+
+        # Validate vector search settings
+        if 'vector_search' in buffer_config:
+            vector_search = buffer_config['vector_search']
+            if not isinstance(vector_search, bool):
+                self.result.add_error("Buffer memory vector_search must be a boolean")
+
+        if 'vector_dimension' in buffer_config:
+            dimension = buffer_config['vector_dimension']
+            if not isinstance(dimension, int) or dimension <= 0:
+                self.result.add_error("Buffer memory vector_dimension must be a positive integer")
+
+        # Validate mode
+        if 'mode' in buffer_config:
+            mode = buffer_config['mode']
+            if mode not in ['local', 'remote']:
+                self.result.add_error("Buffer memory mode must be 'local' or 'remote'")
+
+        # Validate remote configuration if mode is remote
+        if buffer_config.get('mode') == 'remote' and 'remote' in buffer_config:
+            remote_config = buffer_config['remote']
+            if not isinstance(remote_config, dict):
+                self.result.add_error("Buffer memory remote configuration must be a dictionary")
+            elif 'url' not in remote_config:
+                self.result.add_error("Buffer memory remote configuration must include 'url'")
+
+    def _validate_long_term_memory_config(self, long_term_config: Dict[str, Any]) -> None:
+        """Validate long-term memory configuration."""
+        # Validate connection string
+        if 'connection_string' in long_term_config:
+            connection_string = long_term_config['connection_string']
+            if not isinstance(connection_string, str) or not connection_string.strip():
+                self.result.add_error("Long-term memory connection_string must be a non-empty string")
+            else:
+                # Basic format validation
+                valid_prefixes = ['postgresql://', 'postgres://', 'sqlite://']
+                valid_suffix = connection_string.endswith('.db')
+                if not any(connection_string.startswith(prefix) for prefix in valid_prefixes) and not valid_suffix:
+                    self.result.add_warning(
+                        "Long-term memory connection_string should start with postgresql://, postgres://, sqlite:// or end with .db"
+                    )
+
+        # Validate embedding model
+        if 'embedding_model' in long_term_config:
+            embedding_model = long_term_config['embedding_model']
+            if not isinstance(embedding_model, str) or not embedding_model.strip():
+                self.result.add_error("Long-term memory embedding_model must be a non-empty string")
+
+    def _validate_logging_config(self, logging_config: Dict[str, Any]) -> None:
+        """Validate logging configuration according to SCHEMA_GUIDE.md."""
+        if not isinstance(logging_config, dict):
+            self.result.add_error("Logging configuration must be a dictionary")
+            return
+
+        # Check for unknown logging fields according to SCHEMA_GUIDE.md
+        known_logging_fields = {
+            'level', 'format', 'output', 'path', 'stream_url', 'log', 'exclude'
+        }
+        unknown_fields = set(logging_config.keys()) - known_logging_fields
+        if unknown_fields:
+            self.result.add_warning(f"Unknown logging fields: {list(unknown_fields)}")
+
+        # Validate level (enum: debug, info, warning, error)
+        if 'level' in logging_config:
+            level = logging_config['level']
+            valid_levels = ['debug', 'info', 'warning', 'error']
+            if level not in valid_levels:
+                self.result.add_error(
+                    f"Invalid logging level '{level}'. "
+                    f"Valid levels are: {', '.join(valid_levels)}"
+                )
+
+        # Validate format (enum: jsonl, text)
+        if 'format' in logging_config:
+            format_value = logging_config['format']
+            valid_formats = ['jsonl', 'text']
+            if format_value not in valid_formats:
+                self.result.add_error(
+                    f"Invalid logging format '{format_value}'. "
+                    f"Valid formats are: {', '.join(valid_formats)}"
+                )
+
+        # Validate output (enum: stdout, file, stream)
+        output = logging_config.get('output', 'stdout')
+        valid_outputs = ['stdout', 'file', 'stream']
+        if output not in valid_outputs:
+            self.result.add_error(
+                f"Invalid logging output '{output}'. "
+                f"Valid outputs are: {', '.join(valid_outputs)}"
+            )
+
+        # Validate path (required if output == "file")
+        if output == 'file':
+            if 'path' not in logging_config:
+                self.result.add_error(
+                    "Logging path is required when output is 'file'"
+                )
+            else:
+                path = logging_config['path']
+                if not isinstance(path, str) or not path.strip():
+                    self.result.add_error(
+                        "Logging path must be a non-empty string"
+                    )
+
+        # Validate stream_url (required if output == "stream")
+        if output == 'stream':
+            if 'stream_url' not in logging_config:
+                self.result.add_error(
+                    "Logging stream_url is required when output is 'stream'"
+                )
+            else:
+                stream_url = logging_config['stream_url']
+                if not isinstance(stream_url, str) or not stream_url.strip():
+                    self.result.add_error(
+                        "Logging stream_url must be a non-empty string"
+                    )
+
+        # Validate log categories (optional array)
+        if 'log' in logging_config:
+            log_categories = logging_config['log']
+            if not isinstance(log_categories, list):
+                self.result.add_error("Logging 'log' field must be an array")
+            else:
+                valid_categories = {
+                    'user_prompts_interaction', 'multi_modal_metadata',
+                    'overlord_routing', 'agent_reflections', 'system_health',
+                    'mcp_tool_calls', 'memory_recall', 'memory_storage', 'errors'
+                }
+                for category in log_categories:
+                    if not isinstance(category, str):
+                        self.result.add_error(
+                            "Logging category must be a string"
+                        )
+                    elif category not in valid_categories:
+                        self.result.add_warning(
+                            f"Unknown logging category '{category}'. "
+                            f"Valid categories: {', '.join(sorted(valid_categories))}"
+                        )
+
+        # Validate exclude categories (optional array, overrides log)
+        if 'exclude' in logging_config:
+            exclude_categories = logging_config['exclude']
+            if not isinstance(exclude_categories, list):
+                self.result.add_error("Logging 'exclude' field must be an array")
+            else:
+                valid_categories = {
+                    'user_prompts_interaction', 'multi_modal_metadata',
+                    'overlord_routing', 'agent_reflections', 'system_health',
+                    'mcp_tool_calls', 'memory_recall', 'memory_storage', 'errors'
+                }
+                for category in exclude_categories:
+                    if not isinstance(category, str):
+                        self.result.add_error(
+                            "Logging exclude category must be a string"
+                        )
+                    elif category not in valid_categories:
+                        self.result.add_warning(
+                            f"Unknown logging exclude category '{category}'. "
+                            f"Valid categories: {', '.join(sorted(valid_categories))}"
+                        )
+
+    def _validate_overlord_config(self, overlord_config: Dict[str, Any]) -> None:
+        """Validate overlord configuration according to SCHEMA_GUIDE.md."""
+        if not isinstance(overlord_config, dict):
+            self.result.add_error("Overlord configuration must be a dictionary")
+            return
+
+        # Check for unknown overlord fields
+        known_overlord_fields = {
+            'system_message', 'llm', 'config'
+        }
+        unknown_fields = set(overlord_config.keys()) - known_overlord_fields
+        if unknown_fields:
+            self.result.add_warning(f"Unknown overlord fields: {list(unknown_fields)}")
+
+        # Validate system_message
+        if 'system_message' in overlord_config:
+            if not isinstance(overlord_config['system_message'], str):
+                self.result.add_error("Overlord system_message must be a string")
+
+        # Validate overlord LLM configuration
+        if 'llm' in overlord_config:
+            self._validate_overlord_llm_config(overlord_config['llm'])
+
+        # Validate overlord behavior configuration
+        if 'config' in overlord_config:
+            self._validate_overlord_behavior_config(overlord_config['config'])
+
+    def _validate_overlord_llm_config(self, llm_config: Dict[str, Any]) -> None:
+        """Validate overlord LLM configuration."""
+        if not isinstance(llm_config, dict):
+            self.result.add_error("Overlord LLM configuration must be a dictionary")
+            return
+
+        # Check for unknown LLM fields
+        known_llm_fields = {'model', 'api_key', 'settings'}
+        unknown_fields = set(llm_config.keys()) - known_llm_fields
+        if unknown_fields:
+            self.result.add_warning(f"Unknown overlord LLM fields: {list(unknown_fields)}")
+
+        # Validate model
+        if 'model' in llm_config:
+            if not isinstance(llm_config['model'], str):
+                self.result.add_error("Overlord LLM model must be a string")
+
+        # Validate api_key
+        if 'api_key' in llm_config:
+            if not isinstance(llm_config['api_key'], str):
+                self.result.add_error("Overlord LLM api_key must be a string")
+
+        # Validate settings
+        if 'settings' in llm_config:
+            self._validate_llm_global_settings(llm_config['settings'])
+
+    def _validate_overlord_behavior_config(self, config: Dict[str, Any]) -> None:
+        """Validate overlord behavior configuration."""
+        if not isinstance(config, dict):
+            self.result.add_error("Overlord behavior configuration must be a dictionary")
+            return
+
+        # Check for unknown config fields
+        known_config_fields = {
+            'max_extraction_tokens', 'caching', 'max_tool_calls', 'response_format'
+        }
+        unknown_fields = set(config.keys()) - known_config_fields
+        if unknown_fields:
+            self.result.add_warning(f"Unknown overlord config fields: {list(unknown_fields)}")
+
+        # Validate max_extraction_tokens
+        if 'max_extraction_tokens' in config:
+            tokens = config['max_extraction_tokens']
+            if not isinstance(tokens, int) or tokens <= 0:
+                self.result.add_error("max_extraction_tokens must be a positive integer")
+
+        # Validate max_tool_calls
+        if 'max_tool_calls' in config:
+            calls = config['max_tool_calls']
+            if not isinstance(calls, int) or (calls <= 0 and calls != -1):
+                self.result.add_error("max_tool_calls must be positive integer or -1")
+
+        # Validate response_format
+        if 'response_format' in config:
+            format_val = config['response_format']
+            if format_val not in ['markdown', 'json', 'text']:
+                self.result.add_error(
+                    f"response_format '{format_val}' invalid. Valid: markdown, json, text"
+                )
+
+        # Validate caching configuration
+        if 'caching' in config:
+            self._validate_overlord_caching_config(config['caching'])
+
+    def _validate_overlord_caching_config(self, caching_config: Dict[str, Any]) -> None:
+        """Validate overlord caching configuration."""
+        if not isinstance(caching_config, dict):
+            self.result.add_error("Overlord caching configuration must be a dictionary")
+            return
+
+        # Check for unknown caching fields
+        known_caching_fields = {'enabled', 'ttl'}
+        unknown_fields = set(caching_config.keys()) - known_caching_fields
+        if unknown_fields:
+            self.result.add_warning(f"Unknown caching fields: {list(unknown_fields)}")
+
+        # Validate enabled
+        if 'enabled' in caching_config:
+            if not isinstance(caching_config['enabled'], bool):
+                self.result.add_error("Caching enabled must be a boolean")
+
+        # Validate ttl
+        if 'ttl' in caching_config:
+            ttl = caching_config['ttl']
+            if not isinstance(ttl, int) or ttl <= 0:
+                self.result.add_error("Caching TTL must be a positive integer")
+
+    def _validate_a2a_service_config(self, service_config: Dict[str, Any], filename: str) -> None:
+        """Validate A2A service configuration according to SCHEMA_GUIDE.md."""
+        if not isinstance(service_config, dict):
+            self.result.add_error(f"A2A service configuration in {filename} must be a dictionary")
+            return
+
+        # Check required fields
+        for field in self.REQUIRED_A2A_SERVICE_FIELDS:
+            if field not in service_config:
+                self.result.add_error(
+                    f"A2A service {filename} missing required field: {field}"
+                )
+
+        # Validate schema version
+        schema = service_config.get('schema')
+        if schema and not isinstance(schema, str):
+            self.result.add_error(f"A2A service {filename} schema must be a string")
+
+        # Validate id
+        service_id = service_config.get('id')
+        if service_id and not isinstance(service_id, str):
+            self.result.add_error(f"A2A service {filename} id must be a string")
+
+        # Validate name
+        name = service_config.get('name')
+        if name and not isinstance(name, str):
+            self.result.add_error(f"A2A service {filename} name must be a string")
+
+        # Validate description
+        description = service_config.get('description')
+        if description and not isinstance(description, str):
+            self.result.add_error(f"A2A service {filename} description must be a string")
+
+        # Validate url
+        url = service_config.get('url')
+        if url:
+            if not isinstance(url, str):
+                self.result.add_error(f"A2A service {filename} url must be a string")
+            elif not (url.startswith('http://') or url.startswith('https://')):
+                self.result.add_error(
+                    f"A2A service {filename} url must start with http:// or https://"
+                )
+
+        # Validate active field
+        if 'active' in service_config:
+            active = service_config['active']
+            if not isinstance(active, bool):
+                self.result.add_error(f"A2A service {filename} active must be a boolean")
+
+        # Validate metadata fields
+        self._validate_a2a_service_metadata(service_config, filename)
+
+        # Validate retry/timeout overrides
+        self._validate_a2a_service_overrides(service_config, filename)
+
+        # Validate authentication configuration
+        if 'auth' in service_config:
+            self._validate_a2a_service_auth(service_config['auth'], filename)
+
+    def _validate_a2a_service_metadata(self, service_config: Dict[str, Any], filename: str) -> None:
+        """Validate A2A service metadata fields."""
+        metadata_fields = ['author', 'version', 'documentation', 'support_contact']
+
+        for field in metadata_fields:
+            if field in service_config:
+                value = service_config[field]
+                if not isinstance(value, str):
+                    self.result.add_error(
+                        f"A2A service {filename} {field} must be a string"
+                    )
+
+    def _validate_a2a_service_overrides(self, service_config: Dict[str, Any], filename: str) -> None:
+        """Validate A2A service retry/timeout override configuration."""
+        # Validate retry_attempts
+        if 'retry_attempts' in service_config:
+            retry_attempts = service_config['retry_attempts']
+            if not isinstance(retry_attempts, int) or retry_attempts < 0:
+                self.result.add_error(
+                    f"A2A service {filename} retry_attempts must be a non-negative integer"
+                )
+
+        # Validate timeout_seconds
+        if 'timeout_seconds' in service_config:
+            timeout_seconds = service_config['timeout_seconds']
+            if not isinstance(timeout_seconds, int) or timeout_seconds <= 0:
+                self.result.add_error(
+                    f"A2A service {filename} timeout_seconds must be a positive integer"
+                )
+
+    def _validate_a2a_service_auth(self, auth_config: Dict[str, Any], filename: str) -> None:
+        """Validate A2A service authentication configuration."""
+        if not isinstance(auth_config, dict):
+            self.result.add_error(f"A2A service {filename} auth must be a dictionary")
+            return
+
+        # Validate auth type
+        auth_type = auth_config.get('type', 'none')
+        valid_auth_types = ['api_key', 'bearer', 'basic', 'custom', 'none']
+
+        if auth_type not in valid_auth_types:
+            self.result.add_error(
+                f"A2A service {filename} auth type '{auth_type}' invalid. "
+                f"Valid types are: {valid_auth_types}"
+            )
+            return
+
+        # Validate type-specific auth requirements
+        if auth_type == 'api_key':
+            if 'key' not in auth_config:
+                self.result.add_error(
+                    f"A2A service {filename} api_key auth requires 'key' field"
+                )
+            if 'header' in auth_config and not isinstance(auth_config['header'], str):
+                self.result.add_error(
+                    f"A2A service {filename} auth header must be a string"
+                )
+
+        elif auth_type == 'bearer':
+            if 'token' not in auth_config:
+                self.result.add_error(
+                    f"A2A service {filename} bearer auth requires 'token' field"
+                )
+
+        elif auth_type == 'basic':
+            required_basic_fields = ['username', 'password']
+            for field in required_basic_fields:
+                if field not in auth_config:
+                    self.result.add_error(
+                        f"A2A service {filename} basic auth requires '{field}' field"
+                    )
+
+        elif auth_type == 'custom':
+            if 'headers' not in auth_config:
+                self.result.add_error(
+                    f"A2A service {filename} custom auth requires 'headers' field"
+                )
+            elif not isinstance(auth_config['headers'], dict):
+                self.result.add_error(
+                    f"A2A service {filename} custom auth headers must be a dictionary"
+                )
 
 
 def validate_formation(

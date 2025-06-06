@@ -50,8 +50,10 @@
 import asyncio
 import secrets
 import string
+import time
 from typing import Any, Dict, List, Optional, Union
 import datetime
+import os
 
 from loguru import logger
 
@@ -66,7 +68,6 @@ from .a2a.registry_client import A2ARegistryClient
 from .a2a.formation_server import A2AFormationServer
 from .a2a.models import AgentCard, A2ACapability, A2AAuthentication, AuthType
 from .secrets import SecretsManager
-from .config.routing import RoutingConfig
 
 
 class Overlord:
@@ -254,6 +255,35 @@ class Overlord:
         self._model_cache: Dict[str, LLM] = {}
         self._capability_models: Dict[str, str] = {}
 
+        # Load default system prompt from file
+        self._load_default_system_prompt()
+
+    def _load_default_system_prompt(self) -> None:
+        """Load the default system prompt from the system_prompt.md file."""
+        try:
+            # Get the path to the system_prompt.md file relative to this file
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            system_prompt_path = os.path.join(current_dir, "utils", "system_prompt.md")
+
+            if os.path.exists(system_prompt_path):
+                with open(system_prompt_path, 'r', encoding='utf-8') as f:
+                    self._default_system_prompt = f.read().strip()
+                logger.debug(f"Loaded default system prompt from {system_prompt_path}")
+            else:
+                # Fallback if file doesn't exist
+                fallback = """You are an intelligent message router for a multi-agent system.
+Analyze incoming user messages and determine which specialized agent is best equipped to handle each request."""
+                self._default_system_prompt = fallback
+                msg = f"System prompt file not found at {system_prompt_path}, using fallback"
+                logger.warning(msg)
+
+        except Exception as e:
+            # Fallback if there's an error reading the file
+            fallback = """You are an intelligent message router for a multi-agent system.
+Analyze incoming user messages and determine which specialized agent is best equipped to handle each request."""
+            self._default_system_prompt = fallback
+            logger.error(f"Error loading system prompt file: {e}, using fallback")
+
     async def load_formation_from_path(self, formation_path: str) -> Dict[str, Any]:
         """
         Load formation configuration from a file or directory path.
@@ -302,7 +332,7 @@ class Overlord:
             # Update overlord's formation config
             self.formation_config = formation_config
 
-            logger.info(f"✅ Loaded formation: {formation_config.get('name', 'unnamed')}")
+            logger.info(f"✅ Loaded formation: {formation_config.get('id', 'unnamed')}")
 
             # Apply configuration to overlord
             await self._apply_formation_config()
@@ -360,6 +390,15 @@ class Overlord:
 
         # Initialize LLM configuration and model resolver
         await self._initialize_llm_config()
+
+        # Initialize auth configuration
+        await self._initialize_auth_config()
+
+        # Initialize memory configuration
+        await self._initialize_memory_config()
+
+        # Initialize logging configuration
+        await self._initialize_logging_config()
 
         # Create agents from configuration
         agents_config = config.get('agents', [])
@@ -422,6 +461,247 @@ class Overlord:
 
         capabilities = list(self._capability_models.keys())
         logger.info(f"✅ Initialized LLM config with capabilities: {capabilities}")
+
+    async def _initialize_auth_config(self) -> None:
+        """
+        Initialize auth configuration from formation config.
+
+        This processes the auth.api_keys structure and updates the overlord's
+        API keys if they are provided in the formation config.
+        """
+        auth_config = self.formation_config.get('auth', {})
+        auth_api_keys = auth_config.get('api_keys', {})
+
+        # Update admin and user API keys from formation config if provided
+        if 'admin_key' in auth_api_keys:
+            admin_key = auth_api_keys['admin_key']
+            # Interpolate secrets if needed
+            if admin_key and "${{ secrets." in admin_key:
+                try:
+                    interpolated_config = await self.interpolate_secrets({"admin_key": admin_key})
+                    admin_key = interpolated_config.get("admin_key", admin_key)
+                except Exception as e:
+                    logger.warning(f"Failed to interpolate secrets in admin_key: {e}")
+
+            self.admin_api_key = admin_key
+            logger.info("✅ Updated admin API key from formation config")
+
+        if 'user_key' in auth_api_keys:
+            user_key = auth_api_keys['user_key']
+            # Interpolate secrets if needed
+            if user_key and "${{ secrets." in user_key:
+                try:
+                    interpolated_config = await self.interpolate_secrets({"user_key": user_key})
+                    user_key = interpolated_config.get("user_key", user_key)
+                except Exception as e:
+                    logger.warning(f"Failed to interpolate secrets in user_key: {e}")
+
+            self.user_api_key = user_key
+            logger.info("✅ Updated user API key from formation config")
+
+        if auth_api_keys:
+            logger.info("✅ Initialized auth configuration")
+
+    async def _initialize_memory_config(self) -> None:
+        """
+        Initialize memory configuration from formation config.
+
+        This processes the memory.buffer and memory.long_term configuration
+        and initializes or updates the overlord's memory systems according
+        to the new schema specifications.
+        """
+        memory_config = self.formation_config.get('memory', {})
+
+        if not memory_config:
+            logger.debug("No memory configuration found in formation")
+            return
+
+        # Initialize buffer memory configuration
+        buffer_config = memory_config.get('buffer', {})
+        if buffer_config and not self.buffer_memory:
+            await self._initialize_buffer_memory(buffer_config)
+
+        # Initialize long-term memory configuration
+        long_term_config = memory_config.get('long_term', {})
+        if long_term_config and not self.long_term_memory:
+            await self._initialize_long_term_memory(long_term_config)
+
+        if memory_config:
+            logger.info("✅ Initialized memory configuration")
+
+    async def _initialize_logging_config(self) -> None:
+        """
+        Initialize logging configuration from formation config.
+
+        This processes the logging configuration according to SCHEMA_GUIDE.md
+        and configures the logging system for the formation.
+        """
+        logging_config = self.formation_config.get('logging', {})
+
+        if not logging_config:
+            logger.debug("No logging configuration found in formation")
+            return
+
+        try:
+            # Import the logging config module
+            from .config.logging import LoggingConfig, configure_logging
+
+            # Extract logging configuration
+            level = logging_config.get('level', 'info')
+            format_type = logging_config.get('format', 'jsonl')
+            output = logging_config.get('output', 'stdout')
+            path = logging_config.get('path')
+            stream_url = logging_config.get('stream_url')
+            log_categories = logging_config.get('log', [])
+            exclude_categories = logging_config.get('exclude', [])
+
+            # Convert SCHEMA_GUIDE.md format to LoggingConfig format
+            # Map the new schema format to the existing LoggingConfig
+            config = LoggingConfig(
+                level=level.upper(),  # Convert to uppercase for standard logging
+                file=path if output == 'file' else None,
+                format=self._convert_logging_format(format_type)
+            )
+
+            # Configure the logging system
+            configure_logging(config)
+
+            # Store logging configuration for potential future use
+            self._logging_config = {
+                'level': level,
+                'format': format_type,
+                'output': output,
+                'path': path,
+                'stream_url': stream_url,
+                'log_categories': log_categories,
+                'exclude_categories': exclude_categories
+            }
+
+            logger.info(f"✅ Initialized logging configuration "
+                       f"(level={level}, format={format_type}, output={output})")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize logging configuration: {e}")
+
+    def _convert_logging_format(self, schema_format: str) -> str:
+        """
+        Convert SCHEMA_GUIDE.md logging format to LoggingConfig format.
+
+        Args:
+            schema_format: Format from SCHEMA_GUIDE.md ('jsonl' or 'text')
+
+        Returns:
+            Format string for LoggingConfig
+        """
+        if schema_format == 'jsonl':
+            return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+        elif schema_format == 'text':
+            return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
+        else:
+            # Default format
+            return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+
+    async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
+        """Initialize buffer memory from configuration."""
+        try:
+            from .memory.buffer import BufferMemory
+
+            # Extract buffer configuration
+            size = buffer_config.get('size', 10)
+            multiplier = buffer_config.get('multiplier', 10)
+            vector_search = buffer_config.get('vector_search', True)
+            dimension = buffer_config.get('vector_dimension', 1536)
+            mode = buffer_config.get('mode', 'local')
+            remote_config = buffer_config.get('remote', {})
+
+            # Get embedding model for vector search if enabled
+            embedding_model = None
+            if vector_search:
+                try:
+                    embedding_model = await self.get_model_for_capability('embedding')
+                except Exception as e:
+                    logger.warning(f"Could not get embedding model for buffer memory: {e}")
+                    vector_search = False
+
+            # Create buffer memory instance
+            self.buffer_memory = BufferMemory(
+                max_size=size,
+                buffer_multiplier=multiplier,
+                dimension=dimension,
+                model=embedding_model,
+                mode=mode,
+                remote=remote_config if mode == 'remote' else None
+            )
+
+            logger.info(f"✅ Initialized buffer memory (size={size}, multiplier={multiplier}, "
+                       f"vector_search={vector_search}, mode={mode})")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize buffer memory: {e}")
+
+    async def _initialize_long_term_memory(self, long_term_config: Dict[str, Any]) -> None:
+        """Initialize long-term memory from configuration."""
+        try:
+            connection_string = long_term_config.get('connection_string')
+            embedding_model_name = long_term_config.get('embedding_model')
+
+            if not connection_string:
+                logger.warning("No connection_string provided for long-term memory")
+                return
+
+            # Interpolate secrets in connection string if needed
+            if "${{ secrets." in connection_string:
+                try:
+                    interpolated = await self.interpolate_secrets(
+                        {"connection_string": connection_string}
+                    )
+                    connection_string = interpolated.get("connection_string", connection_string)
+                except Exception as e:
+                    logger.error(f"Failed to interpolate secrets in connection_string: {e}")
+                    return
+
+            # Get embedding model
+            embedding_model = None
+            if embedding_model_name:
+                try:
+                    # Create model from specific name override
+                    embedding_model = await self.create_model(model=embedding_model_name)
+                except Exception as e:
+                    logger.warning(f"Could not create embedding model {embedding_model_name}: {e}")
+                    try:
+                        # Fall back to default embedding capability
+                        embedding_model = await self.get_model_for_capability('embedding')
+                    except Exception as e2:
+                        logger.warning(f"Could not get default embedding model: {e2}")
+
+            # Determine memory type based on connection string
+            if connection_string.startswith('postgresql://') or connection_string.startswith('postgres://'):
+                from .memory.memobase import Memobase
+                self.long_term_memory = Memobase(
+                    connection_string=connection_string,
+                    model=embedding_model
+                )
+                logger.info("✅ Initialized PostgreSQL-based long-term memory (Memobase)")
+            elif connection_string.startswith('sqlite://') or connection_string.endswith('.db'):
+                from .memory.sqlite import SQLiteMemory
+                # Remove sqlite:// prefix if present
+                db_path = connection_string.replace('sqlite://', '')
+                self.long_term_memory = SQLiteMemory(db_path=db_path)
+
+                # Set the embedding provider after initialization
+                if embedding_model:
+                    try:
+                        embedding_llm = await self.get_model_for_capability('embedding')
+                        self.long_term_memory.embedding_provider = embedding_llm
+                    except Exception as e:
+                        logger.warning(f"Could not set embedding provider for long-term memory: {e}")
+
+                logger.info(f"✅ Initialized SQLite-based long-term memory ({db_path})")
+            else:
+                logger.error(f"Unsupported connection string format: {connection_string}")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize long-term memory: {e}")
 
     async def get_model_for_capability(
         self,
@@ -522,9 +802,9 @@ class Overlord:
         Args:
             agent_config: Agent configuration dictionary
         """
-        agent_id = agent_config.get('agent_id')
+        agent_id = agent_config.get('id')
         if not agent_id:
-            logger.error("Agent configuration missing agent_id")
+            logger.error("Agent configuration missing id")
             return
 
         # Create model from configuration
@@ -560,7 +840,7 @@ class Overlord:
         # Extract server parameters
         url = server_config.get('url')
         command = server_config.get('command')
-        credentials = server_config.get('credentials')
+        credentials = server_config.get('auth')
 
         # Register the MCP server
         await self.register_mcp_server(
@@ -596,47 +876,104 @@ class Overlord:
     def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
         try:
-            # Get routing configuration from formation config or use defaults
+            # Get overlord configuration from formation config
             overlord_config = self.formation_config.get('overlord', {})
-            routing_data = overlord_config.get('routing', {})
 
-            if routing_data:
-                # Legacy routing config - use old approach
-                routing_config = RoutingConfig(
-                    provider=routing_data.get('provider'),
-                    model=routing_data.get('model'),
-                    temperature=routing_data.get('temperature'),
-                    max_tokens=routing_data.get('max_tokens'),
-                    use_caching=routing_data.get('use_caching'),
-                    cache_ttl=routing_data.get('cache_ttl'),
-                    system_prompt=routing_data.get('system_prompt')
-                )
-
-                # Use the new Model class with provider/model format
-                model_name = f"{routing_config.provider}/{routing_config.model}"
-
-                # Create the routing model
+            # Try new overlord.llm structure first
+            llm_config = overlord_config.get('llm', {})
+            if llm_config:
+                # New overlord.llm config structure
                 self.routing_model = self.create_model(
-                    model=model_name,
-                    temperature=routing_config.temperature,
-                    max_tokens=routing_config.max_tokens,
-                    api_key=routing_data.get('api_key')
+                    model=llm_config.get('model', 'openai/gpt-4o-mini'),
+                    temperature=llm_config.get('settings', {}).get('temperature', 0.2),
+                    max_tokens=llm_config.get('settings', {}).get('max_tokens', 2000),
+                    api_key=llm_config.get('api_key')
                 )
+
+                # Set custom system message if provided
+                overlord_system_message = overlord_config.get('system_message')
+                if overlord_system_message:
+                    self.routing_system_message = overlord_system_message
+                else:
+                    self.routing_system_message = None
+
+                # Configure overlord behavior from overlord.config
+                config_section = overlord_config.get('config', {})
+
+                # Caching configuration
+                caching_config = config_section.get('caching', {})
+                self.routing_cache_enabled = caching_config.get('enabled', True)
+                self.routing_cache_ttl = caching_config.get('ttl', 3600)
+
+                # Additional configuration fields
+                self.max_extraction_tokens = config_section.get('max_extraction_tokens', 500)
+                self.max_tool_calls = config_section.get('max_tool_calls', -1)
+                self.response_format = config_section.get('response_format', 'markdown')
+
+                # Initialize cache expiry tracking if TTL is configured
+                if self.routing_cache_ttl > 0:
+                    self._routing_cache_expiry: Dict[str, float] = {}
+
             else:
-                # New capability-based config - try to get text model
-                try:
-                    self.routing_model = asyncio.create_task(
-                        self.get_model_for_capability('text')
+                # Fall back to legacy overlord.routing structure for compatibility
+                routing_data = overlord_config.get('routing', {})
+                if routing_data:
+                    self.routing_model = self.create_model(
+                        model=routing_data.get('model', 'openai/gpt-4o-mini'),
+                        temperature=routing_data.get('settings', {}).get('temperature', 0.2),
+                        max_tokens=routing_data.get('settings', {}).get('max_tokens', 2000),
+                        api_key=routing_data.get('api_key')
                     )
-                    logger.info("Using capability-based text model for routing")
-                except Exception:
-                    # Fall back to create_model with defaults
-                    self.routing_model = self.create_model()
+
+                    # Legacy caching config
+                    self.routing_cache_enabled = routing_data.get('use_caching', True)
+                    self.routing_cache_ttl = routing_data.get('cache_ttl', 3600)
+                    self.routing_system_message = routing_data.get('system_message')
+
+                    # Default values for new config fields when using legacy format
+                    self.max_extraction_tokens = 500
+                    self.max_tool_calls = -1
+                    self.response_format = 'markdown'
+
+                    # Initialize cache expiry tracking if TTL is configured
+                    if self.routing_cache_ttl > 0:
+                        self._routing_cache_expiry: Dict[str, float] = {}
+
+                else:
+                    # No overlord config - try to get text model from formation
+                    try:
+                        self.routing_model = asyncio.create_task(
+                            self.get_model_for_capability('text')
+                        )
+                        logger.info("Using capability-based text model for routing")
+                    except Exception:
+                        # Fall back to create_model with defaults
+                        self.routing_model = self.create_model()
+
+                    # Default caching settings
+                    self.routing_cache_enabled = True
+                    self.routing_cache_ttl = 3600
+                    self.routing_system_message = None
+                    self.max_extraction_tokens = 500
+                    self.max_tool_calls = -1
+                    self.response_format = 'markdown'
+                    self._routing_cache_expiry: Dict[str, float] = {}
+
+            logger.info(f"✅ Initialized overlord routing model with cache_enabled={self.routing_cache_enabled}, "
+                       f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens}, "
+                       f"max_tool_calls={self.max_tool_calls}, response_format={self.response_format}")
 
         except Exception as e:
             # If initialization fails, log error but continue (routing will fall back to default)
             logger.error(f"Failed to initialize routing model: {str(e)}")
             self.routing_model = None
+            self.routing_cache_enabled = True
+            self.routing_cache_ttl = 3600
+            self.routing_system_message = None
+            self.max_extraction_tokens = 500
+            self.max_tool_calls = -1
+            self.response_format = 'markdown'
+            self._routing_cache_expiry: Dict[str, float] = {}
 
     async def create_model(
         self,
@@ -1475,9 +1812,33 @@ class Overlord:
         if not self.agents:
             raise ValueError("No agents available")
 
+        # Get caching configuration
+        overlord_config = self.formation_config.get('overlord', {})
+        config_section = overlord_config.get('config', {})
+        caching_config = config_section.get('caching', {})
+
+        caching_enabled = caching_config.get('enabled', True)  # Default: enabled
+        cache_ttl = caching_config.get('ttl', 3600)  # Default: 3600 seconds (1 hour)
+
         # Check if we've seen this message before (use cached routing decision)
-        if message in self._routing_cache:
-            return self._routing_cache[message]
+        if caching_enabled and message in self._routing_cache:
+            cached_entry = self._routing_cache[message]
+
+            # Check if cache entry is a simple string (old format) or dict with timestamp
+            if isinstance(cached_entry, str):
+                # Old format - assume it's still valid
+                return cached_entry
+            elif isinstance(cached_entry, dict):
+                # New format with timestamp
+                cached_time = cached_entry.get('timestamp', 0)
+                cached_agent = cached_entry.get('agent_id')
+
+                # Check if cache entry is still valid (within TTL)
+                if time.time() - cached_time < cache_ttl:
+                    return cached_agent
+                else:
+                    # Cache entry expired, remove it
+                    del self._routing_cache[message]
 
         # Check if a routing model is available
         if not hasattr(self, "routing_model") or self.routing_model is None:
@@ -1507,8 +1868,12 @@ class Overlord:
             else:
                 logger.info(f"Routed message to agent: '{selected_agent_id}'")
 
-            # Cache the result for future identical messages
-            self._routing_cache[message] = selected_agent_id
+            # Cache the result for future identical messages (if caching is enabled)
+            if caching_enabled:
+                self._routing_cache[message] = {
+                    'agent_id': selected_agent_id,
+                    'timestamp': time.time()
+                }
 
             return selected_agent_id
 
@@ -1537,13 +1902,30 @@ class Overlord:
         for agent_id, description in self.agent_descriptions.items():
             agent_descriptions.append(f"{agent_id}: {description}")
 
-        # Create the prompt
-        prompt = """
-I need to decide which AI agent should handle a user's message. Based on the agent
-descriptions and the user's message, select the most appropriate agent ID.
+        # Use the loaded default system prompt with current date/time
+        default_prompt = getattr(self, '_default_system_prompt',
+                                "You are an intelligent message router for a multi-agent system. "
+                                "Analyze incoming user messages and determine which specialized agent "
+                                "is best equipped to handle each request.")
 
-Available agents:
-"""
+        # Add current date/time to the prompt
+        current_time = datetime.datetime.now()
+        date_time_str = current_time.strftime("Today is %d %m %Y, %H:%M")
+        default_prefix = f"{date_time_str}\n\n{default_prompt}\n\n"
+
+        # Check for custom system message from overlord configuration
+        overlord_config = self.formation_config.get('overlord', {})
+        custom_system_message = overlord_config.get('system_message')
+
+        if custom_system_message:
+            # Use default prefix + custom system message
+            prompt = default_prefix + custom_system_message.strip() + "\n\n"
+        else:
+            # Use default prefix
+            prompt = default_prefix
+
+        # Add available agents section
+        prompt += "Available agents:\n"
         # Add agent descriptions
         for description in agent_descriptions:
             prompt += f"- {description}\n"
@@ -1976,7 +2358,7 @@ Available agents:
         server_id: str,
         url: Optional[str] = None,
         command: Optional[str] = None,
-        credentials: Optional[Dict[str, Any]] = None,
+        auth: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: Optional[int] = None,
     ) -> str:
@@ -1995,7 +2377,7 @@ Available agents:
                 providing the endpoint to send MCP requests to.
             command: Command for command-line MCP servers. Required for CLI-based MCP
                 servers, specifying the command to execute.
-            credentials: Optional credentials for authentication with the MCP server.
+            auth: Optional authentication configuration for the MCP server.
                 Supports secrets interpolation with ${{ secrets.NAME }} syntax.
                 Format depends on the server's requirements.
             model: Optional model to use for this MCP handler. Some MCP servers
@@ -2013,21 +2395,21 @@ Available agents:
         # Use overlord's default timeout if none specified
         timeout = request_timeout if request_timeout is not None else self.request_timeout
 
-        # Interpolate secrets in credentials if provided
-        final_credentials = credentials
-        if credentials:
+        # Interpolate secrets in auth if provided
+        final_auth = auth
+        if auth:
             try:
-                final_credentials = await self.interpolate_secrets(credentials)
+                final_auth = await self.interpolate_secrets(auth)
             except Exception as e:
-                logger.warning(f"Failed to interpolate secrets in MCP credentials: {e}")
-                # Continue with original credentials
+                logger.warning(f"Failed to interpolate secrets in MCP auth: {e}")
+                # Continue with original auth
 
         # Register the server with the MCP service
         return await self.mcp_service.register_mcp_server(
             server_id=server_id,
             url=url,
             command=command,
-            credentials=final_credentials,
+            credentials=final_auth,
             model=model,
             request_timeout=timeout,
         )
@@ -2699,7 +3081,7 @@ Available agents:
                 url=f"http://localhost:{formation_port}/{agent_id}",
                 muxi_agent_id=agent_id,
                 muxi_formation=(
-                    self.formation_config.get('name', 'unknown')
+                    self.formation_config.get('id', 'unknown')
                     if self.formation_config
                     else 'unknown'
                 )
@@ -3013,7 +3395,7 @@ Available agents:
             host = inbound_config.get('host', '0.0.0.0')
             trusted_endpoints = inbound_config.get('trusted_endpoints', [])
             auth_mode = inbound_config.get('mode', 'none')
-            formation_name = self.formation_config.get('name', 'default')
+            formation_name = self.formation_config.get('id', 'default')
 
             # Create A2A Formation Server
             self.formation_server = A2AFormationServer(
