@@ -8,6 +8,8 @@ Supports multiple authentication types as defined in the A2A protocol:
 - OAuth2 client credentials
 - Basic authentication
 - No authentication
+
+Now integrated with formation-level encrypted secrets management.
 """
 
 import logging
@@ -17,7 +19,7 @@ import hmac
 import hashlib
 import uuid
 from enum import Enum
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any, TYPE_CHECKING
 from dataclasses import dataclass, field
 import httpx
 
@@ -25,11 +27,13 @@ import httpx
 try:
     import jwt
     from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa
-
     JWT_AVAILABLE = True
 except ImportError:
     JWT_AVAILABLE = False
+
+# Avoid circular imports
+if TYPE_CHECKING:
+    from muxi.runtime.secrets import SecretsManager
 
 logger = logging.getLogger(__name__)
 
@@ -83,95 +87,248 @@ class AuthCredentials:
 
 class A2AAuthManager:
     """
-    Manages authentication credentials and applies authentication to HTTP requests
+    Manages authentication credentials for external A2A communication.
+
+    Now uses SecretsManager exclusively for secure credential storage.
+    No fallbacks to environment variables or test values.
     """
 
-    def __init__(self):
-        """Initialize the authentication manager"""
-        self._credentials: Dict[str, AuthCredentials] = {}
-        self._load_default_credentials()
+    def __init__(self, secrets_manager: "SecretsManager"):
+        """
+        Initialize A2A authentication manager with SecretsManager.
 
-    def _load_default_credentials(self):
-        """Load default credentials from environment variables"""
-        # Load common credentials from environment
-        default_creds = {
-            # Example API key for billing service
-            "external-billing-service": AuthCredentials(
-                auth_type=AuthType.API_KEY,
-                credentials={"api_key": os.getenv("BILLING_API_KEY", "test-billing-key-123")},
-            ),
-            # Example bearer token for analytics
-            "analytics-engine": AuthCredentials(
-                auth_type=AuthType.BEARER,
-                credentials={"token": os.getenv("ANALYTICS_TOKEN", "test-analytics-jwt-token")},
-            ),
-            # Example OAuth2 for notification hub
-            "notification-hub": AuthCredentials(
-                auth_type=AuthType.OAUTH2,
-                credentials={
-                    "client_id": os.getenv("NOTIFICATION_CLIENT_ID", "test-client-id"),
-                    "client_secret": os.getenv("NOTIFICATION_CLIENT_SECRET", "test-client-secret"),
-                    "token_url": os.getenv(
-                        "NOTIFICATION_TOKEN_URL", "https://notify.cloudservice.net/oauth/token"
-                    ),
-                },
-            ),
-            # Example API key for document processor
-            "document-processor": AuthCredentials(
-                auth_type=AuthType.API_KEY,
-                credentials={"api_key": os.getenv("DOCUMENT_API_KEY", "test-doc-api-key-456")},
-            ),
-            # Example HMAC for secure messaging service
-            "secure-messaging": AuthCredentials(
-                auth_type=AuthType.HMAC,
-                credentials={
-                    "secret": os.getenv("SECURE_MESSAGING_SECRET", "test-hmac-secret-123")
-                },
-            ),
-            # Example JWT for auth service
-            "auth-service": AuthCredentials(
-                auth_type=AuthType.JWT,
-                credentials={
-                    "private_key": os.getenv(
-                        "AUTH_SERVICE_PRIVATE_KEY", self._get_test_private_key()
-                    ),
+        Args:
+            secrets_manager: Required SecretsManager instance for credential access
+        """
+        if not secrets_manager:
+            raise ValueError("SecretsManager is required for A2A authentication")
+
+        self.secrets_manager = secrets_manager
+        self._credentials: Dict[str, AuthCredentials] = {}
+        self._credentials_loaded = False
+
+        logger.debug("Initialized A2A auth manager with secrets")
+
+    async def ensure_credentials_loaded(self):
+        """Ensure credentials are loaded from secrets manager."""
+        if not self._credentials_loaded:
+            await self._load_default_credentials()
+            self._credentials_loaded = True
+
+    async def _load_default_credentials(self):
+        """Load default credentials from secrets manager only."""
+        logger.debug("Loading A2A credentials from secrets manager...")
+
+        # Define credential mappings: service_id -> secret configurations
+        credential_configs = {
+            # API Key services
+            "external-billing-service": {
+                "auth_type": AuthType.API_KEY,
+                "secret_name": "BILLING_API_KEY"
+            },
+            "document-processor": {
+                "auth_type": AuthType.API_KEY,
+                "secret_name": "DOCUMENT_API_KEY"
+            },
+
+            # Bearer token services
+            "analytics-engine": {
+                "auth_type": AuthType.BEARER,
+                "secret_name": "ANALYTICS_TOKEN"
+            },
+
+            # OAuth2 services
+            "notification-hub": {
+                "auth_type": AuthType.OAUTH2,
+                "secret_names": {
+                    "client_id": "NOTIFICATION_CLIENT_ID",
+                    "client_secret": "NOTIFICATION_CLIENT_SECRET",
+                    "token_url": "NOTIFICATION_TOKEN_URL"
+                }
+            },
+
+            # HMAC services
+            "secure-messaging": {
+                "auth_type": AuthType.HMAC,
+                "secret_name": "SECURE_MESSAGING_SECRET"
+            },
+
+            # JWT services
+            "auth-service": {
+                "auth_type": AuthType.JWT,
+                "secret_name": "AUTH_SERVICE_PRIVATE_KEY",
+                "extra_config": {
                     "algorithm": "RS256",
                     "issuer": "muxi-a2a",
-                    "audience": "a2a-network",
-                },
-            ),
+                    "audience": "a2a-network"
+                }
+            }
         }
 
-        for agent_id, creds in default_creds.items():
+        # Load credentials for each service
+        for service_id, config in credential_configs.items():
             try:
-                self._credentials[agent_id] = creds
-                logger.debug(f"Loaded default credentials for {agent_id} ({creds.auth_type})")
-            except ValueError as e:
-                logger.warning(f"Failed to load credentials for {agent_id}: {e}")
+                auth_type = config["auth_type"]
 
-    def _get_test_private_key(self) -> str:
-        """Generate a test RSA private key for JWT signing (development only)"""
-        if not JWT_AVAILABLE:
-            return "test-private-key-placeholder"
+                if auth_type == AuthType.OAUTH2:
+                    # Handle OAuth2 multi-credential case
+                    credentials = await self._load_oauth2_credentials(service_id, config)
+                elif auth_type == AuthType.JWT:
+                    # Handle JWT special case
+                    credentials = await self._load_jwt_credentials(service_id, config)
+                else:
+                    # Handle single credential cases (API_KEY, BEARER, HMAC)
+                    credentials = await self._load_single_credential(service_id, config)
+
+                if credentials:
+                    self._credentials[service_id] = AuthCredentials(auth_type, credentials)
+                    logger.debug(f"Loaded credentials for {service_id} ({auth_type})")
+                else:
+                    logger.warning(f"No credentials found for {service_id}")
+
+            except Exception as e:
+                logger.warning(f"Failed to load credentials for {service_id}: {e}")
+
+    async def _load_single_credential(
+        self, service_id: str, config: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Load a single credential from secrets manager only."""
+        secret_name = config["secret_name"]
 
         try:
-            # Generate a small RSA key for testing (1024 bit is fast but not secure)
-            private_key = rsa.generate_private_key(
-                public_exponent=65537,
-                key_size=1024,
-            )
-
-            # Serialize to PEM format
-            pem = private_key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
-
-            return pem.decode("utf-8")
+            secret_value = await self.secrets_manager.get_secret(secret_name)
+            if secret_value:
+                credential_key = self._get_credential_key_for_auth_type(
+                    config["auth_type"]
+                )
+                return {credential_key: secret_value}
         except Exception as e:
-            logger.warning(f"Failed to generate test private key: {e}")
-            return "test-private-key-placeholder"
+            logger.warning(f"Failed to get secret {secret_name}: {e}")
+
+        return None
+
+    async def _load_oauth2_credentials(
+        self, service_id: str, config: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Load OAuth2 credentials from secrets manager only."""
+        secret_names = config["secret_names"]
+        credentials = {}
+
+        for key, secret_name in secret_names.items():
+            try:
+                secret_value = await self.secrets_manager.get_secret(secret_name)
+                if secret_value:
+                    credentials[key] = secret_value
+                else:
+                    logger.warning(f"Secret {secret_name} not found for OAuth2 {key}")
+                    return None
+            except Exception as e:
+                logger.warning(f"Failed to get secret {secret_name}: {e}")
+                return None
+
+        # Return credentials only if we have all required fields
+        required_fields = ["client_id", "client_secret"]
+        if all(field in credentials for field in required_fields):
+            return credentials
+
+        return None
+
+    async def _load_jwt_credentials(
+        self, service_id: str, config: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Load JWT credentials from secrets manager only."""
+        secret_name = config["secret_name"]
+        extra_config = config.get("extra_config", {})
+
+        try:
+            private_key = await self.secrets_manager.get_secret(secret_name)
+            if private_key:
+                credentials = {"private_key": private_key}
+                credentials.update(extra_config)
+                return credentials
+        except Exception as e:
+            logger.warning(f"Failed to get secret {secret_name}: {e}")
+
+        return None
+
+    def _get_credential_key_for_auth_type(self, auth_type: AuthType) -> str:
+        """Get the credential dictionary key for a given auth type."""
+        if auth_type == AuthType.API_KEY:
+            return "api_key"
+        elif auth_type == AuthType.BEARER:
+            return "token"
+        elif auth_type == AuthType.HMAC:
+            return "secret"
+        else:
+            raise ValueError(f"Unsupported single credential auth type: {auth_type}")
+
+    async def load_credentials_from_formation_config(self, formation_config: Dict[str, Any]):
+        """
+        Load A2A credentials from formation configuration.
+
+        Expected format:
+        a2a:
+          outbound:
+            services:
+              - service_id: "external-api"
+                auth:
+                  type: "apiKey"
+                  api_key: "${{ secrets.EXTERNAL_API_KEY }}"
+        """
+        if not formation_config:
+            return
+
+        a2a_config = formation_config.get("a2a", {})
+        outbound_config = a2a_config.get("outbound", {})
+        services = outbound_config.get("services", [])
+
+        for service_config in services:
+            try:
+                service_id = service_config.get("service_id")
+                auth_config = service_config.get("auth", {})
+
+                if not service_id or not auth_config:
+                    continue
+
+                auth_type_str = auth_config.get("type")
+                if not auth_type_str:
+                    continue
+
+                auth_type = AuthType(auth_type_str)
+
+                # Process credentials based on auth type
+                if auth_type == AuthType.API_KEY:
+                    api_key = auth_config.get("api_key")
+                    if api_key:
+                        api_key = await self.secrets_manager.interpolate_secrets(api_key)
+                        if api_key:
+                            self.add_credentials(service_id, auth_type, {"api_key": api_key})
+
+                elif auth_type == AuthType.BEARER:
+                    token = auth_config.get("token")
+                    if token:
+                        token = await self.secrets_manager.interpolate_secrets(token)
+                        if token:
+                            self.add_credentials(service_id, auth_type, {"token": token})
+
+                elif auth_type == AuthType.BASIC:
+                    username = auth_config.get("username")
+                    password = auth_config.get("password")
+                    if username and password:
+                        username = await self.secrets_manager.interpolate_secrets(username)
+                        password = await self.secrets_manager.interpolate_secrets(password)
+                        if username and password:
+                            self.add_credentials(service_id, auth_type, {
+                                "username": username,
+                                "password": password
+                            })
+
+                # Add more auth types as needed...
+
+                logger.debug(f"Loaded formation credentials for {service_id} ({auth_type})")
+
+            except Exception as e:
+                logger.warning(f"Failed to load formation credentials for service: {e}")
 
     def add_credentials(self, agent_id: str, auth_type: AuthType, credentials: Dict[str, Any]):
         """
@@ -536,9 +693,17 @@ class A2AAuthManager:
 _auth_manager = None
 
 
-def get_auth_manager() -> A2AAuthManager:
-    """Get the global authentication manager instance"""
+def get_auth_manager(secrets_manager: "SecretsManager") -> A2AAuthManager:
+    """
+    Get the global authentication manager instance with SecretsManager.
+
+    Args:
+        secrets_manager: Required SecretsManager instance for credential access
+
+    Returns:
+        A2AAuthManager instance configured with secrets
+    """
     global _auth_manager
     if _auth_manager is None:
-        _auth_manager = A2AAuthManager()
+        _auth_manager = A2AAuthManager(secrets_manager)
     return _auth_manager

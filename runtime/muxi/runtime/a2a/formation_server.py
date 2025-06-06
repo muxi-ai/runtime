@@ -88,7 +88,9 @@ class A2AFormationServer:
         # Initialize authentication
         from .inbound_auth import A2AInboundAuthenticator
 
-        self.authenticator = A2AInboundAuthenticator(auth_mode)
+        # Pass SecretsManager from overlord if available
+        secrets_manager = getattr(overlord, 'secrets_manager', None)
+        self.authenticator = A2AInboundAuthenticator(auth_mode, secrets_manager)
 
         # Initialize FastAPI app
         self._create_app()
@@ -325,6 +327,9 @@ class A2AFormationServer:
             return await self.get_status()
 
         try:
+            # Initialize authentication credentials from SecretsManager
+            await self.authenticator.initialize_credentials()
+
             # Check if port is available
             with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
                 try:

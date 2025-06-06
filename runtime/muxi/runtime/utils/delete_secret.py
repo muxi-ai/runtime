@@ -3,6 +3,7 @@
 Delete Secret - MUXI Runtime Utility
 
 Tool for deleting secrets from a formation's encrypted secrets store.
+Operates in the current working directory.
 """
 
 import sys
@@ -21,15 +22,12 @@ warnings.filterwarnings("ignore", category=UserWarning)
 os.environ["LOGURU_LEVEL"] = "ERROR"
 
 
-async def delete_secret_from_formation(formation_path: str, secret_name: str):
-    """Delete a secret from the formation's secrets store."""
-    if formation_path.endswith(".yaml"):
-        formation_dir = Path(formation_path).parent
-    else:
-        formation_dir = Path(formation_path)
+async def delete_secret_from_formation(secret_name: str):
+    """Delete a secret from the formation's secrets store in current directory."""
+    formation_dir = Path(".")
 
     print(f"🗑️  Deleting secret '{secret_name}' from formation...")
-    print(f"📁 Formation directory: {formation_dir}")
+    print(f"📁 Formation directory: {formation_dir.absolute()}")
 
     # Initialize SecretsManager
     secrets_manager = SecretsManager(formation_dir)
@@ -38,8 +36,13 @@ async def delete_secret_from_formation(formation_path: str, secret_name: str):
     # Check if secret exists
     secrets = await secrets_manager.list_secrets()
     if secret_name not in secrets:
-        print(f"❌ Secret '{secret_name}' not found!")
-        print(f"📋 Available secrets: {', '.join(secrets) if secrets else '(none)'}")
+        print(f"❌ Secret '{secret_name}' not found in formation!")
+        print("\n📋 Available secrets:")
+        if secrets:
+            for secret in secrets:
+                print(f"   • {secret}")
+        else:
+            print("   (no secrets found)")
         return False
 
     # Delete the secret
@@ -49,21 +52,21 @@ async def delete_secret_from_formation(formation_path: str, secret_name: str):
 
     # Show remaining secrets
     remaining_secrets = await secrets_manager.list_secrets()
-    print(
-        f"📋 Remaining secrets: {', '.join(remaining_secrets) if remaining_secrets else '(none)'}"
-    )
+    print("\n📋 Remaining secrets:")
+    if remaining_secrets:
+        for secret in remaining_secrets:
+            print(f"   • {secret}")
+    else:
+        print("   (no secrets remaining)")
 
     return True
 
 
-async def list_secrets_in_formation(formation_path: str):
-    """List all secrets in the formation."""
-    if formation_path.endswith(".yaml"):
-        formation_dir = Path(formation_path).parent
-    else:
-        formation_dir = Path(formation_path)
+async def list_secrets_in_formation():
+    """List all secrets in the formation in current directory."""
+    formation_dir = Path(".")
 
-    print(f"📁 Formation directory: {formation_dir}")
+    print(f"📁 Formation directory: {formation_dir.absolute()}")
 
     # Initialize SecretsManager
     secrets_manager = SecretsManager(formation_dir)
@@ -87,46 +90,48 @@ def main():
     if len(sys.argv) == 1:
         print("🗑️  MUXI Secrets Management - Delete Secret")
         print("\nUsage:")
-        print(f"  {sys.argv[0]} <formation_path> <SECRET_NAME>")
-        print(f"  {sys.argv[0]} <formation_path> list")
+        print(f"  {sys.argv[0]} <SECRET_NAME>")
+        print(f"  {sys.argv[0]} list")
         print("\nExamples:")
-        print(f"  {sys.argv[0]} examples/configs OPENAI_API_KEY")
-        print(f"  {sys.argv[0]} formation.yaml WEATHER_API_KEY")
-        print(f"  {sys.argv[0]} examples/configs list")
+        print("  cd /path/to/formation")
+        print(f"  {sys.argv[0]} OPENAI_API_KEY")
+        print(f"  {sys.argv[0]} WEATHER_API_KEY")
+        print(f"  {sys.argv[0]} list")
         print(f"\nFor detailed help: {sys.argv[0]} --help")
         sys.exit(1)
 
     parser = argparse.ArgumentParser(
-        description="Delete secrets from MUXI Formation",
+        description="Delete secrets from MUXI Formation in current directory",
         epilog="""
 Examples:
-  %(prog)s examples/configs OPENAI_API_KEY
-  %(prog)s formation.yaml WEATHER_API_KEY
-  %(prog)s examples/configs list
+  cd /path/to/formation
+  %(prog)s OPENAI_API_KEY
+  %(prog)s WEATHER_API_KEY
+  %(prog)s list
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("formation_path", help="Path to formation directory or YAML file")
-    parser.add_argument(
-        "command", nargs="?", help="SECRET_NAME to delete, or 'list' to show all secrets"
-    )
+    parser.add_argument("command", help="SECRET_NAME to delete, or 'list' to show secrets")
 
     args = parser.parse_args()
 
     try:
         if args.command == "list":
-            asyncio.run(list_secrets_in_formation(args.formation_path))
+            asyncio.run(list_secrets_in_formation())
         elif args.command:
-            asyncio.run(delete_secret_from_formation(args.formation_path, args.command))
+            success = asyncio.run(delete_secret_from_formation(args.command))
+            if not success:
+                sys.exit(1)
         else:
             print("🗑️  MUXI Secrets Management - Delete Secret")
             print("\nUsage:")
-            print(f"  {sys.argv[0]} <formation_path> <SECRET_NAME>")
-            print(f"  {sys.argv[0]} <formation_path> list")
+            print(f"  {sys.argv[0]} <SECRET_NAME>")
+            print(f"  {sys.argv[0]} list")
             print("\nExamples:")
-            print(f"  {sys.argv[0]} examples/configs OPENAI_API_KEY")
-            print(f"  {sys.argv[0]} formation.yaml WEATHER_API_KEY")
-            print(f"  {sys.argv[0]} examples/configs list")
+            print("  cd /path/to/formation")
+            print(f"  {sys.argv[0]} OPENAI_API_KEY")
+            print(f"  {sys.argv[0]} WEATHER_API_KEY")
+            print(f"  {sys.argv[0]} list")
             sys.exit(1)
 
     except Exception as e:

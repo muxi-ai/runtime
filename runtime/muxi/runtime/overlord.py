@@ -250,6 +250,10 @@ class Overlord:
         # Add expertise registry
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}
 
+        # Initialize model cache and capability models for LLM config
+        self._model_cache: Dict[str, LLM] = {}
+        self._capability_models: Dict[str, str] = {}
+
     async def load_formation_from_path(self, formation_path: str) -> Dict[str, Any]:
         """
         Load formation configuration from a file or directory path.
@@ -354,6 +358,9 @@ class Overlord:
         """
         config = self.formation_config
 
+        # Initialize LLM configuration and model resolver
+        await self._initialize_llm_config()
+
         # Create agents from configuration
         agents_config = config.get('agents', [])
         for agent_config in agents_config:
@@ -382,6 +389,131 @@ class Overlord:
                 logger.error(f"Failed to apply A2A configuration: {e}")
 
         logger.info("✅ Applied formation configuration to overlord")
+
+    async def _initialize_llm_config(self) -> None:
+        """
+        Initialize LLM configuration from formation config.
+
+        This processes the new capability-based LLM schema and sets up model
+        resolution for different capabilities like text, vision, transcription, etc.
+        """
+        llm_config = self.formation_config.get('llm', {})
+
+        # Initialize model cache for capability-based resolution
+        self._model_cache = {}
+        self._capability_models = {}
+
+        # Process models by capability
+        models_config = llm_config.get('models', [])
+        for model_config in models_config:
+            for capability, model_name in model_config.items():
+                if capability in ['api_key', 'settings']:
+                    continue  # Skip metadata
+
+                self._capability_models[capability] = {
+                    'model': model_name,
+                    'api_key': model_config.get('api_key'),
+                    'settings': model_config.get('settings', {})
+                }
+
+        # Store global settings and api_keys for later use
+        self._global_llm_settings = llm_config.get('settings', {})
+        self._global_api_keys = llm_config.get('api_keys', {})
+
+        capabilities = list(self._capability_models.keys())
+        logger.info(f"✅ Initialized LLM config with capabilities: {capabilities}")
+
+    async def get_model_for_capability(
+        self,
+        capability: str,
+        agent_id: Optional[str] = None
+    ) -> LLM:
+        """
+        Get a model for a specific capability with optional agent override.
+
+        This method implements the capability-based model resolution described in the schema:
+        1. Check for agent-specific model override
+        2. Fall back to formation default for that capability
+        3. Fall back to text capability if capability not found
+        4. Cache models to avoid repeated initialization
+
+        Args:
+            capability: The model capability needed (text, vision, transcription, etc.)
+            agent_id: Optional agent ID for agent-specific overrides
+
+        Returns:
+            LLM instance for the specified capability
+
+        Raises:
+            ValueError: If no suitable model can be found
+        """
+        # Create cache key
+        cache_key = f"{agent_id or 'default'}:{capability}"
+
+        # Return cached model if available
+        if cache_key in self._model_cache:
+            return self._model_cache[cache_key]
+
+        model_config = None
+
+        # Check for agent-specific model override
+        if agent_id and hasattr(self, 'agents') and agent_id in self.agents:
+            agent = self.agents[agent_id]
+            # Look for agent-specific model configuration
+            # This would come from agent config in formation
+            if hasattr(agent, 'models') and capability in agent.models:
+                model_config = agent.models[capability]
+
+        # Fall back to formation default for this capability
+        if not model_config and capability in self._capability_models:
+            model_config = self._capability_models[capability]
+
+        # Fall back to text capability if current capability not found
+        if not model_config and capability != 'text' and 'text' in self._capability_models:
+            model_config = self._capability_models['text']
+            logger.warning(f"No {capability} model found, falling back to text model")
+
+        # If still no model config, raise error
+        if not model_config:
+            raise ValueError(f"No model found for capability: {capability}")
+
+        # Extract model configuration
+        model_name = model_config['model']
+        api_key = model_config.get('api_key')
+        model_settings = model_config.get('settings', {})
+
+        # Apply global settings with model-specific overrides
+        final_settings = {
+            **self._global_llm_settings,
+            **model_settings
+        }
+
+        # Resolve API key - model-specific > global > environment
+        final_api_key = api_key
+        if not final_api_key and '/' in model_name:
+            provider = model_name.split('/')[0]
+            final_api_key = self._global_api_keys.get(provider)
+
+        # Interpolate secrets if needed
+        if final_api_key and "${{ secrets." in final_api_key:
+            try:
+                interpolated_config = await self.interpolate_secrets({"api_key": final_api_key})
+                final_api_key = interpolated_config.get("api_key", final_api_key)
+            except Exception as e:
+                logger.warning(f"Failed to interpolate secrets in api_key: {e}")
+
+        # Create model instance
+        model = LLM(
+            model=model_name,
+            api_key=final_api_key,
+            **final_settings
+        )
+
+        # Cache the model
+        self._model_cache[cache_key] = model
+
+        logger.debug(f"Created {capability} model for {agent_id or 'default'}: {model_name}")
+        return model
 
     async def _create_agent_from_config(self, agent_config: Dict[str, Any]) -> None:
         """
@@ -468,27 +600,38 @@ class Overlord:
             overlord_config = self.formation_config.get('overlord', {})
             routing_data = overlord_config.get('routing', {})
 
-            # Create routing config with values from formation YAML or defaults
-            routing_config = RoutingConfig(
-                provider=routing_data.get('provider'),
-                model=routing_data.get('model'),
-                temperature=routing_data.get('temperature'),
-                max_tokens=routing_data.get('max_tokens'),
-                use_caching=routing_data.get('use_caching'),
-                cache_ttl=routing_data.get('cache_ttl'),
-                system_prompt=routing_data.get('system_prompt')
-            )
+            if routing_data:
+                # Legacy routing config - use old approach
+                routing_config = RoutingConfig(
+                    provider=routing_data.get('provider'),
+                    model=routing_data.get('model'),
+                    temperature=routing_data.get('temperature'),
+                    max_tokens=routing_data.get('max_tokens'),
+                    use_caching=routing_data.get('use_caching'),
+                    cache_ttl=routing_data.get('cache_ttl'),
+                    system_prompt=routing_data.get('system_prompt')
+                )
 
-            # Use the new Model class with provider/model format
-            model_name = f"{routing_config.provider}/{routing_config.model}"
+                # Use the new Model class with provider/model format
+                model_name = f"{routing_config.provider}/{routing_config.model}"
 
-            # Create the routing model
-            self.routing_model = self.create_model(
-                model=model_name,
-                temperature=routing_config.temperature,
-                max_tokens=routing_config.max_tokens,
-                api_key=routing_data.get('api_key')
-            )
+                # Create the routing model
+                self.routing_model = self.create_model(
+                    model=model_name,
+                    temperature=routing_config.temperature,
+                    max_tokens=routing_config.max_tokens,
+                    api_key=routing_data.get('api_key')
+                )
+            else:
+                # New capability-based config - try to get text model
+                try:
+                    self.routing_model = asyncio.create_task(
+                        self.get_model_for_capability('text')
+                    )
+                    logger.info("Using capability-based text model for routing")
+                except Exception:
+                    # Fall back to create_model with defaults
+                    self.routing_model = self.create_model()
 
         except Exception as e:
             # If initialization fails, log error but continue (routing will fall back to default)

@@ -3,18 +3,21 @@ A2A Inbound Authentication Module
 
 Handles authentication for incoming Agent-to-Agent requests to the formation server.
 Supports multiple authentication types and credential validation.
+Now uses SecretsManager exclusively for secure credential storage.
 """
 
 import logging
-import os
 import base64
 import hashlib
 import hmac
 import time
-from typing import Dict, Optional, Tuple, Any
+from typing import Dict, Optional, Tuple, Any, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import Request, Header
+
+if TYPE_CHECKING:
+    from ..secrets import SecretsManager
 
 logger = logging.getLogger(__name__)
 
@@ -41,77 +44,138 @@ class InboundCredential:
 
 class A2AInboundAuthenticator:
     """
-    Handles authentication for incoming A2A requests to the formation server
+    Handles authentication for incoming A2A requests to the formation server.
+    Uses SecretsManager exclusively for credential storage.
     """
 
-    def __init__(self, auth_mode: str = "none"):
+    def __init__(self, auth_mode: str = "none", secrets_manager: Optional["SecretsManager"] = None):
         """
         Initialize the inbound authenticator
 
         Args:
             auth_mode: Default authentication mode for the formation
+            secrets_manager: Optional SecretsManager for credential access
         """
         self.auth_mode = InboundAuthType(auth_mode)
+        self.secrets_manager = secrets_manager
         self.credentials: Dict[str, InboundCredential] = {}
         self.api_keys: Dict[str, str] = {}  # api_key -> client_id mapping
         self.bearer_tokens: Dict[str, str] = {}  # token -> client_id mapping
         self.basic_auth: Dict[str, str] = {}  # username -> password mapping
         self.hmac_secrets: Dict[str, str] = {}  # client_id -> secret mapping
 
-        self._load_default_credentials()
-
         logger.info(f"Initialized A2A inbound authenticator with mode: {self.auth_mode}")
 
-    def _load_default_credentials(self):
-        """Load default credentials for testing external agents"""
+    async def initialize_credentials(self):
+        """Initialize credentials from SecretsManager if available"""
+        if self.secrets_manager:
+            await self._load_credentials_from_secrets()
+        else:
+            logger.warning("No SecretsManager provided - no credentials will be available")
 
-        # Example credentials that external agents might use to authenticate to us
-        default_credentials = {
+    async def _load_credentials_from_secrets(self):
+        """Load credentials from SecretsManager only"""
+        if not self.secrets_manager:
+            logger.warning("SecretsManager not available for credential loading")
+            return
+
+        logger.debug("Loading A2A inbound credentials from secrets manager...")
+
+        # Define credential mappings for expected external clients
+        credential_configs = {
             "external-client-1": {
                 "auth_type": InboundAuthType.API_KEY,
-                "api_key": os.getenv("ALLOWED_API_KEY_1", "test-external-key-123"),
-                "description": "Test external client using API key",
+                "secret_name": "ALLOWED_API_KEY_1",
+                "description": "External client using API key"
             },
             "external-client-2": {
                 "auth_type": InboundAuthType.BEARER,
-                "token": os.getenv(
-                    "ALLOWED_BEARER_TOKEN_1", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.test"
-                ),
-                "description": "Test external client using Bearer token",
+                "secret_name": "ALLOWED_BEARER_TOKEN_1",
+                "description": "External client using Bearer token"
             },
             "external-client-3": {
                 "auth_type": InboundAuthType.BASIC,
-                "username": os.getenv("ALLOWED_BASIC_USER", "external_user"),
-                "password": os.getenv("ALLOWED_BASIC_PASS", "external_pass123"),
-                "description": "Test external client using Basic auth",
+                "secret_names": {
+                    "username": "ALLOWED_BASIC_USER",
+                    "password": "ALLOWED_BASIC_PASS"
+                },
+                "description": "External client using Basic auth"
             },
             "external-client-4": {
                 "auth_type": InboundAuthType.HMAC,
-                "secret": os.getenv("ALLOWED_HMAC_SECRET", "shared-secret-key-456"),
-                "description": "Test external client using HMAC signature",
-            },
+                "secret_name": "ALLOWED_HMAC_SECRET",
+                "description": "External client using HMAC signature"
+            }
         }
 
-        for client_id, cred_info in default_credentials.items():
-            auth_type = cred_info["auth_type"]
+        for client_id, config in credential_configs.items():
+            try:
+                auth_type = config["auth_type"]
 
-            if auth_type == InboundAuthType.API_KEY:
-                self.api_keys[cred_info["api_key"]] = client_id
+                if auth_type == InboundAuthType.BASIC:
+                    # Handle Basic auth (requires username and password)
+                    credential_data = await self._load_basic_credentials(config)
+                else:
+                    # Handle single credential cases (API_KEY, BEARER, HMAC)
+                    credential_data = await self._load_single_inbound_credential(config)
 
-            elif auth_type == InboundAuthType.BEARER:
-                self.bearer_tokens[cred_info["token"]] = client_id
+                if credential_data:
+                    self.add_client_credential(
+                        client_id=client_id,
+                        auth_type=auth_type,
+                        credential_data=credential_data,
+                        description=config["description"]
+                    )
+                    logger.debug(f"Loaded inbound credential for {client_id} ({auth_type})")
+                else:
+                    logger.warning(f"No credentials found for {client_id}")
 
-            elif auth_type == InboundAuthType.BASIC:
-                self.basic_auth[cred_info["username"]] = cred_info["password"]
+            except Exception as e:
+                logger.warning(f"Failed to load credentials for {client_id}: {e}")
 
-            elif auth_type == InboundAuthType.HMAC:
-                self.hmac_secrets[client_id] = cred_info["secret"]
+    async def _load_single_inbound_credential(
+        self, config: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Load a single credential from secrets manager"""
+        secret_name = config["secret_name"]
+        auth_type = config["auth_type"]
 
-            self.credentials[client_id] = InboundCredential(
-                auth_type=auth_type, credential_data=cred_info, description=cred_info["description"]
-            )
+        try:
+            secret_value = await self.secrets_manager.get_secret(secret_name)
+            if secret_value:
+                if auth_type == InboundAuthType.API_KEY:
+                    return {"api_key": secret_value}
+                elif auth_type == InboundAuthType.BEARER:
+                    return {"token": secret_value}
+                elif auth_type == InboundAuthType.HMAC:
+                    return {"secret": secret_value}
+        except Exception as e:
+            logger.warning(f"Failed to get secret {secret_name}: {e}")
 
-            logger.debug(f"Loaded inbound credential for {client_id} ({auth_type})")
+        return None
+
+    async def _load_basic_credentials(self, config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Load Basic auth credentials from secrets manager"""
+        secret_names = config["secret_names"]
+        credentials = {}
+
+        for key, secret_name in secret_names.items():
+            try:
+                secret_value = await self.secrets_manager.get_secret(secret_name)
+                if secret_value:
+                    credentials[key] = secret_value
+                else:
+                    logger.warning(f"Secret {secret_name} not found for Basic auth {key}")
+                    return None
+            except Exception as e:
+                logger.warning(f"Failed to get secret {secret_name}: {e}")
+                return None
+
+        # Return credentials only if we have both username and password
+        if "username" in credentials and "password" in credentials:
+            return credentials
+
+        return None
 
     def add_client_credential(
         self,
