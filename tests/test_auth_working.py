@@ -11,8 +11,9 @@ from pathlib import Path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from runtime.muxi.runtime.a2a.auth import get_auth_manager, AuthType
-from runtime.muxi.runtime.a2a.registry_client import A2ARegistryClient
+from runtime.muxi.runtime.a2a.auth import get_auth_manager, AuthType  # noqa: E402
+from runtime.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+
 
 async def main():
     print("🔐 A2A Authentication Verification")
@@ -49,7 +50,7 @@ async def main():
             # Show some auth requirements
             for agent in agent_list[:3]:  # First 3 agents
                 auth_info = "none"
-                if hasattr(agent, 'authentication') and agent.authentication:
+                if hasattr(agent, "authentication") and agent.authentication:
                     auth_info = f"{agent.authentication.type}"
                 print(f"   - {agent.name}: {auth_info}")
 
@@ -65,6 +66,7 @@ async def main():
     print("✅ Auth manager can apply various auth types")
     print("✅ Registry discovery provides auth requirements")
     print("✅ Agent will use authentication when sending external messages")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
