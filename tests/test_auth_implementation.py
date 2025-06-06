@@ -12,11 +12,30 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "runtime"))
 from runtime.muxi.runtime.a2a.auth import A2AAuthManager, AuthType  # noqa: E402
 
 
+class MockSecretsManager:
+    """Mock SecretsManager for testing"""
+
+    def __init__(self):
+        self.secrets = {}
+
+    async def get_secret(self, name: str):
+        return self.secrets.get(name)
+
+    async def store_secret(self, name: str, value: str):
+        self.secrets[name] = value
+
+    async def interpolate_secrets(self, config):
+        # Simple mock implementation - just return the config as-is
+        return config
+
+
 async def test_hmac_auth():
     """Test HMAC authentication"""
     print("Testing HMAC authentication...")
 
-    auth_manager = A2AAuthManager()
+    # Create mock secrets manager
+    secrets_manager = MockSecretsManager()
+    auth_manager = A2AAuthManager(secrets_manager)
 
     # Add HMAC credentials
     auth_manager.add_credentials("test-agent", AuthType.HMAC, {"secret": "test-secret"})
@@ -50,7 +69,9 @@ async def test_jwt_auth():
     """Test JWT authentication"""
     print("\nTesting JWT authentication...")
 
-    auth_manager = A2AAuthManager()
+    # Create mock secrets manager
+    secrets_manager = MockSecretsManager()
+    auth_manager = A2AAuthManager(secrets_manager)
 
     try:
         import jwt as jwt_lib  # noqa: F401
