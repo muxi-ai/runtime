@@ -6,6 +6,7 @@ Test overlord memory initialization from formation configuration.
 import sys
 import os
 import asyncio
+import pytest
 from unittest.mock import patch, MagicMock
 
 # Add parent directory to path
@@ -14,7 +15,8 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from muxi.runtime.overlord import Overlord
 
 
-def test_memory_initialization():
+@pytest.mark.asyncio
+async def test_memory_initialization():
     """Test memory initialization from formation config."""
 
     # Test formation with memory configuration
@@ -52,41 +54,41 @@ def test_memory_initialization():
         }
     }
 
-    async def run_test():
-        # Create overlord without initial memory systems
-        overlord = Overlord(formation_config=formation_config)
+    # Create overlord without initial memory systems
+    overlord = Overlord(formation_config=formation_config)
 
-        # Mock the LLM creation to avoid needing real API keys
-        with patch('runtime.muxi.runtime.overlord.LLM') as mock_llm_class:
-            mock_llm = MagicMock()
-            mock_llm_class.return_value = mock_llm
+    # Mock the LLM creation to avoid needing real API keys
+    with patch('runtime.muxi.runtime.overlord.LLM') as mock_llm_class:
+        mock_llm = MagicMock()
+        mock_llm_class.return_value = mock_llm
 
-            # Initialize memory configuration
-            await overlord._initialize_memory_config()
+        # Initialize LLM configuration FIRST
+        await overlord._initialize_llm_config()
 
-            print("Memory Initialization Test Results:")
-            print(f"Buffer memory created: {overlord.buffer_memory is not None}")
-            print(f"Long-term memory created: {overlord.long_term_memory is not None}")
+        # Then initialize memory configuration
+        await overlord._initialize_memory_config()
 
-            if overlord.buffer_memory:
-                stats = overlord.buffer_memory.get_stats()
-                print(f"Buffer stats: {stats}")
+        print("Memory Initialization Test Results:")
+        print(f"Buffer memory created: {overlord.buffer_memory is not None}")
+        print(f"Long-term memory created: {overlord.long_term_memory is not None}")
 
-                # Verify buffer configuration matches formation config
-                assert overlord.buffer_memory.max_size == 15
-                assert overlord.buffer_memory.buffer_multiplier == 8
-                assert overlord.buffer_memory.dimension == 1536
-                assert overlord.buffer_memory.mode == 'local'
-                print("✅ Buffer memory configuration matches formation config")
+        if overlord.buffer_memory:
+            stats = overlord.buffer_memory.get_stats()
+            print(f"Buffer stats: {stats}")
 
-            if overlord.long_term_memory:
-                print("✅ Long-term memory initialized successfully")
+            # Verify buffer configuration matches formation config
+            assert overlord.buffer_memory.max_size == 15
+            assert overlord.buffer_memory.buffer_multiplier == 8
+            assert overlord.buffer_memory.dimension == 1536
+            assert overlord.buffer_memory.mode == 'local'
+            print("✅ Buffer memory configuration matches formation config")
 
-    # Run the async test
-    asyncio.run(run_test())
+        if overlord.long_term_memory:
+            print("✅ Long-term memory initialized successfully")
 
 
-def test_memory_config_no_memory():
+@pytest.mark.asyncio
+async def test_memory_config_no_memory():
     """Test that no memory systems are created when not configured."""
 
     formation_config = {
@@ -95,19 +97,17 @@ def test_memory_config_no_memory():
         'description': 'Test formation without memory configuration'
     }
 
-    async def run_test():
-        overlord = Overlord(formation_config=formation_config)
-        await overlord._initialize_memory_config()
+    overlord = Overlord(formation_config=formation_config)
+    await overlord._initialize_memory_config()
 
-        print("\nNo Memory Configuration Test Results:")
-        print(f"Buffer memory: {overlord.buffer_memory}")
-        print(f"Long-term memory: {overlord.long_term_memory}")
-        print("✅ No memory systems created when not configured")
-
-    asyncio.run(run_test())
+    print("\nNo Memory Configuration Test Results:")
+    print(f"Buffer memory: {overlord.buffer_memory}")
+    print(f"Long-term memory: {overlord.long_term_memory}")
+    print("✅ No memory systems created when not configured")
 
 
-def test_remote_buffer_memory():
+@pytest.mark.asyncio
+async def test_remote_buffer_memory():
     """Test remote buffer memory configuration."""
 
     formation_config = {
@@ -139,29 +139,30 @@ def test_remote_buffer_memory():
         }
     }
 
-    async def run_test():
-        overlord = Overlord(formation_config=formation_config)
+    overlord = Overlord(formation_config=formation_config)
 
-        with patch('runtime.muxi.runtime.overlord.LLM') as mock_llm_class:
-            mock_llm = MagicMock()
-            mock_llm_class.return_value = mock_llm
+    with patch('runtime.muxi.runtime.overlord.LLM') as mock_llm_class:
+        mock_llm = MagicMock()
+        mock_llm_class.return_value = mock_llm
 
-            await overlord._initialize_memory_config()
+        # Initialize LLM configuration FIRST
+        await overlord._initialize_llm_config()
 
-            print("\nRemote Buffer Memory Test Results:")
-            print(f"Buffer memory created: {overlord.buffer_memory is not None}")
+        # Then initialize memory configuration
+        await overlord._initialize_memory_config()
 
-            if overlord.buffer_memory:
-                assert overlord.buffer_memory.mode == 'remote'
-                assert overlord.buffer_memory.remote['url'] == 'tcp://localhost:8000'
-                print("✅ Remote buffer memory configuration correct")
+        print("\nRemote Buffer Memory Test Results:")
+        print(f"Buffer memory created: {overlord.buffer_memory is not None}")
 
-    asyncio.run(run_test())
+        if overlord.buffer_memory:
+            assert overlord.buffer_memory.mode == 'remote'
+            assert overlord.buffer_memory.remote['url'] == 'tcp://localhost:8000'
+            print("✅ Remote buffer memory configuration correct")
 
 
 if __name__ == "__main__":
     print("Testing overlord memory initialization...")
-    test_memory_initialization()
-    test_memory_config_no_memory()
-    test_remote_buffer_memory()
+    asyncio.run(test_memory_initialization())
+    asyncio.run(test_memory_config_no_memory())
+    asyncio.run(test_remote_buffer_memory())
     print("\n✅ All overlord memory initialization tests passed!")

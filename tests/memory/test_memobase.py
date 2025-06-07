@@ -7,7 +7,6 @@ This module contains tests for the Memobase class in the MUXI Framework.
 import time
 import unittest
 from unittest.mock import MagicMock, patch
-import pytest
 
 from muxi.runtime.memory.long_term import LongTermMemory
 from muxi.runtime.memory.memobase import Memobase
@@ -76,13 +75,23 @@ class TestMemobase(unittest.TestCase):
         # Verify the returned memory ID
         self.assertEqual(memory_id, 123)
 
-    @pytest.mark.skip("Test needs to be refactored due to API changes")
     @async_test
     @patch("asyncio.to_thread")
     async def test_add_default_user(self, mock_to_thread):
-        """Test adding content with default user ID."""
-        # This test needs to be rewritten for the current API
-        pass
+        """Test adding content with default user ID (anonymous user)."""
+        # For anonymous users (default_user_id=0), the add method should return 0
+        # without actually calling the long-term memory
+
+        # Add content without specifying user_id (should use default_user_id=0)
+        memory_id = await self.memobase.add(
+            content="Test content for anonymous user", metadata={"type": "test"}
+        )
+
+        # Verify that for anonymous users, it returns 0 without calling long-term memory
+        self.assertEqual(memory_id, 0)
+
+        # Verify asyncio.to_thread was NOT called for anonymous users
+        mock_to_thread.assert_not_called()
 
     @async_test
     @patch("asyncio.to_thread")
@@ -156,11 +165,17 @@ class TestMemobase(unittest.TestCase):
             "user_123", "Memory collection for user 123"
         )
 
-    @pytest.mark.skip("Test needs to be refactored due to API changes")
     def test_clear_default_user_memory(self):
-        """Test clearing default user's memory."""
-        # This test needs to be rewritten for the current API
-        pass
+        """Test clearing default user's memory (anonymous user)."""
+        # For anonymous users (default_user_id=0), clearing memory should be a no-op
+        # and not call any methods on the underlying long-term memory
+
+        # Clear memory without specifying user_id (should use default_user_id=0)
+        self.memobase.clear_user_memory()
+
+        # Verify that for anonymous users, no methods were called on long-term memory
+        self.mock_long_term_memory.delete_collection.assert_not_called()
+        self.mock_long_term_memory.create_collection.assert_not_called()
 
     def test_get_user_memories(self):
         """Test getting all memories for a user."""

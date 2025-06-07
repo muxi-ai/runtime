@@ -6,11 +6,10 @@ including all required fields, optional metadata, authentication types,
 and error conditions.
 """
 
-import pytest
 import tempfile
 import yaml
 from pathlib import Path
-from muxi.runtime.config.validation import FormationValidator
+from runtime.muxi.runtime.config.validation import FormationValidator
 
 
 class TestA2AServiceValidation:
