@@ -362,9 +362,10 @@ class RegistryStorage:
         self.agents_file = self.data_dir / "agents.json"
         self.start_time = time.time()
 
-        # Initialize storage file if it doesn't exist
+        # Ensure agents.json file exists with empty dict
         if not self.agents_file.exists():
-            self._save_agents({})
+            with open(self.agents_file, "w") as f:
+                json.dump({}, f)
 
     def _load_agents(self) -> Dict[str, Dict]:
         """Load registered agents from storage."""
@@ -476,8 +477,9 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# Initialize storage
-storage = RegistryStorage(REGISTRY_CONFIG["data_dir"])
+# Initialize storage with absolute path
+data_dir = Path.cwd() / REGISTRY_CONFIG["data_dir"]
+storage = RegistryStorage(str(data_dir))
 
 # Setup logging
 logging.basicConfig(

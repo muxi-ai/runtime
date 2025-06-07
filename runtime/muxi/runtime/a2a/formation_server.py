@@ -19,7 +19,7 @@ from contextlib import closing
 from typing import Dict, Any, Optional, List
 import uuid
 
-from fastapi import FastAPI, Path, Request, Depends
+from fastapi import FastAPI, Path, Request
 import uvicorn
 from pydantic import BaseModel
 
@@ -155,9 +155,9 @@ class A2AFormationServer:
         # Main A2A message endpoint for specific agents
         @self.app.post("/agents/{agent_id}/message")
         async def handle_agent_message(
+            http_request: Request,
             agent_id: str = Path(..., description="ID of the target agent"),
             request: A2AMessageRequest = ...,
-            http_request: Request = Depends(lambda: None),
         ) -> A2AMessageResponse:
             """
             Handle A2A message for a specific agent.
@@ -170,9 +170,9 @@ class A2AFormationServer:
         # Legacy endpoint support (if needed)
         @self.app.post("/{agent_id}")
         async def handle_legacy_message(
+            http_request: Request,
             agent_id: str = Path(..., description="ID of the target agent"),
             request: A2AMessageRequest = ...,
-            http_request: Request = Depends(lambda: None),
         ) -> A2AMessageResponse:
             """Legacy endpoint for backward compatibility"""
             return await self._handle_a2a_message(agent_id, request, http_request)
