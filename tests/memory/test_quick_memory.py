@@ -6,7 +6,7 @@ import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
 
-from muxi.runtime.overlord import Overlord
+from runtime.muxi.runtime.overlord import Overlord
 
 
 @pytest.mark.asyncio

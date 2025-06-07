@@ -1,7 +1,8 @@
 # Formation Configuration Schema
 schema: "1.0.0"                    # REQUIRED: Schema version (Semantic Versioning)
-id: "formation2"                   # REQUIRED: Unique identifier for this formation
-description: "Test Formation 2 for A2A Communication"  # REQUIRED: Human-readable description
+id: "formation1"                   # REQUIRED: Unique identifier for this formation
+name: "Formation A - Research"     # REQUIRED: Human-readable name
+description: "Test Formation 1 for A2A Communication"  # REQUIRED: Human-readable description
 
 # LLM Configuration
 llm:
@@ -36,23 +37,34 @@ a2a:
 
     # Outbound services with secrets-based authentication
     services:
-      - service_id: "document-processor"
+      - service_id: "external-billing-service"
         auth:
           type: "api_key"
           header: "X-API-Key"
-          api_key: "${{ secrets.DOCUMENT_API_KEY }}"
-      - service_id: "notification-hub"
+          api_key: "${{ secrets.BILLING_API_KEY }}"
+      - service_id: "analytics-engine"
         auth:
           type: "bearer"
-          token: "${{ secrets.NOTIFICATION_TOKEN }}"
+          token: "${{ secrets.ANALYTICS_TOKEN }}"
+      - service_id: "secure-messaging"
+        auth:
+          type: "basic"
+          username: "${{ secrets.SECURE_MESSAGING_USER }}"
+          password: "${{ secrets.SECURE_MESSAGING_PASS }}"
 
   inbound:
     enabled: true                 # Enable inbound A2A communication
-    port: 8182                    # Port for A2A server to listen on
+    registries:                   # External A2A registries for server registration
+      - "http://0.0.0.0:9090"
+    port: 8181                    # Port for A2A server to listen on
     trusted_endpoints: []         # List of trusted external endpoints
-    mode: "api_key"               # Authentication mode for inbound requests
+    mode: "apiKey"                # Authentication mode for inbound requests
     shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
 
 # Agent configuration
 # Agents found in agents/ will be automatically added to the list
-agents: []
+agents:
+  - id: "research-agent"
+    name: "Research Agent"
+    description: "Specialized agent for conducting research and gathering information"
+    system_message: "You are a research agent specialized in gathering and analyzing information. You work collaboratively with other agents to provide comprehensive research support."

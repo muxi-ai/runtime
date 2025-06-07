@@ -1,6 +1,7 @@
 # Formation Configuration Schema
 schema: "1.0.0"                    # REQUIRED: Schema version (Semantic Versioning)
 id: "formation2"                   # REQUIRED: Unique identifier for this formation
+name: "Formation B - Writing"      # REQUIRED: Human-readable name
 description: "Test Formation 2 for A2A Communication"  # REQUIRED: Human-readable description
 
 # LLM Configuration
@@ -48,11 +49,17 @@ a2a:
 
   inbound:
     enabled: true                 # Enable inbound A2A communication
+    registries:                   # External A2A registries for server registration
+      - "http://0.0.0.0:9090"
     port: 8182                    # Port for A2A server to listen on
     trusted_endpoints: []         # List of trusted external endpoints
-    mode: "api_key"               # Authentication mode for inbound requests
+    mode: "apiKey"                # Authentication mode for inbound requests
     shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
 
 # Agent configuration
 # Agents found in agents/ will be automatically added to the list
-agents: []
+agents:
+  - id: "writer-agent"
+    name: "Writer Agent"
+    description: "Specialized agent for writing and content creation"
+    system_message: "You are a writer agent specialized in creating high-quality written content. You collaborate with research agents and other specialists to produce comprehensive documents."

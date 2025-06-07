@@ -34,11 +34,29 @@ a2a:
     default_retry_attempts: 3     # Default number of retry attempts
     default_timeout_seconds: 30   # Default timeout for A2A requests
 
+    # Outbound services with secrets-based authentication
+    services:
+      - service_id: "external-billing-service"
+        auth:
+          type: "api_key"
+          header: "X-API-Key"
+          api_key: "${{ secrets.BILLING_API_KEY }}"
+      - service_id: "analytics-engine"
+        auth:
+          type: "bearer"
+          token: "${{ secrets.ANALYTICS_TOKEN }}"
+      - service_id: "secure-messaging"
+        auth:
+          type: "basic"
+          username: "${{ secrets.SECURE_MESSAGING_USER }}"
+          password: "${{ secrets.SECURE_MESSAGING_PASS }}"
+
   inbound:
     enabled: true                 # Enable inbound A2A communication
     port: 8181                    # Port for A2A server to listen on
     trusted_endpoints: []         # List of trusted external endpoints
     mode: "api_key"               # Authentication mode for inbound requests
+    shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
 
 # Agent configuration
 # Agents found in agents/ will be automatically added to the list
