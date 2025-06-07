@@ -272,16 +272,22 @@ class Overlord:
                 logger.debug(f"Loaded default system prompt from {system_prompt_path}")
             else:
                 # Fallback if file doesn't exist
-                fallback = """You are an intelligent message router for a multi-agent system.
-Analyze incoming user messages and determine which specialized agent is best equipped to handle each request."""
+                fallback = (
+                    "You are an intelligent message router for a multi-agent system. "
+                    "Analyze incoming user messages and determine which specialized agent is "
+                    "best equipped to handle each request."
+                )
                 self._default_system_prompt = fallback
                 msg = f"System prompt file not found at {system_prompt_path}, using fallback"
                 logger.warning(msg)
 
         except Exception as e:
             # Fallback if there's an error reading the file
-            fallback = """You are an intelligent message router for a multi-agent system.
-Analyze incoming user messages and determine which specialized agent is best equipped to handle each request."""
+            fallback = (
+                "You are an intelligent message router for a multi-agent system. "
+                "Analyze incoming user messages and determine which specialized agent is "
+                "best equipped to handle each request."
+            )
             self._default_system_prompt = fallback
             logger.error(f"Error loading system prompt file: {e}, using fallback")
 
@@ -991,9 +997,9 @@ Analyze incoming user messages and determine which specialized agent is best equ
                     self._routing_cache_expiry: Dict[str, float] = {}
 
             logger.info(
-                f"✅ Initialized overlord routing model with cache_enabled={self.routing_cache_enabled}, "
-                f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens}, "
-                f"max_tool_calls={self.max_tool_calls}, response_format={self.response_format}"
+                f"✅ Initialized overlord routing with cache_enabled={self.routing_cache_enabled}, "
+                f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens},"
+                f" max_tool_calls={self.max_tool_calls}, response_format={self.response_format}"
             )
 
         except Exception as e:
@@ -1986,9 +1992,13 @@ Analyze incoming user messages and determine which specialized agent is best equ
         default_prefix = f"{date_time_str}\n\n{default_prompt}\n\n"
         default_prefix += f"Always try to use {self.response_format} in responses.\n\n"
 
-        # Check for custom system message from overlord configuration
-        overlord_config = self.formation_config.get("overlord", {})
-        custom_system_message = overlord_config.get("system_message")
+        # Check for custom system message from config or stored routing_system_message
+        custom_system_message = None
+        if hasattr(self, 'routing_system_message') and self.routing_system_message:
+            custom_system_message = self.routing_system_message
+        else:
+            overlord_config = self.formation_config.get("overlord", {})
+            custom_system_message = overlord_config.get("system_message")
 
         if custom_system_message:
             # Use default prefix + custom system message
@@ -2726,7 +2736,7 @@ Analyze incoming user messages and determine which specialized agent is best equ
 """
         )
 
-    # DEPRECATED: route_a2a_message method has been removed as part of the
+    # Note: route_a2a_message method has been removed as part of the
     # architectural refactor to optimal A2A communication. Agents now
     # communicate directly with each other instead of routing through
     # the overlord for better performance and cleaner separation of concerns.
