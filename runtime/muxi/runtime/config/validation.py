@@ -336,6 +336,10 @@ class FormationValidator:
         if "overlord" in config:
             self._validate_overlord_config(config["overlord"])
 
+        # Validate async configuration
+        if "async" in config:
+            self._validate_async_config(config["async"])
+
     def _validate_agents(self, agents_config: List[Dict[str, Any]]) -> None:
         """Validate agents configuration."""
         if not isinstance(agents_config, list):
@@ -693,9 +697,9 @@ class FormationValidator:
                             self.result.add_error(f"Duplicate A2A service id: {service_id}")
                         service_ids.add(service_id)
 
-                    # Comprehensive validation using the detailed A2A service validator
+                    # Validate outbound service auth configuration (simplified format)
                     service_identifier = f"formation a2a.outbound.services[{i}]"
-                    self._validate_a2a_service_config(service_config, service_identifier)
+                    self._validate_outbound_service_auth_config(service_config, service_identifier)
 
     def _validate_knowledge_config(self, knowledge_config: Dict[str, Any], base_path: Path) -> None:
         """Validate knowledge configuration."""
@@ -1523,6 +1527,44 @@ class FormationValidator:
             if not isinstance(ttl, int) or ttl <= 0:
                 self.result.add_error("Caching TTL must be a positive integer")
 
+    def _validate_async_config(self, async_config: Dict[str, Any]) -> None:
+        """Validate async configuration according to SCHEMA_GUIDE.md."""
+        if not isinstance(async_config, dict):
+            self.result.add_error("Async configuration must be a dictionary")
+            return
+
+        # Validate threshold_seconds
+        if "threshold_seconds" in async_config:
+            threshold = async_config["threshold_seconds"]
+            if not isinstance(threshold, int) or threshold <= 0:
+                self.result.add_error("threshold_seconds must be a positive integer")
+
+        # Validate enable_estimation
+        if "enable_estimation" in async_config:
+            estimation = async_config["enable_estimation"]
+            if not isinstance(estimation, bool):
+                self.result.add_error("enable_estimation must be a boolean")
+
+        # Validate webhook_url
+        if "webhook_url" in async_config:
+            webhook_url = async_config["webhook_url"]
+            if not isinstance(webhook_url, str):
+                self.result.add_error("webhook_url must be a string")
+            elif not (webhook_url.startswith("http://") or webhook_url.startswith("https://")):
+                self.result.add_error("webhook_url must start with http:// or https://")
+
+        # Validate webhook_retries
+        if "webhook_retries" in async_config:
+            retries = async_config["webhook_retries"]
+            if not isinstance(retries, int) or retries < 0:
+                self.result.add_error("webhook_retries must be a non-negative integer")
+
+        # Validate webhook_timeout
+        if "webhook_timeout" in async_config:
+            timeout = async_config["webhook_timeout"]
+            if not isinstance(timeout, int) or timeout <= 0:
+                self.result.add_error("webhook_timeout must be a positive integer")
+
     def _validate_a2a_service_config(self, service_config: Dict[str, Any], filename: str) -> None:
         """Validate A2A service configuration according to SCHEMA_GUIDE.md."""
         if not isinstance(service_config, dict):
@@ -1654,6 +1696,75 @@ class FormationValidator:
             elif not isinstance(auth_config["headers"], dict):
                 self.result.add_error(
                     f"A2A service {filename} custom auth headers must be a dictionary"
+                )
+
+    def _validate_outbound_service_auth_config(
+        self, service_config: Dict[str, Any], service_identifier: str
+    ) -> None:
+        """Validate outbound service authentication configuration in formation files."""
+        if not isinstance(service_config, dict):
+            self.result.add_error(f"{service_identifier} configuration must be a dictionary")
+            return
+
+        # Check required field: service_id
+        if "service_id" not in service_config:
+            self.result.add_error(f"{service_identifier} missing required field: service_id")
+
+        # Validate service_id
+        service_id = service_config.get("service_id")
+        if service_id and not isinstance(service_id, str):
+            self.result.add_error(f"{service_identifier} service_id must be a string")
+
+        # Validate authentication configuration if present
+        if "auth" in service_config:
+            self._validate_outbound_auth_config(service_config["auth"], service_identifier)
+
+    def _validate_outbound_auth_config(
+        self, auth_config: Dict[str, Any], service_identifier: str
+    ) -> None:
+        """Validate outbound authentication configuration."""
+        if not isinstance(auth_config, dict):
+            self.result.add_error(f"{service_identifier} auth must be a dictionary")
+            return
+
+        # Validate auth type
+        auth_type = auth_config.get("type", "none")
+        valid_auth_types = ["api_key", "bearer", "basic", "custom", "none"]
+
+        if auth_type not in valid_auth_types:
+            self.result.add_error(
+                f"{service_identifier} auth type '{auth_type}' invalid. "
+                f"Valid types are: {valid_auth_types}"
+            )
+            return
+
+        # Validate type-specific auth requirements
+        if auth_type == "api_key":
+            if "api_key" not in auth_config:
+                self.result.add_error(f"{service_identifier} api_key auth requires 'api_key' field")
+            if "header" in auth_config and not isinstance(auth_config["header"], str):
+                self.result.add_error(f"{service_identifier} auth header must be a string")
+
+        elif auth_type == "bearer":
+            if "token" not in auth_config:
+                self.result.add_error(f"{service_identifier} bearer auth requires 'token' field")
+
+        elif auth_type == "basic":
+            required_basic_fields = ["username", "password"]
+            for field in required_basic_fields:
+                if field not in auth_config:
+                    self.result.add_error(
+                        f"{service_identifier} basic auth requires '{field}' field"
+                    )
+
+        elif auth_type == "custom":
+            if "headers" not in auth_config:
+                self.result.add_error(
+                    f"{service_identifier} custom auth requires 'headers' field"
+                )
+            elif not isinstance(auth_config["headers"], dict):
+                self.result.add_error(
+                    f"{service_identifier} custom auth headers must be a dictionary"
                 )
 
 
