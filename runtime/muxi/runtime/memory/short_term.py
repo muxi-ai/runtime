@@ -24,7 +24,7 @@
 #    - Configurable recency bias for different use cases
 #    - Graceful fallback to recency-only if vector search unavailable
 #
-# The BufferMemory uses a two-tiered size system:
+# The ShortTermMemory uses a two-tiered size system:
 #   - context_window (max_size): The number of recent messages to include
 #   - buffer_multiplier: Total buffer capacity = max_size × buffer_multiplier
 #
@@ -35,14 +35,14 @@
 #
 #   # Create buffer memory with semantic search (local mode)
 #   model = OpenAIModel(model="text-embedding-3-small")
-#   buffer = BufferMemory(
+#   buffer = ShortTermMemory(
 #       max_size=10,              # Context window size
 #       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
 #       model=model               # For generating embeddings
 #   )
 #
-#   # Create buffer memory with remote FAISSx server
-#   buffer = BufferMemory(
+#   # Create buffer memory with remote FAISS/FAISSx server
+#   buffer = ShortTermMemory(
 #       max_size=10,
 #       buffer_multiplier=10,
 #       model=model,
@@ -66,21 +66,28 @@
 # =============================================================================
 
 import collections
+import signal
+import time
 from typing import Any, Dict, List, Optional
 
-from loguru import logger
+import faiss
 import numpy as np
+from loguru import logger
+import multitasking
 
-# Import FAISSx client - same for both local and remote modes
-from faissx import client as faiss
+# Set multitasking to thread mode for shared memory access
+multitasking.set_engine("thread")
+
+# Kill all tasks on ctrl-c for clean shutdown
+signal.signal(signal.SIGINT, multitasking.killall)
 
 
-class BufferMemory:
+class ShortTermMemory:
     """
-    A fixed-size buffer memory with vector search capabilities.
+    Short-term memory system with buffer management and vector search capabilities.
 
-    BufferMemory provides a hybrid memory system that combines recency-based retrieval
-    with semantic search powered by FAISSx. It maintains a buffer of messages with
+    ShortTermMemory provides a hybrid memory system that combines recency-based retrieval
+    with semantic search powered by FAISS/FAISSx. It maintains a buffer of messages with
     associated metadata and vector embeddings for efficient contextual search.
 
     The buffer operates with two key size parameters:
@@ -90,9 +97,9 @@ class BufferMemory:
     This enables maintaining a larger storage for vector search while keeping a smaller
     context window for recent conversations.
 
-    Supports both local and remote FAISSx modes:
-    - Local mode: Uses local FAISSx client for in-memory vector storage
-    - Remote mode: Connects to remote FAISSx server for distributed vector storage
+    Supports both local and remote FAISS modes:
+    - Local mode: Uses local FAISS for in-memory vector storage
+    - Remote mode: Connects to remote FAISS/FAISSx server for distributed vector storage
     """
 
     def __init__(
@@ -103,9 +110,11 @@ class BufferMemory:
         model=None,
         mode: str = "local",
         remote: Optional[Dict[str, Any]] = None,
+        max_memory_mb: int = 1000,
+        fifo_interval_min: int = 5,
     ):
         """
-        Initialize a buffer memory with vector search capabilities.
+        Initialize short-term memory with vector search capabilities.
 
         Args:
             max_size: The context window size - number of recent messages to include
@@ -117,18 +126,22 @@ class BufferMemory:
             model: Optional language model instance for generating embeddings.
                 Must have an async embed(text) method. If None, vector search
                 will be disabled and only recency-based retrieval will be used.
-            mode: FAISSx mode - "local" for in-memory storage or "remote" for
+            mode: FAISS mode - "local" for in-memory storage or "remote" for
                 server-based storage. Default is "local".
             remote: Remote server configuration when mode is "remote". Should contain:
-                - url: FAISSx server URL (e.g., "tcp://localhost:45678")
+                - url: FAISS/FAISSx server URL (e.g., "tcp://localhost:45678")
                 - api_key: Optional API key for authentication
                 - tenant: Optional tenant ID for multi-tenancy
+            max_memory_mb: Maximum memory usage in MB for FIFO cleanup. Default is 1000.
+            fifo_interval_min: Minimum interval in minutes for FIFO cleanup. Default is 5.
         """
         # Buffer size and content
         self.max_size = max_size
         self.buffer_multiplier = buffer_multiplier
         self.buffer_size = max_size * buffer_multiplier
         self.buffer = collections.deque(maxlen=self.buffer_size)
+        self.max_memory_mb = max_memory_mb
+        self.fifo_interval_min = fifo_interval_min
 
         # Vector search configuration
         self.dimension = dimension
@@ -137,7 +150,7 @@ class BufferMemory:
         self.remote = remote or {}
         self.has_vector_search = True
 
-        # Configure FAISSx for remote mode
+        # Configure FAISS for remote mode (FAISSx-specific)
         if mode == "remote" and self.remote:
             faiss.configure(
                 server=self.remote.get("url"),
@@ -149,11 +162,19 @@ class BufferMemory:
 
         # Initialize vector storage
         self.index = faiss.IndexFlatL2(self.dimension)
-        self.index_mapping = {}  # Maps buffer indices to FAISSx indices
-        self.index_count = 0  # Counter for FAISSx indices
+        self.index_mapping = {}  # Maps buffer indices to FAISS indices
+        self.index_count = 0  # Counter for FAISS indices
         self.needs_rebuild = False  # Flag to track if index needs rebuilding
 
-    async def add(self, text: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+        # Start the background FIFO cleanup task
+        fifo_cleanup_task(self)
+
+    async def add(
+        self,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+        namespace: str = "buffer"
+    ) -> None:
         """
         Add an item to the buffer memory.
 
@@ -167,13 +188,20 @@ class BufferMemory:
             metadata: Optional dictionary of metadata associated with this text.
                 Can include any contextual information like timestamps, user IDs,
                 message roles, etc. Default is an empty dictionary.
+            namespace: Namespace for organizing items (e.g., "buffer", "doc").
+                Used for namespaced ID generation. Default is "buffer".
         """
         # Initialize metadata dictionary if None
         if metadata is None:
             metadata = {}
 
-        # Create item with text and metadata
-        item = {"text": text, "metadata": metadata}
+        # Create item with text, metadata, timestamp, and namespace
+        item = {
+            "text": text,
+            "metadata": metadata,
+            "timestamp": time.time(),
+            "namespace": namespace
+        }
 
         # Generate embedding if model is available
         if self.model:
@@ -182,15 +210,15 @@ class BufferMemory:
                 embedding = await self.model.embed(text)
                 item["embedding"] = embedding
 
-                # Record the mapping from buffer index to FAISSx index
+                # Record the mapping from buffer index to FAISS index
                 buffer_idx = len(self.buffer)
                 self.index_mapping[buffer_idx] = self.index_count
 
-                # Add the embedding to the FAISSx index
+                # Add the embedding to the FAISS index
                 embedding_array = np.array([embedding], dtype=np.float32)
                 self.index.add(embedding_array)
 
-                # Increment the FAISSx index counter
+                # Increment the FAISS index counter
                 self.index_count += 1
             except Exception as e:
                 # Handle embedding generation failures gracefully
@@ -209,9 +237,9 @@ class BufferMemory:
 
     def _rebuild_index(self) -> None:
         """
-        Rebuild the FAISSx index after buffer overflow.
+        Rebuild the FAISS index after buffer overflow.
 
-        This internal method rebuilds the FAISSx index and mapping when the buffer
+        This internal method rebuilds the FAISS index and mapping when the buffer
         is full and new items have displaced old ones. It ensures the vector search
         stays in sync with the actual buffer contents.
         """
@@ -242,7 +270,58 @@ class BufferMemory:
         self.index_count = new_count
         self.needs_rebuild = False
 
-        logger.debug(f"Rebuilt FAISSx index with {new_count} embeddings")
+        logger.debug(f"Rebuilt FAISS index with {new_count} embeddings")
+
+    def check_memory_usage_and_cleanup(self) -> None:
+        """
+        Check memory usage and perform FIFO cleanup if needed.
+
+        This method checks if the estimated buffer memory usage exceeds the configured
+        max_memory_mb limit. If so, it removes the oldest items from the buffer
+        and rebuilds the index to maintain memory constraints.
+
+        The buffer manages its own memory budget based on the configured limit
+        rather than checking system-wide memory usage.
+        """
+        try:
+            # Estimate current memory usage of the buffer (rough approximation)
+            # Each item has text + metadata + embedding (if present)
+            estimated_usage_mb = 0
+            for item in self.buffer:
+                # Rough estimate: text size + metadata size + embedding size
+                text_size = len(item["text"].encode('utf-8'))
+                metadata_size = len(str(item["metadata"]).encode('utf-8'))
+                embedding_size = 0
+                if item.get("embedding"):
+                    embedding_size = len(item["embedding"]) * 4  # 4 bytes per float32
+
+                item_size_mb = (text_size + metadata_size + embedding_size) / (1024**2)
+                estimated_usage_mb += item_size_mb
+
+            logger.debug(
+                f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
+                f"configured limit: {self.max_memory_mb}MB"
+            )
+
+            # If we exceed the configured limit, remove oldest items
+            if estimated_usage_mb > self.max_memory_mb:
+                items_to_remove = max(1, len(self.buffer) // 4)  # Remove 25% of items
+                logger.info(
+                    f"Buffer memory limit ({self.max_memory_mb}MB) exceeded. "
+                    f"Removing {items_to_remove} oldest items"
+                )
+
+                # Remove oldest items (from the left of deque)
+                for _ in range(min(items_to_remove, len(self.buffer))):
+                    if self.buffer:
+                        self.buffer.popleft()
+
+                # Rebuild the index after removing items
+                if self.model:
+                    self._rebuild_index()
+
+        except Exception as e:
+            logger.error(f"Error during buffer memory cleanup: {e}")
 
     def _recency_search(
         self,
@@ -352,14 +431,14 @@ class BufferMemory:
             # Convert query vector to numpy array
             query_np = np.array([query_vector], dtype=np.float32)
 
-            # Search the FAISSx index for similar vectors
+            # Search the FAISS index for similar vectors
             k = min(limit * 2, self.index_count)  # Get more results to allow for filtering
             distances, indices = self.index.search(query_np, k)
 
-            # Map FAISSx indices back to buffer indices
+            # Map FAISS indices back to buffer indices
             buffer_indices = []
             for faiss_idx in indices[0]:
-                # Find the buffer index for this FAISSx index
+                # Find the buffer index for this FAISS index
                 for buffer_idx, mapped_faiss_idx in self.index_mapping.items():
                     if mapped_faiss_idx == faiss_idx:
                         buffer_indices.append(buffer_idx)
@@ -403,7 +482,7 @@ class BufferMemory:
             return results[:limit]
 
         except Exception as e:
-            # Handle FAISSx search errors gracefully
+            # Handle FAISS search errors gracefully
             logger.error(f"Error in vector search: {e}")
             return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
@@ -427,17 +506,38 @@ class BufferMemory:
         """
         return self._recency_search(limit, filter_metadata, use_entire_buffer=False)
 
+    def get_items_by_namespace(
+        self, namespace: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get items from the buffer filtered by namespace.
+
+        Args:
+            namespace: The namespace to filter by (e.g., "buffer", "doc").
+            limit: Optional maximum number of items to return.
+
+        Returns:
+            List of buffer items matching the namespace, ordered by recency.
+        """
+        items = []
+        for item in reversed(self.buffer):  # Most recent first
+            if item.get("namespace") == namespace:
+                items.append(item.copy())
+                if limit and len(items) >= limit:
+                    break
+        return items
+
     def clear(self) -> None:
         """
         Clear the buffer memory.
 
-        This method removes all items from the buffer and resets the FAISSx index
+        This method removes all items from the buffer and resets the FAISS index
         if vector search is enabled. It effectively resets the memory to an empty state.
         """
         # Clear the buffer
         self.buffer.clear()
 
-        # Reset FAISSx index if enabled
+        # Reset FAISS index if enabled
         self.index = faiss.IndexFlatL2(self.dimension)
         self.index_mapping = {}
         self.index_count = 0
@@ -457,7 +557,7 @@ class BufferMemory:
             - buffer_capacity: Maximum number of items the buffer can hold
             - context_window_size: Size of the context window (max_size)
             - has_vector_search: Whether vector search is available
-            - vector_index_size: Number of vectors in the FAISSx index
+            - vector_index_size: Number of vectors in the FAISS index
             - model_available: Whether a model is available for embedding generation
         """
         stats = {
@@ -476,3 +576,33 @@ class BufferMemory:
     def __len__(self) -> int:
         """Return the current length of the buffer."""
         return len(self.buffer)
+
+
+@multitasking.task
+def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
+    """
+    Background task for periodic FIFO memory cleanup.
+
+    This function runs continuously in a daemon thread to periodically
+    call the check_memory_usage_and_cleanup method on the buffer.
+
+    Args:
+        buffer_memory: The ShortTermMemory instance to clean up
+    """
+    import time
+
+    logger.info(
+        f"Starting FIFO cleanup task with {buffer_memory.fifo_interval_min} minute interval"
+    )
+
+    while True:
+        try:
+            # Perform cleanup first (free cleanup on startup!)
+            buffer_memory.check_memory_usage_and_cleanup()
+
+            # Then wait for the configured interval (convert minutes to seconds)
+            time.sleep(buffer_memory.fifo_interval_min * 60)
+
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}")
+            time.sleep(60)  # Wait a minute before retrying

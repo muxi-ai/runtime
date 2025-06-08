@@ -55,7 +55,7 @@ from loguru import logger
 
 from .agent import Agent
 from .overlord import Overlord
-from .memory.buffer import BufferMemory
+from .memory.short_term import ShortTermMemory
 from .memory.long_term import LongTermMemory
 from .memory.memobase import Memobase
 from .memory.sqlite import SQLiteMemory
@@ -75,7 +75,7 @@ class Muxi:
 
     def __init__(
         self,
-        buffer_size: Optional[Union[int, BufferMemory]] = None,
+        buffer_size: Optional[Union[int, ShortTermMemory]] = None,
         buffer_multiplier: int = 10,
         long_term_memory: Optional[Union[str, bool, LongTermMemory, Memobase]] = None,
         credential_db_connection_string: Optional[str] = None,
@@ -92,7 +92,7 @@ class Muxi:
         Args:
             buffer_size: Context window size configuration
                 - If an integer, specifies the number of messages to keep in the window
-                - If a BufferMemory instance, used directly
+                - If a ShortTermMemory instance, used directly
             buffer_multiplier: Multiplier for the buffer capacity (default: 10)
                 - The actual buffer size will be buffer_size * buffer_multiplier
             long_term_memory: Long-term memory configuration
@@ -129,33 +129,33 @@ class Muxi:
 
     def _create_buffer_memory(
         self,
-        buffer_config: Optional[Union[int, Dict[str, Any], BufferMemory]],
+        buffer_config: Optional[Union[int, Dict[str, Any], ShortTermMemory]],
         buffer_multiplier: int = 10,
-    ) -> Optional[BufferMemory]:
+    ) -> Optional[ShortTermMemory]:
         """
         Create a buffer memory object from configuration.
 
         This internal method handles various ways buffer memory can be specified
-        and creates the appropriate BufferMemory instance. It supports direct
+        and creates the appropriate ShortTermMemory instance. It supports direct
         instance passing, integer sizes, or dictionary configurations.
 
         Args:
             buffer_config: Buffer memory configuration. Can be:
                 - An integer (context window size)
                 - A dictionary with 'window_size' and optional 'buffer_multiplier'
-                - A BufferMemory instance
+                - A ShortTermMemory instance
                 - None (no buffer memory)
             buffer_multiplier: Multiplier for the buffer capacity (default: 10)
 
         Returns:
-            Configured BufferMemory instance or None if buffer_config is None.
+            Configured ShortTermMemory instance or None if buffer_config is None.
         """
         if buffer_config is None:
             return None
 
         if isinstance(buffer_config, int):
             # Create buffer memory with specified size and multiplier
-            return BufferMemory(max_size=buffer_config, buffer_multiplier=buffer_multiplier)
+            return ShortTermMemory(max_size=buffer_config, buffer_multiplier=buffer_multiplier)
 
         if isinstance(buffer_config, dict):
             # Extract window_size and buffer_multiplier from dict
@@ -163,9 +163,9 @@ class Muxi:
             config_multiplier = buffer_config.get("buffer_multiplier", buffer_multiplier)
 
             # Create buffer with specified parameters
-            return BufferMemory(max_size=window_size, buffer_multiplier=config_multiplier)
+            return ShortTermMemory(max_size=window_size, buffer_multiplier=config_multiplier)
 
-        # Assume it's already a BufferMemory instance
+        # Assume it's already a ShortTermMemory instance
         return buffer_config
 
     def _create_long_term_memory(

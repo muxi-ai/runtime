@@ -60,7 +60,7 @@ from loguru import logger
 from .agent import Agent
 from .mcp import MCPMessage
 from .mcp import MCPService
-from .memory.buffer import BufferMemory
+from .memory.short_term import ShortTermMemory
 from .memory.long_term import LongTermMemory
 from .memory.memobase import Memobase
 from .llm import LLM
@@ -93,7 +93,7 @@ class Overlord:
         agents (Dict[str, Agent]): Dictionary of registered agents, keyed by agent_id
         agent_descriptions (Dict[str, str]): Descriptions of agents used for routing
         default_agent_id (Optional[str]): ID of the default agent for unrouted messages
-        buffer_memory (Optional[BufferMemory]): Short-term memory for recent context
+        buffer_memory (Optional[ShortTermMemory]): Short-term memory for recent context
         long_term_memory (Optional[Union[LongTermMemory, Memobase]]): Persistent memory system
         auto_extract_user_info (bool): Whether to automatically extract user information
         extraction_model (Optional[Model]): Model used for information extraction
@@ -109,7 +109,7 @@ class Overlord:
 
     def __init__(
         self,
-        buffer_memory: Optional[BufferMemory] = None,
+        buffer_memory: Optional[ShortTermMemory] = None,
         long_term_memory: Optional[Union[LongTermMemory, Memobase]] = None,
         auto_extract_user_info: bool = True,
         extraction_model: Optional[LLM] = None,
@@ -519,7 +519,7 @@ class Overlord:
         """
         Initialize memory configuration from formation config.
 
-        This processes the memory.buffer and memory.long_term configuration
+        This processes the memory.short_term and memory.long_term configuration
         and initializes or updates the overlord's memory systems according
         to the new schema specifications.
         """
@@ -619,7 +619,7 @@ class Overlord:
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
         try:
-            from .memory.buffer import BufferMemory
+            from .memory.short_term import ShortTermMemory
 
             # Extract buffer configuration
             size = buffer_config.get("size", 10)
@@ -639,7 +639,7 @@ class Overlord:
                     vector_search = False
 
             # Create buffer memory instance
-            self.buffer_memory = BufferMemory(
+            self.buffer_memory = ShortTermMemory(
                 max_size=size,
                 buffer_multiplier=multiplier,
                 dimension=dimension,

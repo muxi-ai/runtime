@@ -1274,13 +1274,24 @@ class FormationValidator:
             self.result.add_error("Memory configuration must be a dictionary")
             return
 
-        # Validate buffer memory configuration
+        # Ensure short-term memory configuration exists (always required)
+        if "short_term" not in memory_config:
+            # Add default short-term configuration
+            memory_config["short_term"] = self._get_default_short_term_config()
+
+        # Validate short-term memory configuration
+        short_term_config = memory_config["short_term"]
+        if not isinstance(short_term_config, dict):
+            self.result.add_error("Memory short_term configuration must be a dictionary")
+        else:
+            self._validate_short_term_memory_config(short_term_config)
+
+        # Legacy buffer configuration is no longer supported
         if "buffer" in memory_config:
-            buffer_config = memory_config["buffer"]
-            if not isinstance(buffer_config, dict):
-                self.result.add_error("Memory buffer configuration must be a dictionary")
-            else:
-                self._validate_buffer_memory_config(buffer_config)
+            self.result.add_error(
+                "Legacy memory.short_term configuration is no longer supported. "
+                "All buffer settings must be under memory.short_term.buffer."
+            )
 
         # Validate long-term memory configuration
         if "long_term" in memory_config:
@@ -1290,43 +1301,116 @@ class FormationValidator:
             else:
                 self._validate_long_term_memory_config(long_term_config)
 
-    def _validate_buffer_memory_config(self, buffer_config: Dict[str, Any]) -> None:
-        """Validate buffer memory configuration."""
-        # Validate size and multiplier
-        if "size" in buffer_config:
-            size = buffer_config["size"]
-            if not isinstance(size, int) or size <= 0:
-                self.result.add_error("Buffer memory size must be a positive integer")
+    def _get_default_short_term_config(self) -> Dict[str, Any]:
+        """Get default short-term memory configuration."""
+        return {
+            "max_memory_mb": "auto",
+            "vector_dimension": 1536,
+            "mode": "local",
+            "fifo_interval_min": 5,
+            "buffer": {
+                "size": 10,
+                "multiplier": 10,
+                "vector_search": True
+            }
+        }
 
-        if "multiplier" in buffer_config:
-            multiplier = buffer_config["multiplier"]
-            if not isinstance(multiplier, int) or multiplier <= 0:
-                self.result.add_error("Buffer memory multiplier must be a positive integer")
+    def _validate_short_term_memory_config(self, short_term_config: Dict[str, Any]) -> None:
+        """Validate short-term memory configuration."""
+        # Set defaults for missing fields
+        if "max_memory_mb" not in short_term_config:
+            short_term_config["max_memory_mb"] = "auto"
+        if "vector_dimension" not in short_term_config:
+            short_term_config["vector_dimension"] = 1536
+        if "mode" not in short_term_config:
+            short_term_config["mode"] = "local"
+        if "fifo_interval_min" not in short_term_config:
+            short_term_config["fifo_interval_min"] = 5
+        if "buffer" not in short_term_config:
+            short_term_config["buffer"] = {
+                "size": 10,
+                "multiplier": 10,
+                "vector_search": True
+            }
 
-        # Validate vector search settings
-        if "vector_search" in buffer_config:
-            vector_search = buffer_config["vector_search"]
-            if not isinstance(vector_search, bool):
-                self.result.add_error("Buffer memory vector_search must be a boolean")
-
-        if "vector_dimension" in buffer_config:
-            dimension = buffer_config["vector_dimension"]
-            if not isinstance(dimension, int) or dimension <= 0:
-                self.result.add_error("Buffer memory vector_dimension must be a positive integer")
+        # Validate max_memory_mb
+        max_memory = short_term_config["max_memory_mb"]
+        if max_memory != "auto" and (not isinstance(max_memory, int) or max_memory <= 0):
+            self.result.add_error(
+                "Short-term memory max_memory_mb must be 'auto' or a positive integer"
+            )
 
         # Validate mode
-        if "mode" in buffer_config:
-            mode = buffer_config["mode"]
-            if mode not in ["local", "remote"]:
-                self.result.add_error("Buffer memory mode must be 'local' or 'remote'")
+        mode = short_term_config.get("mode", "local")
+        if mode not in ["local", "remote"]:
+            self.result.add_error("Short-term memory mode must be 'local' or 'remote'")
+
+        # Reject "auto" with remote mode - remote servers require explicit memory limits
+        if mode == "remote" and max_memory == "auto":
+            self.result.add_error(
+                "Short-term memory max_memory_mb cannot be 'auto' with remote mode. "
+                "Remote servers require explicit memory limits (e.g., max_memory_mb: 512)."
+            )
+
+        # Validate vector dimension
+        if "vector_dimension" in short_term_config:
+            dimension = short_term_config["vector_dimension"]
+            if not isinstance(dimension, int) or dimension <= 0:
+                self.result.add_error(
+                    "Short-term memory vector_dimension must be a positive integer"
+                )
+
+        # Validate fifo_interval_min
+        if "fifo_interval_min" in short_term_config:
+            interval = short_term_config["fifo_interval_min"]
+            if not isinstance(interval, int) or interval <= 0:
+                self.result.add_error(
+                    "Short-term memory fifo_interval_min must be a positive integer"
+                )
 
         # Validate remote configuration if mode is remote
-        if buffer_config.get("mode") == "remote" and "remote" in buffer_config:
-            remote_config = buffer_config["remote"]
+        if short_term_config.get("mode") == "remote" and "remote" in short_term_config:
+            remote_config = short_term_config["remote"]
             if not isinstance(remote_config, dict):
-                self.result.add_error("Buffer memory remote configuration must be a dictionary")
+                self.result.add_error("Short-term memory remote configuration must be a dictionary")
             elif "url" not in remote_config:
-                self.result.add_error("Buffer memory remote configuration must include 'url'")
+                self.result.add_error("Short-term memory remote configuration must include 'url'")
+
+        # Validate buffer configuration if present
+        if "buffer" in short_term_config:
+            buffer_config = short_term_config["buffer"]
+            if not isinstance(buffer_config, dict):
+                self.result.add_error("Short-term memory buffer configuration must be a dictionary")
+            else:
+                self._validate_short_term_buffer_config(buffer_config)
+
+    def _validate_short_term_buffer_config(self, buffer_config: Dict[str, Any]) -> None:
+        """Validate short-term buffer memory configuration."""
+        # Set defaults for missing fields
+        if "size" not in buffer_config:
+            buffer_config["size"] = 10
+        if "multiplier" not in buffer_config:
+            buffer_config["multiplier"] = 10
+        if "vector_search" not in buffer_config:
+            buffer_config["vector_search"] = True
+
+        # Validate size and multiplier
+        size = buffer_config["size"]
+        if not isinstance(size, int) or size <= 0:
+            self.result.add_error(
+                "Short-term buffer memory size must be a positive integer"
+            )
+
+        multiplier = buffer_config["multiplier"]
+        if not isinstance(multiplier, int) or multiplier <= 0:
+            self.result.add_error(
+                "Short-term buffer memory multiplier must be a positive integer"
+            )
+
+        # Validate vector search settings
+        vector_search = buffer_config["vector_search"]
+        if not isinstance(vector_search, bool):
+            self.result.add_error("Short-term buffer memory vector_search must be a boolean")
 
     def _validate_long_term_memory_config(self, long_term_config: Dict[str, Any]) -> None:
         """Validate long-term memory configuration."""
@@ -1671,8 +1755,10 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "key" not in auth_config:
-                self.result.add_error(f"A2A service {filename} api_key auth requires 'key' field")
+            if "api_key" not in auth_config:
+                self.result.add_error(
+                    f"A2A service {filename} api_key auth requires 'api_key' field"
+                )
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"A2A service {filename} auth header must be a string")
 
@@ -1741,7 +1827,9 @@ class FormationValidator:
         # Validate type-specific auth requirements
         if auth_type == "api_key":
             if "api_key" not in auth_config:
-                self.result.add_error(f"{service_identifier} api_key auth requires 'api_key' field")
+                self.result.add_error(
+                    f"{service_identifier} api_key auth requires 'api_key' field"
+                )
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"{service_identifier} auth header must be a string")
 

@@ -305,7 +305,7 @@ class ConfigLoader:
         # Buffer memory validation
         buffer = memory.get("buffer", {})
         if not isinstance(buffer, dict):
-            raise ValueError("Invalid field: memory.buffer must be an object")
+            raise ValueError("Invalid field: memory.short_term must be an object")
 
         # Long-term memory validation
         long_term = memory.get("long_term", {})
