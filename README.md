@@ -17,7 +17,7 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Formation Execution**: Direct execution of formation YAML configurations as live AI systems
 - **Overlord Orchestration**: Central orchestration system for managing multiple agents
 - **Agent Framework**: Flexible agent implementation with specialized capabilities
-- **Memory Systems**: Sophisticated memory management with buffer and long-term storage
+- **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
 - **Security Layer**: Role-based access control and permission management
@@ -211,7 +211,7 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 
 ### ✅ Task #2 - FAISSx Integration (COMPLETED)
 - **Local/Remote Modes**: Support for both local and remote FAISSx vector operations
-- **BufferMemory Enhancement**: FAISSx integration with mode switching capabilities
+- **ShortTermMemory Enhancement**: FAISSx integration with mode switching capabilities
 - **KnowledgeHandler Enhancement**: FAISSx support for knowledge base vector search
 - **Real Server Testing**: Validated with actual FAISSx server deployment
 - **Backward Compatibility**: All existing functionality preserved
@@ -228,6 +228,14 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 - **Module Restructuring**: Organized `llm_service` to `llm` for cleaner architecture
 - **Import Fixes**: Resolved 25+ import path issues across the codebase
 - **Clean Architecture**: Proper separation between production and test code
+
+### ✅ Enhanced Memory Management (COMPLETED)
+- **FIFO Cleanup System**: Implemented automatic background cleanup for memory management with configurable limits
+- **Background Task Management**: Integrated multitasking library for daemon thread execution with proper signal handling
+- **Memory Estimation**: Comprehensive usage tracking including text content, metadata, and vector embeddings
+- **Automatic Index Rebuilding**: FAISS index rebuilds after cleanup operations to maintain consistency
+- **Configurable Parameters**: Added `max_memory_mb` and `fifo_interval_min` for fine-tuned control
+- **Production Ready**: Complete test suite with various configurations including rapid cleanup scenarios
 
 ## License
 
