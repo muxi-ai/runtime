@@ -12,6 +12,10 @@ colorama>=0.4.6
 # MCP Package
 mcp>=1.4.1  # Now available on PyPI
 
+# File processing and utilities
+aiofiles>=23.2.0
+python-magic>=0.4.27
+
 # LLM Package
 onellm>=0.0.1
 

@@ -73,65 +73,18 @@ import random
 from loguru import logger
 
 # File processing imports
-try:
-    import aiofiles
-    AIOFILES_AVAILABLE = True
-except ImportError:
-    logger.warning("aiofiles not available. Install with: pip install aiofiles")
-    AIOFILES_AVAILABLE = False
-
-try:
-    import magic
-    MAGIC_AVAILABLE = True
-except ImportError:
-    logger.warning("python-magic not available. Install with: pip install python-magic")
-    MAGIC_AVAILABLE = False
+# Required runtime dependencies
+import aiofiles
+import magic
 
 # Import OneLLM components
-try:
-    from onellm import ChatCompletion, Embedding
-    from onellm.config import set_api_key, get_api_key
-    from onellm.errors import (
-        APIError,
-        AuthenticationError,
-        RateLimitError,
-        InvalidRequestError
-    )
-    ONELLM_AVAILABLE = True
-except ImportError:
-    logger.warning("OneLLM package not found. Please install with: pip install onellm")
-
-    # Mock classes for development/testing
-    class ChatCompletion:
-        @staticmethod
-        async def create(**kwargs):
-            return {"choices": [{"message": {"content": "Mock response"}}]}
-
-    class Embedding:
-        @staticmethod
-        async def create(**kwargs):
-            return {"data": [{"embedding": [0.1] * 1536}]}
-
-    def set_api_key(provider: str, key: str):
-        pass
-
-    def get_api_key(provider: str):
-        return None
-
-    # Mock exception classes
-    class APIError(Exception):
-        pass
-
-    class AuthenticationError(APIError):
-        pass
-
-    class RateLimitError(APIError):
-        pass
-
-    class InvalidRequestError(APIError):
-        pass
-
-    ONELLM_AVAILABLE = False
+from onellm import ChatCompletion, Embedding
+from onellm.config import set_api_key
+from onellm.errors import (
+    AuthenticationError,
+    RateLimitError,
+    InvalidRequestError
+)
 
 
 # File processing configuration
@@ -238,13 +191,12 @@ class FileProcessor:
         file_path = Path(file_path)
 
         # Try python-magic first (most accurate)
-        if MAGIC_AVAILABLE:
-            try:
-                mime_type = magic.from_file(str(file_path), mime=True)
-                if mime_type:
-                    return mime_type
-            except Exception as e:
-                logger.debug(f"Magic MIME detection failed: {e}")
+        try:
+            mime_type = magic.from_file(str(file_path), mime=True)
+            if mime_type:
+                return mime_type
+        except Exception as e:
+            logger.debug(f"Magic MIME detection failed: {e}")
 
         # Fallback to mimetypes module
         mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -287,12 +239,8 @@ class FileProcessor:
             onellm_type = FileProcessor._map_mime_to_onellm_type(mime_type)
 
             # Read file and convert to base64
-            if AIOFILES_AVAILABLE:
-                async with aiofiles.open(file_path, 'rb') as f:
-                    file_content = await f.read()
-            else:
-                with open(file_path, 'rb') as f:
-                    file_content = f.read()
+            async with aiofiles.open(file_path, 'rb') as f:
+                file_content = await f.read()
 
             base64_content = base64.b64encode(file_content).decode('utf-8')
 
