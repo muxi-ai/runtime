@@ -7,16 +7,16 @@ This module contains tests for the memory implementations in the muxi framework.
 import unittest
 import numpy as np
 
-from muxi.runtime.memory.buffer import BufferMemory
+from muxi.runtime.memory.short_term import ShortTermMemory
 from muxi.runtime.llm import LLM
 
 
-class TestBufferMemory(unittest.IsolatedAsyncioTestCase):
-    """Test cases for the BufferMemory implementation."""
+class TestShortTermMemory(unittest.IsolatedAsyncioTestCase):
+    """Test cases for the ShortTermMemory implementation."""
 
     async def asyncSetUp(self):
         """Set up test fixtures."""
-        self.memory = BufferMemory(max_size=3, buffer_multiplier=10)
+        self.memory = ShortTermMemory(max_size=3, buffer_multiplier=10)
 
     async def test_add_content(self):
         """Test adding content to the buffer memory."""

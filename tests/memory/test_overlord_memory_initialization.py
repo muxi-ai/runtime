@@ -70,7 +70,7 @@ async def test_memory_initialization():
 
             # Verify buffer configuration matches formation config
             assert overlord.buffer_memory.max_size == 15
-            assert overlord.buffer_memory.buffer_multiplier == 8
+            assert overlord.buffer_memory.short_term_multiplier == 8
             assert overlord.buffer_memory.dimension == 1536
             assert overlord.buffer_memory.mode == "local"
             print("✅ Buffer memory configuration matches formation config")

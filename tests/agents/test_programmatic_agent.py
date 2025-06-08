@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from muxi.runtime.llm import LLM
 from muxi.runtime.overlord import Overlord
-from muxi.runtime.memory.buffer import BufferMemory
+from muxi.runtime.memory.short_term import ShortTermMemory
 from muxi.runtime.mcp import MCPMessage
 
 
@@ -31,7 +31,7 @@ async def test_programmatic_agent():
         return
 
     # Create a buffer memory
-    buffer_memory = BufferMemory(
+    buffer_memory = ShortTermMemory(
         max_size=10,             # Context window size
         buffer_multiplier=10     # Total capacity = 10 × 10 = 100 messages
     )
