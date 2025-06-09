@@ -256,40 +256,71 @@ class Overlord:
         self._model_cache: Dict[str, LLM] = {}
         self._capability_models: Dict[str, str] = {}
 
-        # Load default system prompt from file
-        self._load_default_system_prompt()
+        # Load default persona from file
+        self._load_default_persona()
 
-    def _load_default_system_prompt(self) -> None:
-        """Load the default system prompt from the system_prompt.md file."""
+    def _load_default_persona(self) -> None:
+        """Load the default persona from the system_persona.md file."""
         try:
-            # Get the path to the system_prompt.md file relative to this file
+            # Get the path to the system_persona.md file relative to this file
             current_dir = os.path.dirname(os.path.abspath(__file__))
-            system_prompt_path = os.path.join(current_dir, "utils", "system_prompt.md")
+            persona_path = os.path.join(current_dir, "utils", "system_persona.md")
 
-            if os.path.exists(system_prompt_path):
-                with open(system_prompt_path, "r", encoding="utf-8") as f:
-                    self._default_system_prompt = f.read().strip()
-                logger.debug(f"Loaded default system prompt from {system_prompt_path}")
+            if os.path.exists(persona_path):
+                with open(persona_path, "r", encoding="utf-8") as f:
+                    self._default_persona = f.read().strip()
+                logger.debug(f"Loaded default persona from {persona_path}")
             else:
                 # Fallback if file doesn't exist
-                fallback = (
-                    "You are an intelligent message router for a multi-agent system. "
-                    "Analyze incoming user messages and determine which specialized agent is "
-                    "best equipped to handle each request."
-                )
-                self._default_system_prompt = fallback
-                msg = f"System prompt file not found at {system_prompt_path}, using fallback"
+                fallback = "You are a friendly and helpful assistant."
+                self._default_persona = fallback
+                msg = f"Persona file not found at {persona_path}, using fallback"
                 logger.warning(msg)
 
         except Exception as e:
             # Fallback if there's an error reading the file
-            fallback = (
-                "You are an intelligent message router for a multi-agent system. "
-                "Analyze incoming user messages and determine which specialized agent is "
-                "best equipped to handle each request."
+            fallback = "You are a friendly and helpful assistant."
+            self._default_persona = fallback
+            logger.error(f"Error loading persona file: {e}, using fallback")
+
+    def _create_overlord_system_message(self, persona: Optional[str] = None) -> str:
+        """
+        Create the complete system message by combining technical orchestration
+        instructions with the persona.
+
+        Args:
+            persona: Optional persona text. If None, uses default persona.
+
+        Returns:
+            Complete system message with technical instructions prepended to persona.
+        """
+        # Load technical orchestration instructions from system_message.md
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        system_message_path = os.path.join(current_dir, "utils", "system_message.md")
+
+        system_message = ""
+        try:
+            if os.path.exists(system_message_path):
+                with open(system_message_path, "r", encoding="utf-8") as f:
+                    system_message = f.read().strip()
+        except Exception as e:
+            logger.error(f"Error loading technical instructions: {e}")
+            # Fallback technical instructions
+            system_message = (
+                "You are the system overlord. You are responsible for routing messages "
+                "to the appropriate agents and maintaining conversation coherence."
             )
-            self._default_system_prompt = fallback
-            logger.error(f"Error loading system prompt file: {e}, using fallback")
+        system_message += f"\n\nAlways try to use {self.response_format} in responses."
+
+        # Use provided persona or default
+        if persona is None:
+            persona = getattr(self, "_default_persona", "You are a friendly and helpful assistant.")
+
+        # Combine technical instructions with persona
+        return (
+            f"<system-message>\n{system_message}\n</system-message>\n\n"
+            f"<persona>\n{persona}\n</persona>"
+        )
 
     async def load_formation_from_path(self, formation_path: str) -> Dict[str, Any]:
         """
@@ -916,6 +947,17 @@ class Overlord:
             # Get overlord configuration from formation config
             overlord_config = self.formation_config.get("overlord", {})
 
+            # Set custom persona if provided (with legacy support) - check at top level first
+            overlord_persona = overlord_config.get("persona")
+            if not overlord_persona:
+                # Legacy support: fallback to system_message
+                overlord_persona = overlord_config.get("system_message")
+
+            if overlord_persona:
+                self.routing_persona = overlord_persona
+            else:
+                self.routing_persona = None
+
             # Try new overlord.llm structure first
             llm_config = overlord_config.get("llm", {})
             if llm_config:
@@ -926,13 +968,6 @@ class Overlord:
                     max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
                     api_key=llm_config.get("api_key"),
                 )
-
-                # Set custom system message if provided
-                overlord_system_message = overlord_config.get("system_message")
-                if overlord_system_message:
-                    self.routing_system_message = overlord_system_message
-                else:
-                    self.routing_system_message = None
 
                 # Configure overlord behavior from overlord.config
                 config_section = overlord_config.get("config", {})
@@ -965,7 +1000,11 @@ class Overlord:
                     # Legacy caching config
                     self.routing_cache_enabled = routing_data.get("use_caching", True)
                     self.routing_cache_ttl = routing_data.get("cache_ttl", 3600)
-                    self.routing_system_message = routing_data.get("system_message")
+                    # Only override persona if not already set from top-level config
+                    if not self.routing_persona:
+                        self.routing_persona = routing_data.get("persona") or routing_data.get(
+                            "system_message"
+                        )
 
                     # Default values for new config fields when using legacy format
                     self.max_extraction_tokens = 500
@@ -990,7 +1029,9 @@ class Overlord:
                     # Default caching settings
                     self.routing_cache_enabled = True
                     self.routing_cache_ttl = 3600
-                    self.routing_system_message = None
+                    # Only set to None if not already set from top-level config
+                    if not hasattr(self, "routing_persona"):
+                        self.routing_persona = None
                     self.max_extraction_tokens = 500
                     self.max_tool_calls = -1
                     self.response_format = "markdown"
@@ -1008,7 +1049,9 @@ class Overlord:
             self.routing_model = None
             self.routing_cache_enabled = True
             self.routing_cache_ttl = 3600
-            self.routing_system_message = None
+            # Only set to None if not already set from top-level config
+            if not hasattr(self, "routing_persona"):
+                self.routing_persona = None
             self.max_extraction_tokens = 500
             self.max_tool_calls = -1
             self.response_format = "markdown"
@@ -1977,45 +2020,37 @@ class Overlord:
                 desc = self.agent_descriptions.get(agent_id, f"Agent {agent_id}")
                 agent_descriptions.append(f"{agent_id}: {desc}")
 
-        # Use the loaded default system prompt with current date/time
-        default_prompt = getattr(
-            self,
-            "_default_system_prompt",
-            "You are an intelligent message router for a multi-agent system. "
-            "Analyze incoming user messages and determine which specialized agent "
-            "is best equipped to handle each request.",
-        )
+        # Get persona from config or use default (with legacy support)
+        custom_persona = None
+        if hasattr(self, "routing_persona") and self.routing_persona:
+            custom_persona = self.routing_persona
+        else:
+            overlord_config = self.formation_config.get("overlord", {})
+            custom_persona = overlord_config.get("persona")
+            if not custom_persona:
+                # Legacy support: fallback to system_message
+                custom_persona = overlord_config.get("system_message")
+
+        # Create complete system message using persona
+        complete_system_message = self._create_overlord_system_message(custom_persona)
 
         # Add current date/time to the prompt
         current_time = datetime.datetime.now()
         date_time_str = current_time.strftime("Today is %d %m %Y, %H:%M")
-        default_prefix = f"{date_time_str}\n\n{default_prompt}\n\n"
-        default_prefix += f"Always try to use {self.response_format} in responses.\n\n"
+        prompt = f"{complete_system_message}\n\n<date-time>\n{date_time_str}\n</date-time>\n\n"
 
-        # Check for custom system message from config or stored routing_system_message
-        custom_system_message = None
-        if hasattr(self, 'routing_system_message') and self.routing_system_message:
-            custom_system_message = self.routing_system_message
-        else:
-            overlord_config = self.formation_config.get("overlord", {})
-            custom_system_message = overlord_config.get("system_message")
-
-        if custom_system_message:
-            # Use default prefix + custom system message
-            prompt = default_prefix + custom_system_message.strip() + "\n\n"
-        else:
-            # Use default prefix
-            prompt = default_prefix
+        # f"<date-time>{datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}</date-time>\n\n" \
+        # f"<user-message>{user_message}</user-message>"
 
         # Add available agents section
-        prompt += "Available agents:\n"
+        prompt += "<available-agents>\n"
         # Add agent descriptions
         for description in agent_descriptions:
             prompt += f"- {description}\n"
+        prompt += "</available-agents>\n\n"
 
         # Add the message
-        prompt += f"\nUser message: {message}\n"
-        prompt += "\nRespond with the agent ID only."
+        prompt += f"<user-message>\n{message}\n</user-message>\n"
 
         return prompt
 

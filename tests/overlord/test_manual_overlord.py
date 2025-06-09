@@ -8,7 +8,7 @@ import os
 # Add parent directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from muxi.runtime.overlord import Overlord
+from runtime.muxi.runtime.overlord import Overlord
 
 
 def test_new_overlord_schema():
@@ -20,7 +20,7 @@ def test_new_overlord_schema():
         'id': 'test-formation',
         'description': 'Test formation',
         'overlord': {
-            'system_message': 'Test overlord system message',
+            'persona': 'Test overlord persona',
             'llm': {
                 'model': 'openai/gpt-4o-mini',
                 'settings': {
@@ -48,7 +48,7 @@ def test_new_overlord_schema():
     print(f'- Max extraction tokens: {overlord.max_extraction_tokens}')
     print(f'- Max tool calls: {overlord.max_tool_calls}')
     print(f'- Response format: {overlord.response_format}')
-    print(f'- System message: {overlord.routing_system_message}')
+    print(f'- Persona: {overlord.routing_persona}')
 
     # Verify all expected attributes exist
     assert hasattr(overlord, 'routing_cache_enabled')
@@ -56,7 +56,7 @@ def test_new_overlord_schema():
     assert hasattr(overlord, 'max_extraction_tokens')
     assert hasattr(overlord, 'max_tool_calls')
     assert hasattr(overlord, 'response_format')
-    assert hasattr(overlord, 'routing_system_message')
+    assert hasattr(overlord, 'routing_persona')
 
     # Verify values
     assert overlord.routing_cache_enabled is True
@@ -64,7 +64,7 @@ def test_new_overlord_schema():
     assert overlord.max_extraction_tokens == 500
     assert overlord.max_tool_calls == -1
     assert overlord.response_format == 'markdown'
-    assert overlord.routing_system_message == 'Test overlord system message'
+    assert overlord.routing_persona == 'Test overlord persona'
 
     print('✅ All assertions passed!')
 
@@ -97,7 +97,7 @@ def test_legacy_overlord_schema():
     print('✅ Legacy overlord schema test passed')
     print(f'- Cache enabled: {overlord.routing_cache_enabled}')
     print(f'- Cache TTL: {overlord.routing_cache_ttl}')
-    print(f'- System message: {overlord.routing_system_message}')
+    print(f'- Persona: {overlord.routing_persona}')
 
     # Verify legacy configuration with defaults
     assert overlord.routing_cache_enabled is False
@@ -105,38 +105,37 @@ def test_legacy_overlord_schema():
     assert overlord.max_extraction_tokens == 500  # Default
     assert overlord.max_tool_calls == -1  # Default
     assert overlord.response_format == 'markdown'  # Default
-    assert overlord.routing_system_message == 'Legacy system message'
+    assert overlord.routing_persona == 'Legacy system message'
 
     print('✅ Legacy assertions passed!')
 
 
-def test_system_prompt_loading():
-    """Test system prompt loading from file."""
+def test_persona_loading():
+    """Test persona loading from file."""
 
     overlord = Overlord()
 
-    # The _load_default_system_prompt should be called during init
-    assert hasattr(overlord, '_default_system_prompt')
-    assert overlord._default_system_prompt is not None
-    assert len(overlord._default_system_prompt) > 0
+    # The _load_default_persona should be called during init
+    assert hasattr(overlord, '_default_persona')
+    assert overlord._default_persona is not None
+    assert len(overlord._default_persona) > 0
 
-    print('✅ System prompt loading test passed')
-    print(f'- Default prompt length: {len(overlord._default_system_prompt)} characters')
+    print('✅ Persona loading test passed')
+    print(f'- Default persona length: {len(overlord._default_persona)} characters')
 
 
 def test_routing_prompt_with_timestamp():
     """Test routing prompt includes timestamp."""
 
     overlord = Overlord()
-    overlord._default_system_prompt = "Test system prompt"
 
     test_message = "Test user message"
     prompt = overlord._create_routing_prompt(test_message)
 
     # Check that timestamp is included
     assert "Today is" in prompt
-    # Check that both default prompt and message are included
-    assert "Test system prompt" in prompt
+    # Check that both technical instructions and message are included
+    assert "overlord" in prompt.lower()
     assert test_message in prompt
 
     print('✅ Routing prompt with timestamp test passed')
@@ -153,7 +152,7 @@ if __name__ == '__main__':
         test_legacy_overlord_schema()
         print()
 
-        test_system_prompt_loading()
+        test_persona_loading()
         print()
 
         test_routing_prompt_with_timestamp()

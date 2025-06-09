@@ -1525,8 +1525,16 @@ class FormationValidator:
 
         # Allow any additional fields users might want to add for overlord configuration
 
-        # Validate system_message
+        # Validate persona (new) and system_message (legacy support)
+        if "persona" in overlord_config:
+            if not isinstance(overlord_config["persona"], str):
+                self.result.add_error("Overlord persona must be a string")
+
+        # Legacy support for system_message (but warn about deprecation)
         if "system_message" in overlord_config:
+            self.result.add_warning(
+                "Overlord 'system_message' is deprecated. Use 'persona' instead."
+            )
             if not isinstance(overlord_config["system_message"], str):
                 self.result.add_error("Overlord system_message must be a string")
 
