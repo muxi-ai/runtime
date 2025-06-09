@@ -36,7 +36,7 @@ from typing import Any, Dict, List, Optional
 from loguru import logger
 
 from .handler import MCPHandler, MCPConnectionError
-from ..reconnection import RetryConfiguration, with_retries
+from .reconnection import RetryConfiguration, with_retries
 
 
 class ReconnectingMCPHandler(MCPHandler):
