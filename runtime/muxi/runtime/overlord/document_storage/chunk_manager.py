@@ -16,6 +16,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 from loguru import logger
 
+from ...config.document_processing import DocumentProcessingConfig
+
 try:
     import nltk
     from nltk.tokenize import sent_tokenize
@@ -61,29 +63,55 @@ class DocumentChunkManager:
     - Paragraph: Article-style paragraph-based chunking
     """
 
-    def __init__(self, config: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        document_config: Optional[DocumentProcessingConfig] = None,
+        legacy_config: Optional[Dict[str, Any]] = None
+    ):
         """
         Initialize the document chunk manager.
 
         Args:
-            config: Optional configuration dictionary with chunking parameters
+            document_config: DocumentProcessingConfig object with chunking parameters
+            legacy_config: Optional legacy configuration dictionary (deprecated)
         """
-        self.config = config or {}
+        # Use document processing configuration if provided,
+        # otherwise fall back to legacy or defaults
+        if document_config is not None:
+            self.document_config = document_config
+            self.default_chunk_size = document_config.get_chunk_size()
+            self.chunk_overlap = document_config.get_chunk_overlap()
+        elif legacy_config is not None:
+            # Support legacy configuration format during transition
+            self.document_config = None
+            self.default_chunk_size = legacy_config.get("default_chunk_size", 1000)
+            self.chunk_overlap = legacy_config.get("chunk_overlap", 100)
+        else:
+            # Use default values
+            self.document_config = DocumentProcessingConfig({})
+            self.default_chunk_size = self.document_config.get_chunk_size()
+            self.chunk_overlap = self.document_config.get_chunk_overlap()
 
-        # Default chunking parameters
-        self.default_chunk_size = self.config.get("default_chunk_size", 1000)
-        self.max_chunk_size = self.config.get("max_chunk_size", 2000)
-        self.min_chunk_size = self.config.get("min_chunk_size", 100)
-        self.chunk_overlap = self.config.get("chunk_overlap", 200)
-        self.semantic_threshold = self.config.get("semantic_threshold", 0.8)
+        # Additional chunking parameters with sensible defaults
+        self.max_chunk_size = self.default_chunk_size * 2
+        self.min_chunk_size = max(100, self.default_chunk_size // 10)
+        self.semantic_threshold = 0.8
 
         # Initialize NLP models if available
         self._nlp_model = None
         if SPACY_AVAILABLE:
             try:
-                self._nlp_model = spacy.load("en_core_web_sm")
+                # Use configured spacy model if available
+                model_name = (
+                    self.document_config.get_spacy_model()
+                    if self.document_config
+                    else "en_core_web_sm"
+                )
+                self._nlp_model = spacy.load(model_name)
             except OSError:
-                logger.warning("spaCy English model not found - falling back to basic processing")
+                logger.warning(
+                    "spaCy model not found - falling back to basic processing"
+                )
 
         # Ensure NLTK data is available
         if NLTK_AVAILABLE:

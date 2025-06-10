@@ -37,59 +37,80 @@
 #   similarity = memory_config.similarity_threshold
 # =============================================================================
 
-from pydantic import BaseModel, Field
-from typing import Optional
+import logging
+from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 
-class MemoryConfig(BaseModel):
-    """
-    Configuration settings for memory systems.
+class MemoryConfig:
+    """Memory configuration manager for the new schema structure."""
 
-    This class defines the configuration structure for memory systems,
-    including buffer memory, long-term memory, vector operations, and
-    similarity search parameters. Settings can be customized per formation
-    or environment.
+    def __init__(self, memory_config: Dict[str, Any]):
+        """Initialize memory configuration."""
+        self.memory_config = memory_config
+        self._validate_and_migrate()
 
-    Attributes:
-        use_long_term_memory: Whether to enable long-term memory
-        vector_dimension: Dimension of embedding vectors
-        buffer_max_size: Maximum size of buffer memory
-        connection_string: Database connection string for memory storage
-        default_collection: Default collection name for memory storage
-        similarity_threshold: Threshold for similarity matching
-        max_search_results: Maximum results to return from searches
-    """
+    def _validate_and_migrate(self) -> None:
+        """Validate and migrate legacy memory configuration."""
+        # Handle legacy memory.short_term configuration
+        if "short_term" in self.memory_config:
+            logger.warning(
+                "Legacy memory.short_term configuration detected. "
+                "Please migrate to memory.working and memory.buffer structure."
+            )
+            # Migrate short_term to working
+            short_term_config = self.memory_config.pop("short_term")
+            if "working" not in self.memory_config:
+                self.memory_config["working"] = {}
 
-    # Core memory settings
-    use_long_term_memory: bool = Field(
-        default=True,
-        description="Whether to enable long-term memory storage",
-    )
-    vector_dimension: int = Field(
-        default=1536,
-        description="Dimension of embedding vectors",
-    )
-    buffer_max_size: int = Field(
-        default=1000,
-        description="Maximum number of messages in buffer memory",
-    )
+            # Extract buffer config from short_term.buffer to top-level
+            if isinstance(short_term_config, dict) and "buffer" in short_term_config:
+                buffer_config = short_term_config.pop("buffer")
+                if "buffer" not in self.memory_config:
+                    self.memory_config["buffer"] = buffer_config
 
-    # Database settings
-    connection_string: Optional[str] = Field(
-        default="sqlite:///data/memory.db",
-        description="Database connection string for memory storage",
-    )
-    default_collection: str = Field(
-        default="default",
-        description="Default collection name for memory storage",
-    )
+            # Move remaining short_term config to working
+            if isinstance(short_term_config, dict):
+                self.memory_config["working"].update(short_term_config)
 
-    # Search and similarity settings
-    similarity_threshold: float = Field(
-        default=0.7,
-        description="Minimum similarity score for memory matches",
-    )
-    max_search_results: int = Field(
-        default=10,
-        description="Maximum number of results to return from memory searches",
-    )
+        # Handle legacy memory.long_term configuration
+        if "long_term" in self.memory_config:
+            logger.warning(
+                "Legacy memory.long_term configuration detected. "
+                "Please migrate to memory.persistent structure."
+            )
+            # Migrate long_term to persistent
+            long_term_config = self.memory_config.pop("long_term")
+            if "persistent" not in self.memory_config:
+                self.memory_config["persistent"] = long_term_config
+
+    def get_working_config(self) -> Dict[str, Any]:
+        """Get working memory configuration."""
+        return self.memory_config.get("working", {
+            "max_memory_mb": "auto",
+            "fifo_interval_min": 5,
+            "vector_dimension": 1536,
+            "mode": "local",
+            "remote": {}
+        })
+
+    def get_buffer_config(self) -> Dict[str, Any]:
+        """Get buffer memory configuration."""
+        return self.memory_config.get("buffer", {
+            "size": 10,
+            "multiplier": 10,
+            "vector_search": True
+        })
+
+    def get_persistent_config(self) -> Optional[Dict[str, Any]]:
+        """Get persistent memory configuration."""
+        return self.memory_config.get("persistent")
+
+    def is_persistent_enabled(self) -> bool:
+        """Check if persistent memory is enabled."""
+        persistent_config = self.get_persistent_config()
+        return (
+            persistent_config is not None
+            and persistent_config.get("connection_string") is not None
+        )

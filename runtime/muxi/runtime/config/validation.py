@@ -340,6 +340,10 @@ class FormationValidator:
         if "async" in config:
             self._validate_async_config(config["async"])
 
+        # Validate document processing configuration
+        if "document_processing" in config:
+            self._validate_document_processing_config(config["document_processing"])
+
     def _validate_agents(self, agents_config: List[Dict[str, Any]]) -> None:
         """Validate agents configuration."""
         if not isinstance(agents_config, list):
@@ -1274,118 +1278,121 @@ class FormationValidator:
             self.result.add_error("Memory configuration must be a dictionary")
             return
 
-        # Ensure short-term memory configuration exists (always required)
-        if "short_term" not in memory_config:
-            # Add default short-term configuration
-            memory_config["short_term"] = self._get_default_short_term_config()
+        # Ensure working memory configuration exists (always required)
+        if "working" not in memory_config:
+            # Add default working memory configuration
+            memory_config["working"] = self._get_default_working_memory_config()
 
-        # Validate short-term memory configuration
-        short_term_config = memory_config["short_term"]
-        if not isinstance(short_term_config, dict):
-            self.result.add_error("Memory short_term configuration must be a dictionary")
+        # Validate working memory configuration
+        working_config = memory_config["working"]
+        if not isinstance(working_config, dict):
+            self.result.add_error("Memory working configuration must be a dictionary")
         else:
-            self._validate_short_term_memory_config(short_term_config)
+            self._validate_working_memory_config(working_config)
 
-        # Legacy buffer configuration is no longer supported
+        # Validate buffer memory configuration (moved up from working.buffer)
         if "buffer" in memory_config:
+            buffer_config = memory_config["buffer"]
+            if not isinstance(buffer_config, dict):
+                self.result.add_error("Memory buffer configuration must be a dictionary")
+            else:
+                self._validate_buffer_memory_config(buffer_config)
+        else:
+            # Ensure buffer memory is always available with default settings
+            memory_config["buffer"] = {
+                "size": 10,
+                "multiplier": 10,
+                "vector_search": True
+            }
+
+        # Legacy short_term configuration is no longer supported
+        if "short_term" in memory_config:
             self.result.add_error(
                 "Legacy memory.short_term configuration is no longer supported. "
-                "All buffer settings must be under memory.short_term.buffer."
+                "Use memory.working instead, and move buffer settings to memory.buffer."
             )
 
-        # Validate long-term memory configuration
-        if "long_term" in memory_config:
-            long_term_config = memory_config["long_term"]
-            if not isinstance(long_term_config, dict):
-                self.result.add_error("Memory long_term configuration must be a dictionary")
+        # Validate persistent memory configuration
+        if "persistent" in memory_config:
+            persistent_config = memory_config["persistent"]
+            if not isinstance(persistent_config, dict):
+                self.result.add_error("Memory persistent configuration must be a dictionary")
             else:
-                self._validate_long_term_memory_config(long_term_config)
+                self._validate_persistent_memory_config(persistent_config)
 
-    def _get_default_short_term_config(self) -> Dict[str, Any]:
-        """Get default short-term memory configuration."""
+        # Legacy long_term configuration is no longer supported
+        if "long_term" in memory_config:
+            self.result.add_error(
+                "Legacy memory.long_term configuration is no longer supported. "
+                "Use memory.persistent instead."
+            )
+
+    def _get_default_working_memory_config(self) -> Dict[str, Any]:
+        """Get default working memory configuration."""
         return {
             "max_memory_mb": "auto",
             "vector_dimension": 1536,
             "mode": "local",
-            "fifo_interval_min": 5,
-            "buffer": {
-                "size": 10,
-                "multiplier": 10,
-                "vector_search": True
-            }
+            "fifo_interval_min": 5
         }
 
-    def _validate_short_term_memory_config(self, short_term_config: Dict[str, Any]) -> None:
-        """Validate short-term memory configuration."""
+    def _validate_working_memory_config(self, working_config: Dict[str, Any]) -> None:
+        """Validate working memory configuration."""
         # Set defaults for missing fields
-        if "max_memory_mb" not in short_term_config:
-            short_term_config["max_memory_mb"] = "auto"
-        if "vector_dimension" not in short_term_config:
-            short_term_config["vector_dimension"] = 1536
-        if "mode" not in short_term_config:
-            short_term_config["mode"] = "local"
-        if "fifo_interval_min" not in short_term_config:
-            short_term_config["fifo_interval_min"] = 5
-        if "buffer" not in short_term_config:
-            short_term_config["buffer"] = {
-                "size": 10,
-                "multiplier": 10,
-                "vector_search": True
-            }
+        if "max_memory_mb" not in working_config:
+            working_config["max_memory_mb"] = "auto"
+        if "vector_dimension" not in working_config:
+            working_config["vector_dimension"] = 1536
+        if "mode" not in working_config:
+            working_config["mode"] = "local"
+        if "fifo_interval_min" not in working_config:
+            working_config["fifo_interval_min"] = 5
 
         # Validate max_memory_mb
-        max_memory = short_term_config["max_memory_mb"]
+        max_memory = working_config["max_memory_mb"]
         if max_memory != "auto" and (not isinstance(max_memory, int) or max_memory <= 0):
             self.result.add_error(
-                "Short-term memory max_memory_mb must be 'auto' or a positive integer"
+                "Working memory max_memory_mb must be 'auto' or a positive integer"
             )
 
         # Validate mode
-        mode = short_term_config.get("mode", "local")
+        mode = working_config.get("mode", "local")
         if mode not in ["local", "remote"]:
-            self.result.add_error("Short-term memory mode must be 'local' or 'remote'")
+            self.result.add_error("Working memory mode must be 'local' or 'remote'")
 
         # Reject "auto" with remote mode - remote servers require explicit memory limits
         if mode == "remote" and max_memory == "auto":
             self.result.add_error(
-                "Short-term memory max_memory_mb cannot be 'auto' with remote mode. "
+                "Working memory max_memory_mb cannot be 'auto' with remote mode. "
                 "Remote servers require explicit memory limits (e.g., max_memory_mb: 512)."
             )
 
         # Validate vector dimension
-        if "vector_dimension" in short_term_config:
-            dimension = short_term_config["vector_dimension"]
+        if "vector_dimension" in working_config:
+            dimension = working_config["vector_dimension"]
             if not isinstance(dimension, int) or dimension <= 0:
                 self.result.add_error(
-                    "Short-term memory vector_dimension must be a positive integer"
+                    "Working memory vector_dimension must be a positive integer"
                 )
 
         # Validate fifo_interval_min
-        if "fifo_interval_min" in short_term_config:
-            interval = short_term_config["fifo_interval_min"]
+        if "fifo_interval_min" in working_config:
+            interval = working_config["fifo_interval_min"]
             if not isinstance(interval, int) or interval <= 0:
                 self.result.add_error(
-                    "Short-term memory fifo_interval_min must be a positive integer"
+                    "Working memory fifo_interval_min must be a positive integer"
                 )
 
         # Validate remote configuration if mode is remote
-        if short_term_config.get("mode") == "remote" and "remote" in short_term_config:
-            remote_config = short_term_config["remote"]
+        if working_config.get("mode") == "remote" and "remote" in working_config:
+            remote_config = working_config["remote"]
             if not isinstance(remote_config, dict):
-                self.result.add_error("Short-term memory remote configuration must be a dictionary")
+                self.result.add_error("Working memory remote configuration must be a dictionary")
             elif "url" not in remote_config:
-                self.result.add_error("Short-term memory remote configuration must include 'url'")
+                self.result.add_error("Working memory remote configuration must include 'url'")
 
-        # Validate buffer configuration if present
-        if "buffer" in short_term_config:
-            buffer_config = short_term_config["buffer"]
-            if not isinstance(buffer_config, dict):
-                self.result.add_error("Short-term memory buffer configuration must be a dictionary")
-            else:
-                self._validate_short_term_buffer_config(buffer_config)
-
-    def _validate_short_term_buffer_config(self, buffer_config: Dict[str, Any]) -> None:
-        """Validate short-term buffer memory configuration."""
+    def _validate_buffer_memory_config(self, buffer_config: Dict[str, Any]) -> None:
+        """Validate buffer memory configuration."""
         # Set defaults for missing fields
         if "size" not in buffer_config:
             buffer_config["size"] = 10
@@ -1398,28 +1405,28 @@ class FormationValidator:
         size = buffer_config["size"]
         if not isinstance(size, int) or size <= 0:
             self.result.add_error(
-                "Short-term buffer memory size must be a positive integer"
+                "Buffer memory size must be a positive integer"
             )
 
         multiplier = buffer_config["multiplier"]
         if not isinstance(multiplier, int) or multiplier <= 0:
             self.result.add_error(
-                "Short-term buffer memory multiplier must be a positive integer"
+                "Buffer memory multiplier must be a positive integer"
             )
 
         # Validate vector search settings
         vector_search = buffer_config["vector_search"]
         if not isinstance(vector_search, bool):
-            self.result.add_error("Short-term buffer memory vector_search must be a boolean")
+            self.result.add_error("Buffer memory vector_search must be a boolean")
 
-    def _validate_long_term_memory_config(self, long_term_config: Dict[str, Any]) -> None:
-        """Validate long-term memory configuration."""
+    def _validate_persistent_memory_config(self, persistent_config: Dict[str, Any]) -> None:
+        """Validate persistent memory configuration."""
         # Validate connection string
-        if "connection_string" in long_term_config:
-            connection_string = long_term_config["connection_string"]
+        if "connection_string" in persistent_config:
+            connection_string = persistent_config["connection_string"]
             if not isinstance(connection_string, str) or not connection_string.strip():
                 self.result.add_error(
-                    "Long-term memory connection_string must be a non-empty string"
+                    "Persistent memory connection_string must be a non-empty string"
                 )
             else:
                 # Basic format validation
@@ -1430,15 +1437,136 @@ class FormationValidator:
                     and not valid_suffix
                 ):
                     self.result.add_warning(
-                        "Long-term memory connection_string should start with "
+                        "Persistent memory connection_string should start with "
                         "postgresql://, postgres://, sqlite:// or end with .db"
                     )
 
         # Validate embedding model
-        if "embedding_model" in long_term_config:
-            embedding_model = long_term_config["embedding_model"]
+        if "embedding_model" in persistent_config:
+            embedding_model = persistent_config["embedding_model"]
             if not isinstance(embedding_model, str) or not embedding_model.strip():
-                self.result.add_error("Long-term memory embedding_model must be a non-empty string")
+                self.result.add_error(
+                    "Persistent memory embedding_model must be a non-empty string"
+                )
+
+    def _validate_document_processing_config(self, doc_config: Dict[str, Any]) -> None:
+        """Validate document processing configuration."""
+        if not isinstance(doc_config, dict):
+            self.result.add_error("Document processing configuration must be a dictionary")
+            return
+
+        # Set defaults for all fields
+        if "enabled" not in doc_config:
+            doc_config["enabled"] = True
+        if "chunking" not in doc_config:
+            doc_config["chunking"] = {}
+        if "files" not in doc_config:
+            doc_config["files"] = {}
+        if "models" not in doc_config:
+            doc_config["models"] = {}
+
+        # Validate enabled field
+        if not isinstance(doc_config["enabled"], bool):
+            self.result.add_error("Document processing enabled must be a boolean")
+
+        # Validate chunking configuration
+        chunking_config = doc_config["chunking"]
+        if not isinstance(chunking_config, dict):
+            self.result.add_error("Document processing chunking configuration must be a dictionary")
+        else:
+            self._validate_document_chunking_config(chunking_config)
+
+        # Validate files configuration
+        files_config = doc_config["files"]
+        if not isinstance(files_config, dict):
+            self.result.add_error("Document processing files configuration must be a dictionary")
+        else:
+            self._validate_document_files_config(files_config)
+
+        # Validate models configuration
+        models_config = doc_config["models"]
+        if not isinstance(models_config, dict):
+            self.result.add_error("Document processing models configuration must be a dictionary")
+        else:
+            self._validate_document_models_config(models_config)
+
+    def _validate_document_chunking_config(self, chunking_config: Dict[str, Any]) -> None:
+        """Validate document processing chunking configuration."""
+        # Set defaults
+        if "default_size" not in chunking_config:
+            chunking_config["default_size"] = 1000
+        if "overlap" not in chunking_config:
+            chunking_config["overlap"] = 100
+        if "strategies" not in chunking_config:
+            chunking_config["strategies"] = ["adaptive", "semantic", "fixed", "paragraph"]
+
+        # Validate default_size
+        default_size = chunking_config["default_size"]
+        if not isinstance(default_size, int) or default_size <= 0:
+            self.result.add_error("Document chunking default_size must be a positive integer")
+
+        # Validate overlap
+        overlap = chunking_config["overlap"]
+        if not isinstance(overlap, int) or overlap < 0:
+            self.result.add_error("Document chunking overlap must be a non-negative integer")
+
+        # Validate strategies
+        strategies = chunking_config["strategies"]
+        if not isinstance(strategies, list):
+            self.result.add_error("Document chunking strategies must be a list")
+        else:
+            valid_strategies = ["adaptive", "semantic", "fixed", "paragraph"]
+            for strategy in strategies:
+                if not isinstance(strategy, str) or strategy not in valid_strategies:
+                    self.result.add_error(
+                        f"Invalid chunking strategy '{strategy}'. "
+                        f"Valid strategies are: {', '.join(valid_strategies)}"
+                    )
+
+    def _validate_document_files_config(self, files_config: Dict[str, Any]) -> None:
+        """Validate document processing files configuration."""
+        # Set defaults
+        if "max_size_mb" not in files_config:
+            files_config["max_size_mb"] = 50
+        if "cache_ttl_seconds" not in files_config:
+            files_config["cache_ttl_seconds"] = 3600
+
+        # Validate max_size_mb
+        max_size_mb = files_config["max_size_mb"]
+        if not isinstance(max_size_mb, int) or max_size_mb <= 0:
+            self.result.add_error("Document files max_size_mb must be a positive integer")
+
+        # Validate cache_ttl_seconds
+        cache_ttl = files_config["cache_ttl_seconds"]
+        if not isinstance(cache_ttl, int) or cache_ttl <= 0:
+            self.result.add_error("Document files cache_ttl_seconds must be a positive integer")
+
+    def _validate_document_models_config(self, models_config: Dict[str, Any]) -> None:
+        """Validate document processing models configuration."""
+        # Set defaults
+        if "nltk_data_path" not in models_config:
+            models_config["nltk_data_path"] = "~/nltk_data"
+        if "spacy_model" not in models_config:
+            models_config["spacy_model"] = "en_core_web_sm"
+        if "sentence_transformer" not in models_config:
+            models_config["sentence_transformer"] = "all-MiniLM-L6-v2"
+
+        # Validate nltk_data_path
+        nltk_path = models_config["nltk_data_path"]
+        if not isinstance(nltk_path, str) or not nltk_path.strip():
+            self.result.add_error("Document models nltk_data_path must be a non-empty string")
+
+        # Validate spacy_model
+        spacy_model = models_config["spacy_model"]
+        if not isinstance(spacy_model, str) or not spacy_model.strip():
+            self.result.add_error("Document models spacy_model must be a non-empty string")
+
+        # Validate sentence_transformer
+        sentence_transformer = models_config["sentence_transformer"]
+        if not isinstance(sentence_transformer, str) or not sentence_transformer.strip():
+            self.result.add_error(
+                "Document models sentence_transformer must be a non-empty string"
+            )
 
     def _validate_logging_config(self, logging_config: Dict[str, Any]) -> None:
         """Validate logging configuration according to SCHEMA_GUIDE.md."""

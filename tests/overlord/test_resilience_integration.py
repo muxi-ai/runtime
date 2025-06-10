@@ -6,13 +6,13 @@ to ensure all components work together correctly.
 """
 
 import asyncio
-import os
 import sys
+import os
 
 # Add the runtime directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
-from muxi.runtime.overlord.resilience import (
+from runtime.muxi.runtime.overlord.resilience import (  # noqa: E402, F401
     ResilientWorkflowManager,
     ResilienceConfig,
     ErrorClassifier,
@@ -71,7 +71,7 @@ async def test_error_classification():
     assert context.error_type == ErrorType.AGENT_TIMEOUT
     assert context.severity == ErrorSeverity.MEDIUM
     print(f"  ✅ Timeout error classified as {context.error_type.value} "
-          f"(severity: {context.severity.value})")
+          "(severity: {context.severity.value})")
 
     # Test workflow exception
     workflow_error = WorkflowException(
@@ -84,7 +84,7 @@ async def test_error_classification():
     assert context.error_type == ErrorType.AGENT_CRASHED
     assert context.severity == ErrorSeverity.CRITICAL
     print(f"  ✅ Workflow error classified as {context.error_type.value} "
-          f"(severity: {context.severity.value})")
+          "(severity: {context.severity.value})")
 
     print("✅ Error Classification tests passed!\n")
 
@@ -96,7 +96,7 @@ async def test_recovery_strategy_selection():
     strategist = RecoveryStrategist()
 
     # Test strategy selection for network timeout
-    from muxi.runtime.overlord.resilience.resilience_types import ErrorContext
+    from runtime.muxi.runtime.overlord.resilience.resilience_types import ErrorContext
 
     error_context = ErrorContext(
         error=TimeoutError("Network timeout"),
@@ -126,7 +126,7 @@ async def test_circuit_breaker():
     """Test circuit breaker functionality."""
     print("⚡ Testing Circuit Breaker...")
 
-    from muxi.runtime.overlord.resilience.resilience_types import CircuitBreakerConfig
+    from runtime.muxi.runtime.overlord.resilience.resilience_types import CircuitBreakerConfig
 
     config = CircuitBreakerConfig(
         failure_threshold=2,
@@ -147,6 +147,7 @@ async def test_circuit_breaker():
 
     # Test failure handling
     failure_count = 0
+
     async def failing_function():
         nonlocal failure_count
         failure_count += 1
@@ -167,7 +168,8 @@ async def test_circuit_breaker():
 
     # Circuit should now be open
     stats = circuit_breaker.get_stats()
-    print(f"  ✅ Circuit breaker state: {stats['state']} (failures: {stats['current_failure_count']})")
+    print(f"  ✅ Circuit breaker state: {stats['state']} "
+          "(failures: {stats['current_failure_count']})")
 
     print("✅ Circuit Breaker tests passed!\n")
 
@@ -228,7 +230,8 @@ async def test_resilient_workflow_manager():
     result = await manager.execute_resilient_workflow(failing_workflow)
 
     # Should either succeed with recovery or provide fallback
-    print(f"  ✅ Workflow with recovery: success={result.success}, time={result.execution_time:.3f}s")
+    print(f"  ✅ Workflow with recovery: success={result.success}, "
+          "time={result.execution_time:.3f}s")
 
     # Get resilience statistics
     stats = manager.get_resilience_stats()
