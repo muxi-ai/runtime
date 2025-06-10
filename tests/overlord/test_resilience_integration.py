@@ -6,11 +6,11 @@ to ensure all components work together correctly.
 """
 
 import asyncio
-import sys
 import os
+import sys
 
 # Add the runtime directory to the path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from muxi.runtime.overlord.resilience import (
     ResilientWorkflowManager,
@@ -70,7 +70,8 @@ async def test_error_classification():
 
     assert context.error_type == ErrorType.AGENT_TIMEOUT
     assert context.severity == ErrorSeverity.MEDIUM
-    print(f"  ✅ Timeout error classified as {context.error_type.value} (severity: {context.severity.value})")
+    print(f"  ✅ Timeout error classified as {context.error_type.value} "
+          f"(severity: {context.severity.value})")
 
     # Test workflow exception
     workflow_error = WorkflowException(
@@ -82,7 +83,8 @@ async def test_error_classification():
 
     assert context.error_type == ErrorType.AGENT_CRASHED
     assert context.severity == ErrorSeverity.CRITICAL
-    print(f"  ✅ Workflow error classified as {context.error_type.value} (severity: {context.severity.value})")
+    print(f"  ✅ Workflow error classified as {context.error_type.value} "
+          f"(severity: {context.severity.value})")
 
     print("✅ Error Classification tests passed!\n")
 
