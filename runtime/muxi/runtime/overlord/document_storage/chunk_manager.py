@@ -1,0 +1,447 @@
+"""
+Document Chunking Pipeline Implementation
+
+This module implements intelligent document chunking with multiple adaptive strategies
+for optimal text processing and semantic search performance.
+
+Supports:
+- Adaptive chunking based on content analysis
+- Semantic boundary-aware chunking
+- Fixed-size chunking with overlap
+- Paragraph-based chunking for articles
+"""
+
+import re
+from typing import List, Dict, Any, Optional
+from dataclasses import dataclass
+from loguru import logger
+
+try:
+    import nltk
+    from nltk.tokenize import sent_tokenize
+    NLTK_AVAILABLE = True
+except ImportError:
+    NLTK_AVAILABLE = False
+    logger.warning("NLTK not available - falling back to basic sentence splitting")
+
+try:
+    import spacy
+    SPACY_AVAILABLE = True
+except ImportError:
+    SPACY_AVAILABLE = False
+    logger.warning("spaCy not available - falling back to basic text processing")
+
+
+@dataclass
+class DocumentChunk:
+    """Represents a chunk of document content with metadata"""
+    content: str
+    chunk_id: str
+    document_id: str
+    start_pos: int
+    end_pos: int
+    metadata: Dict[str, Any]
+
+    def __post_init__(self):
+        """Validate chunk data after initialization"""
+        if not self.content.strip():
+            raise ValueError("Chunk content cannot be empty")
+        if self.start_pos < 0 or self.end_pos <= self.start_pos:
+            raise ValueError(f"Invalid chunk positions: start={self.start_pos}, end={self.end_pos}")
+
+
+class DocumentChunkManager:
+    """
+    Intelligent document chunking for large files with adaptive strategies.
+
+    Provides multiple chunking strategies optimized for different content types:
+    - Adaptive: Intelligent strategy selection based on content analysis
+    - Semantic: Boundary-aware chunking using NLP techniques
+    - Fixed: Size-based chunking with configurable overlap
+    - Paragraph: Article-style paragraph-based chunking
+    """
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """
+        Initialize the document chunk manager.
+
+        Args:
+            config: Optional configuration dictionary with chunking parameters
+        """
+        self.config = config or {}
+
+        # Default chunking parameters
+        self.default_chunk_size = self.config.get("default_chunk_size", 1000)
+        self.max_chunk_size = self.config.get("max_chunk_size", 2000)
+        self.min_chunk_size = self.config.get("min_chunk_size", 100)
+        self.chunk_overlap = self.config.get("chunk_overlap", 200)
+        self.semantic_threshold = self.config.get("semantic_threshold", 0.8)
+
+        # Initialize NLP models if available
+        self._nlp_model = None
+        if SPACY_AVAILABLE:
+            try:
+                self._nlp_model = spacy.load("en_core_web_sm")
+            except OSError:
+                logger.warning("spaCy English model not found - falling back to basic processing")
+
+        # Ensure NLTK data is available
+        if NLTK_AVAILABLE:
+            try:
+                nltk.data.find('tokenizers/punkt')
+            except LookupError:
+                logger.info("Downloading NLTK punkt tokenizer...")
+                nltk.download('punkt', quiet=True)
+
+    async def chunk_document(
+        self,
+        content: str,
+        filename: str,
+        strategy: str = "adaptive",
+        document_id: Optional[str] = None
+    ) -> List[DocumentChunk]:
+        """
+        Chunk document using specified strategy.
+
+        Args:
+            content: Document content to chunk
+            filename: Original filename for strategy determination
+            strategy: Chunking strategy ("adaptive", "semantic", "fixed", "paragraph")
+            document_id: Optional document ID for chunk references
+
+        Returns:
+            List of DocumentChunk objects
+        """
+        if not content.strip():
+            raise ValueError("Cannot chunk empty content")
+
+        # Generate document ID if not provided
+        if document_id is None:
+            document_id = self._generate_document_id(filename)
+
+        logger.info(f"Chunking document {filename} using {strategy} strategy")
+
+        # Select chunking strategy
+        if strategy == "adaptive":
+            strategy = self._determine_chunk_strategy(content, filename)
+            logger.info(f"Adaptive strategy selected: {strategy}")
+
+        # Execute chunking based on strategy
+        if strategy == "semantic":
+            chunks = await self._semantic_chunking(content)
+        elif strategy == "paragraph":
+            chunks = await self._paragraph_chunking(content)
+        elif strategy == "fixed":
+            chunks = await self._fixed_chunking(content)
+        else:
+            logger.warning(f"Unknown strategy {strategy}, falling back to adaptive")
+            chunks = await self._adaptive_chunking(content)
+
+        # Convert to DocumentChunk objects
+        document_chunks = []
+        for i, chunk_content in enumerate(chunks):
+            chunk = DocumentChunk(
+                content=chunk_content,
+                chunk_id=f"{document_id}_chunk_{i:04d}",
+                document_id=document_id,
+                start_pos=content.find(chunk_content),
+                end_pos=content.find(chunk_content) + len(chunk_content),
+                metadata={
+                    "filename": filename,
+                    "strategy": strategy,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "word_count": len(chunk_content.split()),
+                    "char_count": len(chunk_content)
+                }
+            )
+            document_chunks.append(chunk)
+
+        logger.info(f"Generated {len(document_chunks)} chunks for document {filename}")
+        return document_chunks
+
+    def _determine_chunk_strategy(self, content: str, filename: str) -> str:
+        """
+        Determine optimal chunking strategy based on content analysis.
+
+        Args:
+            content: Document content to analyze
+            filename: Filename for format hints
+
+        Returns:
+            Recommended chunking strategy
+        """
+        # File extension hints
+        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+
+        # Analyze content characteristics
+        lines = content.split('\n')
+        avg_line_length = sum(len(line) for line in lines) / max(len(lines), 1)
+        paragraph_count = len([line for line in lines if line.strip() and not line.startswith(' ')])
+
+        # Decision logic
+        if ext in ['md', 'txt', 'rst'] and paragraph_count > 3:
+            return "paragraph"
+        elif avg_line_length > 100 and paragraph_count > 5:
+            return "semantic"
+        elif len(content) > 5000:
+            return "semantic"
+        else:
+            return "fixed"
+
+    async def _semantic_chunking(self, content: str) -> List[str]:
+        """
+        Semantic boundary-aware chunking using NLP techniques.
+
+        Args:
+            content: Text content to chunk
+
+        Returns:
+            List of semantically coherent text chunks
+        """
+        if self._nlp_model is not None:
+            return await self._spacy_semantic_chunking(content)
+        elif NLTK_AVAILABLE:
+            return await self._nltk_semantic_chunking(content)
+        else:
+            # Fallback to sentence-based chunking
+            return await self._sentence_based_chunking(content)
+
+    async def _spacy_semantic_chunking(self, content: str) -> List[str]:
+        """Use spaCy for advanced semantic chunking"""
+        doc = self._nlp_model(content)
+
+        chunks = []
+        current_chunk = []
+        current_size = 0
+
+        for sent in doc.sents:
+            sent_text = sent.text.strip()
+            sent_size = len(sent_text)
+
+            # Check if adding this sentence would exceed chunk size
+            if current_size + sent_size > self.default_chunk_size and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sent_text]
+                current_size = sent_size
+            else:
+                current_chunk.append(sent_text)
+                current_size += sent_size
+
+        # Add final chunk
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        return chunks
+
+    async def _nltk_semantic_chunking(self, content: str) -> List[str]:
+        """Use NLTK for sentence-aware chunking"""
+        sentences = sent_tokenize(content)
+
+        chunks = []
+        current_chunk = []
+        current_size = 0
+
+        for sentence in sentences:
+            sentence_size = len(sentence)
+
+            if current_size + sentence_size > self.default_chunk_size and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_size = sentence_size
+            else:
+                current_chunk.append(sentence)
+                current_size += sentence_size
+
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        return chunks
+
+    async def _sentence_based_chunking(self, content: str) -> List[str]:
+        """Fallback sentence-based chunking without external dependencies"""
+        # Simple sentence splitting using punctuation
+        sentence_endings = re.compile(r'[.!?]+\s+')
+        sentences = sentence_endings.split(content)
+
+        chunks = []
+        current_chunk = []
+        current_size = 0
+
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            sentence_size = len(sentence)
+
+            if current_size + sentence_size > self.default_chunk_size and current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = [sentence]
+                current_size = sentence_size
+            else:
+                current_chunk.append(sentence)
+                current_size += sentence_size
+
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+
+        return chunks if chunks else [content]
+
+    async def _adaptive_chunking(self, content: str) -> List[str]:
+        """
+        Size-adaptive chunking with overlap for optimal context preservation.
+
+        Args:
+            content: Text content to chunk
+
+        Returns:
+            List of text chunks with adaptive sizing
+        """
+        chunks = []
+        start = 0
+        content_length = len(content)
+
+        while start < content_length:
+            # Calculate dynamic chunk size based on remaining content
+            remaining = content_length - start
+            chunk_size = min(self.default_chunk_size, remaining)
+
+            # Adjust chunk size to avoid breaking words
+            end = start + chunk_size
+            if end < content_length and not content[end].isspace():
+                # Find the nearest word boundary
+                while end > start and not content[end].isspace():
+                    end -= 1
+                if end == start:  # No space found, use original boundary
+                    end = start + chunk_size
+
+            chunk = content[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+
+            # Move start position with overlap
+            start = max(start + 1, end - self.chunk_overlap)
+
+        return chunks if chunks else [content]
+
+    async def _paragraph_chunking(self, content: str) -> List[str]:
+        """
+        Paragraph-based chunking for articles and structured documents.
+
+        Args:
+            content: Text content to chunk
+
+        Returns:
+            List of paragraph-based chunks
+        """
+        # Split by double newlines (paragraph breaks)
+        paragraphs = re.split(r'\n\s*\n', content)
+        chunks = []
+        current_chunk = []
+        current_size = 0
+
+        for paragraph in paragraphs:
+            paragraph = paragraph.strip()
+            if not paragraph:
+                continue
+
+            paragraph_size = len(paragraph)
+
+            # If paragraph itself is too large, split it
+            if paragraph_size > self.max_chunk_size:
+                # Add current chunk if exists
+                if current_chunk:
+                    chunks.append('\n\n'.join(current_chunk))
+                    current_chunk = []
+                    current_size = 0
+
+                # Split large paragraph using adaptive chunking
+                para_chunks = await self._adaptive_chunking(paragraph)
+                chunks.extend(para_chunks)
+                continue
+
+            # Check if adding this paragraph exceeds chunk size
+            if current_size + paragraph_size > self.default_chunk_size and current_chunk:
+                chunks.append('\n\n'.join(current_chunk))
+                current_chunk = [paragraph]
+                current_size = paragraph_size
+            else:
+                current_chunk.append(paragraph)
+                current_size += paragraph_size
+
+        # Add final chunk
+        if current_chunk:
+            chunks.append('\n\n'.join(current_chunk))
+
+        return chunks if chunks else [content]
+
+    async def _fixed_chunking(self, content: str) -> List[str]:
+        """
+        Fixed-size chunking with configurable overlap.
+
+        Args:
+            content: Text content to chunk
+
+        Returns:
+            List of fixed-size text chunks
+        """
+        chunks = []
+        start = 0
+        content_length = len(content)
+
+        while start < content_length:
+            end = min(start + self.default_chunk_size, content_length)
+
+            # Adjust to word boundaries if not at end
+            if end < content_length and not content[end].isspace():
+                while end > start and not content[end].isspace():
+                    end -= 1
+                if end == start:
+                    end = start + self.default_chunk_size
+
+            chunk = content[start:end].strip()
+            if chunk:
+                chunks.append(chunk)
+
+            start = end - self.chunk_overlap
+            if start <= 0:
+                start = end
+
+        return chunks if chunks else [content]
+
+    def _generate_document_id(self, filename: str) -> str:
+        """Generate a unique document ID from filename"""
+        import hashlib
+        import time
+
+        # Create unique ID from filename and timestamp
+        timestamp = str(int(time.time() * 1000))
+        content = f"{filename}_{timestamp}"
+        return hashlib.md5(content.encode()).hexdigest()[:16]
+
+    def get_chunk_stats(self, chunks: List[DocumentChunk]) -> Dict[str, Any]:
+        """
+        Get statistics about a set of chunks.
+
+        Args:
+            chunks: List of DocumentChunk objects
+
+        Returns:
+            Dictionary with chunk statistics
+        """
+        if not chunks:
+            return {"total_chunks": 0}
+
+        chunk_sizes = [len(chunk.content) for chunk in chunks]
+        word_counts = [chunk.metadata.get("word_count", 0) for chunk in chunks]
+
+        return {
+            "total_chunks": len(chunks),
+            "avg_chunk_size": sum(chunk_sizes) / len(chunks),
+            "min_chunk_size": min(chunk_sizes),
+            "max_chunk_size": max(chunk_sizes),
+            "total_words": sum(word_counts),
+            "avg_words_per_chunk": sum(word_counts) / len(chunks),
+            "strategies_used": list(set(chunk.metadata.get("strategy") for chunk in chunks))
+        }
