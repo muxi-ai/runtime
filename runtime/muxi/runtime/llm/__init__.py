@@ -22,7 +22,11 @@
 # =============================================================================
 
 from .service import OneLLMService
-from .llm import LLM
+from .llm import (
+    LLM, LLMError, LLMErrorType, FileProcessor,
+    get_cache_stats, get_retry_stats, get_circuit_breaker_stats,
+    clear_llm_cache, set_cache_ttl, reset_all_stats
+)
 from .errors import (
     OneLLMError,
     OneLLMConnectionError,
@@ -34,9 +38,24 @@ from .errors import (
     OneLLMServiceError,
 )
 
+# For backward compatibility, expose OneLLMAuthenticationError as AuthenticationError
+AuthenticationError = OneLLMAuthenticationError
+RateLimitError = OneLLMRateLimitError
+
 __all__ = [
     "OneLLMService",
     "LLM",
+    "LLMError",
+    "LLMErrorType",
+    "FileProcessor",
+    "get_cache_stats",
+    "get_retry_stats",
+    "get_circuit_breaker_stats",
+    "clear_llm_cache",
+    "set_cache_ttl",
+    "reset_all_stats",
+    "AuthenticationError",
+    "RateLimitError",
     "OneLLMError",
     "OneLLMConnectionError",
     "OneLLMAuthenticationError",

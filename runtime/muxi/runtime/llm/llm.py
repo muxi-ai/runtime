@@ -606,6 +606,98 @@ class LLM:
             }
         )
 
+        # Initialize fusion engine for advanced multimodal processing (lazy loaded)
+        self._fusion_engine = None
+
+    @property
+    def fusion_engine(self):
+        """Lazy initialize fusion engine for advanced multimodal processing"""
+        if self._fusion_engine is None:
+            try:
+                from ..overlord.workflow.multimodal import MultiModalFusionEngine
+                self._fusion_engine = MultiModalFusionEngine(self)
+                logger.debug("Initialized fusion engine for advanced multimodal processing")
+            except ImportError as e:
+                logger.warning(f"Could not import fusion engine: {e}. "
+                               "Falling back to basic processing.")
+                self._fusion_engine = None
+        return self._fusion_engine
+
+    async def _convert_files_to_content(self, files: List[Union[str, Path]]):
+        """Convert file paths to MultiModalContent objects for fusion engine"""
+        try:
+            from ..overlord.workflow.multimodal import MultiModalContent
+
+            content_items = []
+
+            for file_path in files:
+                # Detect modality type from file
+                modality = await self._detect_file_modality(file_path)
+
+                # Create MultiModalContent object
+                content = MultiModalContent(
+                    modality=modality,
+                    content=str(file_path),  # Will be processed by fusion engine
+                    metadata={
+                        "file_path": str(file_path),
+                        "processing_source": "llm_files_parameter"
+                    }
+                )
+
+                content_items.append(content)
+
+            return content_items
+
+        except ImportError:
+            # Fusion engine not available, return None to trigger basic processing
+            return None
+
+    async def _detect_file_modality(self, file_path: Union[str, Path]):
+        """Detect modality from file extension/type"""
+        try:
+            from ..overlord.workflow.multimodal import ModalityType
+
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(str(file_path))
+
+            if mime_type:
+                if mime_type.startswith('image/'):
+                    return ModalityType.IMAGE
+                elif mime_type.startswith('audio/'):
+                    return ModalityType.AUDIO
+                elif mime_type.startswith('video/'):
+                    return ModalityType.VIDEO
+                elif mime_type in ['application/pdf', 'text/plain', 'application/msword']:
+                    return ModalityType.DOCUMENT
+
+            # Default to document for unknown types
+            return ModalityType.DOCUMENT
+
+        except ImportError:
+            # Fusion engine not available, return None
+            return None
+
+    def _extract_user_message(self, messages: List[Dict[str, str]]) -> str:
+        """Extract the last user message from conversation"""
+        for message in reversed(messages):
+            if message.get("role") == "user":
+                content = message.get("content", "")
+                if isinstance(content, str):
+                    return content
+                elif isinstance(content, list):
+                    # Extract text from multimodal content
+                    text_parts = []
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            text_parts.append(item.get("text", ""))
+                    return " ".join(text_parts)
+        return ""
+
+    async def _text_chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """Handle text-only chat (no files)"""
+        # Use existing chat logic for text-only processing
+        return await self._legacy_chat_with_files(messages, None, **kwargs)
+
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns."""
         async def _wrapped_func(*args, **kwargs):
@@ -647,10 +739,11 @@ class LLM:
         presence_penalty: Optional[float] = None,
         stop: Optional[Union[str, List[str]]] = None,
         files: Optional[List[Union[str, Path]]] = None,
+        fusion_mode: Optional[str] = "adaptive",  # "basic", "adaptive", "advanced"
         **kwargs: Any,
     ) -> str:
         """
-        Generate a chat completion using OneLLM with enhanced error handling.
+        Enhanced chat with unified multimodal processing.
 
         Args:
             messages: A list of messages in the conversation.
@@ -661,6 +754,9 @@ class LLM:
             presence_penalty: Penalize new tokens based on their presence.
             stop: Sequences where the generation will stop.
             files: List of file paths to process.
+            fusion_mode: Processing mode - "basic" for simple pass-through,
+                        "adaptive" for intelligent processing (default),
+                        "advanced" for maximum fusion capabilities
             **kwargs: Additional provider-specific parameters.
 
         Returns:
@@ -669,6 +765,131 @@ class LLM:
         Raises:
             LLMError: For various error conditions with appropriate classification.
         """
+
+        # Handle text-only conversations
+        if not files:
+            return await self._text_chat(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stop=stop,
+                **kwargs
+            )
+
+        # Handle multimodal conversations
+        if fusion_mode == "basic" or self.fusion_engine is None:
+            # Use basic pass-through processing
+            return await self._legacy_chat_with_files(
+                messages, files,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stop=stop,
+                **kwargs
+            )
+        else:
+            # Use advanced fusion engine
+            return await self._advanced_multimodal_processing(
+                messages, files, fusion_mode,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                top_p=top_p,
+                frequency_penalty=frequency_penalty,
+                presence_penalty=presence_penalty,
+                stop=stop,
+                **kwargs
+            )
+
+    async def _advanced_multimodal_processing(
+        self,
+        messages: List[Dict[str, str]],
+        files: List[Union[str, Path]],
+        fusion_mode: str,
+        **kwargs
+    ) -> str:
+        """Process files using advanced fusion engine"""
+
+        try:
+            from ..overlord.workflow.multimodal import ProcessingMode
+
+            # Convert files to MultiModalContent format
+            multimodal_content = await self._convert_files_to_content(files)
+
+            if multimodal_content is None:
+                # Fallback to basic processing if conversion failed
+                logger.warning("Failed to convert files to multimodal content, "
+                               "using basic processing")
+                return await self._legacy_chat_with_files(messages, files, **kwargs)
+
+            # Map fusion_mode to ProcessingMode
+            mode_mapping = {
+                "adaptive": ProcessingMode.ADAPTIVE,
+                "advanced": ProcessingMode.COMPREHENSIVE
+            }
+            processing_mode = mode_mapping.get(fusion_mode, ProcessingMode.ADAPTIVE)
+
+            # Extract user message for context
+            user_message = self._extract_user_message(messages)
+
+            # Process content with fusion engine
+            fusion_result = await self.fusion_engine.process_multimodal_content(
+                multimodal_content,
+                processing_mode=processing_mode,
+                fusion_options={
+                    "user_context": user_message,
+                    "conversation_history": messages[:-1] if len(messages) > 1 else []
+                }
+            )
+
+            # Convert fusion result to chat response
+            return await self._synthesize_chat_response(
+                fusion_result, user_message, **kwargs
+            )
+
+        except Exception as e:
+            logger.error(f"Error in advanced multimodal processing: {e}")
+            # Fallback to basic processing on any error
+            return await self._legacy_chat_with_files(messages, files, **kwargs)
+
+    async def _synthesize_chat_response(
+        self,
+        fusion_result,
+        user_message: str,
+        **kwargs
+    ) -> str:
+        """Convert fusion result to natural chat response"""
+
+        # Create synthesis prompt
+        synthesis_prompt = f"""
+Based on the following multimodal analysis, provide a natural response to the user's request.
+
+User Request: {user_message}
+
+Multimodal Analysis:
+{fusion_result.unified_analysis}
+
+Key Insights:
+{', '.join(fusion_result.insights)}
+
+Provide a helpful, conversational response that directly addresses what the user asked for.
+        """
+
+        # Use text-only chat for synthesis
+        synthesis_messages = [{"role": "user", "content": synthesis_prompt}]
+        return await self._text_chat(synthesis_messages, **kwargs)
+
+    async def _legacy_chat_with_files(
+        self,
+        messages: List[Dict[str, str]],
+        files: Optional[List[Union[str, Path]]],
+        **kwargs
+    ) -> str:
+        """Legacy file processing implementation for backward compatibility"""
 
         async def _chat_request():
             # Process files if provided
@@ -707,7 +928,7 @@ class LLM:
             params = {
                 "model": self.model_name,  # Use full model name with provider prefix
                 "messages": messages,
-                "temperature": temperature if temperature is not None else self.temperature,
+                "temperature": kwargs.get("temperature", self.temperature),
             }
 
             # Add files to parameters if processed
@@ -715,32 +936,27 @@ class LLM:
                 params["files"] = processed_files
 
             # Add optional parameters if provided
-            if max_tokens is not None:
-                params["max_tokens"] = max_tokens
-            elif self.max_tokens is not None:
-                params["max_tokens"] = self.max_tokens
-
-            if top_p is not None:
-                params["top_p"] = top_p
-
-            if frequency_penalty is not None:
-                params["frequency_penalty"] = frequency_penalty
-
-            if presence_penalty is not None:
-                params["presence_penalty"] = presence_penalty
-
-            if stop is not None:
-                params["stop"] = stop
+            for param_name in ["max_tokens", "top_p", "frequency_penalty",
+                             "presence_penalty", "stop"]:
+                if param_name in kwargs and kwargs[param_name] is not None:
+                    params[param_name] = kwargs[param_name]
+                elif param_name == "max_tokens" and self.max_tokens is not None:
+                    params["max_tokens"] = self.max_tokens
 
             # Add any additional kwargs
-            params.update(kwargs)
+            additional_kwargs = {
+                k: v for k, v in kwargs.items()
+                if k not in ["temperature", "max_tokens", "top_p",
+                            "frequency_penalty", "presence_penalty", "stop"]
+            }
+            params.update(additional_kwargs)
             params.update(self.additional_params)
 
             # Check cache first (but exclude files from cache key for security)
             cache_params = {k: v for k, v in params.items() if k != "files"}
             cache_key = _get_cache_key("chat", **cache_params)
 
-            # Only use cache if no files are attached (files should always be processed fresh)
+            # Only use cache if no files are attached
             if not files:
                 cached_response = _get_cached_response(cache_key)
                 if cached_response is not None:
