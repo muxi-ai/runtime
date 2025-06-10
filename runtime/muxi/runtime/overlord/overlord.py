@@ -1176,7 +1176,23 @@ class Overlord:
                 # Additional configuration fields
                 self.max_extraction_tokens = config_section.get("max_extraction_tokens", 500)
                 self.max_tool_calls = config_section.get("max_tool_calls", -1)
-                self.response_format = config_section.get("response_format", "markdown")
+
+                # Response configuration (required nested structure)
+                response_config = config_section.get("response", {})
+                self.response_format = response_config.get("format", "markdown")
+                self.use_interactive_elements = response_config.get("interactive_elements", True)
+
+                # Intelligence configuration
+                self.learn_user_preference = config_section.get("learn_user_preference", True)
+                self.adaptive_responses = config_section.get("adaptive_responses", True)
+
+                # Resilience configuration
+                self.circuit_breaker = config_section.get("circuit_breaker", True)
+                self.error_recovery = config_section.get("error_recovery", True)
+
+                # Workflow configuration
+                self.auto_decomposition = config_section.get("auto_decomposition", True)
+                self.plan_approval_threshold = config_section.get("plan_approval_threshold", 7)
 
                 # Initialize cache expiry tracking if TTL is configured
                 if self.routing_cache_ttl > 0:
@@ -1202,10 +1218,18 @@ class Overlord:
                             "system_message"
                         )
 
-                    # Default values for new config fields when using legacy format
+                    # Default values for overlord config
                     self.max_extraction_tokens = 500
                     self.max_tool_calls = -1
+                    # Response config is now required - these are fallback defaults
                     self.response_format = "markdown"
+                    self.use_interactive_elements = True
+                    self.learn_user_preference = True
+                    self.adaptive_responses = True
+                    self.circuit_breaker = True
+                    self.error_recovery = True
+                    self.auto_decomposition = True
+                    self.plan_approval_threshold = 7
 
                     # Initialize cache expiry tracking if TTL is configured
                     if self.routing_cache_ttl > 0:
@@ -1231,12 +1255,24 @@ class Overlord:
                     self.max_extraction_tokens = 500
                     self.max_tool_calls = -1
                     self.response_format = "markdown"
+                    self.use_interactive_elements = True
+                    self.learn_user_preference = True
+                    self.adaptive_responses = True
+                    self.circuit_breaker = True
+                    self.error_recovery = True
+                    self.auto_decomposition = True
+                    self.plan_approval_threshold = 7
                     self._routing_cache_expiry: Dict[str, float] = {}
 
             logger.info(
                 f"✅ Initialized overlord routing with cache_enabled={self.routing_cache_enabled}, "
-                f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens},"
-                f" max_tool_calls={self.max_tool_calls}, response_format={self.response_format}"
+                f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens}, "
+                f"max_tool_calls={self.max_tool_calls}, response_format={self.response_format}, "
+                f"interactive_elements={self.use_interactive_elements}, "
+                f"learn_user_preference={self.learn_user_preference}, "
+                f"adaptive_responses={self.adaptive_responses}, circuit_breaker={self.circuit_breaker}, "
+                f"error_recovery={self.error_recovery}, auto_decomposition={self.auto_decomposition}, "
+                f"plan_approval_threshold={self.plan_approval_threshold}"
             )
 
         except Exception as e:
@@ -1250,7 +1286,15 @@ class Overlord:
                 self.routing_persona = None
             self.max_extraction_tokens = 500
             self.max_tool_calls = -1
+            # Response config requires proper nested structure
             self.response_format = "markdown"
+            self.use_interactive_elements = True
+            self.learn_user_preference = True
+            self.adaptive_responses = True
+            self.circuit_breaker = True
+            self.error_recovery = True
+            self.auto_decomposition = True
+            self.plan_approval_threshold = 7
             self._routing_cache_expiry: Dict[str, float] = {}
 
     async def create_model(

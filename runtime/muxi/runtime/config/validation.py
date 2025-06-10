@@ -1588,17 +1588,70 @@ class FormationValidator:
             if not isinstance(calls, int) or (calls <= 0 and calls != -1):
                 self.result.add_error("max_tool_calls must be positive integer or -1")
 
-        # Validate response_format
+        # Validate response_format (no longer supported)
         if "response_format" in config:
-            format_val = config["response_format"]
-            if format_val not in ["markdown", "json", "text"]:
-                self.result.add_error(
-                    f"response_format '{format_val}' invalid. Valid: markdown, json, text"
-                )
+            self.result.add_error(
+                "Overlord 'response_format' is no longer supported. Use 'response.format' instead."
+            )
+
+        # Validate response configuration (required structure)
+        if "response" in config:
+            self._validate_overlord_response_config(config["response"])
+        else:
+            self.result.add_error("Overlord 'response' configuration is required")
+
+        # Validate intelligence configuration
+        if "learn_user_preference" in config:
+            if not isinstance(config["learn_user_preference"], bool):
+                self.result.add_error("learn_user_preference must be a boolean")
+
+        if "adaptive_responses" in config:
+            if not isinstance(config["adaptive_responses"], bool):
+                self.result.add_error("adaptive_responses must be a boolean")
+
+        # Validate resilience configuration
+        if "circuit_breaker" in config:
+            if not isinstance(config["circuit_breaker"], bool):
+                self.result.add_error("circuit_breaker must be a boolean")
+
+        if "error_recovery" in config:
+            if not isinstance(config["error_recovery"], bool):
+                self.result.add_error("error_recovery must be a boolean")
+
+        # Validate workflow configuration
+        if "auto_decomposition" in config:
+            if not isinstance(config["auto_decomposition"], bool):
+                self.result.add_error("auto_decomposition must be a boolean")
+
+        if "plan_approval_threshold" in config:
+            threshold = config["plan_approval_threshold"]
+            if not isinstance(threshold, int) or threshold < 1 or threshold > 10:
+                self.result.add_error("plan_approval_threshold must be an integer between 1 and 10")
 
         # Validate caching configuration
         if "caching" in config:
             self._validate_overlord_caching_config(config["caching"])
+
+    def _validate_overlord_response_config(self, response_config: Dict[str, Any]) -> None:
+        """Validate overlord response configuration."""
+        if not isinstance(response_config, dict):
+            self.result.add_error("Overlord response configuration must be a dictionary")
+            return
+
+        # Allow any additional fields users might want to add for overlord response configuration
+
+        # Validate format
+        if "format" in response_config:
+            format_val = response_config["format"]
+            if format_val not in ["markdown", "json", "text"]:
+                self.result.add_error(
+                    f"response.format '{format_val}' invalid. Valid: markdown, json, text"
+                )
+
+        # Validate interactive_elements
+        if "interactive_elements" in response_config:
+            if not isinstance(response_config["interactive_elements"], bool):
+                self.result.add_error("response.interactive_elements must be a boolean")
 
     def _validate_overlord_caching_config(self, caching_config: Dict[str, Any]) -> None:
         """Validate overlord caching configuration."""
