@@ -94,7 +94,7 @@ from ..memory.memobase import Memobase
 from ..llm import LLM
 from ..a2a.registry_client import A2ARegistryClient
 from ..a2a.formation_server import A2AFormationServer
-from ..a2a.models import AgentCard, A2ACapability, A2AAuthentication, AuthType
+# A2A models imported when needed
 from ..secrets import SecretsManager
 
 # Enhanced workflow capabilities
@@ -105,9 +105,6 @@ from .workflow import (
     ApprovalManager,
     ProgressTracker,
     Workflow,
-    WorkflowStatus,
-    ApprovalStatus,
-    RequestAnalysis,
 )
 
 # NEW: Import multimodal and synthesis components
@@ -136,15 +133,29 @@ from .parallel import ParallelWorkflowOptimizer
 from .intelligence import (
     UserPreferenceEngine,
     AdaptiveResponseGenerator,
-    UserPreferences,
-    ConversationContext,
-    AdaptedResponse
 )
 
 # NEW: Import Phase 4.1 resilience components
 from .resilience import (
     ResilientWorkflowManager,
     ResilienceConfig,
+)
+
+# Document Processing Components (Tasks 3.7-3.9)
+from .document_storage import (
+    DocumentChunkManager,
+    DocumentMetadataStore,
+    DocumentReferenceSystem,
+)
+from .document_experience import (
+    DocumentAcknowledgmentGenerator,
+    DocumentSummarizer,
+    DocumentErrorHandler,
+)
+from .document_workflow import (
+    DocumentWorkflowIntegrator,
+    DocumentCrossReferenceManager,
+    DocumentContextPreserver,
 )
 
 
@@ -437,6 +448,18 @@ class Overlord:
             self.progress_tracker.update_workflow_progress
         )
 
+        # NEW: Initialize document processing components (Tasks 3.7-3.9)
+        # These will be properly initialized after _apply_formation_config() is called
+        self.document_chunker: Optional[DocumentChunkManager] = None
+        self.document_metadata_store: Optional[DocumentMetadataStore] = None
+        self.document_reference_system: Optional[DocumentReferenceSystem] = None
+        self.document_acknowledger: Optional[DocumentAcknowledgmentGenerator] = None
+        self.document_summarizer: Optional[DocumentSummarizer] = None
+        self.document_error_handler: Optional[DocumentErrorHandler] = None
+        self.document_workflow_integrator: Optional[DocumentWorkflowIntegrator] = None
+        self.document_cross_referencer: Optional[DocumentCrossReferenceManager] = None
+        self.document_context_preserver: Optional[DocumentContextPreserver] = None
+
         logger.info("Enhanced Overlord initialized with workflow capabilities")
 
     async def start(self) -> None:
@@ -634,6 +657,9 @@ class Overlord:
 
         # Initialize document processing configuration
         await self._initialize_document_processing_config()
+
+        # Initialize document processing components
+        await self._initialize_document_components()
 
         # Create agents from configuration
         agents_config = config.get("agents", [])
@@ -898,6 +924,56 @@ class Overlord:
             # Fall back to default configuration
             from ..config.document_processing import DocumentProcessingConfig
             self.document_processing_config = DocumentProcessingConfig({})
+
+    async def _initialize_document_components(self) -> None:
+        """
+        Initialize document processing components based on configuration.
+
+        This initializes all document processing components from Tasks 3.7-3.9:
+        - Document Storage Foundation (3.7)
+        - Document User Experience (3.8)
+        - Document Workflow Integration (3.9)
+        """
+        try:
+            # Only initialize if document processing is enabled
+            if not hasattr(self, 'document_processing_config') or not self.document_processing_config.is_enabled():
+                logger.info("Document processing not enabled, skipping component initialization")
+                return
+
+            logger.info("Initializing document processing components...")
+
+            # Subtask 3.7: Document Storage Foundation Layer
+            self.document_chunker = DocumentChunkManager()
+            self.document_metadata_store = DocumentMetadataStore()
+            self.document_reference_system = DocumentReferenceSystem()
+
+            # Subtask 3.8: Document User Experience Layer
+            # Get the persona manager for acknowledgments
+            persona_manager = getattr(self, 'persona_manager', None)
+            self.document_acknowledger = DocumentAcknowledgmentGenerator(persona_manager)
+            self.document_summarizer = DocumentSummarizer()
+            self.document_error_handler = DocumentErrorHandler()
+
+            # Subtask 3.9: Document Workflow Integration Layer
+            workflow_manager = getattr(self, 'workflow_executor', None)
+            self.document_workflow_integrator = DocumentWorkflowIntegrator(workflow_manager)
+            self.document_cross_referencer = DocumentCrossReferenceManager()
+            self.document_context_preserver = DocumentContextPreserver()
+
+            logger.info("✅ Document processing components initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize document processing components: {e}")
+            # Set all components to None on failure
+            self.document_chunker = None
+            self.document_metadata_store = None
+            self.document_reference_system = None
+            self.document_acknowledger = None
+            self.document_summarizer = None
+            self.document_error_handler = None
+            self.document_workflow_integrator = None
+            self.document_cross_referencer = None
+            self.document_context_preserver = None
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
@@ -2818,6 +2894,303 @@ class Overlord:
             else:
                 # For non-user messages, just store directly
                 await self.long_term_memory.add(content=content, metadata=metadata, user_id=user_id)
+
+    # ===================================================================
+    # DOCUMENT PROCESSING ORCHESTRATION (Tasks 3.7-3.9)
+    # ===================================================================
+
+    async def process_document_upload(
+        self,
+        attachments: List[Dict[str, Any]],
+        user_request: str,
+        context: Optional[Dict[str, Any]] = None,
+        user_id: Optional[int] = None,
+    ) -> str:
+        """
+        Enhanced document processing with full workflow integration.
+
+        This is the main orchestration method that coordinates all document processing
+        components through the three phases defined in the implementation plan:
+
+        Phase 1: Document Storage Foundation (Task 3.7)
+        - Parse and chunk documents using DocumentChunkManager
+        - Store in enhanced buffer memory with DocumentAwareBufferMemory
+        - Index for semantic search with DocumentSemanticIndex
+
+        Phase 2: Document User Experience (Task 3.8)
+        - Generate persona-consistent acknowledgments
+        - Provide document summaries and error handling
+
+        Phase 3: Document Workflow Integration (Task 3.9)
+        - Create document-enhanced workflows
+        - Execute with document context and cross-references
+        - Generate final response with proper citations
+
+        Args:
+            attachments: List of attachment dictionaries containing:
+                - filename: Name of the uploaded file
+                - content: File content (text or bytes)
+                - content_type: MIME type of the file
+                - size: File size in bytes
+            user_request: User's request/question about the documents
+            context: Optional conversation context
+            user_id: Optional user ID for multi-user support
+
+        Returns:
+            Final response string with document processing results,
+            acknowledgments, and any generated insights or workflow results.
+        """
+        try:
+            # Check if document processing is enabled
+            if not self._is_document_processing_available():
+                return self._generate_document_unavailable_message()
+
+            logger.info(f"Processing {len(attachments)} document(s) for user request: {user_request[:100]}...")
+
+            # Phase 1: Document Storage Foundation (Task 3.7)
+            processed_docs = await self._process_document_storage_phase(
+                attachments, user_id, context
+            )
+
+            # Phase 2: Document User Experience (Task 3.8)
+            acknowledgment = await self._process_document_experience_phase(
+                processed_docs, user_request, context
+            )
+
+            # Phase 3: Document Workflow Integration (Task 3.9)
+            if self._requires_document_workflow(user_request):
+                workflow_result = await self._process_document_workflow_phase(
+                    processed_docs, user_request, context
+                )
+
+                # Generate final response with citations
+                final_response = await self._generate_final_document_response(
+                    acknowledgment, workflow_result, processed_docs
+                )
+                return final_response
+            else:
+                # Simple case - just return acknowledgment
+                return acknowledgment
+
+        except Exception as e:
+            logger.error(f"Error in document processing: {e}")
+            if self.document_error_handler:
+                return await self.document_error_handler.handle_document_error(
+                    e, "document_upload", context or {}
+                )
+            else:
+                return f"I encountered an error processing your documents: {str(e)}"
+
+    async def _process_document_storage_phase(
+        self,
+        attachments: List[Dict[str, Any]],
+        user_id: Optional[int],
+        context: Optional[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        Phase 1: Document Storage Foundation (Task 3.7)
+
+        Process and store documents with intelligent chunking and indexing.
+        """
+        processed_docs = []
+
+        for attachment in attachments:
+            try:
+                filename = attachment.get("filename", "unknown")
+                content = attachment.get("content", "")
+
+                logger.info(f"Processing document: {filename}")
+
+                # Chunk the document using adaptive strategies
+                if self.document_chunker:
+                    chunks = await self.document_chunker.chunk_document(
+                        content=content,
+                        filename=filename,
+                        strategy="adaptive"
+                    )
+                else:
+                    # Fallback simple chunking
+                    chunks = [{"content": content, "metadata": {"filename": filename}}]
+
+                # Store metadata
+                doc_metadata = {
+                    "filename": filename,
+                    "upload_time": time.time(),
+                    "user_id": user_id,
+                    "chunk_count": len(chunks),
+                    "original_size": len(content)
+                }
+
+                if self.document_metadata_store:
+                    doc_id = await self.document_metadata_store.store_document_metadata(
+                        filename, doc_metadata
+                    )
+                else:
+                    doc_id = f"doc_{int(time.time())}"
+
+                # Store in buffer memory with enhanced metadata
+                for i, chunk in enumerate(chunks):
+                    chunk_metadata = {
+                        **doc_metadata,
+                        "chunk_index": i,
+                        "doc_id": doc_id,
+                        "role": "document",
+                        "timestamp": time.time()
+                    }
+
+                    await self.add_to_buffer_memory(
+                        message=chunk.get("content", ""),
+                        metadata=chunk_metadata
+                    )
+
+                # Add to processed docs list
+                processed_docs.append({
+                    "doc_id": doc_id,
+                    "filename": filename,
+                    "chunks": len(chunks),
+                    "metadata": doc_metadata
+                })
+
+                logger.info(f"✅ Processed {filename}: {len(chunks)} chunks")
+
+            except Exception as e:
+                logger.error(f"Error processing document {attachment.get('filename', 'unknown')}: {e}")
+                continue
+
+        return processed_docs
+
+    async def _process_document_experience_phase(
+        self,
+        processed_docs: List[Dict[str, Any]],
+        user_request: str,
+        context: Optional[Dict[str, Any]],
+    ) -> str:
+        """
+        Phase 2: Document User Experience (Task 3.8)
+
+        Generate persona-consistent acknowledgments and summaries.
+        """
+        try:
+            if self.document_acknowledger:
+                # Generate acknowledgment using the component
+                doc_list = [(doc["doc_id"], doc["filename"]) for doc in processed_docs]
+                acknowledgment = await self.document_acknowledger.generate_document_acknowledgment(
+                    processed_docs=doc_list,
+                    user_request=user_request,
+                    context=context or {}
+                )
+            else:
+                # Fallback acknowledgment
+                file_list = [doc["filename"] for doc in processed_docs]
+                file_names = ", ".join(file_list)
+                acknowledgment = f"I've successfully processed your document(s): {file_names}. "
+
+                if user_request:
+                    acknowledgment += f"Now I can help you with: {user_request}"
+
+            return acknowledgment
+
+        except Exception as e:
+            logger.error(f"Error in document experience phase: {e}")
+            return f"I've processed your documents, though I encountered some issues with the acknowledgment generation."
+
+    async def _process_document_workflow_phase(
+        self,
+        processed_docs: List[Dict[str, Any]],
+        user_request: str,
+        context: Optional[Dict[str, Any]],
+    ) -> str:
+        """
+        Phase 3: Document Workflow Integration (Task 3.9)
+
+        Create and execute document-enhanced workflows.
+        """
+        try:
+            if self.document_workflow_integrator:
+                # Create document-based workflow
+                doc_ids = [doc["doc_id"] for doc in processed_docs]
+                workflow_result = await self.document_workflow_integrator.create_document_based_workflow(
+                    documents=doc_ids,
+                    user_request=user_request,
+                    context=context or {}
+                )
+                return workflow_result
+            else:
+                # Fallback: simple memory search and response
+                search_results = await self.search_memory(
+                    query=user_request,
+                    k=5,
+                    use_long_term=False  # Search only buffer memory with documents
+                )
+
+                if search_results:
+                    relevant_content = "\n".join([r["text"] for r in search_results[:3]])
+                    return f"Based on the uploaded documents:\n\n{relevant_content}"
+                else:
+                    return "I've processed your documents but couldn't find specific information related to your request."
+
+        except Exception as e:
+            logger.error(f"Error in document workflow phase: {e}")
+            return "I processed your documents but encountered an issue generating the workflow response."
+
+    async def _generate_final_document_response(
+        self,
+        acknowledgment: str,
+        workflow_result: str,
+        processed_docs: List[Dict[str, Any]]
+    ) -> str:
+        """
+        Generate the final response with proper citations and formatting.
+        """
+        try:
+            if self.document_cross_referencer:
+                # Add citations to the workflow result
+                source_docs = [doc["filename"] for doc in processed_docs]
+                cited_response = await self.document_cross_referencer.generate_citation_context(
+                    content=workflow_result,
+                    document_sources=source_docs
+                )
+                return f"{acknowledgment}\n\n{cited_response}"
+            else:
+                # Simple concatenation
+                source_list = ", ".join([doc["filename"] for doc in processed_docs])
+                return f"{acknowledgment}\n\n{workflow_result}\n\n*Sources: {source_list}*"
+
+        except Exception as e:
+            logger.error(f"Error generating final response: {e}")
+            return f"{acknowledgment}\n\n{workflow_result}"
+
+    def _is_document_processing_available(self) -> bool:
+        """Check if document processing components are available and enabled."""
+        return (
+            hasattr(self, 'document_processing_config') and
+            self.document_processing_config and
+            self.document_processing_config.is_enabled()
+        )
+
+    def _generate_document_unavailable_message(self) -> str:
+        """Generate a message when document processing is not available."""
+        return (
+            "Document processing is not currently enabled in this formation. "
+            "To enable document processing, please configure a documents model "
+            "in your formation's LLM configuration."
+        )
+
+    def _requires_document_workflow(self, user_request: str) -> bool:
+        """
+        Determine if the user request requires complex workflow processing.
+
+        Simple heuristic to determine if we should use workflow integration
+        or just return a basic acknowledgment.
+        """
+        # Keywords that suggest the user wants to do something with the documents
+        workflow_keywords = [
+            "analyze", "summarize", "compare", "extract", "find", "search",
+            "explain", "tell me", "what", "how", "why", "research", "review"
+        ]
+
+        user_request_lower = user_request.lower()
+        return any(keyword in user_request_lower for keyword in workflow_keywords)
 
     def _generate_api_key(self, key_type: str) -> str:
         """
