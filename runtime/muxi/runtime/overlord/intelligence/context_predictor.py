@@ -294,7 +294,7 @@ class ContextPredictor:
                 preference_type=PreferenceType.DETAIL_LEVEL,
                 value="brief",
                 confidence=ConfidenceScore(value=0.9, data_points=1, recency=1.0, consistency=0.95),
-                context_conditions={"urgency": "high"},
+                context_conditions={"urgency": context.urgency},
                 prediction_method="urgency_based",
                 timestamp=current_time
             ))
@@ -303,7 +303,7 @@ class ContextPredictor:
                 preference_type=PreferenceType.INTERACTION_PACE,
                 value="immediate",
                 confidence=ConfidenceScore(value=0.95, data_points=1, recency=1.0, consistency=0.98),
-                context_conditions={"urgency": "high"},
+                context_conditions={"urgency": context.urgency},
                 prediction_method="urgency_based",
                 timestamp=current_time
             ))
@@ -312,7 +312,7 @@ class ContextPredictor:
                 preference_type=PreferenceType.RESPONSE_FORMAT,
                 value="numbered",
                 confidence=ConfidenceScore(value=0.8, data_points=1, recency=1.0, consistency=0.85),
-                context_conditions={"urgency": "high"},
+                context_conditions={"urgency": context.urgency},
                 prediction_method="urgency_based",
                 timestamp=current_time
             ))

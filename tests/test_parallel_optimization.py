@@ -6,6 +6,7 @@ dependency analysis, resource allocation, bottleneck detection, and execution.
 """
 
 import asyncio
+import pytest
 from typing import Dict, List, Any
 
 # Import the parallel optimization components
@@ -26,6 +27,7 @@ from runtime.muxi.runtime.overlord.parallel.types import (
 class TestParallelOptimization:
     """Test suite for parallel workflow optimization."""
 
+    @pytest.fixture
     async def sample_workflow(self) -> Dict[str, Any]:
         """Create a sample workflow for testing."""
         return {
@@ -62,6 +64,7 @@ class TestParallelOptimization:
             },
         }
 
+    @pytest.fixture
     async def sample_agents(self) -> List[AgentCapability]:
         """Create sample agent capabilities for testing."""
         return [
@@ -95,10 +98,12 @@ class TestParallelOptimization:
             ),
         ]
 
+    @pytest.fixture
     def optimizer(self) -> ParallelWorkflowOptimizer:
         """Create a parallel workflow optimizer for testing."""
         return ParallelWorkflowOptimizer(sensitivity_threshold=0.5)
 
+    @pytest.mark.asyncio
     async def test_dependency_analysis(self, sample_workflow):
         """Test dependency analysis functionality."""
         print("\n🧪 Testing Dependency Analysis")
@@ -135,6 +140,7 @@ class TestParallelOptimization:
 
         print("✅ Dependency Analysis: All tests passed")
 
+    @pytest.mark.asyncio
     async def test_resource_allocation(self, sample_workflow, sample_agents):
         """Test resource allocation optimization."""
         print("\n🧪 Testing Resource Allocation")
@@ -171,6 +177,7 @@ class TestParallelOptimization:
 
         print("✅ Resource Allocation: All tests passed")
 
+    @pytest.mark.asyncio
     async def test_bottleneck_detection(self, sample_workflow, sample_agents):
         """Test bottleneck detection."""
         print("\n🧪 Testing Bottleneck Detection")
@@ -205,6 +212,7 @@ class TestParallelOptimization:
 
         print("✅ Bottleneck Detection: All tests passed")
 
+    @pytest.mark.asyncio
     async def test_end_to_end_optimization(self, optimizer, sample_workflow, sample_agents):
         """Test complete end-to-end optimization pipeline."""
         print("\n🧪 Testing End-to-End Optimization")
@@ -231,6 +239,7 @@ class TestParallelOptimization:
 
         print("✅ End-to-End Optimization: All tests passed")
 
+    @pytest.mark.asyncio
     async def test_parallel_execution_simulation(self, optimizer, sample_workflow, sample_agents):
         """Test parallel execution with a mock executor."""
         print("\n🧪 Testing Parallel Execution Simulation")
@@ -274,6 +283,7 @@ class TestParallelOptimization:
 
         print("✅ Parallel Execution Simulation: All tests passed")
 
+    @pytest.mark.asyncio
     async def test_optimization_recommendations(self, optimizer, sample_workflow):
         """Test optimization recommendations."""
         print("\n🧪 Testing Optimization Recommendations")
@@ -289,6 +299,7 @@ class TestParallelOptimization:
 
         print("✅ Optimization Recommendations: All tests passed")
 
+    @pytest.mark.asyncio
     async def test_error_handling(self, optimizer):
         """Test error handling in optimization pipeline."""
         print("\n🧪 Testing Error Handling")
