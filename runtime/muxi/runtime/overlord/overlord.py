@@ -863,36 +863,35 @@ class Overlord:
 
     async def _initialize_document_processing_config(self) -> None:
         """
-        Initialize document processing configuration from formation config.
+        Initialize document processing configuration from LLM models in formation config.
 
-        This processes the document_processing configuration and stores it
-        for use by document-related components, replacing environment variable usage.
+        This processes the unified document configuration from llm.models.documents.settings
+        for use by document-related components.
         """
-        doc_config = self.formation_config.get("document_processing", {})
-
-        if not doc_config:
-            logger.debug("No document processing configuration found in formation")
-            # Set up default configuration
-            from ..config.document_processing import DocumentProcessingConfig
-            self.document_processing_config = DocumentProcessingConfig({})
-            return
-
         try:
             # Import the document processing config module
             from ..config.document_processing import DocumentProcessingConfig
 
-            # Create document processing configuration instance
-            self.document_processing_config = DocumentProcessingConfig(doc_config)
+            # Extract LLM configuration from formation
+            llm_config = self.formation_config.get("llm", {})
+
+            # Create document processing configuration instance using unified schema
+            self.document_processing_config = DocumentProcessingConfig(llm_config)
 
             # Log the configuration details
             enabled = self.document_processing_config.is_enabled()
-            chunk_size = self.document_processing_config.get_chunk_size()
-            max_file_size = self.document_processing_config.get_max_file_size_mb()
+            if enabled:
+                chunk_size = self.document_processing_config.get_chunk_size()
+                max_file_size = self.document_processing_config.get_max_file_size_mb()
+                strategy = self.document_processing_config.get_extraction_strategy()
 
-            logger.info(
-                f"✅ Initialized document processing configuration "
-                f"(enabled={enabled}, chunk_size={chunk_size}, max_file_size={max_file_size}MB)"
-            )
+                logger.info(
+                    f"✅ Initialized document processing configuration "
+                    f"(enabled={enabled}, chunk_size={chunk_size}, max_file_size={max_file_size}MB, "
+                    f"strategy={strategy})"
+                )
+            else:
+                logger.info("✅ Document processing not configured (no documents model found)")
 
         except Exception as e:
             logger.error(f"Failed to initialize document processing configuration: {e}")

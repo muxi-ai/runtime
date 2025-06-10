@@ -1,101 +1,109 @@
 """Document processing configuration for MUXI runtime."""
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentProcessingConfig:
-    """Document processing configuration manager."""
+    """Document processing configuration manager for unified LLM model schema."""
 
-    def __init__(self, document_processing_config: Dict[str, Any]):
-        """Initialize document processing configuration."""
-        self.config = document_processing_config or {}
+    def __init__(self, llm_config: Dict[str, Any]):
+        """Initialize document processing configuration from LLM models.
+
+        Args:
+            llm_config: Full LLM configuration dictionary containing models
+        """
+        self.config, self._documents_model_found = self._extract_document_config(llm_config)
         self._apply_defaults()
+
+    def _extract_document_config(self, llm_config: Dict[str, Any]) -> Tuple[Dict[str, Any], bool]:
+        """Extract document processing config from LLM models configuration.
+
+        Returns:
+            Tuple of (config_dict, documents_model_found)
+        """
+        models = llm_config.get("models", [])
+
+        # Find the documents model configuration
+        for model in models:
+            if "documents" in model:
+                settings = model.get("settings", {})
+                logger.debug(f"Found document model settings: {settings}")
+                return settings, True
+
+        logger.debug("No document model configuration found, using defaults")
+        return {}, False
 
     def _apply_defaults(self) -> None:
         """Apply default values for missing configuration."""
-        # General configuration defaults
-        if "enabled" not in self.config:
-            self.config["enabled"] = True
+        # Extraction configuration defaults
+        if "extraction" not in self.config:
+            self.config["extraction"] = {}
 
-        # Chunking configuration defaults
-        if "chunking" not in self.config:
-            self.config["chunking"] = {}
+        extraction = self.config["extraction"]
 
-        chunking_defaults = {
-            "default_size": 1000,
-            "overlap": 100,
-            "strategies": ["adaptive", "semantic", "fixed", "paragraph"]
-        }
+        # Core extraction settings
+        extraction.setdefault("chunk_size", 1000)
+        extraction.setdefault("overlap", 100)
+        extraction.setdefault("strategy", "adaptive")
 
-        for key, default_value in chunking_defaults.items():
-            if key not in self.config["chunking"]:
-                self.config["chunking"][key] = default_value
+        # NLP configuration defaults
+        if "nlp" not in extraction:
+            extraction["nlp"] = {}
 
-        # Files configuration defaults
-        if "files" not in self.config:
-            self.config["files"] = {}
+        nlp = extraction["nlp"]
+        nlp.setdefault("data_path", "~/nlp_data")
+        # These are intentionally commented in the schema - only set if explicitly provided
+        # nlp.setdefault("spacy_model", "en_core_web_sm")
+        # nlp.setdefault("sentence_transformer", "all-MiniLM-L6-v2")
 
-        files_defaults = {
-            "max_size_mb": 50,
-            "cache_ttl_seconds": 3600
-        }
-
-        for key, default_value in files_defaults.items():
-            if key not in self.config["files"]:
-                self.config["files"][key] = default_value
-
-        # Models configuration defaults
-        if "models" not in self.config:
-            self.config["models"] = {}
-
-        models_defaults = {
-            "nltk_data_path": "~/nltk_data",
-            "spacy_model": "en_core_web_sm",
-            "sentence_transformer": "all-MiniLM-L6-v2"
-        }
-
-        for key, default_value in models_defaults.items():
-            if key not in self.config["models"]:
-                self.config["models"][key] = default_value
+        # File processing defaults
+        self.config.setdefault("max_size_mb", 20)
+        self.config.setdefault("cache_ttl_seconds", 3600)
 
     def is_enabled(self) -> bool:
         """Check if document processing is enabled."""
-        return self.config.get("enabled", True)
+        # Document processing is enabled if documents model is configured
+        return self._documents_model_found
 
     def get_chunk_size(self) -> int:
         """Get default chunk size for document processing."""
-        return self.config["chunking"]["default_size"]
+        return self.config["extraction"]["chunk_size"]
 
     def get_chunk_overlap(self) -> int:
         """Get chunk overlap for document processing."""
-        return self.config["chunking"]["overlap"]
+        return self.config["extraction"]["overlap"]
+
+    def get_extraction_strategy(self) -> str:
+        """Get the extraction strategy."""
+        return self.config["extraction"]["strategy"]
 
     def get_chunking_strategies(self) -> List[str]:
         """Get available chunking strategies."""
-        return self.config["chunking"]["strategies"]
+        # Return common strategies since this is typically used for validation
+        return ["adaptive", "semantic", "fixed", "paragraph"]
 
     def get_max_file_size_mb(self) -> int:
         """Get maximum file size in MB."""
-        return self.config["files"]["max_size_mb"]
+        return self.config["max_size_mb"]
 
     def get_cache_ttl_seconds(self) -> int:
         """Get cache TTL in seconds."""
-        return self.config["files"]["cache_ttl_seconds"]
+        return self.config["cache_ttl_seconds"]
 
-    def get_nltk_data_path(self) -> str:
-        """Get NLTK data path."""
-        return self.config["models"]["nltk_data_path"]
+    def get_nlp_data_path(self) -> str:
+        """Get NLP data path."""
+        return self.config["extraction"]["nlp"]["data_path"]
 
     def get_spacy_model(self) -> str:
-        """Get spaCy model name."""
-        return self.config["models"]["spacy_model"]
+        """Get spaCy model name if explicitly configured."""
+        return self.config["extraction"]["nlp"].get("spacy_model", "en_core_web_sm")
 
     def get_sentence_transformer_model(self) -> str:
-        """Get sentence transformer model name."""
-        return self.config["models"]["sentence_transformer"]
+        """Get sentence transformer model name if explicitly configured."""
+        return self.config["extraction"]["nlp"].get("sentence_transformer", "all-MiniLM-L6-v2")
 
     def get_max_file_size_bytes(self) -> int:
         """Get maximum file size in bytes."""

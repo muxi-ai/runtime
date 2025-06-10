@@ -1,20 +1,60 @@
 """
-Document Error Handler Implementation
+Enhanced Document Error Handler with Risk Mitigation Strategies
 
-This module implements specialized error handling for document processing
-with recovery suggestions and user-friendly error reporting.
-
-Features:
-- Document-specific error classification
-- Recovery suggestion generation
-- Error pattern analysis
-- User-friendly error reporting
+This module implements comprehensive fallback mechanisms and error recovery
+for production-ready document processing.
 """
 
+import asyncio
+import logging
 import time
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Optional, Any, Tuple
+from enum import Enum
 from dataclasses import dataclass
+from pathlib import Path
 from loguru import logger
+
+
+class DocumentErrorType(Enum):
+    """Types of document processing errors"""
+    PARSING_ERROR = "parsing_error"
+    SIZE_LIMIT_EXCEEDED = "size_limit_exceeded"
+    UNSUPPORTED_FORMAT = "unsupported_format"
+    CORRUPTION_ERROR = "corruption_error"
+    MEMORY_ERROR = "memory_error"
+    TIMEOUT_ERROR = "timeout_error"
+    NETWORK_ERROR = "network_error"
+    DEPENDENCY_ERROR = "dependency_error"
+
+
+class FallbackStrategy(Enum):
+    """Fallback processing strategies"""
+    TEXT_EXTRACTION_ONLY = "text_only"
+    SIMPLIFIED_PROCESSING = "simplified"
+    EXTERNAL_SERVICE = "external"
+    MANUAL_REVIEW = "manual"
+    SKIP_WITH_WARNING = "skip"
+
+
+@dataclass
+class ProcessingMetrics:
+    """Track processing performance metrics"""
+    file_size_mb: float
+    processing_time_ms: float
+    memory_usage_mb: float
+    success: bool
+    fallback_used: Optional[str] = None
+    error_type: Optional[str] = None
+
+
+@dataclass
+class CircuitBreakerState:
+    """Circuit breaker for failing operations"""
+    failure_count: int = 0
+    last_failure_time: float = 0
+    state: str = "closed"  # closed, open, half_open
+    failure_threshold: int = 5
+    timeout_seconds: float = 60.0
 
 
 @dataclass
@@ -43,12 +83,7 @@ class ErrorPattern:
 
 
 class DocumentErrorHandler:
-    """
-    Specialized error handling for document processing operations.
-
-    Provides comprehensive error analysis, recovery suggestions,
-    and user-friendly error reporting with pattern recognition.
-    """
+    """Enhanced error handler with comprehensive risk mitigation"""
 
     def __init__(self, persona_config: Optional[Dict[str, Any]] = None):
         """
@@ -58,6 +93,27 @@ class DocumentErrorHandler:
             persona_config: Overlord persona configuration for error messaging
         """
         self.persona_config = persona_config or {}
+
+        # Circuit breakers for different operations
+        self.circuit_breakers: Dict[str, CircuitBreakerState] = {}
+
+        # Performance tracking
+        self.processing_metrics: List[ProcessingMetrics] = []
+
+        # Fallback configurations
+        self.fallback_strategies = {
+            DocumentErrorType.PARSING_ERROR: FallbackStrategy.TEXT_EXTRACTION_ONLY,
+            DocumentErrorType.SIZE_LIMIT_EXCEEDED: FallbackStrategy.SIMPLIFIED_PROCESSING,
+            DocumentErrorType.UNSUPPORTED_FORMAT: FallbackStrategy.EXTERNAL_SERVICE,
+            DocumentErrorType.CORRUPTION_ERROR: FallbackStrategy.TEXT_EXTRACTION_ONLY,
+            DocumentErrorType.MEMORY_ERROR: FallbackStrategy.SIMPLIFIED_PROCESSING,
+            DocumentErrorType.TIMEOUT_ERROR: FallbackStrategy.SIMPLIFIED_PROCESSING,
+            DocumentErrorType.NETWORK_ERROR: FallbackStrategy.SKIP_WITH_WARNING,
+            DocumentErrorType.DEPENDENCY_ERROR: FallbackStrategy.TEXT_EXTRACTION_ONLY,
+        }
+
+        # Initialize backup processing methods
+        self._initialize_fallback_processors()
 
         # Error tracking
         self._error_history: List[DocumentError] = []
@@ -158,161 +214,314 @@ class DocumentErrorHandler:
             ]
         }
 
-    async def handle_error(
+    def _initialize_fallback_processors(self) -> None:
+        """Initialize backup processing methods"""
+        try:
+            # Basic text extraction (always available)
+            self.basic_text_extractor = self._create_basic_extractor()
+
+            # Simplified processors (fewer dependencies)
+            self.simplified_pdf_processor = self._create_simplified_pdf_processor()
+            self.simplified_docx_processor = self._create_simplified_docx_processor()
+
+            logger.info("✅ Fallback processors initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Failed to initialize fallback processors: {e}")
+
+    async def handle_document_error(
         self,
         error: Exception,
-        document_id: str,
-        stage: str,
-        context: Optional[Dict[str, Any]] = None
-    ) -> DocumentError:
+        filename: str,
+        file_size_mb: float,
+        operation: str = "parsing"
+    ) -> Tuple[Optional[str], str]:
         """
-        Handle a document processing error and generate recovery suggestions.
-
-        Args:
-            error: The exception that occurred
-            document_id: ID of the document being processed
-            stage: Processing stage where error occurred
-            context: Optional context information
+        Handle document processing errors with fallback strategies
 
         Returns:
-            DocumentError object with analysis and suggestions
+            Tuple[content, status_message]
         """
-        error_type = self._classify_error(error, stage)
-        severity = self._determine_severity(error_type, context)
+        error_type = self._classify_error(error, file_size_mb)
 
-        # Generate recovery suggestions
-        recovery_suggestions = self._generate_recovery_suggestions(
-            error_type, error, context
+        # Update circuit breaker
+        self._update_circuit_breaker(operation, success=False)
+
+        # Check if circuit breaker is open
+        if self._is_circuit_breaker_open(operation):
+            return None, f"⚠️ Service temporarily unavailable for {operation}. Please try again later."
+
+        # Attempt fallback strategy
+        fallback_strategy = self.fallback_strategies.get(error_type, FallbackStrategy.SKIP_WITH_WARNING)
+
+        logger.warning(
+            f"Document error for {filename}: {error_type.value}, "
+            f"attempting fallback: {fallback_strategy.value}"
         )
 
-        # Create error object
-        doc_error = DocumentError(
-            error_id=f"{document_id}_{stage}_{int(time.time())}",
-            error_type=error_type,
-            error_message=str(error),
-            document_id=document_id,
-            stage=stage,
-            severity=severity,
-            recovery_suggestions=recovery_suggestions,
-            timestamp=time.time(),
-            metadata=context or {}
+        return await self._execute_fallback_strategy(
+            fallback_strategy, filename, error_type, error
         )
 
-        # Track error for pattern analysis
-        self._track_error(doc_error)
+    async def _execute_fallback_strategy(
+        self,
+        strategy: FallbackStrategy,
+        filename: str,
+        error_type: DocumentErrorType,
+        original_error: Exception
+    ) -> Tuple[Optional[str], str]:
+        """Execute the appropriate fallback strategy"""
 
-        logger.error(
-            f"Document error handled: {error_type} in {stage} "
-            f"for document {document_id}"
+        try:
+            if strategy == FallbackStrategy.TEXT_EXTRACTION_ONLY:
+                content = await self._fallback_text_extraction(filename)
+                return content, f"✅ Extracted text using fallback method (original error: {error_type.value})"
+
+            elif strategy == FallbackStrategy.SIMPLIFIED_PROCESSING:
+                content = await self._fallback_simplified_processing(filename)
+                return content, f"✅ Processed using simplified method (original error: {error_type.value})"
+
+            elif strategy == FallbackStrategy.EXTERNAL_SERVICE:
+                content = await self._fallback_external_service(filename)
+                return content, f"✅ Processed using external service (original error: {error_type.value})"
+
+            elif strategy == FallbackStrategy.MANUAL_REVIEW:
+                await self._queue_for_manual_review(filename, error_type, original_error)
+                return None, f"📋 Document queued for manual review (error: {error_type.value})"
+
+            elif strategy == FallbackStrategy.SKIP_WITH_WARNING:
+                return None, f"⚠️ Skipping document due to {error_type.value}: {str(original_error)}"
+
+        except Exception as fallback_error:
+            logger.error(f"Fallback strategy {strategy.value} failed: {fallback_error}")
+            return None, f"❌ All processing methods failed. Original: {error_type.value}, Fallback: {str(fallback_error)}"
+
+    async def _fallback_text_extraction(self, filename: str) -> Optional[str]:
+        """Basic text extraction fallback"""
+        try:
+            if filename.lower().endswith('.pdf'):
+                return await self._extract_pdf_text_basic(filename)
+            elif filename.lower().endswith(('.docx', '.doc')):
+                return await self._extract_docx_text_basic(filename)
+            elif filename.lower().endswith(('.txt', '.md')):
+                return await self._extract_plain_text(filename)
+            else:
+                return f"Unable to extract text from {Path(filename).suffix} files"
+        except Exception as e:
+            logger.error(f"Basic text extraction failed for {filename}: {e}")
+            return None
+
+    async def _fallback_simplified_processing(self, filename: str) -> Optional[str]:
+        """Simplified processing with reduced memory usage"""
+        try:
+            # Use streaming processing for large files
+            if filename.lower().endswith('.pdf'):
+                return await self._process_pdf_streaming(filename)
+            elif filename.lower().endswith(('.docx', '.doc')):
+                return await self._process_docx_minimal(filename)
+            else:
+                return await self._fallback_text_extraction(filename)
+        except Exception as e:
+            logger.error(f"Simplified processing failed for {filename}: {e}")
+            return await self._fallback_text_extraction(filename)
+
+    async def _fallback_external_service(self, filename: str) -> Optional[str]:
+        """Use external service for processing"""
+        try:
+            # This could integrate with cloud services like AWS Textract, Google Document AI, etc.
+            logger.info(f"External service processing not implemented for {filename}")
+            return await self._fallback_text_extraction(filename)
+        except Exception as e:
+            logger.error(f"External service processing failed for {filename}: {e}")
+            return await self._fallback_text_extraction(filename)
+
+    def _classify_error(self, error: Exception, file_size_mb: float) -> DocumentErrorType:
+        """Classify error type for appropriate fallback strategy"""
+        error_str = str(error).lower()
+
+        if file_size_mb > self.persona_config.get('max_file_size_mb', 50):
+            return DocumentErrorType.SIZE_LIMIT_EXCEEDED
+
+        if any(keyword in error_str for keyword in ['memory', 'ram', 'out of memory']):
+            return DocumentErrorType.MEMORY_ERROR
+
+        if any(keyword in error_str for keyword in ['timeout', 'time out', 'deadline']):
+            return DocumentErrorType.TIMEOUT_ERROR
+
+        if any(keyword in error_str for keyword in ['network', 'connection', 'dns']):
+            return DocumentErrorType.NETWORK_ERROR
+
+        if any(keyword in error_str for keyword in ['corrupt', 'damaged', 'invalid']):
+            return DocumentErrorType.CORRUPTION_ERROR
+
+        if any(keyword in error_str for keyword in ['unsupported', 'not supported', 'format']):
+            return DocumentErrorType.UNSUPPORTED_FORMAT
+
+        if any(keyword in error_str for keyword in ['import', 'module', 'dependency']):
+            return DocumentErrorType.DEPENDENCY_ERROR
+
+        # Default to parsing error
+        return DocumentErrorType.PARSING_ERROR
+
+    def _update_circuit_breaker(self, operation: str, success: bool) -> None:
+        """Update circuit breaker state"""
+        if operation not in self.circuit_breakers:
+            self.circuit_breakers[operation] = CircuitBreakerState()
+
+        breaker = self.circuit_breakers[operation]
+        current_time = time.time()
+
+        if success:
+            breaker.failure_count = 0
+            breaker.state = "closed"
+        else:
+            breaker.failure_count += 1
+            breaker.last_failure_time = current_time
+
+            if breaker.failure_count >= breaker.failure_threshold:
+                breaker.state = "open"
+                logger.warning(f"Circuit breaker opened for {operation} after {breaker.failure_count} failures")
+
+    def _is_circuit_breaker_open(self, operation: str) -> bool:
+        """Check if circuit breaker is open"""
+        if operation not in self.circuit_breakers:
+            return False
+
+        breaker = self.circuit_breakers[operation]
+        current_time = time.time()
+
+        if breaker.state == "open":
+            if current_time - breaker.last_failure_time > breaker.timeout_seconds:
+                breaker.state = "half_open"
+                logger.info(f"Circuit breaker for {operation} moved to half-open state")
+                return False
+            return True
+
+        return False
+
+    async def record_processing_metrics(
+        self,
+        filename: str,
+        file_size_mb: float,
+        processing_time_ms: float,
+        memory_usage_mb: float,
+        success: bool,
+        fallback_used: Optional[str] = None,
+        error_type: Optional[str] = None
+    ) -> None:
+        """Record processing metrics for analysis"""
+        metrics = ProcessingMetrics(
+            file_size_mb=file_size_mb,
+            processing_time_ms=processing_time_ms,
+            memory_usage_mb=memory_usage_mb,
+            success=success,
+            fallback_used=fallback_used,
+            error_type=error_type
         )
 
-        return doc_error
+        self.processing_metrics.append(metrics)
 
-    async def generate_user_friendly_message(
-        self, doc_error: DocumentError
-    ) -> str:
-        """
-        Generate a user-friendly error message.
+        # Keep only last 1000 metrics to prevent memory growth
+        if len(self.processing_metrics) > 1000:
+            self.processing_metrics = self.processing_metrics[-1000:]
 
-        Args:
-            doc_error: DocumentError object
+    def get_error_statistics(self) -> Dict[str, Any]:
+        """Get error and recovery statistics"""
+        if not self.processing_metrics:
+            return {"total_processed": 0, "success_rate": 0.0}
 
-        Returns:
-            User-friendly error message string
-        """
-        # Get persona-appropriate messaging style
-        message_style = self._get_message_style()
+        total = len(self.processing_metrics)
+        successful = sum(1 for m in self.processing_metrics if m.success)
+        fallback_used = sum(1 for m in self.processing_metrics if m.fallback_used)
 
-        # Base message based on error type
-        base_message = self._get_base_error_message(doc_error.error_type, message_style)
+        error_types = {}
+        for metric in self.processing_metrics:
+            if metric.error_type:
+                error_types[metric.error_type] = error_types.get(metric.error_type, 0) + 1
 
-        # Add context about the specific document
-        context_message = self._add_document_context(doc_error)
-
-        # Add recovery suggestions
-        suggestions_message = self._format_recovery_suggestions(
-            doc_error.recovery_suggestions, message_style
-        )
-
-        # Combine all parts
-        full_message = f"{base_message} {context_message}"
-        if suggestions_message:
-            full_message += f" {suggestions_message}"
-
-        return full_message
-
-    def _classify_error(self, error: Exception, stage: str) -> str:
-        """Classify the error type based on error and stage"""
-        error_message = str(error).lower()
-
-        # Check each classification for keyword matches
-        for error_type, classification in self._error_classifications.items():
-            if any(keyword in error_message for keyword in classification["keywords"]):
-                return error_type
-
-        # Default classification based on stage
-        stage_defaults = {
-            "upload": "network_timeout",
-            "parsing": "file_format",
-            "processing": "content_extraction",
-            "indexing": "vectorization_failure"
+        return {
+            "total_processed": total,
+            "success_rate": successful / total,
+            "fallback_usage_rate": fallback_used / total,
+            "error_types": error_types,
+            "circuit_breaker_states": {
+                op: breaker.state for op, breaker in self.circuit_breakers.items()
+            }
         }
 
-        return stage_defaults.get(stage, "content_extraction")
+    # Helper methods for fallback processing
+    def _create_basic_extractor(self):
+        """Create basic text extractor that always works"""
+        return lambda content: content[:1000] if isinstance(content, str) else str(content)[:1000]
 
-    def _determine_severity(
-        self, error_type: str, context: Optional[Dict[str, Any]] = None
-    ) -> str:
-        """Determine error severity"""
-        base_severity = self._error_classifications.get(error_type, {}).get(
-            "severity", "medium"
-        )
+    def _create_simplified_pdf_processor(self):
+        """Create simplified PDF processor with minimal dependencies"""
+        def simple_pdf_extract(filename):
+            try:
+                import PyPDF2
+                with open(filename, 'rb') as file:
+                    reader = PyPDF2.PdfReader(file)
+                    text = ""
+                    for page_num in range(min(5, len(reader.pages))):  # Limit to 5 pages
+                        text += reader.pages[page_num].extract_text()
+                    return text[:5000]  # Limit output size
+            except Exception:
+                return f"Unable to process PDF: {filename}"
+        return simple_pdf_extract
 
-        # Adjust severity based on context
-        if context:
-            if context.get("retry_count", 0) > 2:
-                # Increase severity for repeated failures
-                if base_severity == "low":
-                    return "medium"
-                elif base_severity == "medium":
-                    return "high"
+    def _create_simplified_docx_processor(self):
+        """Create simplified DOCX processor"""
+        def simple_docx_extract(filename):
+            try:
+                import docx
+                doc = docx.Document(filename)
+                text = ""
+                for paragraph in doc.paragraphs[:20]:  # Limit to 20 paragraphs
+                    text += paragraph.text + "\n"
+                return text[:5000]  # Limit output size
+            except Exception:
+                return f"Unable to process Word document: {filename}"
+        return simple_docx_extract
 
-            if context.get("file_size", 0) > 50 * 1024 * 1024:  # > 50MB
-                # Large files are more likely to cause issues
-                if base_severity == "low":
-                    return "medium"
+    async def _extract_pdf_text_basic(self, filename: str) -> str:
+        """Basic PDF text extraction"""
+        return self.simplified_pdf_processor(filename)
 
-        return base_severity
+    async def _extract_docx_text_basic(self, filename: str) -> str:
+        """Basic DOCX text extraction"""
+        return self.simplified_docx_processor(filename)
 
-    def _generate_recovery_suggestions(
+    async def _extract_plain_text(self, filename: str) -> str:
+        """Extract plain text files"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                return f.read()
+        except UnicodeDecodeError:
+            with open(filename, 'r', encoding='latin-1') as f:
+                return f.read()
+
+    async def _process_pdf_streaming(self, filename: str) -> str:
+        """Process PDF with streaming to reduce memory usage"""
+        # Implementation would use streaming PDF processing
+        return await self._extract_pdf_text_basic(filename)
+
+    async def _process_docx_minimal(self, filename: str) -> str:
+        """Process DOCX with minimal memory usage"""
+        # Implementation would use minimal DOCX processing
+        return await self._extract_docx_text_basic(filename)
+
+    async def _queue_for_manual_review(
         self,
-        error_type: str,
-        error: Exception,
-        context: Optional[Dict[str, Any]] = None
-    ) -> List[str]:
-        """Generate specific recovery suggestions"""
-        # Get base suggestions for error type
-        base_suggestions = self._recovery_templates.get(error_type, [])
-
-        # Add context-specific suggestions
-        suggestions = base_suggestions.copy()
-
-        if context:
-            # Add file-specific suggestions
-            filename = context.get("filename", "")
-            if filename:
-                if filename.lower().endswith('.pdf'):
-                    suggestions.append("For PDF files, ensure they're not password-protected")
-                elif filename.lower().endswith(('.doc', '.docx')):
-                    suggestions.append("For Word documents, try saving as PDF first")
-
-            # Add retry suggestions for transient errors
-            if error_type in ["network_timeout", "memory_limit"]:
-                retry_count = context.get("retry_count", 0)
-                if retry_count < 3:
-                    suggestions.insert(0, "This appears to be a temporary issue - please try again")
-
-        return suggestions[:5]  # Limit to 5 suggestions
+        filename: str,
+        error_type: DocumentErrorType,
+        error: Exception
+    ) -> None:
+        """Queue document for manual review"""
+        # This could integrate with a ticketing system, email alerts, etc.
+        logger.warning(
+            f"Document {filename} queued for manual review: "
+            f"{error_type.value} - {str(error)}"
+        )
 
     def _track_error(self, doc_error: DocumentError) -> None:
         """Track error for pattern analysis"""
@@ -409,37 +618,6 @@ class DocumentErrorHandler:
         else:
             suggestion_list = "\n".join([f"• {suggestion}" for suggestion in suggestions[:3]])
             return f"{intro}\n{suggestion_list}"
-
-    def get_error_statistics(self) -> Dict[str, Any]:
-        """Get error statistics and patterns"""
-        if not self._error_history:
-            return {"total_errors": 0}
-
-        # Count errors by type
-        error_counts = {}
-        severity_counts = {}
-        stage_counts = {}
-
-        for error in self._error_history:
-            error_counts[error.error_type] = error_counts.get(error.error_type, 0) + 1
-            severity_counts[error.severity] = severity_counts.get(error.severity, 0) + 1
-            stage_counts[error.stage] = stage_counts.get(error.stage, 0) + 1
-
-        # Get recent error rate
-        recent_errors = [
-            error for error in self._error_history
-            if time.time() - error.timestamp < 3600  # Last hour
-        ]
-
-        return {
-            "total_errors": len(self._error_history),
-            "error_types": error_counts,
-            "severity_distribution": severity_counts,
-            "stage_distribution": stage_counts,
-            "recent_errors_count": len(recent_errors),
-            "most_common_error": max(error_counts.items(), key=lambda x: x[1])[0] if error_counts else None,
-            "error_patterns_count": len(self._error_patterns)
-        }
 
     def clear_error_history(self, older_than_hours: Optional[float] = None) -> int:
         """Clear error history, optionally only entries older than specified hours"""

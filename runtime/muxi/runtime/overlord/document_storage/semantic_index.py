@@ -20,7 +20,7 @@ from pathlib import Path
 from loguru import logger
 
 try:
-    from faissx import FAISSxClient
+    from faissx.client import FaissXClient
     FAISSX_AVAILABLE = True
 except ImportError:
     FAISSX_AVAILABLE = False
@@ -110,8 +110,8 @@ class DocumentSemanticIndex:
     def _initialize_remote_index(self) -> None:
         """Initialize remote FAISSx client"""
         try:
-            self._faissx_client = FAISSxClient(
-                url=self.remote_config.get("url", "tcp://localhost:8000"),
+            self._faissx_client = FaissXClient(
+                url=self.remote_config.get("url", "tcp://localhost:45678"),
                 api_key=self.remote_config.get("api_key"),
                 tenant_id=self.remote_config.get("tenant_id")
             )
