@@ -132,6 +132,15 @@ from .caching import IntelligentCacheManager
 # NEW: Import parallel workflow optimization
 from .parallel import ParallelWorkflowOptimizer
 
+# NEW: Import Phase 3 intelligence components
+from .intelligence import (
+    UserPreferenceEngine,
+    AdaptiveResponseGenerator,
+    UserPreferences,
+    ConversationContext,
+    AdaptedResponse
+)
+
 
 class Overlord:
     """
@@ -402,6 +411,10 @@ class Overlord:
         self.parallel_optimizer = ParallelWorkflowOptimizer(
             sensitivity_threshold=0.5
         )
+
+        # NEW: Initialize Phase 3 User Experience Intelligence components
+        self.user_preference_engine = UserPreferenceEngine(overlord=self)
+        self.adaptive_response_generator = AdaptiveResponseGenerator(overlord=self)
 
         # Active workflows tracking
         self.active_workflows: Dict[str, Workflow] = {}
@@ -4324,6 +4337,20 @@ class Overlord:
                     agent_id=agent_id,
                 )
 
+            # NEW: Apply Phase 3 adaptive response generation
+            try:
+                adapted_response = await self.generate_adaptive_response(
+                    base_response=response,
+                    user_id=user_id,
+                    context=context
+                )
+                # Use the adapted response if successful
+                if adapted_response.adaptations_applied:
+                    response = adapted_response.adapted
+                    logger.debug(f"Applied {len(adapted_response.adaptations_applied)} adaptations to response")
+            except Exception as e:
+                logger.debug(f"Phase 3 adaptation failed, using original response: {e}")
+
             return response
 
         except Exception as e:
@@ -4503,3 +4530,333 @@ class Overlord:
         except Exception as e:
             logger.error(f"Error processing multimodal task inputs for {task_id}: {e}")
             return task_inputs  # Return original inputs on error
+
+    # =========================================================================
+    # Phase 3: User Experience Intelligence Methods
+    # =========================================================================
+
+    async def analyze_user_preferences(
+        self,
+        user_id: Optional[int] = None,
+        conversation_history: Optional[List] = None,
+        feedback_data: Optional[List] = None
+    ) -> UserPreferences:
+        """
+        Analyze user preferences using Phase 3 intelligence capabilities
+
+        Args:
+            user_id: User identifier for preference analysis
+            conversation_history: List of conversation messages for analysis
+            feedback_data: List of feedback events for preference learning
+
+        Returns:
+            UserPreferences object with analyzed user preferences
+        """
+        try:
+            # Convert user_id to string for preference engine
+            user_id_str = str(user_id) if user_id is not None else None
+
+            # Get conversation history from memory if not provided
+            if conversation_history is None:
+                conversation_history = await self._get_conversation_history_for_analysis(user_id)
+
+            # Get feedback data if not provided
+            if feedback_data is None:
+                feedback_data = await self._get_feedback_data_for_analysis(user_id)
+
+            # Analyze preferences using the preference engine
+            preferences = await self.user_preference_engine.analyze_user_preferences(
+                user_id=user_id_str,
+                conversation_history=conversation_history,
+                feedback_data=feedback_data
+            )
+
+            logger.info(f"Analyzed preferences for user {user_id}: "
+                       f"{len(preferences.explicit)} explicit, "
+                       f"{len(preferences.implicit)} implicit, "
+                       f"{len(preferences.contextual)} contextual preferences")
+
+            return preferences
+
+        except Exception as e:
+            logger.error(f"Error analyzing user preferences: {e}")
+            # Return empty preferences as fallback
+            return UserPreferences(
+                user_id=user_id_str,
+                deployment_mode="multi_user" if self.is_multi_user else "single_user"
+            )
+
+    async def generate_adaptive_response(
+        self,
+        base_response: str,
+        user_id: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> AdaptedResponse:
+        """
+        Generate an adaptive response based on user preferences
+
+        Args:
+            base_response: Original response to adapt
+            user_id: User identifier for personalization
+            context: Additional context for adaptation
+
+        Returns:
+            AdaptedResponse with personalized adaptations applied
+        """
+        try:
+            # Convert user_id to string for intelligence system
+            user_id_str = str(user_id) if user_id is not None else None
+
+            # Get or analyze user preferences
+            user_preferences = await self.user_preference_engine.get_stored_preferences(user_id_str)
+
+            if not user_preferences:
+                # No stored preferences, analyze from recent history
+                user_preferences = await self.analyze_user_preferences(user_id)
+
+            # Create conversation context
+            conversation_context = await self._create_conversation_context(context, user_id)
+
+            # Generate adaptive response
+            adapted_response = await self.adaptive_response_generator.generate_adaptive_response(
+                base_response=base_response,
+                user_preferences=user_preferences,
+                context=conversation_context,
+                user_id=user_id_str
+            )
+
+            logger.info(f"Generated adaptive response for user {user_id}: "
+                       f"{len(adapted_response.adaptations_applied)} adaptations applied "
+                       f"(confidence: {adapted_response.confidence:.2f})")
+
+            return adapted_response
+
+        except Exception as e:
+            logger.error(f"Error generating adaptive response: {e}")
+            # Return non-adaptive response as fallback
+            return AdaptedResponse(
+                user_id=user_id_str,
+                deployment_mode="multi_user" if self.is_multi_user else "single_user",
+                original=base_response,
+                adapted=base_response,
+                adaptations_applied=[],
+                confidence=0.0
+            )
+
+    async def get_contextual_preferences(
+        self,
+        user_id: Optional[int] = None,
+        current_context: Optional[Dict[str, Any]] = None
+    ) -> UserPreferences:
+        """
+        Get user preferences optimized for current context
+
+        Args:
+            user_id: User identifier
+            current_context: Current conversation context
+
+        Returns:
+            UserPreferences optimized for the given context
+        """
+        try:
+            # Convert user_id to string
+            user_id_str = str(user_id) if user_id is not None else None
+
+            # Create conversation context
+            conversation_context = await self._create_conversation_context(current_context, user_id)
+
+            # Get contextual preferences
+            preferences = await self.user_preference_engine.get_preferences_for_context(
+                user_id=user_id_str,
+                context=conversation_context
+            )
+
+            return preferences
+
+        except Exception as e:
+            logger.error(f"Error getting contextual preferences: {e}")
+            return UserPreferences(
+                user_id=user_id_str,
+                deployment_mode="multi_user" if self.is_multi_user else "single_user"
+            )
+
+    async def update_preferences_from_feedback(
+        self,
+        feedback_type: str,
+        feedback_content: str,
+        user_id: Optional[int] = None,
+        context: Optional[Dict[str, Any]] = None
+    ) -> bool:
+        """
+        Update user preferences based on feedback
+
+        Args:
+            feedback_type: Type of feedback (positive, negative, correction)
+            feedback_content: Content of the feedback
+            user_id: User identifier
+            context: Additional context for the feedback
+
+        Returns:
+            True if preferences were updated successfully
+        """
+        try:
+            # Convert user_id to string
+            user_id_str = str(user_id) if user_id is not None else None
+
+            # Create feedback event
+            from .intelligence.types import FeedbackEvent
+            feedback_event = FeedbackEvent(
+                user_id=user_id_str,
+                feedback_type=feedback_type,
+                feedback_content=feedback_content,
+                context=context or {}
+            )
+
+            # Get current preferences
+            current_preferences = await self.user_preference_engine.get_stored_preferences(user_id_str)
+
+            if not current_preferences:
+                # No stored preferences, analyze first
+                current_preferences = await self.analyze_user_preferences(user_id)
+
+            # Update preferences with feedback
+            updated_preferences = await self.user_preference_engine.update_preferences_from_feedback(
+                user_id=user_id_str,
+                feedback_event=feedback_event,
+                current_preferences=current_preferences
+            )
+
+            logger.info(f"Updated preferences for user {user_id} based on {feedback_type} feedback")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error updating preferences from feedback: {e}")
+            return False
+
+    async def clear_user_preferences(self, user_id: Optional[int] = None) -> bool:
+        """
+        Clear stored preferences for a user
+
+        Args:
+            user_id: User identifier
+
+        Returns:
+            True if preferences were cleared successfully
+        """
+        try:
+            # Convert user_id to string
+            user_id_str = str(user_id) if user_id is not None else None
+
+            await self.user_preference_engine.clear_user_preferences(user_id_str)
+
+            logger.info(f"Cleared preferences for user {user_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error clearing user preferences: {e}")
+            return False
+
+    # Helper methods for Phase 3 intelligence
+
+    async def _get_conversation_history_for_analysis(self, user_id: Optional[int]) -> List:
+        """Get conversation history for preference analysis"""
+        try:
+            # Get recent messages from buffer memory
+            if self.buffer_memory:
+                # Get recent messages (limit to last 50 for analysis)
+                messages = []
+                buffer_data = getattr(self.buffer_memory, 'buffer', [])
+
+                for item in buffer_data[-50:]:  # Last 50 messages
+                    if hasattr(item, 'metadata') and item.metadata:
+                        # Filter by user if in multi-user mode
+                        if not self.is_multi_user or item.metadata.get('user_id') == user_id:
+                            # Convert to Message format expected by intelligence system
+                            from .intelligence.types import Message
+                            message = Message(
+                                role=item.metadata.get('role', 'user'),
+                                content=str(item.content) if hasattr(item, 'content') else str(item),
+                                timestamp=item.metadata.get('timestamp', time.time()),
+                                user_id=str(user_id) if user_id is not None else None
+                            )
+                            messages.append(message)
+
+                return messages
+
+            return []
+
+        except Exception as e:
+            logger.error(f"Error getting conversation history: {e}")
+            return []
+
+    async def _get_feedback_data_for_analysis(self, user_id: Optional[int]) -> List:
+        """Get feedback data for preference analysis"""
+        try:
+            # This would typically load feedback from long-term memory
+            # For now, return empty list as feedback system needs to be implemented
+            return []
+
+        except Exception as e:
+            logger.error(f"Error getting feedback data: {e}")
+            return []
+
+    async def _create_conversation_context(
+        self,
+        context: Optional[Dict[str, Any]],
+        user_id: Optional[int]
+    ) -> ConversationContext:
+        """Create conversation context for intelligence system"""
+        try:
+            # Extract context information
+            conversation_context = ConversationContext()
+
+            if context:
+                conversation_context.topic = context.get('topic')
+                conversation_context.urgency = context.get('urgency')
+                conversation_context.user_mood = context.get('user_mood')
+                conversation_context.current_task = context.get('current_task')
+                conversation_context.available_modalities = context.get('available_modalities', ['text'])
+                conversation_context.metadata = context
+
+            # Set session length from buffer memory
+            if self.buffer_memory:
+                buffer_data = getattr(self.buffer_memory, 'buffer', [])
+                conversation_context.session_length = len(buffer_data)
+
+            return conversation_context
+
+        except Exception as e:
+            logger.error(f"Error creating conversation context: {e}")
+            return ConversationContext()
+
+    def get_intelligence_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about the intelligence system
+
+        Returns:
+            Dictionary with intelligence system statistics
+        """
+        try:
+            # Get stats from preference engine
+            preference_stats = {}
+            if hasattr(self.user_preference_engine, 'preference_cache'):
+                preference_stats = {
+                    'cached_users': len(self.user_preference_engine.preference_cache),
+                    'deployment_mode': 'multi_user' if self.is_multi_user else 'single_user'
+                }
+
+            # Get stats from adaptive generator
+            adaptation_stats = {}
+            if hasattr(self.adaptive_response_generator, 'get_adaptation_stats'):
+                adaptation_stats = self.adaptive_response_generator.get_adaptation_stats()
+
+            return {
+                'intelligence_enabled': True,
+                'preference_engine': preference_stats,
+                'adaptive_response': adaptation_stats,
+                'multi_user_mode': self.is_multi_user
+            }
+
+        except Exception as e:
+            logger.error(f"Error getting intelligence stats: {e}")
+            return {'intelligence_enabled': False, 'error': str(e)}
