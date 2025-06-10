@@ -7,7 +7,8 @@ including buttons, forms, visualizations, and rich media integration.
 
 import json
 import uuid
-from typing import Any, Dict, List, Optional, Union, Tuple
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
@@ -16,6 +17,7 @@ from loguru import logger
 
 class ElementType(Enum):
     """Types of interactive elements"""
+
     BUTTON = "button"
     FORM = "form"
     MENU = "menu"
@@ -29,6 +31,7 @@ class ElementType(Enum):
 
 class ButtonStyle(Enum):
     """Button styling options"""
+
     PRIMARY = "primary"
     SECONDARY = "secondary"
     SUCCESS = "success"
@@ -40,6 +43,7 @@ class ButtonStyle(Enum):
 @dataclass
 class InteractiveElement:
     """Base class for interactive elements"""
+
     element_id: str
     element_type: ElementType
     content: Dict[str, Any]
@@ -54,6 +58,7 @@ class InteractiveElement:
 @dataclass
 class ButtonElement(InteractiveElement):
     """Interactive button element"""
+
     text: str = ""
     action: str = ""  # Action to trigger when clicked
     style: ButtonStyle = ButtonStyle.PRIMARY
@@ -65,13 +70,14 @@ class ButtonElement(InteractiveElement):
             "text": self.text,
             "action": self.action,
             "style": self.style.value,
-            "disabled": self.disabled
+            "disabled": self.disabled,
         }
 
 
 @dataclass
 class FormElement(InteractiveElement):
     """Interactive form element"""
+
     title: str = ""
     fields: List[Dict[str, Any]] = field(default_factory=list)
     submit_action: str = ""
@@ -83,29 +89,27 @@ class FormElement(InteractiveElement):
             "title": self.title,
             "fields": self.fields,
             "submit_action": self.submit_action,
-            "cancel_action": self.cancel_action
+            "cancel_action": self.cancel_action,
         }
 
 
 @dataclass
 class ChartElement(InteractiveElement):
     """Chart/visualization element"""
+
     chart_type: str = ""  # "bar", "line", "pie", "scatter", etc.
     data: Dict[str, Any] = field(default_factory=dict)
     title: Optional[str] = None
 
     def __post_init__(self):
         self.element_type = ElementType.CHART
-        self.content = {
-            "chart_type": self.chart_type,
-            "data": self.data,
-            "title": self.title
-        }
+        self.content = {"chart_type": self.chart_type, "data": self.data, "title": self.title}
 
 
 @dataclass
 class TableElement(InteractiveElement):
     """Table display element"""
+
     headers: List[str] = field(default_factory=list)
     rows: List[List[Any]] = field(default_factory=list)
     sortable: bool = True
@@ -117,7 +121,7 @@ class TableElement(InteractiveElement):
             "headers": self.headers,
             "rows": self.rows,
             "sortable": self.sortable,
-            "searchable": self.searchable
+            "searchable": self.searchable,
         }
 
 
@@ -139,20 +143,20 @@ class InteractiveElementGenerator:
             "approval_buttons": {
                 "approve": {"text": "✅ Approve", "style": "success"},
                 "reject": {"text": "❌ Reject", "style": "danger"},
-                "modify": {"text": "✏️ Modify", "style": "warning"}
+                "modify": {"text": "✏️ Modify", "style": "warning"},
             },
             "navigation_buttons": {
                 "continue": {"text": "Continue →", "style": "primary"},
                 "back": {"text": "← Back", "style": "secondary"},
-                "cancel": {"text": "Cancel", "style": "secondary"}
+                "cancel": {"text": "Cancel", "style": "secondary"},
             },
             "feedback_form": {
                 "title": "Feedback",
                 "fields": [
                     {"name": "rating", "type": "range", "min": 1, "max": 5, "label": "Rating"},
-                    {"name": "comments", "type": "textarea", "label": "Comments", "optional": True}
-                ]
-            }
+                    {"name": "comments", "type": "textarea", "label": "Comments", "optional": True},
+                ],
+            },
         }
 
     def create_button(
@@ -161,18 +165,20 @@ class InteractiveElementGenerator:
         action: str,
         style: ButtonStyle = ButtonStyle.PRIMARY,
         disabled: bool = False,
-        **kwargs
+        **kwargs,
     ) -> ButtonElement:
         """Create an interactive button element"""
-        element_id = kwargs.get('element_id', f"btn_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"btn_{uuid.uuid4().hex[:8]}")
 
         button = ButtonElement(
             element_id=element_id,
+            element_type=ElementType.BUTTON,
+            content={},  # Will be set in __post_init__
             text=text,
             action=action,
             style=style,
             disabled=disabled,
-            **kwargs
+            **kwargs,
         )
 
         self.element_cache[element_id] = button
@@ -187,7 +193,7 @@ class InteractiveElementGenerator:
             button = self.create_button(
                 text=config["text"],
                 action=f"{action}{context_suffix}",
-                style=ButtonStyle(config["style"])
+                style=ButtonStyle(config["style"]),
             )
             buttons.append(button)
 
@@ -199,18 +205,20 @@ class InteractiveElementGenerator:
         fields: List[Dict[str, Any]],
         submit_action: str,
         cancel_action: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> FormElement:
         """Create an interactive form element"""
-        element_id = kwargs.get('element_id', f"form_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"form_{uuid.uuid4().hex[:8]}")
 
         form = FormElement(
             element_id=element_id,
+            element_type=ElementType.FORM,
+            content={},  # Will be set in __post_init__
             title=title,
             fields=fields,
             submit_action=submit_action,
             cancel_action=cancel_action,
-            **kwargs
+            **kwargs,
         )
 
         self.element_cache[element_id] = form
@@ -224,25 +232,23 @@ class InteractiveElementGenerator:
             title=template["title"],
             fields=template["fields"],
             submit_action=f"submit_feedback_{context}",
-            cancel_action=f"cancel_feedback_{context}"
+            cancel_action=f"cancel_feedback_{context}",
         )
 
     def create_chart(
-        self,
-        chart_type: str,
-        data: Dict[str, Any],
-        title: Optional[str] = None,
-        **kwargs
+        self, chart_type: str, data: Dict[str, Any], title: Optional[str] = None, **kwargs
     ) -> ChartElement:
         """Create a chart/visualization element"""
-        element_id = kwargs.get('element_id', f"chart_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"chart_{uuid.uuid4().hex[:8]}")
 
         chart = ChartElement(
             element_id=element_id,
+            element_type=ElementType.CHART,
+            content={},  # Will be set in __post_init__
             chart_type=chart_type,
             data=data,
             title=title,
-            **kwargs
+            **kwargs,
         )
 
         self.element_cache[element_id] = chart
@@ -254,45 +260,46 @@ class InteractiveElementGenerator:
         rows: List[List[Any]],
         sortable: bool = True,
         searchable: bool = True,
-        **kwargs
+        **kwargs,
     ) -> TableElement:
         """Create a table element"""
-        element_id = kwargs.get('element_id', f"table_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"table_{uuid.uuid4().hex[:8]}")
 
         table = TableElement(
             element_id=element_id,
+            element_type=ElementType.TABLE,
+            content={},  # Will be set in __post_init__
             headers=headers,
             rows=rows,
             sortable=sortable,
             searchable=searchable,
-            **kwargs
+            **kwargs,
         )
 
         self.element_cache[element_id] = table
         return table
 
     def create_progress_chart(
-        self,
-        completed: int,
-        total: int,
-        title: str = "Progress"
+        self, completed: int, total: int, title: str = "Progress"
     ) -> ChartElement:
         """Create a progress visualization"""
         percentage = (completed / total * 100) if total > 0 else 0
 
         data = {
             "labels": ["Completed", "Remaining"],
-            "datasets": [{
-                "data": [completed, total - completed],
-                "backgroundColor": ["#4CAF50", "#E0E0E0"],
-                "borderWidth": 0
-            }]
+            "datasets": [
+                {
+                    "data": [completed, total - completed],
+                    "backgroundColor": ["#4CAF50", "#E0E0E0"],
+                    "borderWidth": 0,
+                }
+            ],
         }
 
         return self.create_chart(
             chart_type="doughnut",
             data=data,
-            title=f"{title}: {completed}/{total} ({percentage:.1f}%)"
+            title=f"{title}: {completed}/{total} ({percentage:.1f}%)",
         )
 
     def create_workflow_status_table(self, workflow_data: Dict[str, Any]) -> TableElement:
@@ -311,21 +318,19 @@ class InteractiveElementGenerator:
                 "pending": "⏳",
                 "in_progress": "🔄",
                 "completed": "✅",
-                "failed": "❌"
+                "failed": "❌",
             }.get(status, "❓")
 
-            rows.append([
-                task_info.get("description", task_id),
-                f"{status_emoji} {status.title()}",
-                f"{progress}%",
-                agent
-            ])
+            rows.append(
+                [
+                    task_info.get("description", task_id),
+                    f"{status_emoji} {status.title()}",
+                    f"{progress}%",
+                    agent,
+                ]
+            )
 
-        return self.create_table(
-            headers=headers,
-            rows=rows,
-            title="Workflow Status"
-        )
+        return self.create_table(headers=headers, rows=rows, title="Workflow Status")
 
 
 class ResponseFormatter:
@@ -342,7 +347,7 @@ class ResponseFormatter:
             "markdown": self._process_markdown,
             "html": self._process_html,
             "json": self._process_json,
-            "plain": self._process_plain
+            "plain": self._process_plain,
         }
 
     async def format_response(
@@ -350,7 +355,7 @@ class ResponseFormatter:
         content: str,
         elements: List[InteractiveElement] = None,
         format_type: str = "markdown",
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Format response with rich content and interactive elements.
@@ -373,9 +378,7 @@ class ResponseFormatter:
             formatted_content = await processor(content, context)
 
             # Embed interactive elements
-            embedded_content = await self._embed_elements(
-                formatted_content, elements, format_type
-            )
+            embedded_content = await self._embed_elements(formatted_content, elements, format_type)
 
             # Generate response metadata
             metadata = {
@@ -383,13 +386,13 @@ class ResponseFormatter:
                 "has_interactive_elements": len(elements) > 0,
                 "element_count": len(elements),
                 "element_types": [elem.element_type.value for elem in elements],
-                "formatting_timestamp": logger._get_timestamp()
+                "formatting_timestamp": datetime.now().isoformat(),
             }
 
             return {
                 "content": embedded_content,
                 "elements": [self._serialize_element(elem) for elem in elements],
-                "metadata": metadata
+                "metadata": metadata,
             }
 
         except Exception as e:
@@ -397,7 +400,7 @@ class ResponseFormatter:
             return {
                 "content": content,
                 "elements": [],
-                "metadata": {"format": "plain", "error": str(e)}
+                "metadata": {"format": "plain", "error": str(e)},
             }
 
     async def _process_markdown(self, content: str, context: Dict[str, Any]) -> str:
@@ -428,21 +431,14 @@ class ResponseFormatter:
 
     async def _process_json(self, content: str, context: Dict[str, Any]) -> str:
         """Process content as structured JSON"""
-        return json.dumps({
-            "type": "response",
-            "content": content,
-            "context": context
-        }, indent=2)
+        return json.dumps({"type": "response", "content": content, "context": context}, indent=2)
 
     async def _process_plain(self, content: str, context: Dict[str, Any]) -> str:
         """Process content as plain text"""
         return content
 
     async def _embed_elements(
-        self,
-        content: str,
-        elements: List[InteractiveElement],
-        format_type: str
+        self, content: str, elements: List[InteractiveElement], format_type: str
     ) -> str:
         """Embed interactive elements into formatted content"""
         if not elements:
@@ -472,24 +468,27 @@ class ResponseFormatter:
                 "success": "✅",
                 "warning": "⚠️",
                 "danger": "❌",
-                "info": "ℹ️"
+                "info": "ℹ️",
             }.get(element.content.get("style", "primary"), "🔘")
 
             return f"{style_emoji} **{element.content['text']}** `[{element.content['action']}]`"
 
         elif element.element_type == ElementType.FORM:
             form_md = f"### 📝 {element.content['title']}\n\n"
-            for field in element.content['fields']:
-                form_md += f"- **{field['label']}**: _{field['type']}_\n"
+            for form_field in element.content["fields"]:
+                form_md += f"- **{form_field['label']}**: _{form_field['type']}_\n"
             return form_md
 
         elif element.element_type == ElementType.CHART:
-            return f"📊 **{element.content.get('title', 'Chart')}** `[{element.content['chart_type']}]`"
+            return (
+                f"📊 **{element.content.get('title', 'Chart')}** "
+                f"`[{element.content['chart_type']}]`"
+            )
 
         elif element.element_type == ElementType.TABLE:
-            table_md = "| " + " | ".join(element.content['headers']) + " |\n"
-            table_md += "|" + "---|" * len(element.content['headers']) + "\n"
-            for row in element.content['rows']:
+            table_md = "| " + " | ".join(element.content["headers"]) + " |\n"
+            table_md += "|" + "---|" * len(element.content["headers"]) + "\n"
+            for row in element.content["rows"]:
                 table_md += "| " + " | ".join(str(cell) for cell in row) + " |\n"
             return table_md
 
@@ -497,27 +496,34 @@ class ResponseFormatter:
 
     def _element_to_html(self, element: InteractiveElement) -> str:
         """Convert element to HTML representation"""
-        element_html = f'<div class="interactive-element" data-type="{element.element_type.value}" data-id="{element.element_id}">'
+        element_html = (
+            '<div class="interactive-element" '
+            f'data-type="{element.element_type.value}" '
+            f'data-id="{element.element_id}">'
+        )
 
         if element.element_type == ElementType.BUTTON:
-            element_html += f'<button class="btn btn-{element.content["style"]}" data-action="{element.content["action"]}">'
+            element_html += (
+                f'<button class="btn btn-{element.content["style"]}" '
+                f'data-action="{element.content["action"]}">'
+            )
             element_html += element.content["text"]
-            element_html += '</button>'
+            element_html += "</button>"
 
         elif element.element_type == ElementType.TABLE:
             element_html += '<table class="data-table">'
-            element_html += '<thead><tr>'
-            for header in element.content['headers']:
-                element_html += f'<th>{header}</th>'
-            element_html += '</tr></thead><tbody>'
-            for row in element.content['rows']:
-                element_html += '<tr>'
+            element_html += "<thead><tr>"
+            for header in element.content["headers"]:
+                element_html += f"<th>{header}</th>"
+            element_html += "</tr></thead><tbody>"
+            for row in element.content["rows"]:
+                element_html += "<tr>"
                 for cell in row:
-                    element_html += f'<td>{cell}</td>'
-                element_html += '</tr>'
-            element_html += '</tbody></table>'
+                    element_html += f"<td>{cell}</td>"
+                element_html += "</tr>"
+            element_html += "</tbody></table>"
 
-        element_html += '</div>'
+        element_html += "</div>"
         return element_html
 
     def _serialize_element(self, element: InteractiveElement) -> Dict[str, Any]:
@@ -529,7 +535,7 @@ class ResponseFormatter:
             "metadata": element.metadata,
             "position": element.position,
             "width": element.width,
-            "height": element.height
+            "height": element.height,
         }
 
     def _enhance_code_blocks(self, content: str) -> str:
@@ -549,7 +555,7 @@ class ResponseFormatter:
             "✅ Success": "✅ **Success**",
             "❌ Error": "❌ **Error**",
             "⚠️ Warning": "⚠️ **Warning**",
-            "ℹ️ Info": "ℹ️ **Info**"
+            "ℹ️ Info": "ℹ️ **Info**",
         }
 
         enhanced = content
@@ -580,14 +586,11 @@ class MediaIntegrator:
             "image": ["png", "jpg", "jpeg", "gif", "svg", "webp"],
             "video": ["mp4", "webm", "ogg"],
             "audio": ["mp3", "wav", "ogg", "m4a"],
-            "document": ["pdf", "doc", "docx", "txt", "md"]
+            "document": ["pdf", "doc", "docx", "txt", "md"],
         }
 
     async def embed_media(
-        self,
-        content: str,
-        media_items: List[Dict[str, Any]],
-        format_type: str = "markdown"
+        self, content: str, media_items: List[Dict[str, Any]], format_type: str = "markdown"
     ) -> str:
         """
         Embed media items into content.
@@ -611,11 +614,7 @@ class MediaIntegrator:
 
         return embedded_content
 
-    async def _embed_single_media(
-        self,
-        media_item: Dict[str, Any],
-        format_type: str
-    ) -> str:
+    async def _embed_single_media(self, media_item: Dict[str, Any], format_type: str) -> str:
         """Embed a single media item"""
         media_type = media_item.get("type", "unknown")
         url = media_item.get("url", "")
@@ -624,7 +623,9 @@ class MediaIntegrator:
 
         if format_type == "markdown":
             if media_type == "image":
-                return f"![{title}]({url})\n\n*{description}*" if description else f"![{title}]({url})"
+                return (
+                    f"![{title}]({url})\n\n*{description}*" if description else f"![{title}]({url})"
+                )
             elif media_type == "video":
                 return f"🎥 **{title}**\n\n[Watch Video]({url})\n\n*{description}*"
             elif media_type == "audio":
@@ -634,17 +635,19 @@ class MediaIntegrator:
 
         elif format_type == "html":
             if media_type == "image":
-                return f'<img src="{url}" alt="{title}" title="{title}"><p><em>{description}</em></p>'
+                return (
+                    f'<img src="{url}" alt="{title}" title="{title}"><p><em>{description}</em></p>'
+                )
             elif media_type == "video":
-                return f'<video controls><source src="{url}" type="video/mp4"></video><p><strong>{title}</strong><br><em>{description}</em></p>'
+                return (
+                    f'<video controls><source src="{url}" type="video/mp4"></video>'
+                    f'<p><strong>{title}</strong><br><em>{description}</em></p>'
+                )
 
         return f"📎 **{title}**: {url}"
 
     def create_chart_from_data(
-        self,
-        data: Dict[str, Any],
-        chart_type: str = "bar",
-        title: str = "Chart"
+        self, data: Dict[str, Any], chart_type: str = "bar", title: str = "Chart"
     ) -> Dict[str, Any]:
         """Create chart configuration from data"""
         return {
@@ -655,12 +658,7 @@ class MediaIntegrator:
                 "data": data,
                 "options": {
                     "responsive": True,
-                    "plugins": {
-                        "title": {
-                            "display": True,
-                            "text": title
-                        }
-                    }
-                }
-            }
+                    "plugins": {"title": {"display": True, "text": title}},
+                },
+            },
         }
