@@ -141,6 +141,12 @@ from .intelligence import (
     AdaptedResponse
 )
 
+# NEW: Import Phase 4.1 resilience components
+from .resilience import (
+    ResilientWorkflowManager,
+    ResilienceConfig,
+)
+
 
 class Overlord:
     """
@@ -415,6 +421,12 @@ class Overlord:
         # NEW: Initialize Phase 3 User Experience Intelligence components
         self.user_preference_engine = UserPreferenceEngine(overlord=self)
         self.adaptive_response_generator = AdaptiveResponseGenerator(overlord=self)
+
+        # NEW: Initialize Phase 4.1 resilience components
+        resilience_config = ResilienceConfig(
+            **self.formation_config.get('resilience', {})
+        )
+        self.resilient_workflow_manager = ResilientWorkflowManager(resilience_config)
 
         # Active workflows tracking
         self.active_workflows: Dict[str, Workflow] = {}
