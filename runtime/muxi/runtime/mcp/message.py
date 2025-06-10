@@ -47,21 +47,22 @@ class ErrorCodes(int, Enum):
     It includes both standard codes from the JSON-RPC specification and MCP-specific
     extension codes for more granular error reporting.
     """
+
     # Standard JSON-RPC 2.0 error codes
-    PARSE_ERROR = -32700           # Invalid JSON was received
-    INVALID_REQUEST = -32600       # The JSON sent is not a valid Request object
-    METHOD_NOT_FOUND = -32601      # The method does not exist / is not available
-    INVALID_PARAMS = -32602        # Invalid method parameter(s)
-    INTERNAL_ERROR = -32603        # Internal JSON-RPC error
+    PARSE_ERROR = -32700  # Invalid JSON was received
+    INVALID_REQUEST = -32600  # The JSON sent is not a valid Request object
+    METHOD_NOT_FOUND = -32601  # The method does not exist / is not available
+    INVALID_PARAMS = -32602  # Invalid method parameter(s)
+    INTERNAL_ERROR = -32603  # Internal JSON-RPC error
 
     # MCP extension error codes
-    TOOL_NOT_FOUND = -32000        # The requested tool was not found
+    TOOL_NOT_FOUND = -32000  # The requested tool was not found
     TOOL_EXECUTION_ERROR = -32001  # Error during tool execution
-    UNAUTHORIZED = -32002          # Client not authorized to use the tool
-    RATE_LIMITED = -32003          # Request was rate limited
-    BAD_CREDENTIALS = -32004       # Invalid or missing credentials
-    TIMEOUT = -32005               # Operation timed out
-    CANCELLED = -32006             # Operation was cancelled
+    UNAUTHORIZED = -32002  # Client not authorized to use the tool
+    RATE_LIMITED = -32003  # Request was rate limited
+    BAD_CREDENTIALS = -32004  # Invalid or missing credentials
+    TIMEOUT = -32005  # Operation timed out
+    CANCELLED = -32006  # Operation was cancelled
 
 
 class JSONRPCError(BaseModel):
@@ -73,6 +74,7 @@ class JSONRPCError(BaseModel):
     and message fields, plus an optional data field for additional
     error details.
     """
+
     code: int = Field(..., description="Error code")
     message: str = Field(..., description="Error message")
     data: Optional[Any] = Field(None, description="Additional error data")
@@ -86,6 +88,7 @@ class JSONRPCBaseRequest(BaseModel):
     including the JSON-RPC version, method name, and request ID. It serves
     as the foundation for more specific request types.
     """
+
     jsonrpc: str = Field("2.0", description="JSON-RPC version (always '2.0')")
     method: str = Field(..., description="Method to be invoked")
     id: Union[str, int] = Field(..., description="Request identifier")
@@ -99,6 +102,7 @@ class JSONRPCRequest(JSONRPCBaseRequest):
     which contains the parameters for the requested method. The params field
     can be any valid JSON structure, typically an object or array.
     """
+
     params: Optional[Dict[str, Any]] = Field(None, description="Method parameters")
 
 
@@ -110,6 +114,7 @@ class JSONRPCBaseResponse(BaseModel):
     including the JSON-RPC version and the response ID (which must match
     the ID from the corresponding request).
     """
+
     jsonrpc: str = Field("2.0", description="JSON-RPC version (always '2.0')")
     id: Union[str, int, None] = Field(..., description="Request identifier")
 
@@ -122,6 +127,7 @@ class JSONRPCSuccessResponse(JSONRPCBaseResponse):
     a result field containing the return value of the invoked method. The
     structure of the result field depends on the specific method called.
     """
+
     result: Any = Field(..., description="Method execution result")
 
 
@@ -133,6 +139,7 @@ class JSONRPCErrorResponse(JSONRPCBaseResponse):
     occurred during method invocation. It includes an error object that
     provides details about what went wrong.
     """
+
     error: JSONRPCError = Field(..., description="Error object")
 
 
@@ -147,25 +154,19 @@ class FunctionCallModel(BaseModel):
     system, including the name of the function and its parameters. It's used
     to represent both agent-generated function calls and their results.
     """
+
     name: str = Field(..., description="Function/tool name")
     parameters: Dict[str, Any] = Field(..., description="Function/tool parameters")
     output: Optional[Any] = Field(None, description="Function/tool output (when available)")
 
     class Config:
         """Pydantic configuration for the model."""
-        schema_extra = {
+
+        json_schema_extra = {
             "example": {
                 "name": "get_weather",
-                "parameters": {
-                    "location": "New York",
-                    "unit": "celsius",
-                    "include_forecast": True
-                },
-                "output": {
-                    "temperature": 22,
-                    "conditions": "Partly cloudy",
-                    "humidity": 65
-                }
+                "parameters": {"location": "New York", "unit": "celsius", "include_forecast": True},
+                "output": {"temperature": 22, "conditions": "Partly cloudy", "humidity": 65},
             }
         }
 
@@ -178,10 +179,12 @@ class ContentItem(BaseModel):
     which can be either text content or a tool/function call. It supports
     the LLM multi-modal content format.
     """
+
     type: str = Field(..., description="Content type ('text' or 'tool_calls')")
     text: Optional[str] = Field(None, description="Text content (when type='text')")
     tool_calls: Optional[List[FunctionCallModel]] = Field(
-        None, description="Tool calls (when type='tool_calls')")
+        None, description="Tool calls (when type='tool_calls')"
+    )
 
     def model_dump(self, **kwargs):
         """
@@ -194,26 +197,26 @@ class ContentItem(BaseModel):
         Returns:
             Dict[str, Any]: Dictionary representation of the content item
         """
-        if kwargs.get('mode') == 'json':
+        if kwargs.get("mode") == "json":
             # For JSON output
             has_tool_calls = self.type == "tool_calls" and self.tool_calls
             tool_calls_json = None
             if has_tool_calls:
-                tool_calls_json = [
-                    tc.model_dump(mode='json') for tc in self.tool_calls
-                ]
+                tool_calls_json = [tc.model_dump(mode="json") for tc in self.tool_calls]
 
             return {
                 "type": self.type,
                 "text": self.text if self.type == "text" else None,
-                "tool_calls": tool_calls_json
+                "tool_calls": tool_calls_json,
             }
         # For regular dict output
         result = {"type": self.type}
         if self.type == "text":
             result["text"] = self.text
         elif self.type == "tool_calls":
-            result["tool_calls"] = [tc.model_dump() for tc in self.tool_calls] if self.tool_calls else None
+            result["tool_calls"] = (
+                [tc.model_dump() for tc in self.tool_calls] if self.tool_calls else None
+            )
         return result
 
 
@@ -226,9 +229,11 @@ class MCPMessage(BaseModel):
     can be either a simple string or a list of content items supporting
     multi-modal content.
     """
+
     role: str = Field(..., description="Message role (user, assistant, system, etc.)")
     content: Union[str, List[ContentItem]] = Field(
-        ..., description="Message content (string or content items)")
+        ..., description="Message content (string or content items)"
+    )
 
     def model_dump(self, **kwargs):
         """
@@ -247,7 +252,7 @@ class MCPMessage(BaseModel):
         if isinstance(self.content, str):
             result["content"] = self.content
         else:
-            mode = 'json' if kwargs.get('mode') == 'json' else None
+            mode = "json" if kwargs.get("mode") == "json" else None
             result["content"] = [item.model_dump(mode=mode) for item in self.content]
 
         return result
@@ -265,6 +270,7 @@ class MCPToolCall(FunctionCallModel):
     MCP tool calls. It provides the same structure with a more specific
     name that aligns with the MCP protocol terminology.
     """
+
     pass
 
 
@@ -276,6 +282,7 @@ class MCPToolCallRequest(JSONRPCRequest):
     a tool in the MCP system. It ensures the request follows both the
     JSON-RPC 2.0 specification and the MCP extensions for tool calls.
     """
+
     # Method is the tool name in MCP
     params: Dict[str, Any] = Field(..., description="Tool parameters")
 
@@ -288,4 +295,5 @@ class MCPToolCallResponse(JSONRPCSuccessResponse):
     of a tool call in the MCP system. It ensures the response follows both
     the JSON-RPC 2.0 specification and the MCP extensions for tool calls.
     """
+
     result: Any = Field(..., description="Tool execution result")
