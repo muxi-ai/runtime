@@ -129,6 +129,9 @@ from .workflow.multimodal_integration import (
 # NEW: Import intelligent caching system
 from .caching import IntelligentCacheManager
 
+# NEW: Import parallel workflow optimization
+from .parallel import ParallelWorkflowOptimizer
+
 
 class Overlord:
     """
@@ -393,6 +396,11 @@ class Overlord:
             enable_analytics=True,
             enable_memory_optimization=True,
             embedding_service=self.extraction_model  # Use extraction model for embeddings
+        )
+
+        # NEW: Initialize parallel workflow optimizer
+        self.parallel_optimizer = ParallelWorkflowOptimizer(
+            sensitivity_threshold=0.5
         )
 
         # Active workflows tracking
@@ -4395,6 +4403,61 @@ class Overlord:
     # =========================================================================
     # END ENHANCED WORKFLOW ORCHESTRATION METHODS
     # =========================================================================
+
+    async def optimize_workflow_for_parallel_execution(
+        self,
+        workflow: Any,
+        available_agents: Optional[List[str]] = None
+    ) -> Any:
+        """
+        Optimize a workflow for parallel execution using the parallel optimizer.
+
+        Args:
+            workflow: The workflow to optimize
+            available_agents: List of available agent IDs (defaults to all agents)
+
+        Returns:
+            OptimizedWorkflow with execution plan
+        """
+        if available_agents is None:
+            available_agents = list(self.agents.keys())
+
+        # Convert workflow to dictionary format expected by optimizer
+        workflow_definition = {
+            "id": getattr(workflow, 'id', 'unknown'),
+            "tasks": {}  # Would need to extract tasks from workflow
+        }
+
+        try:
+            # Register agent capabilities with the optimizer
+            agent_capabilities = []
+            for agent_id in available_agents:
+                if agent_id in self.agents:
+                    # Create capability info for agent
+                    from .parallel.types import AgentCapability
+                    capability = AgentCapability(
+                        agent_id=agent_id,
+                        capabilities={"general", "chat"},  # Default capabilities
+                        max_concurrent_tasks=3
+                    )
+                    agent_capabilities.append(capability)
+
+            await self.parallel_optimizer.register_agent_capabilities(agent_capabilities)
+
+            # Optimize the workflow
+            optimized_workflow = await self.parallel_optimizer.optimize_workflow(
+                workflow_definition,
+                available_agents
+            )
+
+            logger.info(f"Workflow optimization complete. Expected speedup: "
+                       f"{optimized_workflow.expected_speedup:.1f}x")
+
+            return optimized_workflow
+
+        except Exception as e:
+            logger.error(f"Error optimizing workflow: {e}")
+            raise
 
     async def process_task_inputs_with_multimodal(
         self,
