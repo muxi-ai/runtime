@@ -12,7 +12,7 @@ import asyncio
 
 # Test imports
 try:
-    from muxi.runtime.overlord.caching import IntelligentCacheManager
+    from runtime.muxi.runtime.overlord.caching import IntelligentCacheManager
     print("✓ Cache imports successful")
 except ImportError as e:
     print(f"✗ Cache import failed: {e}")
@@ -83,6 +83,12 @@ async def test_cache_operations():
 
         await cache_manager.start()
 
+        # Clear all caches to ensure clean test start
+        await cache_manager.l1_cache.clear()
+        await cache_manager.l2_cache.clear()
+        await cache_manager.l3_cache.clear()
+        await cache_manager.persistent_cache.clear()
+
         # Test cache miss
         response = await cache_manager.get_cached_response(
             user_message="Hello, how are you?",
@@ -125,17 +131,17 @@ async def test_cache_operations():
             print("✗ Cache hit failed")
             return False
 
-        # Test semantic similarity (should work with mock embeddings)
-        similar_response = await cache_manager.get_cached_response(
-            user_message="Hi, how are you doing?",  # Similar but different
+        # Test semantic similarity with a completely different message
+        different_response = await cache_manager.get_cached_response(
+            user_message="What is the capital of France?",  # Completely different topic
             user_id=1,
             agent_id="test_agent"
         )
 
-        if similar_response:
-            print("✓ Semantic similarity matching working")
+        if different_response:
+            print("? Unexpected semantic match detected")
         else:
-            print("✓ No semantic match (expected with mock embeddings)")
+            print("✓ No semantic match for different topic (as expected)")
 
         await cache_manager.stop()
         return True

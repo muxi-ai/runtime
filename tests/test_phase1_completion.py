@@ -99,7 +99,7 @@ async def test_interactive_elements():
     )
 
     logger.info("✅ Interactive elements test completed")
-    logger.info(f"📝 Formatted response preview:\n{formatted_response[:500]}...")
+    logger.info(f"📝 Formatted response preview:\n{formatted_response['content'][:500]}...")
 
     return {
         "buttons": [approve_button, reject_button],
@@ -201,7 +201,7 @@ async def test_multimodal_workflow_processing():
         # Create a sample workflow
         workflow = Workflow(
             id="test_multimodal_workflow",
-            description="Multi-modal analysis workflow",
+            user_request="Multi-modal analysis workflow",
             tasks={
                 "task1": SubTask(
                     id="data_analysis",
@@ -209,8 +209,7 @@ async def test_multimodal_workflow_processing():
                     required_capabilities=["data_analysis", "multimodal_fusion"],
                     status=TaskStatus.PENDING
                 )
-            },
-            context={}
+            }
         )
 
         # Process workflow with multimodal capabilities
@@ -231,13 +230,29 @@ async def test_multimodal_workflow_processing():
             raw_inputs=raw_inputs
         )
 
+        # Test task output processing
+        task_output_processor = TaskOutputProcessor(fusion_engine)
+
+        raw_outputs = [
+            "Analysis complete: 3 key trends identified",
+            {"type": "chart", "data": [1, 2, 3], "title": "Sales Trends"},
+            {"type": "summary", "insights": ["Trend 1", "Trend 2", "Trend 3"]}
+        ]
+
+        processed_outputs = await task_output_processor.process_task_outputs(
+            task=workflow.tasks["task1"],
+            raw_outputs=raw_outputs
+        )
+
         logger.info("✅ Multimodal workflow processing test completed")
         logger.info(f"📋 Enhanced workflow: {enhanced_workflow.id}")
         logger.info(f"🔄 Processed inputs count: {len(processed_inputs)}")
+        logger.info(f"📤 Processed outputs count: {len(processed_outputs)}")
 
         return {
             "enhanced_workflow": enhanced_workflow,
             "processed_inputs": processed_inputs,
+            "processed_outputs": processed_outputs,
             "multimodal_content": [text_content]
         }
 
@@ -331,7 +346,7 @@ async def test_integrated_workflow_experience():
         )
 
         final_response = await integrator.embed_media(
-            content=formatted_response,
+            content=formatted_response['content'],
             media_items=media_items,
             format_type="markdown"
         )

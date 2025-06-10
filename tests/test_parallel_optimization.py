@@ -6,22 +6,20 @@ dependency analysis, resource allocation, bottleneck detection, and execution.
 """
 
 import asyncio
-import pytest
 from typing import Dict, List, Any
 
 # Import the parallel optimization components
-from muxi.runtime.overlord.parallel import (
+from runtime.muxi.runtime.overlord.parallel import (
     ParallelWorkflowOptimizer,
     DependencyAnalyzer,
     ResourceManager,
     BottleneckDetector,
-    ParallelExecutor
+    ParallelExecutor,
 )
-from muxi.runtime.overlord.parallel.types import (
+from runtime.muxi.runtime.overlord.parallel.types import (
     AgentCapability,
-    TaskStatus,
     ExecutionPlan,
-    OptimizedWorkflow
+    OptimizedWorkflow,
 )
 
 
@@ -38,30 +36,30 @@ class TestParallelOptimization:
                     "required_capabilities": ["web_research", "data_analysis"],
                     "dependencies": [],
                     "estimated_duration": 45.0,
-                    "priority": 1
+                    "priority": 1,
                 },
                 "task2": {
                     "description": "Analyze company current practices",
                     "required_capabilities": ["document_analysis"],
                     "dependencies": [],
                     "estimated_duration": 30.0,
-                    "priority": 1
+                    "priority": 1,
                 },
                 "task3": {
                     "description": "Write comprehensive report",
                     "required_capabilities": ["writing", "business_strategy"],
                     "dependencies": ["task1", "task2"],
                     "estimated_duration": 60.0,
-                    "priority": 2
+                    "priority": 2,
                 },
                 "task4": {
                     "description": "Create presentation slides",
                     "required_capabilities": ["presentation", "design"],
                     "dependencies": ["task3"],
                     "estimated_duration": 25.0,
-                    "priority": 3
-                }
-            }
+                    "priority": 3,
+                },
+            },
         }
 
     async def sample_agents(self) -> List[AgentCapability]:
@@ -72,29 +70,29 @@ class TestParallelOptimization:
                 capabilities={"web_research", "data_analysis"},
                 max_concurrent_tasks=2,
                 success_rate=0.95,
-                average_response_time=40.0
+                average_response_time=40.0,
             ),
             AgentCapability(
                 agent_id="analyst_agent",
                 capabilities={"document_analysis", "business_strategy"},
                 max_concurrent_tasks=3,
                 success_rate=0.90,
-                average_response_time=35.0
+                average_response_time=35.0,
             ),
             AgentCapability(
                 agent_id="writer_agent",
                 capabilities={"writing", "business_strategy"},
                 max_concurrent_tasks=2,
                 success_rate=0.88,
-                average_response_time=50.0
+                average_response_time=50.0,
             ),
             AgentCapability(
                 agent_id="designer_agent",
                 capabilities={"presentation", "design"},
                 max_concurrent_tasks=2,
                 success_rate=0.92,
-                average_response_time=30.0
-            )
+                average_response_time=30.0,
+            ),
         ]
 
     def optimizer(self) -> ParallelWorkflowOptimizer:
@@ -180,17 +178,17 @@ class TestParallelOptimization:
         bottleneck_detector = BottleneckDetector(sensitivity_threshold=0.3)
 
         # Create a mock execution plan
-        from muxi.runtime.overlord.parallel.types import ExecutionPlan, ResourceAllocation
+        from runtime.muxi.runtime.overlord.parallel.types import ExecutionPlan, ResourceAllocation
 
         resource_allocation = ResourceAllocation(allocation_id="test_alloc")
         resource_allocation.parallel_efficiency = 0.4  # Low efficiency to trigger bottleneck
-        resource_allocation.load_balance_score = 0.3   # Poor balance to trigger bottleneck
+        resource_allocation.load_balance_score = 0.3  # Poor balance to trigger bottleneck
 
         execution_plan = ExecutionPlan(
             plan_id="test_plan",
             parallel_groups=[],
             resource_allocation=resource_allocation,
-            execution_order=[]
+            execution_order=[],
         )
         execution_plan.parallelization_speedup = 1.2  # Low speedup
 
@@ -218,10 +216,7 @@ class TestParallelOptimization:
         available_agents = [agent.agent_id for agent in sample_agents]
 
         # Optimize the workflow
-        optimized_workflow = await optimizer.optimize_workflow(
-            sample_workflow,
-            available_agents
-        )
+        optimized_workflow = await optimizer.optimize_workflow(sample_workflow, available_agents)
 
         assert isinstance(optimized_workflow, OptimizedWorkflow)
         assert optimized_workflow.workflow_id == "test_workflow"
@@ -245,9 +240,7 @@ class TestParallelOptimization:
         available_agents = [agent.agent_id for agent in sample_agents]
 
         # Optimize workflow
-        optimized_workflow = await optimizer.optimize_workflow(
-            sample_workflow, available_agents
-        )
+        optimized_workflow = await optimizer.optimize_workflow(sample_workflow, available_agents)
 
         # Create executor
         executor = ParallelExecutor()
@@ -260,14 +253,13 @@ class TestParallelOptimization:
 
         # Mock progress callback
         progress_updates = []
+
         def mock_progress_callback(progress_data: Dict[str, Any]) -> None:
             progress_updates.append(progress_data)
 
         # Execute the workflow
         execution_result = await executor.execute_workflow(
-            optimized_workflow,
-            mock_task_executor,
-            mock_progress_callback
+            optimized_workflow, mock_task_executor, mock_progress_callback
         )
 
         assert execution_result.execution_id is not None
@@ -307,15 +299,13 @@ class TestParallelOptimization:
             "tasks": {
                 "task1": {
                     "dependencies": ["nonexistent_task"],  # Invalid dependency
-                    "description": "Invalid task"
+                    "description": "Invalid task",
                 }
-            }
+            },
         }
 
         try:
-            optimized_workflow = await optimizer.optimize_workflow(
-                invalid_workflow, ["agent1"]
-            )
+            optimized_workflow = await optimizer.optimize_workflow(invalid_workflow, ["agent1"])
             # Should complete but with warnings about invalid dependencies
             assert optimized_workflow is not None
         except Exception as e:
@@ -343,7 +333,9 @@ async def run_all_tests():
         await test_instance.test_resource_allocation(sample_workflow, sample_agents)
         await test_instance.test_bottleneck_detection(sample_workflow, sample_agents)
         await test_instance.test_end_to_end_optimization(optimizer, sample_workflow, sample_agents)
-        await test_instance.test_parallel_execution_simulation(optimizer, sample_workflow, sample_agents)
+        await test_instance.test_parallel_execution_simulation(
+            optimizer, sample_workflow, sample_agents
+        )
         await test_instance.test_optimization_recommendations(optimizer, sample_workflow)
         await test_instance.test_error_handling(optimizer)
 
