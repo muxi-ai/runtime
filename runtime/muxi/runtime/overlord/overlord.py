@@ -126,6 +126,9 @@ from .workflow.multimodal_integration import (
     TaskOutputProcessor
 )
 
+# NEW: Import intelligent caching system
+from .caching import IntelligentCacheManager
+
 
 class Overlord:
     """
@@ -385,6 +388,13 @@ class Overlord:
             fusion_engine=self.multimodal_fusion_engine
         )
 
+        # NEW: Initialize intelligent caching system
+        self.cache_manager = IntelligentCacheManager(
+            enable_analytics=True,
+            enable_memory_optimization=True,
+            embedding_service=self.extraction_model  # Use extraction model for embeddings
+        )
+
         # Active workflows tracking
         self.active_workflows: Dict[str, Workflow] = {}
         self.pending_approvals: Dict[str, Workflow] = {}
@@ -395,6 +405,22 @@ class Overlord:
         )
 
         logger.info("Enhanced Overlord initialized with workflow capabilities")
+
+    async def start(self) -> None:
+        """Start all overlord services including cache manager."""
+        try:
+            # Start cache manager
+            if hasattr(self, "cache_manager") and self.cache_manager:
+                await self.cache_manager.start()
+                logger.info("Cache manager started successfully")
+
+            # Initialize other async services if needed
+            await self.initialize_external_registry_async()
+
+            logger.info("Overlord services started successfully")
+        except Exception as e:
+            logger.error(f"Error starting overlord services: {e}")
+            raise
 
     def _load_default_persona(self) -> None:
         """Load the default persona from the system_persona.md file."""
@@ -3403,6 +3429,14 @@ class Overlord:
                 if hasattr(self._mcp_service, "close"):
                     await self._mcp_service.close()
 
+            # Stop cache manager
+            if hasattr(self, "cache_manager") and self.cache_manager:
+                try:
+                    await self.cache_manager.stop()
+                    logger.info("Cache manager stopped successfully")
+                except Exception as e:
+                    logger.error(f"Error stopping cache manager: {e}")
+
             logger.info("Overlord shutdown complete")
 
         except Exception as e:
@@ -3733,6 +3767,22 @@ class Overlord:
             >>> # Plan approval workflow - presents plan before execution
         """
         try:
+            # Check cache first for potential cached response
+            cached_response = None
+            if hasattr(self, "cache_manager") and self.cache_manager:
+                try:
+                    cached_response = await self.cache_manager.get_cached_response(
+                        user_message=user_message,
+                        context=context,
+                        user_id=user_id,
+                        agent_id=None  # Will be determined if cache miss
+                    )
+                    if cached_response and cached_response.is_valid():
+                        logger.debug("Cache hit - returning cached response")
+                        return cached_response.content
+                except Exception as e:
+                    logger.debug(f"Cache lookup error: {e}")
+
             # Check if this is a workflow approval response
             approval_response = await self._handle_pending_approvals(
                 user_message, user_id, conversation_id
@@ -3752,15 +3802,39 @@ class Overlord:
             # Determine if we should use workflow mode
             should_use_workflow = self._should_use_workflow(analysis, enable_workflow)
 
+            # Generate response
             if should_use_workflow:
-                return await self._handle_workflow_request(
+                response = await self._handle_workflow_request(
                     user_message, analysis, user_id, conversation_id, context
                 )
+                response_type = "workflow"
+                workflow_id = getattr(analysis, 'workflow_id', None)
             else:
                 # Fallback to traditional agent routing
-                return await self._handle_simple_request(
+                response = await self._handle_simple_request(
                     user_message, user_id, conversation_id, context
                 )
+                response_type = "simple"
+                workflow_id = None
+
+            # Cache the response for future use
+            if hasattr(self, "cache_manager") and self.cache_manager and response:
+                try:
+                    await self.cache_manager.cache_response(
+                        user_message=user_message,
+                        response_content=response,
+                        response_type=response_type,
+                        context=context,
+                        user_id=user_id,
+                        agent_id=None,  # Will be set by cache manager
+                        workflow_id=workflow_id,
+                        quality_score=1.0  # Default quality score
+                    )
+                    logger.debug("Response cached successfully")
+                except Exception as e:
+                    logger.debug(f"Cache storage error: {e}")
+
+            return response
 
         except Exception as e:
             logger.error(f"Error processing message: {e}")

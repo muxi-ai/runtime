@@ -13,7 +13,7 @@ from enum import Enum
 
 from loguru import logger
 
-from ..llm import LLM
+from ...llm import LLM
 from .types import Workflow, TaskStatus
 
 

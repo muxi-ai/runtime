@@ -54,8 +54,8 @@ class InteractiveElement:
 @dataclass
 class ButtonElement(InteractiveElement):
     """Interactive button element"""
-    text: str
-    action: str  # Action to trigger when clicked
+    text: str = ""
+    action: str = ""  # Action to trigger when clicked
     style: ButtonStyle = ButtonStyle.PRIMARY
     disabled: bool = False
 
@@ -72,9 +72,9 @@ class ButtonElement(InteractiveElement):
 @dataclass
 class FormElement(InteractiveElement):
     """Interactive form element"""
-    title: str
-    fields: List[Dict[str, Any]]
-    submit_action: str
+    title: str = ""
+    fields: List[Dict[str, Any]] = field(default_factory=list)
+    submit_action: str = ""
     cancel_action: Optional[str] = None
 
     def __post_init__(self):
@@ -90,8 +90,8 @@ class FormElement(InteractiveElement):
 @dataclass
 class ChartElement(InteractiveElement):
     """Chart/visualization element"""
-    chart_type: str  # "bar", "line", "pie", "scatter", etc.
-    data: Dict[str, Any]
+    chart_type: str = ""  # "bar", "line", "pie", "scatter", etc.
+    data: Dict[str, Any] = field(default_factory=dict)
     title: Optional[str] = None
 
     def __post_init__(self):
@@ -106,8 +106,8 @@ class ChartElement(InteractiveElement):
 @dataclass
 class TableElement(InteractiveElement):
     """Table display element"""
-    headers: List[str]
-    rows: List[List[Any]]
+    headers: List[str] = field(default_factory=list)
+    rows: List[List[Any]] = field(default_factory=list)
     sortable: bool = True
     searchable: bool = True
 
