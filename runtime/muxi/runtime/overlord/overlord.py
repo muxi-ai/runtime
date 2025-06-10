@@ -108,7 +108,23 @@ from .workflow import (
     WorkflowStatus,
     ApprovalStatus,
     RequestAnalysis,
-  )
+)
+
+# NEW: Import multimodal and synthesis components
+from .workflow.multimodal import MultiModalFusionEngine, MultiModalWorkflowIntegrator
+from .workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
+
+# NEW: Import interactive elements and enhanced multimodal integration
+from .workflow.interactive import (
+    InteractiveElementGenerator,
+    ResponseFormatter,
+    MediaIntegrator
+)
+from .workflow.multimodal_integration import (
+    WorkflowMultiModalProcessor,
+    TaskInputProcessor,
+    TaskOutputProcessor
+)
 
 
 class Overlord:
@@ -342,12 +358,41 @@ class Overlord:
         self.approval_manager = ApprovalManager()
         self.progress_tracker = ProgressTracker()
 
+        # NEW: Initialize multimodal and synthesis components
+        self.multimodal_fusion_engine = MultiModalFusionEngine(llm=extraction_model)
+        self.multimodal_integrator = MultiModalWorkflowIntegrator(
+            fusion_engine=self.multimodal_fusion_engine
+        )
+        self.quality_assessor = ResponseQualityAssessor(llm=extraction_model)
+        self.response_synthesizer = AdvancedResponseSynthesizer(
+            llm=extraction_model,
+            quality_assessor=self.quality_assessor
+        )
+
+        # NEW: Initialize interactive elements and enhanced multimodal integration
+        self.interactive_generator = InteractiveElementGenerator()
+        self.response_formatter = ResponseFormatter(self.interactive_generator)
+        self.media_integrator = MediaIntegrator()
+
+        # Enhanced multimodal processors
+        self.workflow_multimodal_processor = WorkflowMultiModalProcessor(
+            fusion_engine=self.multimodal_fusion_engine
+        )
+        self.task_input_processor = TaskInputProcessor(
+            fusion_engine=self.multimodal_fusion_engine
+        )
+        self.task_output_processor = TaskOutputProcessor(
+            fusion_engine=self.multimodal_fusion_engine
+        )
+
         # Active workflows tracking
         self.active_workflows: Dict[str, Workflow] = {}
         self.pending_approvals: Dict[str, Workflow] = {}
 
         # Setup progress tracking
-        self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
+        self.workflow_executor.add_progress_callback(
+            self.progress_tracker.update_workflow_progress
+        )
 
         logger.info("Enhanced Overlord initialized with workflow capabilities")
 
@@ -3909,35 +3954,48 @@ class Overlord:
         context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
-        Execute approved workflow.
+        Execute workflow with enhanced multimodal and interactive processing.
 
         Args:
             workflow: Workflow to execute
             user_id: Optional user identifier
             conversation_id: Optional conversation identifier
-            context: Optional execution context
+            context: Optional conversation context
 
         Returns:
-            Execution results or progress report
+            Final workflow response with interactive elements
         """
         try:
-            # Track active workflow
+            # Add workflow to active tracking
             self.active_workflows[workflow.id] = workflow
 
-            # Build execution context
-            execution_context = {
-                "user_id": user_id,
-                "conversation_id": conversation_id,
-                **(context or {}),
-            }
-
-            # Execute workflow
-            completed_workflow = await self.workflow_executor.execute_workflow(
-                workflow, execution_context
+            # NEW: Process workflow with multimodal capabilities
+            enhanced_workflow = await self.workflow_multimodal_processor.process_workflow_content(
+                workflow=workflow
             )
 
-            # Generate final response
-            response = self._generate_workflow_response(completed_workflow)
+            # Execute the enhanced workflow
+            result = await self.workflow_executor.execute_workflow(enhanced_workflow)
+
+            if result.success:
+                workflow.status = WorkflowStatus.COMPLETED
+
+                # Generate enhanced response with interactive elements
+                response = await self._generate_enhanced_workflow_response(workflow, context)
+
+                # Add to memory for context preservation
+                if workflow.id:
+                    await self.add_message_to_memory(
+                        content=f"Completed workflow: {workflow.description}",
+                        role="assistant",
+                        timestamp=time.time(),
+                        agent_id="workflow_orchestrator",
+                        user_id=user_id,
+                    )
+
+            else:
+                workflow.status = WorkflowStatus.FAILED
+                response = f"Workflow execution failed: {result.error or 'Unknown error'}"
 
             # Extract user information from workflow completion
             if self.auto_extract_user_info and user_id and user_id != 0:
@@ -3960,7 +4018,132 @@ class Overlord:
             logger.error(f"Error executing workflow {workflow.id}: {e}")
             return f"I encountered an error while working on your request: {str(e)}"
 
-    def _generate_workflow_response(self, workflow: Workflow) -> str:
+    async def _generate_enhanced_workflow_response(self, workflow: Workflow, context: Optional[Dict[str, Any]] = None) -> str:
+        """
+        Generate enhanced response with multimodal processing and interactive elements.
+
+        Args:
+            workflow: Completed workflow
+            context: Optional conversation context
+
+        Returns:
+            Enhanced response with interactive elements
+        """
+        try:
+            # Generate base response using advanced synthesis
+            base_response = await self._generate_workflow_response(workflow)
+
+            # Create interactive elements based on workflow content
+            interactive_elements = await self._create_workflow_interactive_elements(workflow)
+
+            # Process any media content from workflow outputs
+            media_items = await self._extract_media_from_workflow(workflow)
+
+            # Format response with interactive elements and media
+            formatted_response = await self.response_formatter.format_response(
+                content=base_response,
+                elements=interactive_elements,
+                format_type="markdown",
+                context=context or {}
+            )
+
+            # Integrate media if present
+            if media_items:
+                enhanced_response = await self.media_integrator.embed_media(
+                    content=formatted_response,
+                    media_items=media_items,
+                    format_type="markdown"
+                )
+                return enhanced_response
+
+            return formatted_response
+
+        except Exception as e:
+            logger.error(f"Error generating enhanced response: {e}")
+            # Fallback to basic response
+            return await self._generate_workflow_response(workflow)
+
+    async def _create_workflow_interactive_elements(self, workflow: Workflow) -> List:
+        """
+        Create interactive elements based on workflow content and status.
+
+        Args:
+            workflow: Workflow to create elements for
+
+        Returns:
+            List of interactive elements
+        """
+        elements = []
+
+        try:
+            # Create progress visualization if workflow has multiple tasks
+            if len(workflow.tasks) > 1:
+                completed_tasks = sum(1 for task in workflow.tasks.values() if task.status.value == "completed")
+                total_tasks = len(workflow.tasks)
+
+                progress_chart = self.interactive_generator.create_progress_chart(
+                    completed=completed_tasks,
+                    total=total_tasks,
+                    title="Workflow Progress"
+                )
+                elements.append(progress_chart)
+
+            # Create workflow status table
+            workflow_table = self.interactive_generator.create_workflow_status_table({
+                "id": workflow.id,
+                "status": workflow.status.value,
+                "tasks": workflow.tasks,
+                "created_at": getattr(workflow, 'created_at', 'Unknown')
+            })
+            elements.append(workflow_table)
+
+            # Add feedback buttons for completed workflows
+            if workflow.status == WorkflowStatus.COMPLETED:
+                feedback_buttons = self.interactive_generator.create_approval_buttons(
+                    context=f"workflow_{workflow.id}"
+                )
+                elements.extend(feedback_buttons)
+
+        except Exception as e:
+            logger.error(f"Error creating interactive elements: {e}")
+
+        return elements
+
+    async def _extract_media_from_workflow(self, workflow: Workflow) -> List[Dict[str, Any]]:
+        """
+        Extract media content from workflow task outputs.
+
+        Args:
+            workflow: Workflow to extract media from
+
+        Returns:
+            List of media items
+        """
+        media_items = []
+
+        try:
+            for task in workflow.tasks.values():
+                if hasattr(task, 'multimodal_outputs'):
+                    for output in task.multimodal_outputs or []:
+                        if hasattr(output, 'generated_media'):
+                            media_items.extend(output.generated_media)
+
+                # Also check regular outputs for media references
+                if task.outputs and isinstance(task.outputs, dict):
+                    for key, value in task.outputs.items():
+                        if key.endswith(('_image', '_chart', '_diagram', '_media')):
+                            media_items.append({
+                                "type": "generated",
+                                "content": value,
+                                "title": key.replace('_', ' ').title()
+                            })
+
+        except Exception as e:
+            logger.error(f"Error extracting media from workflow: {e}")
+
+        return media_items
+
+    async def _generate_workflow_response(self, workflow: Workflow) -> str:
         """
         Generate final response from completed workflow.
 
@@ -3971,24 +4154,26 @@ class Overlord:
             Final response to user
         """
         if workflow.status == WorkflowStatus.COMPLETED:
-            # Collect outputs from all tasks
-            outputs = []
-            for task in workflow.tasks.values():
-                if task.outputs and task.outputs.get("content"):
-                    outputs.append(task.outputs["content"])
+            try:
+                # Use advanced synthesis for completed workflows
+                user_context = {
+                    'persona': getattr(self, '_default_persona', 'professional and helpful'),
+                    'workflow_id': workflow.id,
+                    'user_request': getattr(workflow, 'user_request', ''),
+                }
 
-            if outputs:
-                response_parts = ["I've completed your request. Here are the results:\n"]
+                synthesis_result = await self.response_synthesizer.synthesize_response(
+                    workflow=workflow,
+                    user_context=user_context,
+                    synthesis_options={'mode': 'balanced'}
+                )
 
-                for i, output in enumerate(outputs, 1):
-                    if len(outputs) > 1:
-                        response_parts.append(f"## Part {i}\n{output}\n")
-                    else:
-                        response_parts.append(output)
+                return synthesis_result.synthesized_content
 
-                return "\n".join(response_parts)
-            else:
-                return "I've completed the workflow, but no specific outputs were generated."
+            except Exception as e:
+                logger.error(f"Error in advanced synthesis: {e}")
+                # Fallback to simple concatenation
+                return self._generate_simple_workflow_response(workflow)
 
         elif workflow.status == WorkflowStatus.FAILED:
             failed_tasks = [
@@ -4002,6 +4187,24 @@ class Overlord:
 
         else:
             return f"Workflow completed with status: {workflow.status.value}"
+
+    def _generate_simple_workflow_response(self, workflow: Workflow) -> str:
+        """Generate simple fallback response for workflow completion."""
+        outputs = []
+        for task in workflow.tasks.values():
+            if task.outputs and task.outputs.get("content"):
+                outputs.append(task.outputs["content"])
+
+        if outputs:
+            response_parts = ["I've completed your request. Here are the results:\n"]
+            for i, output in enumerate(outputs, 1):
+                if len(outputs) > 1:
+                    response_parts.append(f"## Part {i}\n{output}\n")
+                else:
+                    response_parts.append(output)
+            return "\n".join(response_parts)
+        else:
+            return "I've completed the workflow, but no specific outputs were generated."
 
     async def _handle_simple_request(
         self,
@@ -4118,3 +4321,48 @@ class Overlord:
     # =========================================================================
     # END ENHANCED WORKFLOW ORCHESTRATION METHODS
     # =========================================================================
+
+    async def process_task_inputs_with_multimodal(
+        self,
+        task_inputs: List[Any],
+        task_id: str
+    ) -> List[Any]:
+        """
+        Process task inputs to handle multimodal content.
+
+        Args:
+            task_inputs: Raw task inputs to process
+            task_id: ID of the task processing inputs
+
+        Returns:
+            Processed task inputs with multimodal content
+        """
+        try:
+            # Process inputs through multimodal processor
+            multimodal_inputs = await self.task_input_processor.process_task_inputs(
+                task=None,  # Can be None since we're just processing inputs
+                raw_inputs=task_inputs
+            )
+
+            # Convert back to format expected by tasks
+            processed_inputs = []
+            for mm_input in multimodal_inputs:
+                if hasattr(mm_input, 'content_items') and mm_input.content_items:
+                    # Extract content from multimodal format
+                    content_strings = []
+                    for content_item in mm_input.content_items:
+                        if hasattr(content_item, 'content'):
+                            content_strings.append(str(content_item.content))
+
+                    if content_strings:
+                        processed_inputs.extend(content_strings)
+                    else:
+                        processed_inputs.append(str(mm_input))
+                else:
+                    processed_inputs.append(str(mm_input))
+
+            return processed_inputs if processed_inputs else task_inputs
+
+        except Exception as e:
+            logger.error(f"Error processing multimodal task inputs for {task_id}: {e}")
+            return task_inputs  # Return original inputs on error
