@@ -80,45 +80,42 @@ import magic
 # Import OneLLM components
 from onellm import ChatCompletion, Embedding
 from onellm.config import set_api_key
-from onellm.errors import (
-    AuthenticationError,
-    RateLimitError,
-    InvalidRequestError
-)
+from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
 
 
 # File processing configuration
 FILE_SIZE_LIMITS = {
-    'default': 500 * 1024 * 1024,  # 500MB general limit for safety
+    "default": 500 * 1024 * 1024,  # 500MB general limit for safety
     # Let OneLLM enforce its own format-specific limits
 }
 
 # MIME type to OneLLM content type mapping
 MIME_TO_ONELLM_TYPE = {
     # Images
-    'image/jpeg': 'image_url',
-    'image/png': 'image_url',
-    'image/gif': 'image_url',
-    'image/webp': 'image_url',
+    "image/jpeg": "image_url",
+    "image/png": "image_url",
+    "image/gif": "image_url",
+    "image/webp": "image_url",
     # Documents - OneLLM handles these, we just pass them through
-    'application/pdf': 'document',
-    'text/plain': 'text',
-    'text/markdown': 'text',
+    "application/pdf": "document",
+    "text/plain": "text",
+    "text/markdown": "text",
     # Audio/Video - pass through, user prompt determines processing
-    'audio/mpeg': 'audio',
-    'audio/wav': 'audio',
-    'video/mp4': 'video',
+    "audio/mpeg": "audio",
+    "audio/wav": "audio",
+    "video/mp4": "video",
     # Archives and other formats
-    'application/zip': 'document',
-    'application/json': 'text',
+    "application/zip": "document",
+    "application/json": "text",
     # Default fallback
-    'default': 'document'
+    "default": "document",
 }
 
 
 # Enhanced Error Classification
 class LLMErrorType(Enum):
     """Classification of LLM error types for appropriate handling."""
+
     AUTHENTICATION = "authentication"
     RATE_LIMIT = "rate_limit"
     TIMEOUT = "timeout"
@@ -141,7 +138,7 @@ class LLMError(Exception):
         provider: str = None,
         model: str = None,
         retryable: bool = False,
-        original_error: Exception = None
+        original_error: Exception = None,
     ):
         super().__init__(message)
         self.error_type = error_type
@@ -171,12 +168,12 @@ class FileProcessor:
 
             # Check file size limits
             file_size = file_path.stat().st_size
-            if file_size > FILE_SIZE_LIMITS['default']:
+            if file_size > FILE_SIZE_LIMITS["default"]:
                 logger.warning(f"File {file_path} exceeds size limit: {file_size} bytes")
                 return False
 
             # Basic security check - avoid obviously dangerous files
-            if file_path.suffix.lower() in ['.exe', '.bat', '.sh', '.scr']:
+            if file_path.suffix.lower() in [".exe", ".bat", ".sh", ".scr"]:
                 logger.warning(f"Potentially dangerous file type: {file_path.suffix}")
                 return False
 
@@ -204,7 +201,7 @@ class FileProcessor:
             return mime_type
 
         # Default fallback
-        return 'application/octet-stream'
+        return "application/octet-stream"
 
     @staticmethod
     def _map_mime_to_onellm_type(mime_type: str) -> str:
@@ -214,16 +211,16 @@ class FileProcessor:
             return MIME_TO_ONELLM_TYPE[mime_type]
 
         # Check broad categories
-        if mime_type.startswith('image/'):
-            return 'image_url'
-        elif mime_type.startswith('text/'):
-            return 'text'
-        elif mime_type.startswith('audio/'):
-            return 'audio'
-        elif mime_type.startswith('video/'):
-            return 'video'
+        if mime_type.startswith("image/"):
+            return "image_url"
+        elif mime_type.startswith("text/"):
+            return "text"
+        elif mime_type.startswith("audio/"):
+            return "audio"
+        elif mime_type.startswith("video/"):
+            return "video"
         else:
-            return MIME_TO_ONELLM_TYPE['default']
+            return MIME_TO_ONELLM_TYPE["default"]
 
     @staticmethod
     async def convert_file_for_onellm(file_path: Union[str, Path]) -> Dict[str, Any]:
@@ -239,34 +236,29 @@ class FileProcessor:
             onellm_type = FileProcessor._map_mime_to_onellm_type(mime_type)
 
             # Read file and convert to base64
-            async with aiofiles.open(file_path, 'rb') as f:
+            async with aiofiles.open(file_path, "rb") as f:
                 file_content = await f.read()
 
-            base64_content = base64.b64encode(file_content).decode('utf-8')
+            base64_content = base64.b64encode(file_content).decode("utf-8")
 
             # Return in OneLLM-compatible format
-            if onellm_type == 'image_url':
+            if onellm_type == "image_url":
                 return {
                     "type": "image_url",
-                    "image_url": {
-                        "url": f"data:{mime_type};base64,{base64_content}"
-                    }
+                    "image_url": {"url": f"data:{mime_type};base64,{base64_content}"},
                 }
-            elif onellm_type == 'text':
+            elif onellm_type == "text":
                 # For text files, include the actual text content
                 try:
-                    text_content = file_content.decode('utf-8')
-                    return {
-                        "type": "text",
-                        "text": f"[File: {file_path.name}]\n{text_content}"
-                    }
+                    text_content = file_content.decode("utf-8")
+                    return {"type": "text", "text": f"[File: {file_path.name}]\n{text_content}"}
                 except UnicodeDecodeError:
                     # Fallback to base64 if not valid UTF-8
                     return {
                         "type": "document",
                         "data": base64_content,
                         "filename": file_path.name,
-                        "mime_type": mime_type
+                        "mime_type": mime_type,
                     }
             else:
                 # Generic document/audio/video handling
@@ -274,7 +266,7 @@ class FileProcessor:
                     "type": onellm_type,
                     "data": base64_content,
                     "filename": file_path.name,
-                    "mime_type": mime_type
+                    "mime_type": mime_type,
                 }
 
         except Exception as e:
@@ -282,7 +274,7 @@ class FileProcessor:
                 f"File conversion failed for {file_path}: {str(e)}",
                 error_type=LLMErrorType.FILE_PROCESSING,
                 retryable=False,
-                original_error=e
+                original_error=e,
             )
 
 
@@ -293,7 +285,7 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 5,
         timeout: float = 60.0,
-        expected_exception: tuple = (Exception,)
+        expected_exception: tuple = (Exception,),
     ):
         self.failure_threshold = failure_threshold
         self.timeout = timeout
@@ -309,7 +301,7 @@ class CircuitBreaker:
                 raise LLMError(
                     "Circuit breaker is OPEN. Too many failures.",
                     error_type=LLMErrorType.MODEL_OVERLOAD,
-                    retryable=False
+                    retryable=False,
                 )
             else:
                 self.state = "half-open"
@@ -334,9 +326,7 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = "open"
-            logger.warning(
-                "Circuit breaker OPENED after {} failures".format(self.failure_count)
-            )
+            logger.warning("Circuit breaker OPENED after {} failures".format(self.failure_count))
 
 
 # Global cache for responses (simple in-memory cache)
@@ -352,7 +342,7 @@ _retry_stats = {
     "successful_requests": 0,
     "failed_requests": 0,
     "retry_attempts": 0,
-    "circuit_breaker_trips": 0
+    "circuit_breaker_trips": 0,
 }
 
 
@@ -390,7 +380,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.AUTHENTICATION,
             provider=provider,
             retryable=False,
-            original_error=error
+            original_error=error,
         )
     elif isinstance(error, RateLimitError):
         return LLMError(
@@ -398,7 +388,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.RATE_LIMIT,
             provider=provider,
             retryable=True,
-            original_error=error
+            original_error=error,
         )
     elif isinstance(error, InvalidRequestError):
         return LLMError(
@@ -406,7 +396,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.INVALID_REQUEST,
             provider=provider,
             retryable=False,
-            original_error=error
+            original_error=error,
         )
     elif isinstance(error, asyncio.TimeoutError):
         return LLMError(
@@ -414,7 +404,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.TIMEOUT,
             provider=provider,
             retryable=True,
-            original_error=error
+            original_error=error,
         )
     elif "context length" in error_message.lower() or "token" in error_message.lower():
         return LLMError(
@@ -422,7 +412,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.CONTEXT_LENGTH,
             provider=provider,
             retryable=False,
-            original_error=error
+            original_error=error,
         )
     elif "overloaded" in error_message.lower() or "busy" in error_message.lower():
         return LLMError(
@@ -430,7 +420,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.MODEL_OVERLOAD,
             provider=provider,
             retryable=True,
-            original_error=error
+            original_error=error,
         )
     else:
         return LLMError(
@@ -438,7 +428,7 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             error_type=LLMErrorType.UNKNOWN,
             provider=provider,
             retryable=True,
-            original_error=error
+            original_error=error,
         )
 
 
@@ -451,10 +441,10 @@ async def _exponential_backoff_retry(
     retryable_errors: tuple = (
         LLMErrorType.RATE_LIMIT,
         LLMErrorType.TIMEOUT,
-        LLMErrorType.MODEL_OVERLOAD
+        LLMErrorType.MODEL_OVERLOAD,
     ),
     *args,
-    **kwargs
+    **kwargs,
 ):
     """Execute function with exponential backoff retry strategy."""
     global _retry_stats
@@ -475,15 +465,15 @@ async def _exponential_backoff_retry(
                         "error_type": e.error_type.value,
                         "provider": e.provider,
                         "retryable": e.retryable,
-                        "attempt": attempt + 1
-                    }
+                        "attempt": attempt + 1,
+                    },
                 )
                 raise e
 
             _retry_stats["retry_attempts"] += 1
 
             # Calculate delay with exponential backoff
-            delay = min(base_delay * (2 ** attempt), max_delay)
+            delay = min(base_delay * (2**attempt), max_delay)
             if jitter:
                 delay = delay * (0.5 + random.random() * 0.5)  # Add 50% jitter
 
@@ -494,8 +484,8 @@ async def _exponential_backoff_retry(
                     "error_type": e.error_type.value,
                     "provider": e.provider,
                     "retry_delay": delay,
-                    "attempt": attempt + 1
-                }
+                    "attempt": attempt + 1,
+                },
             )
 
             await asyncio.sleep(delay)
@@ -585,7 +575,7 @@ class LLM:
                 _circuit_breakers[circuit_breaker_key] = CircuitBreaker(
                     failure_threshold=circuit_breaker_threshold,
                     timeout=circuit_breaker_timeout,
-                    expected_exception=(LLMError,)
+                    expected_exception=(LLMError,),
                 )
             self.circuit_breaker = _circuit_breakers[circuit_breaker_key]
         else:
@@ -602,8 +592,8 @@ class LLM:
                 "model": self._model,
                 "timeout": timeout,
                 "max_retries": max_retries,
-                "circuit_breaker_enabled": enable_circuit_breaker
-            }
+                "circuit_breaker_enabled": enable_circuit_breaker,
+            },
         )
 
         # Initialize fusion engine for advanced multimodal processing (lazy loaded)
@@ -615,11 +605,13 @@ class LLM:
         if self._fusion_engine is None:
             try:
                 from ..overlord.workflow.multimodal import MultiModalFusionEngine
+
                 self._fusion_engine = MultiModalFusionEngine(self)
                 logger.debug("Initialized fusion engine for advanced multimodal processing")
             except ImportError as e:
-                logger.warning(f"Could not import fusion engine: {e}. "
-                               "Falling back to basic processing.")
+                logger.warning(
+                    f"Could not import fusion engine: {e}. " "Falling back to basic processing."
+                )
                 self._fusion_engine = None
         return self._fusion_engine
 
@@ -640,8 +632,8 @@ class LLM:
                     content=str(file_path),  # Will be processed by fusion engine
                     metadata={
                         "file_path": str(file_path),
-                        "processing_source": "llm_files_parameter"
-                    }
+                        "processing_source": "llm_files_parameter",
+                    },
                 )
 
                 content_items.append(content)
@@ -658,16 +650,17 @@ class LLM:
             from ..overlord.workflow.multimodal import ModalityType
 
             import mimetypes
+
             mime_type, _ = mimetypes.guess_type(str(file_path))
 
             if mime_type:
-                if mime_type.startswith('image/'):
+                if mime_type.startswith("image/"):
                     return ModalityType.IMAGE
-                elif mime_type.startswith('audio/'):
+                elif mime_type.startswith("audio/"):
                     return ModalityType.AUDIO
-                elif mime_type.startswith('video/'):
+                elif mime_type.startswith("video/"):
                     return ModalityType.VIDEO
-                elif mime_type in ['application/pdf', 'text/plain', 'application/msword']:
+                elif mime_type in ["application/pdf", "text/plain", "application/msword"]:
                     return ModalityType.DOCUMENT
 
             # Default to document for unknown types
@@ -700,21 +693,21 @@ class LLM:
 
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns."""
+
         async def _wrapped_func(*args, **kwargs):
             try:
                 # Add timeout to the function call
-                return await asyncio.wait_for(
-                    func(*args, **kwargs),
-                    timeout=self.timeout
-                )
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=self.timeout)
             except Exception as e:
                 # Classify and raise appropriate LLMError
                 raise _classify_error(e, self._provider)
 
         # Apply circuit breaker if enabled
         if self.circuit_breaker:
+
             async def _circuit_breaker_func(*args, **kwargs):
                 return await self.circuit_breaker.call(_wrapped_func, *args, **kwargs)
+
             func_to_retry = _circuit_breaker_func
         else:
             func_to_retry = _wrapped_func
@@ -726,7 +719,7 @@ class LLM:
             base_delay=self.base_retry_delay,
             max_delay=self.max_retry_delay,
             *args,
-            **kwargs
+            **kwargs,
         )
 
     async def chat(
@@ -776,33 +769,36 @@ class LLM:
                 frequency_penalty=frequency_penalty,
                 presence_penalty=presence_penalty,
                 stop=stop,
-                **kwargs
+                **kwargs,
             )
 
         # Handle multimodal conversations
         if fusion_mode == "basic" or self.fusion_engine is None:
             # Use basic pass-through processing
             return await self._legacy_chat_with_files(
-                messages, files,
+                messages,
+                files,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
                 frequency_penalty=frequency_penalty,
                 presence_penalty=presence_penalty,
                 stop=stop,
-                **kwargs
+                **kwargs,
             )
         else:
             # Use advanced fusion engine
             return await self._advanced_multimodal_processing(
-                messages, files, fusion_mode,
+                messages,
+                files,
+                fusion_mode,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 top_p=top_p,
                 frequency_penalty=frequency_penalty,
                 presence_penalty=presence_penalty,
                 stop=stop,
-                **kwargs
+                **kwargs,
             )
 
     async def _advanced_multimodal_processing(
@@ -810,7 +806,7 @@ class LLM:
         messages: List[Dict[str, str]],
         files: List[Union[str, Path]],
         fusion_mode: str,
-        **kwargs
+        **kwargs,
     ) -> str:
         """Process files using advanced fusion engine"""
 
@@ -822,14 +818,15 @@ class LLM:
 
             if multimodal_content is None:
                 # Fallback to basic processing if conversion failed
-                logger.warning("Failed to convert files to multimodal content, "
-                               "using basic processing")
+                logger.warning(
+                    "Failed to convert files to multimodal content, " "using basic processing"
+                )
                 return await self._legacy_chat_with_files(messages, files, **kwargs)
 
             # Map fusion_mode to ProcessingMode
             mode_mapping = {
                 "adaptive": ProcessingMode.ADAPTIVE,
-                "advanced": ProcessingMode.COMPREHENSIVE
+                "advanced": ProcessingMode.COMPREHENSIVE,
             }
             processing_mode = mode_mapping.get(fusion_mode, ProcessingMode.ADAPTIVE)
 
@@ -842,26 +839,19 @@ class LLM:
                 processing_mode=processing_mode,
                 fusion_options={
                     "user_context": user_message,
-                    "conversation_history": messages[:-1] if len(messages) > 1 else []
-                }
+                    "conversation_history": messages[:-1] if len(messages) > 1 else [],
+                },
             )
 
             # Convert fusion result to chat response
-            return await self._synthesize_chat_response(
-                fusion_result, user_message, **kwargs
-            )
+            return await self._synthesize_chat_response(fusion_result, user_message, **kwargs)
 
         except Exception as e:
             logger.error(f"Error in advanced multimodal processing: {e}")
             # Fallback to basic processing on any error
             return await self._legacy_chat_with_files(messages, files, **kwargs)
 
-    async def _synthesize_chat_response(
-        self,
-        fusion_result,
-        user_message: str,
-        **kwargs
-    ) -> str:
+    async def _synthesize_chat_response(self, fusion_result, user_message: str, **kwargs) -> str:
         """Convert fusion result to natural chat response"""
 
         # Create synthesis prompt
@@ -884,10 +874,7 @@ Provide a helpful, conversational response that directly addresses what the user
         return await self._text_chat(synthesis_messages, **kwargs)
 
     async def _legacy_chat_with_files(
-        self,
-        messages: List[Dict[str, str]],
-        files: Optional[List[Union[str, Path]]],
-        **kwargs
+        self, messages: List[Dict[str, str]], files: Optional[List[Union[str, Path]]], **kwargs
     ) -> str:
         """Legacy file processing implementation for backward compatibility"""
 
@@ -903,7 +890,7 @@ Provide a helpful, conversational response that directly addresses what the user
                                 f"File security validation failed: {file_path}",
                                 error_type=LLMErrorType.FILE_PROCESSING,
                                 provider=self._provider,
-                                retryable=False
+                                retryable=False,
                             )
 
                         # Convert file to OneLLM format
@@ -921,7 +908,7 @@ Provide a helpful, conversational response that directly addresses what the user
                             error_type=LLMErrorType.FILE_PROCESSING,
                             provider=self._provider,
                             retryable=False,
-                            original_error=e
+                            original_error=e,
                         )
 
             # Prepare parameters
@@ -936,8 +923,13 @@ Provide a helpful, conversational response that directly addresses what the user
                 params["files"] = processed_files
 
             # Add optional parameters if provided
-            for param_name in ["max_tokens", "top_p", "frequency_penalty",
-                             "presence_penalty", "stop"]:
+            for param_name in [
+                "max_tokens",
+                "top_p",
+                "frequency_penalty",
+                "presence_penalty",
+                "stop",
+            ]:
                 if param_name in kwargs and kwargs[param_name] is not None:
                     params[param_name] = kwargs[param_name]
                 elif param_name == "max_tokens" and self.max_tokens is not None:
@@ -945,9 +937,17 @@ Provide a helpful, conversational response that directly addresses what the user
 
             # Add any additional kwargs
             additional_kwargs = {
-                k: v for k, v in kwargs.items()
-                if k not in ["temperature", "max_tokens", "top_p",
-                            "frequency_penalty", "presence_penalty", "stop"]
+                k: v
+                for k, v in kwargs.items()
+                if k
+                not in [
+                    "temperature",
+                    "max_tokens",
+                    "top_p",
+                    "frequency_penalty",
+                    "presence_penalty",
+                    "stop",
+                ]
             }
             params.update(additional_kwargs)
             params.update(self.additional_params)
@@ -969,13 +969,13 @@ Provide a helpful, conversational response that directly addresses what the user
             # Extract content from response
             if isinstance(response, dict) and "choices" in response:
                 content = response["choices"][0]["message"]["content"] or ""
-            elif hasattr(response, 'choices') and response.choices:
+            elif hasattr(response, "choices") and response.choices:
                 # Handle ChatCompletionResponse object
                 message = response.choices[0].message
-                if hasattr(message, 'content'):
+                if hasattr(message, "content"):
                     content = message.content or ""
                 elif isinstance(message, dict):
-                    content = message.get('content', '')
+                    content = message.get("content", "")
                 else:
                     content = str(message)
             elif isinstance(response, str):
@@ -987,6 +987,7 @@ Provide a helpful, conversational response that directly addresses what the user
                 if "content" in response_str:
                     # Try to extract content using regex
                     import re
+
                     match = re.search(r"'content':\s*'([^']*)'", response_str)
                     if match:
                         content = match.group(1)
@@ -1170,7 +1171,8 @@ def get_retry_stats():
     global _retry_stats
     success_rate = (
         _retry_stats["successful_requests"] / _retry_stats["total_requests"]
-        if _retry_stats["total_requests"] > 0 else 0
+        if _retry_stats["total_requests"] > 0
+        else 0
     )
 
     return {
@@ -1178,8 +1180,9 @@ def get_retry_stats():
         "success_rate": success_rate,
         "average_retries_per_request": (
             _retry_stats["retry_attempts"] / _retry_stats["total_requests"]
-            if _retry_stats["total_requests"] > 0 else 0
-        )
+            if _retry_stats["total_requests"] > 0
+            else 0
+        ),
     }
 
 
@@ -1191,7 +1194,7 @@ def get_circuit_breaker_stats():
             "state": cb.state,
             "failure_count": cb.failure_count,
             "last_failure_time": cb.last_failure_time,
-            "failure_threshold": cb.failure_threshold
+            "failure_threshold": cb.failure_threshold,
         }
     return stats
 
@@ -1204,7 +1207,7 @@ def reset_all_stats():
         "successful_requests": 0,
         "failed_requests": 0,
         "retry_attempts": 0,
-        "circuit_breaker_trips": 0
+        "circuit_breaker_trips": 0,
     }
     _circuit_breakers.clear()
     clear_llm_cache()
