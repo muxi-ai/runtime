@@ -1576,6 +1576,12 @@ class FormationValidator:
 
         # Allow any additional fields users might want to add for logging configuration
 
+        # Validate enabled (boolean)
+        if "enabled" in logging_config:
+            enabled = logging_config["enabled"]
+            if not isinstance(enabled, bool):
+                self.result.add_error("Logging 'enabled' field must be a boolean")
+
         # Validate level (enum: debug, info, warning, error)
         if "level" in logging_config:
             level = logging_config["level"]
@@ -1624,26 +1630,14 @@ class FormationValidator:
                     self.result.add_error("Logging stream_url must be a non-empty string")
 
         # Validate log categories (optional array)
-        if "log" in logging_config:
-            log_categories = logging_config["log"]
-            if not isinstance(log_categories, list):
-                self.result.add_error("Logging 'log' field must be an array")
+        if "events" in logging_config:
+            log_events = logging_config["events"]
+            if not isinstance(log_events, list):
+                self.result.add_error("Logging 'events' field must be an array")
             else:
-                for category in log_categories:
-                    if not isinstance(category, str):
-                        self.result.add_error("Logging category must be a string")
-                    # Allow any logging categories users want to define
-
-        # Validate exclude categories (optional array, overrides log)
-        if "exclude" in logging_config:
-            exclude_categories = logging_config["exclude"]
-            if not isinstance(exclude_categories, list):
-                self.result.add_error("Logging 'exclude' field must be an array")
-            else:
-                for category in exclude_categories:
-                    if not isinstance(category, str):
-                        self.result.add_error("Logging exclude category must be a string")
-                    # Allow any logging exclude categories users want to define
+                for logging_event in log_events:
+                    if not isinstance(logging_event, str):
+                        self.result.add_error("Logging event must be a string")
 
     def _validate_overlord_config(self, overlord_config: Dict[str, Any]) -> None:
         """Validate overlord configuration according to SCHEMA_GUIDE.md."""

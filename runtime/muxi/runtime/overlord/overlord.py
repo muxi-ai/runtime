@@ -848,40 +848,47 @@ class Overlord:
             from ..config.logging import LoggingConfig, configure_logging
 
             # Extract logging configuration
+            enabled = logging_config.get("enabled", True)
             level = logging_config.get("level", "info")
             format_type = logging_config.get("format", "jsonl")
             output = logging_config.get("output", "stdout")
             path = logging_config.get("path")
             stream_url = logging_config.get("stream_url")
-            log_categories = logging_config.get("log", [])
-            exclude_categories = logging_config.get("exclude", [])
+            log_events = logging_config.get("events", [])
 
-            # Convert SCHEMA_GUIDE.md format to LoggingConfig format
-            # Map the new schema format to the existing LoggingConfig
-            config = LoggingConfig(
-                level=level.upper(),  # Convert to uppercase for standard logging
-                file=path if output == "file" else None,
-                format=self._convert_logging_format(format_type),
-            )
+            # Only configure logging if enabled
+            if enabled:
+                # Convert SCHEMA_GUIDE.md format to LoggingConfig format
+                # Map the new schema format to the existing LoggingConfig
+                config = LoggingConfig(
+                    level=level.upper(),  # Convert to uppercase for standard logging
+                    file=path if output == "file" else None,
+                    format=self._convert_logging_format(format_type),
+                )
 
-            # Configure the logging system
-            configure_logging(config)
+                # Configure the logging system
+                configure_logging(config)
 
             # Store logging configuration for potential future use
+            # TODO: Implement hybrid logic - if events specified, ignore level;
+            # if events missing, use level-based defaults
             self._logging_config = {
+                "enabled": enabled,
                 "level": level,
                 "format": format_type,
                 "output": output,
                 "path": path,
                 "stream_url": stream_url,
-                "log_categories": log_categories,
-                "exclude_categories": exclude_categories,
+                "log_events": log_events
             }
 
-            logger.info(
-                f"✅ Initialized logging configuration "
-                f"(level={level}, format={format_type}, output={output})"
-            )
+            if enabled:
+                logger.info(
+                    f"✅ Initialized logging configuration "
+                    f"(enabled={enabled}, level={level}, format={format_type}, output={output})"
+                )
+            else:
+                logger.info("✅ Logging disabled in formation configuration")
 
         except Exception as e:
             logger.error(f"Failed to initialize logging configuration: {e}")
