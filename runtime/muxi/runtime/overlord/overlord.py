@@ -3272,7 +3272,7 @@ class Overlord:
             For async processing: Dict with request_id, status, and processing info
         """
         # Generate unique request ID for all requests (for tracking and logging)
-        request_id = generate_nanoid()
+        request_id = f"req_{generate_nanoid()}"
         timestamp = time.time()
 
         logger.info(f"Chat request {request_id}: {message[:100]}...")

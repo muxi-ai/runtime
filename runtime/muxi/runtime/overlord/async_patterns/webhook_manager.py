@@ -120,33 +120,97 @@ class WebhookManager:
                     request_timeout
                 )
                 if success:
-                    logger.info(
-                        f"Webhook delivered successfully for request "
-                        f"{request_id} on attempt {attempt + 1}"
-                    )
+                    if attempt > 0:
+                        logger.info(
+                            f"✅ Webhook delivered successfully for request {request_id} "
+                            f"(succeeded on attempt {attempt + 1})"
+                        )
+                    else:
+                        logger.info(f"✅ Webhook delivered successfully for request {request_id}")
                     return True
                 else:
-                    logger.warning(
-                        f"Webhook delivery failed for request "
-                        f"{request_id} on attempt {attempt + 1}"
-                    )
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"🔄 Webhook delivery attempt {attempt + 1}/{max_retries + 1} failed "
+                            f"for request {request_id}, retrying..."
+                        )
+                    else:
+                        logger.error(
+                            f"❌ Webhook delivery failed permanently for request {request_id} "
+                            f"after {max_retries + 1} attempts"
+                        )
 
             except Exception as e:
-                logger.error(
-                    f"Webhook delivery error for request {request_id} "
-                    f"on attempt {attempt + 1}: {e}"
-                )
+                # Provide elegant error messages instead of verbose HTTP details
+                error_summary = self._summarize_webhook_error(e)
+                if attempt < max_retries:
+                    logger.warning(
+                        f"🔄 Webhook delivery attempt {attempt + 1}/{max_retries + 1} failed "
+                        f"for request {request_id}: {error_summary}"
+                    )
+                else:
+                    logger.error(
+                        f"❌ Webhook delivery failed permanently for request {request_id}: {error_summary}"
+                    )
 
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
                 wait_time = min(2 ** attempt, 60)  # Cap at 60 seconds
+                logger.debug(f"⏳ Waiting {wait_time}s before retry...")
                 await asyncio.sleep(wait_time)
 
-        logger.error(
-            f"Webhook delivery failed permanently for request {request_id} "
-            f"after {max_retries + 1} attempts"
-        )
         return False
+
+    def _summarize_webhook_error(self, exception: Exception) -> str:
+        """
+        Convert verbose HTTP exceptions into concise, elegant error summaries.
+
+        Args:
+            exception: The exception that occurred during webhook delivery
+
+        Returns:
+            A concise, user-friendly error message
+        """
+        error_str = str(exception).lower()
+
+        # Connection refused/failed
+        if "connection refused" in error_str or "connect call failed" in error_str:
+            return "Connection refused (service unavailable)"
+
+        # Timeout errors
+        if "timeout" in error_str or "timed out" in error_str:
+            return "Request timeout"
+
+        # DNS/host resolution errors
+        if ("name or service not known" in error_str or
+                "nodename nor servname provided" in error_str):
+            return "Host not found (DNS resolution failed)"
+
+        # SSL/TLS errors
+        if ("ssl" in error_str and
+                ("certificate" in error_str or "handshake" in error_str)):
+            return "SSL/TLS handshake failed"
+
+        # HTTP status errors
+        if hasattr(exception, 'status'):
+            status = getattr(exception, 'status')
+            if status >= 500:
+                return f"Server error (HTTP {status})"
+            elif status >= 400:
+                return f"Client error (HTTP {status})"
+            else:
+                return f"HTTP {status}"
+
+        # Network unreachable
+        if "network is unreachable" in error_str:
+            return "Network unreachable"
+
+        # Generic fallback
+        exception_type = type(exception).__name__
+        if len(str(exception)) > 100:
+            return f"{exception_type} (connection failed)"
+        else:
+            return f"{exception_type}: {str(exception)[:50]}..."
 
     async def _deliver_webhook(
         self,
@@ -182,18 +246,17 @@ class WebhookManager:
                 if response.status >= 200 and response.status < 300:
                     return True
                 else:
-                    logger.warning(
-                        f"Webhook returned status {response.status}: "
-                        f"{await response.text()}"
-                    )
+                    # Don't log the full response text, just the status
+                    logger.debug(f"Webhook returned HTTP {response.status}")
                     return False
 
         except asyncio.TimeoutError:
-            logger.error(f"Webhook delivery timed out after {timeout} seconds")
+            logger.debug(f"Webhook request timed out after {timeout}s")
             return False
         except Exception as e:
-            logger.error(f"Webhook delivery exception: {e}")
-            return False
+            # Don't log the exception here - let the caller handle it
+            # This prevents duplicate logging
+            raise e
 
     async def close(self):
         """Close the HTTP session."""
