@@ -86,7 +86,7 @@ import os
 from loguru import logger
 
 from ..agent import Agent
-
+from ..mcp.message import MCPMessage
 from ..mcp.service import MCPService
 from ..memory.short_term import ShortTermMemory
 from ..memory.long_term import LongTermMemory
@@ -94,8 +94,10 @@ from ..memory.memobase import Memobase
 from ..llm import LLM
 from ..a2a.registry_client import A2ARegistryClient
 from ..a2a.formation_server import A2AFormationServer
+
 # A2A models imported when needed
 from ..secrets import SecretsManager
+from ..utils.id_generator import generate_nanoid
 
 # Enhanced workflow capabilities
 from .workflow import (
@@ -112,15 +114,11 @@ from .workflow.multimodal import MultiModalFusionEngine, MultiModalWorkflowInteg
 from .workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
 
 # NEW: Import interactive elements and enhanced multimodal integration
-from .workflow.interactive import (
-    InteractiveElementGenerator,
-    ResponseFormatter,
-    MediaIntegrator
-)
+from .workflow.interactive import InteractiveElementGenerator, ResponseFormatter, MediaIntegrator
 from .workflow.multimodal_integration import (
     WorkflowMultiModalProcessor,
     TaskInputProcessor,
-    TaskOutputProcessor
+    TaskOutputProcessor,
 )
 
 # NEW: Import intelligent caching system
@@ -156,6 +154,13 @@ from .document_workflow import (
     DocumentWorkflowIntegrator,
     DocumentCrossReferenceManager,
     DocumentContextPreserver,
+)
+
+# Async Orchestration Components (Task 4)
+from .async_patterns import (
+    RequestTracker,
+    WebhookManager,
+    TimeEstimator,
 )
 
 
@@ -231,7 +236,8 @@ class Overlord:
         complexity_threshold: float = 7.0,
     ):
         """
-        Initialize the overlord with optional centralized memory systems and enhanced workflow capabilities.
+        Initialize the overlord with optional centralized memory systems and enhanced workflow
+        capabilities.
 
         The constructor sets up the Overlord with the specified memory systems and
         configuration. It initializes agent storage, memory systems, extraction settings,
@@ -344,8 +350,7 @@ class Overlord:
         # Get/Initialize the MCP service
         self.mcp_service = MCPService.get_instance()
 
-        # Initialize the routing model if needed
-        self._initialize_routing_model()
+        # Note: Routing model will be initialized in start() method (async)
 
         # Set request timeout
         self.request_timeout = request_timeout
@@ -397,8 +402,7 @@ class Overlord:
         )
         self.quality_assessor = ResponseQualityAssessor(llm=extraction_model)
         self.response_synthesizer = AdvancedResponseSynthesizer(
-            llm=extraction_model,
-            quality_assessor=self.quality_assessor
+            llm=extraction_model, quality_assessor=self.quality_assessor
         )
 
         # NEW: Initialize interactive elements and enhanced multimodal integration
@@ -410,9 +414,7 @@ class Overlord:
         self.workflow_multimodal_processor = WorkflowMultiModalProcessor(
             fusion_engine=self.multimodal_fusion_engine
         )
-        self.task_input_processor = TaskInputProcessor(
-            fusion_engine=self.multimodal_fusion_engine
-        )
+        self.task_input_processor = TaskInputProcessor(fusion_engine=self.multimodal_fusion_engine)
         self.task_output_processor = TaskOutputProcessor(
             fusion_engine=self.multimodal_fusion_engine
         )
@@ -421,22 +423,18 @@ class Overlord:
         self.cache_manager = IntelligentCacheManager(
             enable_analytics=True,
             enable_memory_optimization=True,
-            embedding_service=self.extraction_model  # Use extraction model for embeddings
+            embedding_service=self.extraction_model,  # Use extraction model for embeddings
         )
 
         # NEW: Initialize parallel workflow optimizer
-        self.parallel_optimizer = ParallelWorkflowOptimizer(
-            sensitivity_threshold=0.5
-        )
+        self.parallel_optimizer = ParallelWorkflowOptimizer(sensitivity_threshold=0.5)
 
         # NEW: Initialize Phase 3 User Experience Intelligence components
         self.user_preference_engine = UserPreferenceEngine(overlord=self)
         self.adaptive_response_generator = AdaptiveResponseGenerator(overlord=self)
 
         # NEW: Initialize Phase 4.1 resilience components
-        resilience_config = ResilienceConfig(
-            **self.formation_config.get('resilience', {})
-        )
+        resilience_config = ResilienceConfig(**self.formation_config.get("resilience", {}))
         self.resilient_workflow_manager = ResilientWorkflowManager(resilience_config)
 
         # Active workflows tracking
@@ -444,9 +442,7 @@ class Overlord:
         self.pending_approvals: Dict[str, Workflow] = {}
 
         # Setup progress tracking
-        self.workflow_executor.add_progress_callback(
-            self.progress_tracker.update_workflow_progress
-        )
+        self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
 
         # NEW: Initialize document processing components (Tasks 3.7-3.9)
         # These will be properly initialized after _apply_formation_config() is called
@@ -460,18 +456,39 @@ class Overlord:
         self.document_cross_referencer: Optional[DocumentCrossReferenceManager] = None
         self.document_context_preserver: Optional[DocumentContextPreserver] = None
 
-        logger.info("Enhanced Overlord initialized with workflow capabilities")
+        # NEW: Initialize async request-response components (Task 4)
+        self.request_tracker = RequestTracker()
+        async_config = self.formation_config.get("async", {})
+        self.webhook_manager = WebhookManager(
+            default_retries=async_config.get("webhook_retries", 3),
+            default_timeout=async_config.get("webhook_timeout", 10),
+        )
+        self.time_estimator = TimeEstimator(self.request_analyzer)
+
+        # Async configuration
+        self.async_threshold_seconds = async_config.get("threshold_seconds", 30)
+        self.async_enable_estimation = async_config.get("enable_estimation", True)
+        self.async_webhook_url = async_config.get("webhook_url")
+
+        logger.info(
+            "Enhanced Overlord initialized with workflow capabilities and async orchestration"
+        )
 
     async def start(self) -> None:
         """Start all overlord services including cache manager."""
         try:
+            # Initialize the routing model (async)
+            await self._initialize_routing_model()
+
             # Start cache manager
             if hasattr(self, "cache_manager") and self.cache_manager:
                 await self.cache_manager.start()
                 logger.info("Cache manager started successfully")
 
-            # Initialize other async services if needed
-            await self.initialize_external_registry_async()
+            # Initialize other services if needed
+            self._initialize_external_registry_client()
+            self._initialize_inbound_registry_client()
+            self._initialize_formation_server()
 
             logger.info("Overlord services started successfully")
         except Exception as e:
@@ -560,8 +577,8 @@ class Overlord:
         """
         try:
             # Import FormationLoader and validation when needed
-            from ..formation_loader import FormationLoader
-            from ..validation import validate_formation
+            from ..config.formation_loader import FormationLoader
+            from ..config.validation import validate_formation
 
             # Validate formation before loading
             logger.info(f"Validating formation: {formation_path}")
@@ -609,7 +626,7 @@ class Overlord:
             Dict[str, Any]: Validation results with 'is_valid', 'errors', 'warnings', 'suggestions'
         """
         try:
-            from ..validation import validate_formation
+            from ..config.validation import validate_formation
 
             validation_result = validate_formation(formation_path, self.secrets_manager)
 
@@ -828,7 +845,7 @@ class Overlord:
 
         try:
             # Import the logging config module
-            from .config.logging import LoggingConfig, configure_logging
+            from ..config.logging import LoggingConfig, configure_logging
 
             # Extract logging configuration
             level = logging_config.get("level", "info")
@@ -913,8 +930,8 @@ class Overlord:
 
                 logger.info(
                     f"✅ Initialized document processing configuration "
-                    f"(enabled={enabled}, chunk_size={chunk_size}, max_file_size={max_file_size}MB, "
-                    f"strategy={strategy})"
+                    f"(enabled={enabled}, chunk_size={chunk_size}, "
+                    f"max_file_size={max_file_size}MB, strategy={strategy})"
                 )
             else:
                 logger.info("✅ Document processing not configured (no documents model found)")
@@ -923,6 +940,7 @@ class Overlord:
             logger.error(f"Failed to initialize document processing configuration: {e}")
             # Fall back to default configuration
             from ..config.document_processing import DocumentProcessingConfig
+
             self.document_processing_config = DocumentProcessingConfig({})
 
     async def _initialize_document_components(self) -> None:
@@ -936,7 +954,10 @@ class Overlord:
         """
         try:
             # Only initialize if document processing is enabled
-            if not hasattr(self, 'document_processing_config') or not self.document_processing_config.is_enabled():
+            if (
+                not hasattr(self, "document_processing_config")
+                or not self.document_processing_config.is_enabled()
+            ):
                 logger.info("Document processing not enabled, skipping component initialization")
                 return
 
@@ -949,13 +970,13 @@ class Overlord:
 
             # Subtask 3.8: Document User Experience Layer
             # Get the persona manager for acknowledgments
-            persona_manager = getattr(self, 'persona_manager', None)
+            persona_manager = getattr(self, "persona_manager", None)
             self.document_acknowledger = DocumentAcknowledgmentGenerator(persona_manager)
             self.document_summarizer = DocumentSummarizer()
             self.document_error_handler = DocumentErrorHandler()
 
             # Subtask 3.9: Document Workflow Integration Layer
-            workflow_manager = getattr(self, 'workflow_executor', None)
+            workflow_manager = getattr(self, "workflow_executor", None)
             self.document_workflow_integrator = DocumentWorkflowIntegrator(workflow_manager)
             self.document_cross_referencer = DocumentCrossReferenceManager()
             self.document_context_preserver = DocumentContextPreserver()
@@ -978,7 +999,7 @@ class Overlord:
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
         try:
-            from .memory.short_term import ShortTermMemory
+            from ..memory.short_term import ShortTermMemory
 
             # Extract buffer configuration
             size = buffer_config.get("size", 10)
@@ -1054,14 +1075,14 @@ class Overlord:
             if connection_string.startswith("postgresql://") or connection_string.startswith(
                 "postgres://"
             ):
-                from .memory.memobase import Memobase
+                from ..memory.memobase import Memobase
 
                 self.long_term_memory = Memobase(
                     connection_string=connection_string, model=embedding_model
                 )
                 logger.info("✅ Initialized PostgreSQL-based long-term memory (Memobase)")
             elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
-                from .memory.sqlite import SQLiteMemory
+                from ..memory.sqlite import SQLiteMemory
 
                 # Remove sqlite:// prefix if present
                 db_path = connection_string.replace("sqlite://", "")
@@ -1269,7 +1290,7 @@ class Overlord:
 
         logger.info("✅ Applied A2A configuration")
 
-    def _initialize_routing_model(self):
+    async def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
         try:
             # Get overlord configuration from formation config
@@ -1290,7 +1311,7 @@ class Overlord:
             llm_config = overlord_config.get("llm", {})
             if llm_config:
                 # New overlord.llm config structure
-                self.routing_model = self.create_model(
+                self.routing_model = await self.create_model(
                     model=llm_config.get("model", "openai/gpt-4o-mini"),
                     temperature=llm_config.get("settings", {}).get("temperature", 0.2),
                     max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
@@ -1334,7 +1355,7 @@ class Overlord:
                 # Fall back to legacy overlord.routing structure for compatibility
                 routing_data = overlord_config.get("routing", {})
                 if routing_data:
-                    self.routing_model = self.create_model(
+                    self.routing_model = await self.create_model(
                         model=routing_data.get("model", "openai/gpt-4o-mini"),
                         temperature=routing_data.get("settings", {}).get("temperature", 0.2),
                         max_tokens=routing_data.get("settings", {}).get("max_tokens", 2000),
@@ -1370,13 +1391,12 @@ class Overlord:
                 else:
                     # No overlord config - try to get text model from formation
                     try:
-                        self.routing_model = asyncio.create_task(
-                            self.get_model_for_capability("text")
-                        )
-                        logger.info("Using capability-based text model for routing")
+                        # Don't create a task, just set to None and handle later
+                        self.routing_model = None
+                        logger.info("Will use capability-based text model for routing")
                     except Exception:
                         # Fall back to create_model with defaults
-                        self.routing_model = self.create_model()
+                        self.routing_model = await self.create_model()
 
                     # Default caching settings
                     self.routing_cache_enabled = True
@@ -1397,13 +1417,18 @@ class Overlord:
                     self._routing_cache_expiry: Dict[str, float] = {}
 
             logger.info(
-                f"✅ Initialized overlord routing with cache_enabled={self.routing_cache_enabled}, "
-                f"ttl={self.routing_cache_ttl}, max_extraction_tokens={self.max_extraction_tokens}, "
-                f"max_tool_calls={self.max_tool_calls}, response_format={self.response_format}, "
+                f"✅ Initialized overlord routing with "
+                f"cache_enabled={self.routing_cache_enabled}, "
+                f"ttl={self.routing_cache_ttl}, "
+                f"max_extraction_tokens={self.max_extraction_tokens}, "
+                f"max_tool_calls={self.max_tool_calls}, "
+                f"response_format={self.response_format}, "
                 f"interactive_elements={self.use_interactive_elements}, "
                 f"learn_user_preference={self.learn_user_preference}, "
-                f"adaptive_responses={self.adaptive_responses}, circuit_breaker={self.circuit_breaker}, "
-                f"error_recovery={self.error_recovery}, auto_decomposition={self.auto_decomposition}, "
+                f"adaptive_responses={self.adaptive_responses}, "
+                f"circuit_breaker={self.circuit_breaker}, "
+                f"error_recovery={self.error_recovery}, "
+                f"auto_decomposition={self.auto_decomposition}, "
                 f"plan_approval_threshold={self.plan_approval_threshold}"
             )
 
@@ -2013,10 +2038,6 @@ class Overlord:
             logger.error(f"Failed to interpolate secrets: {e}")
             return config
 
-
-
-
-
     def get_agent(self, agent_id: Optional[str] = None) -> Agent:
         """
         Get an agent by ID.
@@ -2159,7 +2180,7 @@ class Overlord:
         """
         try:
             # Import here to avoid circular imports
-            from .run import run_server, is_port_in_use
+            from ..run import run_server, is_port_in_use
 
             # Check if port is already in use
             if is_port_in_use(port):
@@ -2243,20 +2264,27 @@ class Overlord:
                     # Cache entry expired, remove it
                     del self._routing_cache[message]
 
-        # Check if a routing model is available
+        # Get routing model if not available
+        routing_model = self.routing_model
         if not hasattr(self, "routing_model") or self.routing_model is None:
-            # Fall back to default agent
-            logger.info(
-                f"No routing model available, using default agent '{self.default_agent_id}'"
-            )
-            return self.default_agent_id
+            try:
+                # Try to get text model from formation
+                routing_model = await self.get_model_for_capability("text")
+                logger.info("Using capability-based text model for routing")
+            except Exception as e:
+                # Fall back to default agent if model creation fails
+                logger.info(
+                    f"No routing model available ({e}), "
+                    f"using default agent '{self.default_agent_id}'"
+                )
+                return self.default_agent_id
 
         try:
             # Create a prompt for the routing model
             prompt = self._create_routing_prompt(message)
 
             # Query the routing model
-            response = await self.routing_model.generate_text(prompt)
+            response = await routing_model.generate_text(prompt)
 
             # Parse the response
             selected_agent_id = self._parse_routing_response(response)
@@ -2402,8 +2430,6 @@ class Overlord:
 
         # If no agent ID was found, return None
         return None
-
-
 
     def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -2608,8 +2634,6 @@ class Overlord:
                 user_id=user_id,
                 message_count=message_count,
             )
-
-
 
     async def get_user_context_memory(
         self, user_id: int, agent_id: Optional[str] = None
@@ -2945,7 +2969,10 @@ class Overlord:
             if not self._is_document_processing_available():
                 return self._generate_document_unavailable_message()
 
-            logger.info(f"Processing {len(attachments)} document(s) for user request: {user_request[:100]}...")
+            logger.info(
+                f"Processing {len(attachments)} document(s) for user request: "
+                f"{user_request[:100]}..."
+            )
 
             # Phase 1: Document Storage Foundation (Task 3.7)
             processed_docs = await self._process_document_storage_phase(
@@ -3004,9 +3031,7 @@ class Overlord:
                 # Chunk the document using adaptive strategies
                 if self.document_chunker:
                     chunks = await self.document_chunker.chunk_document(
-                        content=content,
-                        filename=filename,
-                        strategy="adaptive"
+                        content=content, filename=filename, strategy="adaptive"
                     )
                 else:
                     # Fallback simple chunking
@@ -3018,7 +3043,7 @@ class Overlord:
                     "upload_time": time.time(),
                     "user_id": user_id,
                     "chunk_count": len(chunks),
-                    "original_size": len(content)
+                    "original_size": len(content),
                 }
 
                 if self.document_metadata_store:
@@ -3035,26 +3060,29 @@ class Overlord:
                         "chunk_index": i,
                         "doc_id": doc_id,
                         "role": "document",
-                        "timestamp": time.time()
+                        "timestamp": time.time(),
                     }
 
                     await self.add_to_buffer_memory(
-                        message=chunk.get("content", ""),
-                        metadata=chunk_metadata
+                        message=chunk.get("content", ""), metadata=chunk_metadata
                     )
 
                 # Add to processed docs list
-                processed_docs.append({
-                    "doc_id": doc_id,
-                    "filename": filename,
-                    "chunks": len(chunks),
-                    "metadata": doc_metadata
-                })
+                processed_docs.append(
+                    {
+                        "doc_id": doc_id,
+                        "filename": filename,
+                        "chunks": len(chunks),
+                        "metadata": doc_metadata,
+                    }
+                )
 
                 logger.info(f"✅ Processed {filename}: {len(chunks)} chunks")
 
             except Exception as e:
-                logger.error(f"Error processing document {attachment.get('filename', 'unknown')}: {e}")
+                logger.error(
+                    f"Error processing document {attachment.get('filename', 'unknown')}: {e}"
+                )
                 continue
 
         return processed_docs
@@ -3075,9 +3103,7 @@ class Overlord:
                 # Generate acknowledgment using the component
                 doc_list = [(doc["doc_id"], doc["filename"]) for doc in processed_docs]
                 acknowledgment = await self.document_acknowledger.generate_document_acknowledgment(
-                    processed_docs=doc_list,
-                    user_request=user_request,
-                    context=context or {}
+                    processed_docs=doc_list, user_request=user_request, context=context or {}
                 )
             else:
                 # Fallback acknowledgment
@@ -3092,7 +3118,10 @@ class Overlord:
 
         except Exception as e:
             logger.error(f"Error in document experience phase: {e}")
-            return f"I've processed your documents, though I encountered some issues with the acknowledgment generation."
+            return (
+                "I've processed your documents, though I encountered some issues "
+                "with the acknowledgment generation."
+            )
 
     async def _process_document_workflow_phase(
         self,
@@ -3109,10 +3138,10 @@ class Overlord:
             if self.document_workflow_integrator:
                 # Create document-based workflow
                 doc_ids = [doc["doc_id"] for doc in processed_docs]
-                workflow_result = await self.document_workflow_integrator.create_document_based_workflow(
-                    documents=doc_ids,
-                    user_request=user_request,
-                    context=context or {}
+                workflow_result = (
+                    await self.document_workflow_integrator.create_document_based_workflow(
+                        documents=doc_ids, user_request=user_request, context=context or {}
+                    )
                 )
                 return workflow_result
             else:
@@ -3120,24 +3149,27 @@ class Overlord:
                 search_results = await self.search_memory(
                     query=user_request,
                     k=5,
-                    use_long_term=False  # Search only buffer memory with documents
+                    use_long_term=False,  # Search only buffer memory with documents
                 )
 
                 if search_results:
                     relevant_content = "\n".join([r["text"] for r in search_results[:3]])
                     return f"Based on the uploaded documents:\n\n{relevant_content}"
                 else:
-                    return "I've processed your documents but couldn't find specific information related to your request."
+                    return (
+                        "I've processed your documents but couldn't find specific "
+                        "information related to your request."
+                    )
 
         except Exception as e:
             logger.error(f"Error in document workflow phase: {e}")
-            return "I processed your documents but encountered an issue generating the workflow response."
+            return (
+                "I processed your documents but encountered an issue generating "
+                "the workflow response."
+            )
 
     async def _generate_final_document_response(
-        self,
-        acknowledgment: str,
-        workflow_result: str,
-        processed_docs: List[Dict[str, Any]]
+        self, acknowledgment: str, workflow_result: str, processed_docs: List[Dict[str, Any]]
     ) -> str:
         """
         Generate the final response with proper citations and formatting.
@@ -3147,8 +3179,7 @@ class Overlord:
                 # Add citations to the workflow result
                 source_docs = [doc["filename"] for doc in processed_docs]
                 cited_response = await self.document_cross_referencer.generate_citation_context(
-                    content=workflow_result,
-                    document_sources=source_docs
+                    content=workflow_result, document_sources=source_docs
                 )
                 return f"{acknowledgment}\n\n{cited_response}"
             else:
@@ -3163,9 +3194,9 @@ class Overlord:
     def _is_document_processing_available(self) -> bool:
         """Check if document processing components are available and enabled."""
         return (
-            hasattr(self, 'document_processing_config') and
-            self.document_processing_config and
-            self.document_processing_config.is_enabled()
+            hasattr(self, "document_processing_config")
+            and self.document_processing_config
+            and self.document_processing_config.is_enabled()
         )
 
     def _generate_document_unavailable_message(self) -> str:
@@ -3185,12 +3216,334 @@ class Overlord:
         """
         # Keywords that suggest the user wants to do something with the documents
         workflow_keywords = [
-            "analyze", "summarize", "compare", "extract", "find", "search",
-            "explain", "tell me", "what", "how", "why", "research", "review"
+            "analyze",
+            "summarize",
+            "compare",
+            "extract",
+            "find",
+            "search",
+            "explain",
+            "tell me",
+            "what",
+            "how",
+            "why",
+            "research",
+            "review",
         ]
 
         user_request_lower = user_request.lower()
         return any(keyword in user_request_lower for keyword in workflow_keywords)
+
+    # ===================================================================
+    # ASYNC REQUEST-RESPONSE ORCHESTRATION (Task 4)
+    # ===================================================================
+
+    async def chat(
+        self,
+        message: str,
+        agent_name: Optional[str] = None,
+        user_id: Optional[str] = None,
+        use_async: Optional[bool] = None,  # None=intelligent, True=force async, False=force sync
+        webhook_url: Optional[str] = None,  # Optional webhook URL
+        threshold_seconds: Optional[float] = None,  # Optional threshold override
+    ) -> Union[MCPMessage, Dict[str, Any]]:
+        """
+        Enhanced chat with async support for long-running agentic tasks.
+
+        This method provides the main chat interface for the overlord with intelligent
+        async decision making. For requests that are expected to take a long time,
+        it automatically switches to async mode and returns a request ID while
+        processing continues in the background with webhook notification upon completion.
+
+        Args:
+            message: The user's message/request to process.
+            agent_name: Optional specific agent to use. If None, overlord will
+                select the most appropriate agent for the message.
+            user_id: Optional user ID for multi-user support and context.
+            use_async: Force async behavior. None=intelligent decision, True=force async,
+                False=force sync. When None, uses time estimation to decide.
+            webhook_url: Optional webhook URL for completion notification. Defaults
+                to formation config if not provided.
+            threshold_seconds: Optional threshold override for async decision. Defaults
+                to formation config if not provided.
+
+        Returns:
+            For sync processing: MCPMessage with the agent's response
+            For async processing: Dict with request_id, status, and processing info
+        """
+        # Generate unique request ID for all requests (for tracking and logging)
+        request_id = generate_nanoid()
+        timestamp = time.time()
+
+        logger.info(f"Chat request {request_id}: {message[:100]}...")
+
+        # Use provided values or formation defaults
+        webhook_url = webhook_url or self.async_webhook_url
+        threshold_seconds = threshold_seconds or self.async_threshold_seconds
+
+        # Async decision logic
+        if use_async is False:
+            use_async_mode = False  # Force synchronous
+            logger.debug(f"Request {request_id}: Forced synchronous processing")
+        elif use_async is True:
+            use_async_mode = True  # Force asynchronous
+            logger.debug(f"Request {request_id}: Forced asynchronous processing")
+        else:  # use_async is None - intelligent decision
+            if self.async_enable_estimation:
+                estimated_time = await self.time_estimator.estimate_processing_time(message)
+                use_async_mode = self.time_estimator.should_use_async(
+                    estimated_time, threshold_seconds
+                )
+                logger.debug(
+                    f"Request {request_id}: Estimated {estimated_time:.1f}s, "
+                    f"threshold {threshold_seconds}s, async={use_async_mode}"
+                )
+
+        if use_async_mode:
+            # Async processing path
+            estimated_time = (
+                await self.time_estimator.estimate_processing_time(message)
+                if self.async_enable_estimation
+                else None
+            )
+
+            # Track async request
+            from .async_patterns.request_tracker import RequestState, RequestStatus
+
+            initial_state = RequestState(
+                id=request_id,
+                status=RequestStatus.PROCESSING,
+                start_time=timestamp,
+                webhook_url=webhook_url,
+                estimated_completion=estimated_time,
+                user_id=user_id,
+            )
+            await self.request_tracker.track_request(request_id, initial_state)
+
+            # Start background processing
+            asyncio.create_task(
+                self._execute_async_request(request_id, message, agent_name, user_id)
+            )
+
+            logger.info(
+                f"Request {request_id}: Started async processing (estimated: {estimated_time:.1f}s)"
+            )
+
+            # Return immediate async response
+            return {
+                "request_id": request_id,
+                "status": "processing",
+                "result": None,
+                "processing_mode": "async",
+                "timestamp": timestamp,
+                "estimated_completion_time": estimated_time,
+                "webhook_url": webhook_url,
+                "user_id": user_id,
+            }
+        else:
+            # Synchronous processing path
+            start_time = time.time()
+            result = await self._process_sync_chat(message, agent_name, user_id)
+            processing_time = time.time() - start_time
+
+            logger.info(
+                f"Request {request_id}: Completed sync processing in {processing_time:.2f}s"
+            )
+
+            # Return sync response format for compatibility
+            return {
+                "request_id": request_id,
+                "status": "completed",
+                "result": result.content if hasattr(result, "content") else str(result),
+                "processing_mode": "sync",
+                "processing_time": processing_time,
+                "timestamp": timestamp,
+                "user_id": user_id,
+            }
+
+    async def _execute_async_request(
+        self, request_id: str, message: str, agent_name: Optional[str], user_id: Optional[str]
+    ) -> None:
+        """
+        Execute async request in background.
+
+        This method runs the actual chat processing in the background for async requests,
+        updating the request tracker with progress and delivering webhook notifications
+        upon completion or failure.
+        """
+        try:
+            start_time = time.time()
+            logger.info(f"Request {request_id}: Starting background processing")
+
+            # Process using existing sync infrastructure
+            result = await self._process_sync_chat(message, agent_name, user_id)
+            processing_time = time.time() - start_time
+
+            # Extract result content
+            result_content = result.content if hasattr(result, "content") else str(result)
+
+            # Update request as completed
+            from .async_patterns.request_tracker import RequestStatus
+
+            await self.request_tracker.update_request(
+                request_id, RequestStatus.COMPLETED, result=result_content
+            )
+
+            logger.info(
+                f"Request {request_id}: Completed async processing in {processing_time:.2f}s"
+            )
+
+            # Send webhook notification if URL is configured
+            webhook_url = await self._get_webhook_url_for_request(request_id)
+            if webhook_url:
+                success = await self.webhook_manager.deliver_completion(
+                    webhook_url=webhook_url,
+                    request_id=request_id,
+                    result=result_content,
+                    processing_time=processing_time,
+                    processing_mode="async",  # NEW: indicate this was async processing
+                    user_id=user_id,  # NEW: include user identifier
+                )
+                if success:
+                    logger.info(f"Request {request_id}: Webhook delivered successfully")
+                else:
+                    logger.error(f"Request {request_id}: Webhook delivery failed")
+            else:
+                logger.debug(
+                    f"Request {request_id}: No webhook URL configured, skipping notification"
+                )
+
+        except Exception as e:
+            logger.error(f"Request {request_id}: Error in async processing: {e}")
+
+            # Update request as failed
+            from .async_patterns.request_tracker import RequestStatus
+
+            await self.request_tracker.update_request(
+                request_id, RequestStatus.FAILED, error=str(e)
+            )
+
+            # Send failure webhook if URL is configured
+            webhook_url = await self._get_webhook_url_for_request(request_id)
+            if webhook_url:
+                await self.webhook_manager.deliver_completion(
+                    webhook_url=webhook_url,
+                    request_id=request_id,
+                    error=str(e),
+                    processing_mode="async",  # NEW: indicate this was async processing
+                    user_id=user_id,  # NEW: include user identifier
+                )
+
+    async def _process_sync_chat(
+        self, message: str, agent_name: Optional[str], user_id: Optional[str]
+    ) -> MCPMessage:
+        """
+        Process chat synchronously using existing infrastructure.
+
+        This method handles the actual chat processing using the existing overlord
+        infrastructure for agent selection and message processing. It maintains
+        compatibility with the current system while providing a clean interface
+        for both sync and async execution paths.
+        """
+        # Use existing agent selection logic if no specific agent requested
+        if agent_name is None:
+            agent_name = await self.select_agent_for_message(message)
+
+        # Get the selected agent and process the message
+        agent = self.get_agent(agent_name)
+
+        # Convert user_id to int if provided (for compatibility with existing agent interface)
+        user_id_int = None
+        if user_id is not None:
+            try:
+                user_id_int = int(user_id) if isinstance(user_id, str) else user_id
+            except (ValueError, TypeError):
+                logger.warning(
+                    f"Invalid user_id format: {user_id}, proceeding without user context"
+                )
+
+        # Process the message using the agent
+        result = await agent.process_message(message, user_id=user_id_int)
+
+        return result
+
+    async def _get_webhook_url_for_request(self, request_id: str) -> Optional[str]:
+        """
+        Get webhook URL for a specific request.
+
+        This method retrieves the webhook URL associated with a request,
+        first checking the request's specific configuration and falling
+        back to the formation default.
+        """
+        try:
+            request_state = await self.request_tracker.get_request(request_id)
+            if request_state and request_state.webhook_url:
+                return request_state.webhook_url
+
+            # Fall back to formation default
+            return self.async_webhook_url
+        except Exception as e:
+            logger.error(f"Error getting webhook URL for request {request_id}: {e}")
+            return self.async_webhook_url
+
+    async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get status of an async request.
+
+        This method provides a way to check the current status of an async request,
+        including completion status, results, and any errors that occurred.
+
+        Args:
+            request_id: The unique identifier for the async request
+
+        Returns:
+            Dict with request status information, or None if request not found
+        """
+        try:
+            request_state = await self.request_tracker.get_request(request_id)
+
+            if request_state:
+                return {
+                    "request_id": request_state.id,
+                    "status": request_state.status.value,
+                    "start_time": request_state.start_time,
+                    "end_time": request_state.end_time,
+                    "result": request_state.result,
+                    "error": request_state.error,
+                    "processing_time": (
+                        request_state.end_time - request_state.start_time
+                        if request_state.end_time
+                        else None
+                    ),
+                    "estimated_completion": request_state.estimated_completion,
+                    "user_id": request_state.user_id,
+                }
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Error getting async request status for {request_id}: {e}")
+            return None
+
+    async def cleanup_async_requests(self, max_age_hours: float = 24) -> int:
+        """
+        Clean up old completed async requests.
+
+        This method removes completed async requests that are older than the
+        specified age to prevent memory buildup from request tracking.
+
+        Args:
+            max_age_hours: Maximum age in hours for keeping completed requests
+
+        Returns:
+            Number of requests cleaned up
+        """
+        try:
+            max_age_seconds = max_age_hours * 3600
+            return await self.request_tracker.cleanup_completed_requests(max_age_seconds)
+        except Exception as e:
+            logger.error(f"Error cleaning up async requests: {e}")
+            return 0
 
     def _generate_api_key(self, key_type: str) -> str:
         """
@@ -3274,11 +3627,9 @@ class Overlord:
         section for API keys, which is displayed when keys have been auto-generated.
         It includes a warning message about using auto-generated keys in production.
         """
-        # Determine which keys to display
-        if self._user_key_auto_generated:
-            user_key_display = self.user_api_key
-        else:
-            user_key_display = "[user provided]"
+        # This method is incomplete and the user_key_display variable was unused
+        # TODO: Complete implementation of splash screen with API keys
+        pass
 
     def _initialize_external_registry_client(self) -> None:
         """Initialize external registry client for outbound A2A discovery."""

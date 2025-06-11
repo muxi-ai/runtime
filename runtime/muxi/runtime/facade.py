@@ -549,37 +549,66 @@ class Muxi:
                 logger.warning(f"Invalid MCP server configuration: {server}")
 
     async def chat(
-        self, agent_name: Optional[str] = None, message: str = "", user_id: Optional[str] = None
-    ) -> str:
+        self,
+        message: str,
+        agent_name: Optional[str] = None,
+        user_id: Optional[str] = None,
+        use_async: Optional[bool] = None,
+        webhook_url: Optional[str] = None,
+        threshold_seconds: Optional[float] = None
+    ) -> Union[str, Dict[str, Any]]:
         """
         Send a message to an agent and get a response.
 
         This is the primary method for interacting with agents through the facade.
-        It handles message routing, processing, and response extraction.
+        It handles message routing, processing, and response extraction, with full
+        support for async request-response patterns for long-running tasks.
 
         Args:
+            message: The message to send to the agent.
             agent_name: Optional name of the agent to use. If None, the overlord
                 will select the most appropriate agent for the message.
-            message: The message to send to the agent.
             user_id: Optional user ID for multi-user support. Enables user-specific
                 memory and context.
+            use_async: Optional async mode control:
+                - None (default): Intelligent async decision based on time estimation
+                - True: Force async processing with immediate request_id return
+                - False: Force synchronous processing
+            webhook_url: Optional webhook URL for async completion notifications.
+                Overrides formation-level default webhook URL.
+            threshold_seconds: Optional threshold override for async decision making.
+                Overrides formation-level default threshold.
 
         Returns:
-            The agent's response as a string, extracted from the MCPMessage.
+            For sync responses: The agent's response as a string.
+            For async responses: Dict with request_id and status information.
         """
-        # Process the message through the overlord
+        # Process the message through the overlord with all parameters
         response = await self.overlord.chat(
-            agent_name=agent_name, message=message, user_id=user_id
+            message=message,
+            agent_name=agent_name,
+            user_id=user_id,
+            use_async=use_async,
+            webhook_url=webhook_url,
+            threshold_seconds=threshold_seconds
         )
 
-        # Return just the text response (content could be a string or dict)
-        if isinstance(response.content, str):
-            return response.content
-        elif isinstance(response.content, dict) and "text" in response.content:
-            return response.content["text"]
-        else:
-            # Fallback to string representation
-            return str(response.content)
+        # Handle async response (dict with request_id)
+        if isinstance(response, dict) and "request_id" in response:
+            return response
+
+        # Handle sync response (MCPMessage)
+        if hasattr(response, 'content'):
+            if isinstance(response.content, str):
+                return response.content
+            elif isinstance(response.content, dict) and "text" in response.content:
+                return response.content["text"]
+            else:
+                # Fallback to string representation
+                return str(response.content)
+
+        # Fallback for unexpected response format
+        return str(response)
 
     def add_user_context_memory(self, user_id: int, knowledge: Dict[str, Any]) -> None:
         """
