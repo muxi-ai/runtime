@@ -76,6 +76,7 @@
 # =============================================================================
 
 import asyncio
+import hashlib
 import secrets
 import string
 import time
@@ -278,6 +279,9 @@ class Overlord:
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
         self.default_agent_id: Optional[str] = None
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
+
+        # ENHANCE existing initialization instead of adding separate service
+        self._user_id_cache = {}  # Add to existing overlord caching
 
         # Store formation configuration for A2A and other features
         self.formation_config = formation_config or {}
@@ -1700,7 +1704,7 @@ class Overlord:
         metadata: Optional[Dict[str, Any]] = None,
         embedding: Optional[List[float]] = None,
         agent_id: Optional[str] = None,
-        user_id: Optional[int] = None,
+        user_id: Any = None,
     ) -> Optional[str]:
         """
         Add content to the overlord's long-term memory.
@@ -1736,11 +1740,13 @@ class Overlord:
         # Handle multi-user case with Memobase
         if self.is_multi_user and user_id is not None:
             try:
+                # ENHANCE: Use flexible user ID conversion
+                internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
                 return await self.long_term_memory.add(
                     content=content,
                     metadata=full_metadata,
                     embedding=embedding,
-                    user_id=user_id,
+                    user_id=internal_user_id,
                 )
             except Exception as e:
                 logger.error(f"Error adding to Memobase: {e}")
@@ -1763,7 +1769,7 @@ class Overlord:
         agent_id: Optional[str] = None,
         k: int = 5,
         use_long_term: bool = True,
-        user_id: Optional[int] = None,
+        user_id: Any = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -1830,8 +1836,10 @@ class Overlord:
             try:
                 # Handle multi-user case with Memobase
                 if self.is_multi_user and user_id is not None:
+                    # ENHANCE: Use flexible user ID conversion
+                    internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
                     lt_results = await self.long_term_memory.search(
-                        query=query, limit=k, user_id=user_id, filter_metadata=full_filter
+                        query=query, limit=k, user_id=internal_user_id, filter_metadata=full_filter
                     )
                 # Standard long-term memory case
                 else:
@@ -1860,11 +1868,11 @@ class Overlord:
 
         return results
 
-    def clear_memory(
+    async def clear_memory(
         self,
         clear_long_term: bool = False,
         agent_id: Optional[str] = None,
-        user_id: Optional[int] = None,
+        user_id: Any = None,
     ) -> None:
         """
         Clear memory for the specified agent or user.
@@ -1898,24 +1906,22 @@ class Overlord:
         if clear_long_term and self.long_term_memory:
             try:
                 if self.is_multi_user and user_id is not None:
+                    # ENHANCE: Use flexible user ID conversion
+                    internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
                     # For multi-user with Memobase
-                    asyncio.create_task(
-                        self.long_term_memory.clear(
-                            user_id=user_id,
-                            filter_metadata=filter_metadata if filter_metadata else None,
-                        )
+                    await self.long_term_memory.clear(
+                        user_id=internal_user_id,
+                        filter_metadata=filter_metadata if filter_metadata else None,
                     )
                 else:
                     # For standard long-term memory
-                    asyncio.create_task(
-                        self.long_term_memory.clear(
-                            filter_metadata=filter_metadata if filter_metadata else None
-                        )
+                    await self.long_term_memory.clear(
+                        filter_metadata=filter_metadata if filter_metadata else None
                     )
             except Exception as e:
                 logger.error(f"Error clearing long-term memory: {e}")
 
-    def clear_all_memories(self, clear_long_term: bool = False) -> None:
+    async def clear_all_memories(self, clear_long_term: bool = False) -> None:
         """
         Clear the memories for all agents.
 
@@ -1927,7 +1933,7 @@ class Overlord:
             clear_long_term: Whether to clear long-term memories as well.
                 If False, only clears buffer memory.
         """
-        self.clear_memory(clear_long_term=clear_long_term)
+        await self.clear_memory(clear_long_term=clear_long_term)
 
     # ===================================================================
     # SECRETS MANAGEMENT
@@ -2536,7 +2542,7 @@ class Overlord:
         self,
         user_message: str,
         agent_response: str,
-        user_id: int,
+        user_id: Any,
         agent_id: str,
         extraction_model: Optional[LLM] = None,
     ) -> None:
@@ -2562,8 +2568,15 @@ class Overlord:
             extraction_model: Optional model to use for extraction.
                 If provided, overrides the default extraction model.
         """
+        # ENHANCE: Use flexible user ID conversion
+        try:
+            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
+        except Exception as e:
+            logger.error(f"User ID conversion failed during extraction: {e}")
+            return
+
         # Skip extraction for anonymous users
-        if user_id == 0:
+        if internal_user_id == 0:
             return
 
         # Skip if extraction is disabled or not available
@@ -2571,7 +2584,7 @@ class Overlord:
             return
 
         # Increment message count for this user
-        self.message_counts[user_id] = self.message_counts.get(user_id, 0) + 1
+        self.message_counts[internal_user_id] = self.message_counts.get(internal_user_id, 0) + 1
 
         # Process this conversation turn for information extraction
         try:
@@ -2580,13 +2593,13 @@ class Overlord:
                 self._run_extraction(
                     user_message=user_message,
                     agent_response=agent_response,
-                    user_id=user_id,
+                    user_id=internal_user_id,
                     agent_id=agent_id,
-                    message_count=self.message_counts[user_id],
+                    message_count=self.message_counts[internal_user_id],
                     extraction_model=extraction_model,
                 )
             )
-            logger.debug(f"Automatic extraction scheduled for user {user_id}")
+            logger.debug(f"Automatic extraction scheduled for user {internal_user_id}")
         except Exception as e:
             # Log but don't fail if extraction errors occur
             logger.warning(f"User information extraction failed: {str(e)}")
@@ -2644,7 +2657,7 @@ class Overlord:
             )
 
     async def get_user_context_memory(
-        self, user_id: int, agent_id: Optional[str] = None
+        self, user_id: Any, agent_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Get context memory for a specific user.
@@ -2672,11 +2685,18 @@ class Overlord:
         if not self.is_multi_user or not isinstance(self.long_term_memory, Memobase):
             return {}
 
-        return await self.long_term_memory.get_user_context_memory(user_id=user_id)
+        # ENHANCE: Use flexible user ID conversion
+        try:
+            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
+        except Exception as e:
+            logger.error(f"User ID conversion failed during context memory retrieval: {e}")
+            return {}
+
+        return await self.long_term_memory.get_user_context_memory(user_id=internal_user_id)
 
     async def add_user_context_memory(
         self,
-        user_id: int,
+        user_id: Any,
         knowledge: Dict[str, Any],
         source: str = "manual_input",
         importance: float = 0.9,
@@ -2709,12 +2729,19 @@ class Overlord:
         if not self.is_multi_user or not isinstance(self.long_term_memory, Memobase):
             return []
 
+        # ENHANCE: Use flexible user ID conversion
+        try:
+            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
+        except Exception as e:
+            logger.error(f"User ID conversion failed during context memory addition: {e}")
+            return []
+
         return await self.long_term_memory.add_user_context_memory(
-            user_id=user_id, knowledge=knowledge, source=source, importance=importance
+            user_id=internal_user_id, knowledge=knowledge, source=source, importance=importance
         )
 
     async def clear_user_context_memory(
-        self, user_id: int, keys: Optional[List[str]] = None, agent_id: Optional[str] = None
+        self, user_id: Any, keys: Optional[List[str]] = None, agent_id: Optional[str] = None
     ) -> bool:
         """
         Clear context memory for a specific user.
@@ -2738,7 +2765,16 @@ class Overlord:
         if not self.is_multi_user or not isinstance(self.long_term_memory, Memobase):
             return False
 
-        return await self.long_term_memory.clear_user_context_memory(user_id=user_id, keys=keys)
+        # ENHANCE: Use flexible user ID conversion
+        try:
+            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
+        except Exception as e:
+            logger.error(f"User ID conversion failed during context memory clearing: {e}")
+            return False
+
+        return await self.long_term_memory.clear_user_context_memory(
+            user_id=internal_user_id, keys=keys
+        )
 
     async def register_mcp_server(
         self,
@@ -2854,7 +2890,7 @@ class Overlord:
         role: str,
         timestamp: float,
         agent_id: str,
-        user_id: Optional[int] = None,
+        user_id: Any = None,
     ) -> None:
         """
         Add a message to appropriate memory stores based on configuration.
@@ -2881,14 +2917,25 @@ class Overlord:
             self.buffer_memory.add(content, metadata=metadata)
 
         # Add to long-term memory if we have a valid user_id and multi-user support
-        if self.is_multi_user and user_id is not None and user_id != 0 and self.long_term_memory:
+        if self.is_multi_user and user_id is not None and self.long_term_memory:
+            # ENHANCE: Use flexible user ID conversion
+            try:
+                internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
+            except Exception as e:
+                logger.error(f"User ID conversion failed during message memory addition: {e}")
+                return
+
+            # Skip for anonymous users
+            if internal_user_id == 0:
+                return
+
             metadata = {"role": role, "timestamp": timestamp, "agent_id": agent_id}
 
             # Enhanced message with user context if this is a user message
             if role == "user":
                 try:
                     # Get user context memory
-                    context_memory = await self.get_user_context_memory(user_id=user_id)
+                    context_memory = await self.get_user_context_memory(user_id=internal_user_id)
 
                     # If context is available, enhance the message before storing
                     if context_memory:
@@ -2909,23 +2956,25 @@ class Overlord:
                         metadata["original_content"] = content
 
                         await self.long_term_memory.add(
-                            content=enhanced_content, metadata=metadata, user_id=user_id
+                            content=enhanced_content, metadata=metadata, user_id=internal_user_id
                         )
                     else:
                         # Store the original content
                         await self.long_term_memory.add(
-                            content=content, metadata=metadata, user_id=user_id
+                            content=content, metadata=metadata, user_id=internal_user_id
                         )
                 except Exception as e:
                     # Log error and fall back to original message
                     error_msg = "Error enhancing message with user context:"
                     logger.error(f"{error_msg} {e}")  # noqa: E501
                     await self.long_term_memory.add(
-                        content=content, metadata=metadata, user_id=user_id
+                        content=content, metadata=metadata, user_id=internal_user_id
                     )
             else:
                 # For non-user messages, just store directly
-                await self.long_term_memory.add(content=content, metadata=metadata, user_id=user_id)
+                await self.long_term_memory.add(
+                    content=content, metadata=metadata, user_id=internal_user_id
+                )
 
     # ===================================================================
     # DOCUMENT PROCESSING ORCHESTRATION (Tasks 3.7-3.9)
@@ -2936,7 +2985,7 @@ class Overlord:
         attachments: List[Dict[str, Any]],
         user_request: str,
         context: Optional[Dict[str, Any]] = None,
-        user_id: Optional[int] = None,
+        user_id: Any = None,
     ) -> str:
         """
         Enhanced document processing with full workflow integration.
@@ -3019,7 +3068,7 @@ class Overlord:
     async def _process_document_storage_phase(
         self,
         attachments: List[Dict[str, Any]],
-        user_id: Optional[int],
+        user_id: Any,
         context: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
@@ -3046,10 +3095,19 @@ class Overlord:
                     chunks = [{"content": content, "metadata": {"filename": filename}}]
 
                 # Store metadata
+                # ENHANCE: Use flexible user ID conversion if available
+                internal_user_id = None
+                if user_id is not None:
+                    try:
+                        internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
+                    except Exception as e:
+                        logger.warning(f"User ID conversion failed for document storage: {e}")
+                        internal_user_id = None
+
                 doc_metadata = {
                     "filename": filename,
                     "upload_time": time.time(),
-                    "user_id": user_id,
+                    "user_id": internal_user_id,
                     "chunk_count": len(chunks),
                     "original_size": len(content),
                 }
@@ -3250,7 +3308,7 @@ class Overlord:
         self,
         message: str,
         agent_name: Optional[str] = None,
-        user_id: Optional[str] = None,
+        user_id: Any = None,
         use_async: Optional[bool] = None,  # None=intelligent, True=force async, False=force sync
         webhook_url: Optional[str] = None,  # Optional webhook URL
         threshold_seconds: Optional[float] = None,  # Optional threshold override
@@ -3370,7 +3428,7 @@ class Overlord:
             }
 
     async def _execute_async_request(
-        self, request_id: str, message: str, agent_name: Optional[str], user_id: Optional[str]
+        self, request_id: str, message: str, agent_name: Optional[str], user_id: Any
     ) -> None:
         """
         Execute async request in background.
@@ -3443,7 +3501,7 @@ class Overlord:
                 )
 
     async def _process_sync_chat(
-        self, message: str, agent_name: Optional[str], user_id: Optional[str]
+        self, message: str, agent_name: Optional[str], user_id: Any
     ) -> MCPMessage:
         """
         Process chat synchronously using existing infrastructure.
@@ -3460,15 +3518,11 @@ class Overlord:
         # Get the selected agent and process the message
         agent = self.get_agent(agent_name)
 
-        # Convert user_id to int if provided (for compatibility with existing agent interface)
+        # ENHANCED: Convert user_id to int using flexible user ID handling
         user_id_int = None
         if user_id is not None:
-            try:
-                user_id_int = int(user_id) if isinstance(user_id, str) else user_id
-            except (ValueError, TypeError):
-                logger.warning(
-                    f"Invalid user_id format: {user_id}, proceeding without user context"
-                )
+            # Use enhanced conversion that accepts any external user ID format
+            user_id_int = await self._enhance_existing_user_id_conversion(user_id)
 
         # Process the message using the agent
         result = await agent.process_message(message, user_id=user_id_int)
@@ -3638,6 +3692,172 @@ class Overlord:
         # This method is incomplete and the user_key_display variable was unused
         # TODO: Complete implementation of splash screen with API keys
         pass
+
+    async def _enhance_existing_user_id_conversion(self, external_user_id: Any) -> int:
+        """
+        Enhanced version of existing user ID conversion logic.
+
+        Accepts any external user ID format and maps to internal integer ID
+        for compatibility with existing components.
+
+        Args:
+            external_user_id: User ID from external system (any type/format)
+
+        Returns:
+            Internal integer user ID for use with existing components
+        """
+        # Handle anonymous users (existing behavior)
+        if external_user_id is None or external_user_id == 0:
+            return 0
+
+        # Convert to string for consistent processing
+        external_id_str = self._normalize_external_id(external_user_id)
+
+        # Use enhanced resolution
+        internal_id, isolation_key = await self._resolve_flexible_user_id(external_id_str)
+
+        return internal_id
+
+    async def _resolve_flexible_user_id(self, external_id_str: str) -> tuple[int, str]:
+        """
+        Resolve external user ID to internal ID and isolation key.
+
+        Args:
+            external_id_str: Normalized external user ID string
+
+        Returns:
+            Tuple of (internal_id, isolation_key)
+        """
+        # Create hash for fast lookup (existing pattern)
+        external_id_hash = hashlib.sha256(external_id_str.encode()).hexdigest()[:16]
+
+        # Check cache first (using existing overlord caching pattern)
+        if external_id_hash in self._user_id_cache:
+            cached_record = self._user_id_cache[external_id_hash]
+            return cached_record['internal_id'], cached_record['isolation_key']
+
+        # Find or create user record (leverage existing database connections)
+        user_record = await self._find_or_create_user(external_id_str, external_id_hash)
+
+        # Cache result using existing overlord cache pattern
+        self._user_id_cache[external_id_hash] = user_record
+
+        return user_record['internal_id'], user_record['isolation_key']
+
+    async def _find_or_create_user(self, external_id_str: str, external_id_hash: str) -> dict:
+        """
+        Find existing user or create new user record.
+
+        Args:
+            external_id_str: Normalized external user ID
+            external_id_hash: Hash of external ID for fast lookup
+
+        Returns:
+            User record dict with internal_id and isolation_key
+        """
+        try:
+            # Use existing database connections from overlord
+            # Check if we have a database connection (leveraging existing patterns)
+            db_connection = None
+
+            if hasattr(self, 'long_term_memory') and self.long_term_memory:
+                if hasattr(self.long_term_memory, 'db') and self.long_term_memory.db:
+                    db_connection = self.long_term_memory.db
+                elif (hasattr(self.long_term_memory, 'connection')
+                      and self.long_term_memory.connection):
+                    db_connection = self.long_term_memory.connection
+
+            if db_connection:
+                # Try to find existing user
+                query = """
+                SELECT id, external_user_id, external_user_id_hash
+                FROM users
+                WHERE external_user_id_hash = %s
+                LIMIT 1
+                """
+
+                if hasattr(db_connection, 'fetchone'):
+                    # Direct connection
+                    cursor = db_connection.cursor()
+                    cursor.execute(query, (external_id_hash,))
+                    user_row = cursor.fetchone()
+                elif hasattr(db_connection, 'fetch_one'):
+                    # AsyncPG-style connection
+                    user_row = await db_connection.fetch_one(query, external_id_hash)
+                else:
+                    user_row = None
+
+                if user_row:
+                    # User exists, return record
+                    internal_id = (user_row[0] if isinstance(user_row, (list, tuple))
+                                   else user_row['id'])
+                    return {
+                        'internal_id': internal_id,
+                        'isolation_key': f"user_{internal_id}_{external_id_hash[:8]}"
+                    }
+                else:
+                    # Create new user
+                    insert_query = """
+                    INSERT INTO users (external_user_id, external_user_id_hash, user_id)
+                    VALUES (%s, %s, %s)
+                    RETURNING id
+                    """
+
+                    # Generate a nano_id for the user_id column (for backward compatibility)
+                    nano_id = generate_nanoid()
+
+                    if hasattr(db_connection, 'fetchone'):
+                        # Direct connection
+                        cursor = db_connection.cursor()
+                        cursor.execute(insert_query, (external_id_str, external_id_hash, nano_id))
+                        new_user_row = cursor.fetchone()
+                        db_connection.commit()
+                        internal_id = new_user_row[0] if new_user_row else None
+                    elif hasattr(db_connection, 'fetch_one'):
+                        # AsyncPG-style connection
+                        new_user_row = await db_connection.fetch_one(
+                            insert_query, external_id_str, external_id_hash, nano_id
+                        )
+                        internal_id = new_user_row[0] if new_user_row else None
+                    else:
+                        internal_id = None
+
+                    if internal_id:
+                        return {
+                            'internal_id': internal_id,
+                            'isolation_key': f"user_{internal_id}_{external_id_hash[:8]}"
+                        }
+
+        except Exception as e:
+            logger.warning(f"Database operation failed for user ID resolution: {e}")
+
+        # Fallback: generate synthetic internal ID based on hash
+        # This maintains functionality even if database operations fail
+        synthetic_id = abs(hash(external_id_hash)) % 1000000  # Keep it reasonable
+        return {
+            'internal_id': synthetic_id,
+            'isolation_key': f"user_{synthetic_id}_{external_id_hash[:8]}"
+        }
+
+    def _normalize_external_id(self, external_user_id: Any) -> str:
+        """
+        Normalize any external user ID to consistent string format.
+
+        Args:
+            external_user_id: User ID in any format
+
+        Returns:
+            Normalized string representation
+        """
+        if external_user_id is None:
+            return "anonymous"
+        elif isinstance(external_user_id, str):
+            return external_user_id.strip()
+        elif isinstance(external_user_id, (int, float)):
+            return str(external_user_id)
+        else:
+            # Handle any other type (objects, etc.)
+            return str(external_user_id)
 
     def _initialize_external_registry_client(self) -> None:
         """Initialize external registry client for outbound A2A discovery."""

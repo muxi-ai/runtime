@@ -144,7 +144,7 @@ class Agent:
         return self._mcp_service
 
     async def process_message(
-        self, message: Union[str, MCPMessage], user_id: Optional[int] = None
+        self, message: Union[str, MCPMessage], user_id: Any = None
     ) -> MCPMessage:
         """
         Process a message from the user and generate a response.
