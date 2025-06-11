@@ -24,6 +24,7 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
 - **Multi-Modal Support**: Handle text, image, audio, video, and document content
 - **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
+- **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, and background processing
 
 ## Installation
 
@@ -160,10 +161,10 @@ muxi/runtime/
 
 MUXI Runtime is part of the broader MUXI Framework ecosystem, designed around formation-based AI system deployment:
 
-- **MUXI Runtime**: The computational engine executing formations (this repository) - **✅ 100% Complete**
+- **MUXI Runtime**: The computational engine executing formations (this repository) - **✅ 100% Complete + Async Orchestration**
 - **MUXI Server**: Formation execution server with REST/SSE/WebRTC/MCP/Webhook APIs - **⏳ Next Phase**
 - **OneLLM**: Provider-agnostic LLM interface with multi-modal support - **✅ OpenAI Complete**
-- **FAISSx**: Distributed FAISS vector database for memory systems - **🚧 Integration In Progress**
+- **FAISSx**: Distributed FAISS vector database for memory systems - **✅ Integration Complete**
 - **MUXI CLI**: Command-line interface for formation management (planned)
 - **MUXI Schemas**: Formation and agent configuration schemas
 
