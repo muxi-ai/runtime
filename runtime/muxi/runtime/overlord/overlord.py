@@ -854,6 +854,7 @@ class Overlord:
             output = logging_config.get("output", "stdout")
             path = logging_config.get("path")
             stream_url = logging_config.get("stream_url")
+            stream_protocol = logging_config.get("stream_protocol")
             log_events = logging_config.get("events", [])
 
             # Only configure logging if enabled
@@ -869,20 +870,20 @@ class Overlord:
                 # Configure the logging system
                 configure_logging(config)
 
-            # Store logging configuration for potential future use
-            # TODO: Implement hybrid logic - if events specified, ignore level;
-            # if events missing, use level-based defaults
-            self._logging_config = {
-                "enabled": enabled,
-                "level": level,
-                "format": format_type,
-                "output": output,
-                "path": path,
-                "stream_url": stream_url,
-                "log_events": log_events
-            }
+                # Store logging configuration for potential future use
+                # TODO: Implement hybrid logic - if events specified, ignore level;
+                # if events missing, use level-based defaults
+                self._logging_config = {
+                    "enabled": enabled,
+                    "level": level,
+                    "format": format_type,
+                    "output": output,
+                    "path": path,
+                    "stream_url": stream_url,
+                    "stream_protocol": stream_protocol,
+                    "log_events": log_events
+                }
 
-            if enabled:
                 logger.info(
                     f"✅ Initialized logging configuration "
                     f"(enabled={enabled}, level={level}, format={format_type}, output={output})"

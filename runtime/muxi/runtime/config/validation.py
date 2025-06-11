@@ -1629,6 +1629,31 @@ class FormationValidator:
                 if not isinstance(stream_url, str) or not stream_url.strip():
                     self.result.add_error("Logging stream_url must be a non-empty string")
 
+                # Validate stream_protocol with smart defaults
+                stream_protocol = logging_config.get("stream_protocol")
+                if stream_protocol is not None:
+                    valid_protocols = ["zmq", "webhook", "websocket", "kafka"]
+                    if stream_protocol not in valid_protocols:
+                        self.result.add_error(
+                            f"Invalid stream_protocol '{stream_protocol}'. "
+                            f"Valid protocols are: {', '.join(valid_protocols)}"
+                        )
+                else:
+                    # Auto-detect protocol from URL and suggest
+                    if stream_url.startswith(("https://", "http://")):
+                        suggested_protocol = "webhook"
+                    elif stream_url.startswith(("tcp://", "ipc://")):
+                        suggested_protocol = "zmq"
+                    elif stream_url.startswith(("ws://", "wss://")):
+                        suggested_protocol = "websocket"
+                    else:
+                        suggested_protocol = "zmq"  # Default fallback
+
+                    self.result.add_suggestion(
+                        f"stream_protocol not specified. Based on URL '{stream_url}', "
+                        f"consider adding 'stream_protocol: \"{suggested_protocol}\"'"
+                    )
+
         # Validate log categories (optional array)
         if "events" in logging_config:
             log_events = logging_config["events"]
