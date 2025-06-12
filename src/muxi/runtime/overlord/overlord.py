@@ -84,6 +84,7 @@ import os
 
 from loguru import logger
 
+from ..observability import ObservabilityManager, EventType, EventLevel
 from ..agent import Agent
 from ..mcp.message import MCPMessage
 from ..mcp.service import MCPService
@@ -165,8 +166,7 @@ from .async_patterns import (
 # Unified Response Components (Phase 3)
 from ..utils.response_converter import (
     create_unified_response,
-    extract_user_content,
-    create_error_response
+    extract_user_content
 )
 
 
@@ -313,10 +313,9 @@ class Overlord:
 
         # Initialize clarification configuration with defaults
         from ..clarification.types import ClarificationConfig, QuestionStyle
+
         self.clarification_config = ClarificationConfig(
-            max_questions=5,
-            style=QuestionStyle.CONVERSATIONAL,
-            persist_learned_info=False
+            max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
         )
 
         # Initialize external registry clients (will be set up later)
@@ -490,6 +489,9 @@ class Overlord:
         self.async_enable_estimation = async_config.get("enable_estimation", True)
         self.async_webhook_url = async_config.get("webhook_url")
 
+        # Initialize observability system (Task 5)
+        self.observability_manager = ObservabilityManager(config=self.formation_config)
+
         logger.info(
             "Enhanced Overlord initialized with workflow capabilities and async orchestration"
         )
@@ -504,6 +506,10 @@ class Overlord:
             if hasattr(self, "cache_manager") and self.cache_manager:
                 await self.cache_manager.start()
                 logger.info("Cache manager started successfully")
+
+            # Start observability system
+            await self.observability_manager.start()
+            logger.info("Observability system started successfully")
 
             # Initialize other services if needed
             self._initialize_external_registry_client()
@@ -892,10 +898,7 @@ class Overlord:
                     continue
 
             # Store processed logging configuration
-            self._logging_config = {
-                "enabled": enabled,
-                "streams": processed_streams
-            }
+            self._logging_config = {"enabled": enabled, "streams": processed_streams}
 
             logger.info(
                 f"✅ Initialized logging configuration "
@@ -935,7 +938,7 @@ class Overlord:
             "level": level,
             "format": format_type,
             "events": events,
-            "auth": auth
+            "auth": auth,
         }
 
         if transport == "stdout":
@@ -1069,9 +1072,7 @@ class Overlord:
 
             # Update the overlord's clarification configuration
             self.clarification_config = ClarificationConfig(
-                max_questions=max_questions,
-                style=style,
-                persist_learned_info=persist_learned_info
+                max_questions=max_questions, style=style, persist_learned_info=persist_learned_info
             )
 
             logger.info(
@@ -1809,8 +1810,6 @@ class Overlord:
             "specialties": getattr(agent, "specialties", []),
             "description": agent.system_message or "",
         }
-
-
 
         logger.info(f"Created agent with ID '{agent.agent_id}'")
 
@@ -2590,7 +2589,13 @@ class Overlord:
 
             # Simple keyword scoring
             keywords = [
-                "business", "writer", "assistant", "help", "support", "analysis", "research"
+                "business",
+                "writer",
+                "assistant",
+                "help",
+                "support",
+                "analysis",
+                "research",
             ]
             for keyword in keywords:
                 if keyword in message_lower and keyword in description_lower:
@@ -3543,96 +3548,123 @@ class Overlord:
 
         logger.info(f"Chat request {request_id}: {message[:100]}...")
 
-        # Use provided values or formation defaults
-        webhook_url = webhook_url or self.async_webhook_url
-        threshold_seconds = threshold_seconds or self.async_threshold_seconds
+        # Start request tracking with observability
+        async with self.observability_manager.track_request(
+            request_id=request_id,
+            formation_id=self.formation_id,
+            user_id=str(user_id) if user_id is not None else None,
+        ) as request_context:
+            # Emit routing started event
+            await self.observability_manager.event_logger.emit_event(
+                EventType.OVERLORD_ROUTING_STARTED,
+                level=EventLevel.INFO,
+                request_context=request_context,
+                data={"message": message[:200], "agent_name": agent_name},
+                description=f"Starting routing for request {request_id}",
+            )
 
-        # Async decision logic
-        if use_async is False:
-            use_async_mode = False  # Force synchronous
-            logger.debug(f"Request {request_id}: Forced synchronous processing")
-        elif use_async is True:
-            use_async_mode = True  # Force asynchronous
-            logger.debug(f"Request {request_id}: Forced asynchronous processing")
-        else:  # use_async is None - intelligent decision
-            if self.async_enable_estimation:
-                estimated_time = await self.time_estimator.estimate_processing_time(message)
-                use_async_mode = self.time_estimator.should_use_async(
-                    estimated_time, threshold_seconds
+            # Use provided values or formation defaults
+            webhook_url = webhook_url or self.async_webhook_url
+            threshold_seconds = threshold_seconds or self.async_threshold_seconds
+
+            # Async decision logic
+            if use_async is False:
+                use_async_mode = False  # Force synchronous
+                logger.debug(f"Request {request_id}: Forced synchronous processing")
+            elif use_async is True:
+                use_async_mode = True  # Force asynchronous
+                logger.debug(f"Request {request_id}: Forced asynchronous processing")
+            else:  # use_async is None - intelligent decision
+                if self.async_enable_estimation:
+                    estimated_time = await self.time_estimator.estimate_processing_time(message)
+                    use_async_mode = self.time_estimator.should_use_async(
+                        estimated_time, threshold_seconds
+                    )
+                    logger.debug(
+                        f"Request {request_id}: Estimated {estimated_time:.1f}s, "
+                        f"threshold {threshold_seconds}s, async={use_async_mode}"
+                    )
+
+            if use_async_mode:
+                # Async processing path
+                estimated_time = (
+                    await self.time_estimator.estimate_processing_time(message)
+                    if self.async_enable_estimation
+                    else None
                 )
-                logger.debug(
-                    f"Request {request_id}: Estimated {estimated_time:.1f}s, "
-                    f"threshold {threshold_seconds}s, async={use_async_mode}"
+
+                # Track async request
+                from .async_patterns.request_tracker import RequestState, RequestStatus
+
+                initial_state = RequestState(
+                    id=request_id,
+                    status=RequestStatus.PROCESSING,
+                    start_time=timestamp,
+                    webhook_url=webhook_url,
+                    estimated_completion=estimated_time,
+                    user_id=user_id,
+                )
+                await self.request_tracker.track_request(request_id, initial_state)
+
+                # Start background processing
+                asyncio.create_task(
+                    self._execute_async_request(request_id, message, agent_name, user_id)
                 )
 
-        if use_async_mode:
-            # Async processing path
-            estimated_time = (
-                await self.time_estimator.estimate_processing_time(message)
-                if self.async_enable_estimation
-                else None
-            )
+                logger.info(
+                    f"Request {request_id}: Started async processing "
+                    f"(estimated: {estimated_time:.1f}s)"
+                )
 
-            # Track async request
-            from .async_patterns.request_tracker import RequestState, RequestStatus
+                # Return immediate async response using unified format
+                return create_unified_response(
+                    request_id=request_id,
+                    status="processing",
+                    content=[],  # Empty content for processing status
+                    formation_id=self.formation_id,
+                    processing_mode="async",
+                    processing_time=None,  # Not available yet
+                    webhook_url=webhook_url,
+                    error=None,
+                    user_id=str(user_id) if user_id is not None else None,
+                )
+            else:
+                # Synchronous processing path
+                start_time = time.time()
+                result = await self._process_sync_chat(
+                    message, agent_name, user_id, request_context
+                )
+                processing_time = time.time() - start_time
 
-            initial_state = RequestState(
-                id=request_id,
-                status=RequestStatus.PROCESSING,
-                start_time=timestamp,
-                webhook_url=webhook_url,
-                estimated_completion=estimated_time,
-                user_id=user_id,
-            )
-            await self.request_tracker.track_request(request_id, initial_state)
+                logger.info(
+                    f"Request {request_id}: Completed sync processing in {processing_time:.2f}s"
+                )
 
-            # Start background processing
-            asyncio.create_task(
-                self._execute_async_request(request_id, message, agent_name, user_id)
-            )
+                # Emit routing completed event
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.OVERLORD_ROUTING_COMPLETED,
+                    level=EventLevel.INFO,
+                    request_context=request_context,
+                    data={"processing_time": processing_time, "mode": "sync"},
+                    description=f"Routing completed for request {request_id}",
+                )
 
-            logger.info(
-                f"Request {request_id}: Started async processing (estimated: {estimated_time:.1f}s)"
-            )
+                # Extract user-facing content from result
+                result_content = result.content if hasattr(result, "content") else str(result)
+                user_content = extract_user_content(result_content)
 
-            # Return immediate async response using unified format
-            return create_unified_response(
-                request_id=request_id,
-                status="processing",
-                content=[],  # Empty content for processing status
-                formation_id=self.formation_id,
-                processing_mode="async",
-                processing_time=None,  # Not available yet
-                webhook_url=webhook_url,
-                error=None,
-                user_id=str(user_id) if user_id is not None else None
-            )
-        else:
-            # Synchronous processing path
-            start_time = time.time()
-            result = await self._process_sync_chat(message, agent_name, user_id)
-            processing_time = time.time() - start_time
-
-            logger.info(
-                f"Request {request_id}: Completed sync processing in {processing_time:.2f}s"
-            )
-
-            # Extract user-facing content from result
-            result_content = result.content if hasattr(result, "content") else str(result)
-            user_content = extract_user_content(result_content)
-
-            # Return sync response using unified format
-            return create_unified_response(
-                request_id=request_id,
-                status="completed",
-                content=user_content,
-                formation_id=self.formation_id,
-                processing_mode="sync",
-                processing_time=processing_time,
-                webhook_url=None,  # Not used for sync
-                error=None,
-                user_id=str(user_id) if user_id is not None else None
-            )
+                # Return sync response using unified format
+                return create_unified_response(
+                    request_id=request_id,
+                    status="completed",
+                    content=user_content,
+                    formation_id=self.formation_id,
+                    processing_mode="sync",
+                    processing_time=processing_time,
+                    webhook_url=None,  # Not used for sync
+                    error=None,
+                    user_id=str(user_id) if user_id is not None else None,
+                )
 
     async def _execute_async_request(
         self, request_id: str, message: str, agent_name: Optional[str], user_id: Any
@@ -3679,7 +3711,7 @@ class Overlord:
                         clarification_question=clarification_question,
                         clarification_request_id=clarification_request_id,
                         original_message=message,
-                        user_id=user_id
+                        user_id=user_id,
                     )
                     if success:
                         logger.info(
@@ -3700,9 +3732,7 @@ class Overlord:
                         "proceeding with regular processing"
                     )
                     # No webhook available, proceed with regular processing
-                    await self.request_tracker.update_request(
-                        request_id, RequestStatus.PROCESSING
-                    )
+                    await self.request_tracker.update_request(request_id, RequestStatus.PROCESSING)
 
             # Process using existing sync infrastructure
             result = await self._process_sync_chat(message, agent_name, user_id)
@@ -3764,7 +3794,7 @@ class Overlord:
                 )
 
     async def _process_sync_chat(
-        self, message: str, agent_name: Optional[str], user_id: Any
+        self, message: str, agent_name: Optional[str], user_id: Any, request_context=None
     ) -> MCPMessage:
         """
         Process chat synchronously using existing infrastructure.
@@ -3776,7 +3806,27 @@ class Overlord:
         """
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
+            # Emit agent selection started event
+            if request_context and hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.OVERLORD_AGENT_SELECTION_STARTED,
+                    level=EventLevel.INFO,
+                    request_context=request_context,
+                    data={"message": message[:200]},
+                    description="Starting agent selection process",
+                )
+
             agent_name = await self.select_agent_for_message(message)
+
+            # Emit agent selection completed event
+            if request_context and hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.OVERLORD_AGENT_SELECTION_COMPLETED,
+                    level=EventLevel.INFO,
+                    request_context=request_context,
+                    data={"selected_agent": agent_name},
+                    description=f"Agent selection completed: {agent_name}",
+                )
 
         # Get the selected agent and process the message
         agent = self.get_agent(agent_name)
@@ -3788,7 +3838,9 @@ class Overlord:
             user_id_int = await self._enhance_existing_user_id_conversion(user_id)
 
         # Process the message using the agent
-        result = await agent.process_message(message, user_id=user_id_int)
+        result = await agent.process_message(
+            message, user_id=user_id_int, request_context=request_context
+        )
 
         return result
 
@@ -3887,7 +3939,7 @@ class Overlord:
         """
         try:
             # Check if clarification system is available
-            if not hasattr(self, 'clarification_analyzer'):
+            if not hasattr(self, "clarification_analyzer"):
                 logger.debug("Clarification system not available, proceeding without check")
                 return None
 
@@ -3901,7 +3953,7 @@ class Overlord:
                 user_context = await self.get_user_context_memory(user_id_int, agent_name)
 
             # Analyze message for clarification needs
-            from .clarification import (
+            from ..clarification import (
                 InformationAnalyzer,
                 ClarificationQuestionGenerator,
                 ClarificationManager,
@@ -3917,7 +3969,7 @@ class Overlord:
                 user_message=message,
                 intent="general",  # Could be enhanced with intent detection
                 available_tools=[],  # Could be enhanced with tool detection
-                user_context=user_context
+                user_context=user_context,
             )
 
             # If no missing info, proceed
@@ -3932,7 +3984,7 @@ class Overlord:
                 available_info=analysis.available_info,
                 intent="general",
                 confidence_scores=analysis.confidence_scores,
-                user_context=user_context
+                user_context=user_context,
             )
 
             if question and len(question) > 0:
@@ -3944,7 +3996,7 @@ class Overlord:
                     user_id=str(user_id),
                     agent_id=agent_name or self.default_agent_id,
                     request_type=RequestType.REASONING,
-                    intent="general"
+                    intent="general",
                 )
 
                 logger.info(f"Clarification needed for async request: {clarification_text}")
@@ -3986,12 +4038,11 @@ class Overlord:
 
             # Process the clarification response
             if request_state.clarification_request_id:
-                from .clarification import ClarificationManager
+                from ..clarification import ClarificationManager
 
                 manager = ClarificationManager(overlord=self)
                 result = await manager.process_user_response(
-                    request_state.clarification_request_id,
-                    clarification_response
+                    request_state.clarification_request_id, clarification_response
                 )
 
                 if result.status == "complete":
@@ -4001,9 +4052,7 @@ class Overlord:
                     )
 
                     # Update request status back to processing
-                    await self.request_tracker.update_request(
-                        request_id, RequestStatus.PROCESSING
-                    )
+                    await self.request_tracker.update_request(request_id, RequestStatus.PROCESSING)
 
                     # Resume processing in background with enhanced message
                     enhanced_message = (
@@ -4013,12 +4062,13 @@ class Overlord:
 
                     # Schedule background processing continuation
                     import asyncio
+
                     asyncio.create_task(
                         self._execute_async_request(
                             request_id,
                             enhanced_message,
                             None,  # Agent already selected
-                            request_state.user_id
+                            request_state.user_id,
                         )
                     )
                     return True
@@ -4039,7 +4089,7 @@ class Overlord:
                             clarification_question=result.next_question,
                             clarification_request_id=request_state.clarification_request_id,
                             original_message=request_state.original_message,
-                            user_id=request_state.user_id
+                            user_id=request_state.user_id,
                         )
                         if success:
                             logger.info(
@@ -4060,8 +4110,9 @@ class Overlord:
 
                     # Mark request as failed
                     await self.request_tracker.update_request(
-                        request_id, RequestStatus.FAILED,
-                        error=f"Clarification failed: {result.error_message}"
+                        request_id,
+                        RequestStatus.FAILED,
+                        error=f"Clarification failed: {result.error_message}",
                     )
 
                     return False
@@ -4074,9 +4125,9 @@ class Overlord:
             # Mark request as failed on error
             try:
                 from .async_patterns.request_tracker import RequestStatus
+
                 await self.request_tracker.update_request(
-                    request_id, RequestStatus.FAILED,
-                    error=f"Clarification processing error: {e}"
+                    request_id, RequestStatus.FAILED, error=f"Clarification processing error: {e}"
                 )
             except Exception:
                 pass  # Avoid nested exceptions
@@ -4124,7 +4175,7 @@ class Overlord:
         # Check cache first (using existing overlord caching pattern)
         if external_id_hash in self._user_id_cache:
             cached_record = self._user_id_cache[external_id_hash]
-            return cached_record['internal_id'], cached_record['isolation_key']
+            return cached_record["internal_id"], cached_record["isolation_key"]
 
         # Find or create user record (leverage existing database connections)
         user_record = await self._find_or_create_user(external_id_str, external_id_hash)
@@ -4132,7 +4183,7 @@ class Overlord:
         # Cache result using existing overlord cache pattern
         self._user_id_cache[external_id_hash] = user_record
 
-        return user_record['internal_id'], user_record['isolation_key']
+        return user_record["internal_id"], user_record["isolation_key"]
 
     async def _find_or_create_user(self, external_id_str: str, external_id_hash: str) -> dict:
         """
@@ -4150,11 +4201,13 @@ class Overlord:
             # Check if we have a database connection (leveraging existing patterns)
             db_connection = None
 
-            if hasattr(self, 'long_term_memory') and self.long_term_memory:
-                if hasattr(self.long_term_memory, 'db') and self.long_term_memory.db:
+            if hasattr(self, "long_term_memory") and self.long_term_memory:
+                if hasattr(self.long_term_memory, "db") and self.long_term_memory.db:
                     db_connection = self.long_term_memory.db
-                elif (hasattr(self.long_term_memory, 'connection')
-                      and self.long_term_memory.connection):
+                elif (
+                    hasattr(self.long_term_memory, "connection")
+                    and self.long_term_memory.connection
+                ):
                     db_connection = self.long_term_memory.connection
 
             if db_connection:
@@ -4166,12 +4219,12 @@ class Overlord:
                 LIMIT 1
                 """
 
-                if hasattr(db_connection, 'fetchone'):
+                if hasattr(db_connection, "fetchone"):
                     # Direct connection
                     cursor = db_connection.cursor()
                     cursor.execute(query, (external_id_hash,))
                     user_row = cursor.fetchone()
-                elif hasattr(db_connection, 'fetch_one'):
+                elif hasattr(db_connection, "fetch_one"):
                     # AsyncPG-style connection
                     user_row = await db_connection.fetch_one(query, external_id_hash)
                 else:
@@ -4179,11 +4232,12 @@ class Overlord:
 
                 if user_row:
                     # User exists, return record
-                    internal_id = (user_row[0] if isinstance(user_row, (list, tuple))
-                                   else user_row['id'])
+                    internal_id = (
+                        user_row[0] if isinstance(user_row, (list, tuple)) else user_row["id"]
+                    )
                     return {
-                        'internal_id': internal_id,
-                        'isolation_key': f"user_{internal_id}_{external_id_hash[:8]}"
+                        "internal_id": internal_id,
+                        "isolation_key": f"user_{internal_id}_{external_id_hash[:8]}",
                     }
                 else:
                     # Create new user
@@ -4196,14 +4250,14 @@ class Overlord:
                     # Generate a nano_id for the user_id column (for backward compatibility)
                     nano_id = generate_nanoid()
 
-                    if hasattr(db_connection, 'fetchone'):
+                    if hasattr(db_connection, "fetchone"):
                         # Direct connection
                         cursor = db_connection.cursor()
                         cursor.execute(insert_query, (external_id_str, external_id_hash, nano_id))
                         new_user_row = cursor.fetchone()
                         db_connection.commit()
                         internal_id = new_user_row[0] if new_user_row else None
-                    elif hasattr(db_connection, 'fetch_one'):
+                    elif hasattr(db_connection, "fetch_one"):
                         # AsyncPG-style connection
                         new_user_row = await db_connection.fetch_one(
                             insert_query, external_id_str, external_id_hash, nano_id
@@ -4214,8 +4268,8 @@ class Overlord:
 
                     if internal_id:
                         return {
-                            'internal_id': internal_id,
-                            'isolation_key': f"user_{internal_id}_{external_id_hash[:8]}"
+                            "internal_id": internal_id,
+                            "isolation_key": f"user_{internal_id}_{external_id_hash[:8]}",
                         }
 
         except Exception as e:
@@ -4225,8 +4279,8 @@ class Overlord:
         # This maintains functionality even if database operations fail
         synthetic_id = abs(hash(external_id_hash)) % 1000000  # Keep it reasonable
         return {
-            'internal_id': synthetic_id,
-            'isolation_key': f"user_{synthetic_id}_{external_id_hash[:8]}"
+            "internal_id": synthetic_id,
+            "isolation_key": f"user_{synthetic_id}_{external_id_hash[:8]}",
         }
 
     def _normalize_external_id(self, external_user_id: Any) -> str:
@@ -4280,6 +4334,7 @@ class Overlord:
         # Generate a random string
         import secrets
         import string
+
         alphabet = string.ascii_letters + string.digits
         random_part = "".join(secrets.choice(alphabet) for _ in range(24))
 

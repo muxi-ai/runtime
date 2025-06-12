@@ -215,7 +215,7 @@ class Agent:
         return self._mcp_service
 
     async def process_message(
-        self, message: Union[str, MCPMessage], user_id: Any = None
+        self, message: Union[str, MCPMessage], user_id: Any = None, request_context=None
     ) -> MCPMessage:
         """
         Process a message from the user and generate a response.
@@ -244,6 +244,22 @@ class Agent:
         else:
             content = message.content
             message_obj = message
+
+        # Emit agent message received event
+        if request_context and hasattr(self.overlord, "observability_manager"):
+            from .observability import EventType, EventLevel
+
+            await self.overlord.observability_manager.event_logger.emit_event(
+                EventType.AGENT_MESSAGE_RECEIVED,
+                level=EventLevel.INFO,
+                request_context=request_context,
+                data={
+                    "agent_id": self.agent_id,
+                    "agent_name": self.name,
+                    "message_length": len(content),
+                },
+                description=f"Agent {self.agent_id} received message",
+            )
 
         # Let overlord handle memory management
         timestamp = datetime.datetime.now().timestamp()
@@ -386,6 +402,22 @@ class Agent:
         # Add response to conversation context
         self._messages.append({"role": "assistant", "content": response.content})
 
+        # Emit agent response ready event
+        if request_context and hasattr(self.overlord, "observability_manager"):
+            from .observability import EventType, EventLevel
+
+            await self.overlord.observability_manager.event_logger.emit_event(
+                EventType.AGENT_RESPONSE_READY,
+                level=EventLevel.INFO,
+                request_context=request_context,
+                data={
+                    "agent_id": self.agent_id,
+                    "agent_name": self.name,
+                    "response_length": len(content),
+                },
+                description=f"Agent {self.agent_id} response ready",
+            )
+
         # Let overlord handle memory management for the response
         if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
             timestamp = datetime.datetime.now().timestamp()
@@ -510,7 +542,11 @@ class Agent:
         )
 
     async def invoke_tool(
-        self, tool_name: str, parameters: Dict[str, Any], server_id: Optional[str] = None
+        self,
+        tool_name: str,
+        parameters: Dict[str, Any],
+        server_id: Optional[str] = None,
+        request_context=None,
     ) -> Dict[str, Any]:
         """
         Invoke a tool via the centralized MCP service.
@@ -525,6 +561,7 @@ class Agent:
                 expected parameters for the specified tool.
             server_id: Optional specific server ID to use. If not provided,
                 the MCP service will route to an appropriate server.
+            request_context: Optional request context for observability tracking.
 
         Returns:
             The result of the tool call as a dictionary.
@@ -532,12 +569,65 @@ class Agent:
         Raises:
             Exception: Any error from the MCP service during tool invocation
         """
-        return await self._mcp_service.invoke_tool(
-            tool_name=tool_name,
-            parameters=parameters,
-            server_id=server_id,
-            request_timeout=self.request_timeout,
-        )
+        # Emit MCP tool call started event
+        if request_context and hasattr(self.overlord, "observability_manager"):
+            from .observability import EventType, EventLevel
+
+            await self.overlord.observability_manager.event_logger.emit_event(
+                EventType.MCP_TOOL_CALL_STARTED,
+                level=EventLevel.INFO,
+                request_context=request_context,
+                data={
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "agent_id": self.agent_id,
+                    "parameters": parameters,
+                },
+                description=f"MCP tool call started: {tool_name}",
+            )
+
+        try:
+            # Execute the tool call
+            result = await self._mcp_service.invoke_tool(
+                tool_name=tool_name,
+                parameters=parameters,
+                server_id=server_id,
+                request_timeout=self.request_timeout,
+            )
+
+            # Emit MCP tool call completed event
+            if request_context and hasattr(self.overlord, "observability_manager"):
+                await self.overlord.observability_manager.event_logger.emit_event(
+                    EventType.MCP_TOOL_CALL_COMPLETED,
+                    level=EventLevel.INFO,
+                    request_context=request_context,
+                    data={
+                        "tool_name": tool_name,
+                        "server_id": server_id,
+                        "agent_id": self.agent_id,
+                        "success": result.get("status") == "success",
+                    },
+                    description=f"MCP tool call completed: {tool_name}",
+                )
+
+            return result
+
+        except Exception as e:
+            # Emit MCP tool call failed event
+            if request_context and hasattr(self.overlord, "observability_manager"):
+                await self.overlord.observability_manager.event_logger.emit_event(
+                    EventType.MCP_TOOL_CALL_FAILED,
+                    level=EventLevel.ERROR,
+                    request_context=request_context,
+                    data={
+                        "tool_name": tool_name,
+                        "server_id": server_id,
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                    },
+                    description=f"MCP tool call failed: {tool_name} - {str(e)}",
+                )
+            raise
 
     async def _handle_potential_clarification_response(
         self, message: str, user_id: Any = None
@@ -568,15 +658,19 @@ class Agent:
             # This is a clarification response - process it
             result = await self._clarification_parser.parse_response(
                 user_response=message,
-                question=request.clarification_plan[request.current_step] if request.clarification_plan else None,
-                context=request.context
+                question=(
+                    request.clarification_plan[request.current_step]
+                    if request.clarification_plan
+                    else None
+                ),
+                context=request.context,
             )
 
             # Update the clarification request with the extracted information
             await self._clarification_manager.update_request_with_response(
                 request_id=request.request_id,
                 extracted_info=result.extracted_info,
-                confidence=result.confidence
+                confidence=result.confidence,
             )
 
             # Check if we have enough information to proceed
@@ -590,7 +684,7 @@ class Agent:
                 # Error in processing
                 await self._clarification_manager.mark_request_failed(
                     request_id=request.request_id,
-                    error=result.error_message or "Failed to process clarification response"
+                    error=result.error_message or "Failed to process clarification response",
                 )
                 return (
                     "I'm sorry, I had trouble understanding your response. "
@@ -600,8 +694,7 @@ class Agent:
         except ClarificationError as e:
             logger.error(f"Clarification processing error: {e}")
             return (
-                "I'm sorry, I had trouble processing your response. "
-                "Could you please try again?"
+                "I'm sorry, I had trouble processing your response. " "Could you please try again?"
             )
         except Exception as e:
             logger.error(f"Unexpected error in clarification handling: {e}")
@@ -630,9 +723,7 @@ class Agent:
             # Get user context for enrichment
             user_context = {}
             if self.overlord and hasattr(self.overlord, "get_user_context_memory"):
-                user_context = await self.overlord.get_user_context_memory(
-                    user_id=user_id
-                )
+                user_context = await self.overlord.get_user_context_memory(user_id=user_id)
 
             # Get available tools from MCP service
             available_tools = []
@@ -647,7 +738,7 @@ class Agent:
                 user_message=message,
                 intent=self._extract_intent_from_message(message),
                 available_tools=available_tools,
-                user_context=user_context
+                user_context=user_context,
             )
 
             # If analysis shows we can proceed, no clarification needed
@@ -659,13 +750,13 @@ class Agent:
                 request_type = RequestType.TOOL_CALL if available_tools else RequestType.REASONING
 
                 # Start a new clarification request
-                request = await self._clarification_manager.start_clarification(
+                await self._clarification_manager.start_clarification(
                     user_id=user_id,
                     agent_id=self.agent_id,
                     request_type=request_type,
                     intent=analysis.reasoning_context_needed or "general_assistance",
-                    tool_name=getattr(analysis, 'tool_name', None),
-                    provided_info=analysis.available_info
+                    tool_name=getattr(analysis, "tool_name", None),
+                    provided_info=analysis.available_info,
                 )
 
                 # Generate the first clarification question
@@ -676,7 +767,7 @@ class Agent:
                     info_schema={"type": "string", "description": f"Missing {missing_item}"},
                     user_context=user_context,
                     conversation_context=message,
-                    intent=analysis.reasoning_context_needed or "general_assistance"
+                    intent=analysis.reasoning_context_needed or "general_assistance",
                 )
 
                 # Question generated successfully
@@ -706,19 +797,23 @@ class Agent:
         message_lower = message.lower()
 
         # Financial/investment keywords
-        if any(word in message_lower for word in ['invest', 'money', 'financial', 'portfolio', 'stock']):
+        if any(
+            word in message_lower for word in ["invest", "money", "financial", "portfolio", "stock"]
+        ):
             return "investment_advice"
 
         # Technical explanation keywords
-        if any(word in message_lower for word in ['explain', 'how does', 'what is', 'tell me about']):
+        if any(
+            word in message_lower for word in ["explain", "how does", "what is", "tell me about"]
+        ):
             return "technical_explanation"
 
         # Booking/reservation keywords
-        if any(word in message_lower for word in ['book', 'reserve', 'schedule', 'appointment']):
+        if any(word in message_lower for word in ["book", "reserve", "schedule", "appointment"]):
             return "booking_request"
 
         # Search keywords
-        if any(word in message_lower for word in ['find', 'search', 'look for', 'get me']):
+        if any(word in message_lower for word in ["find", "search", "look for", "get me"]):
             return "search_request"
 
         return "general_assistance"
@@ -737,8 +832,7 @@ class Agent:
         try:
             # Mark the clarification as complete
             await self._clarification_manager.mark_request_complete(
-                request_id=request.request_id,
-                final_params=result.complete_params
+                request_id=request.request_id, final_params=result.complete_params
             )
 
             # If this was a tool call request, execute the tool
@@ -747,13 +841,19 @@ class Agent:
                     tool_name=request.tool_name,
                     parameters=result.complete_params or {}
                 )
-                return f"I've completed your request. {tool_result.get('result', 'Task completed successfully.')}"
+                return (
+                    f"I've completed your request. "
+                    f"{tool_result.get('result', 'Task completed successfully.')}"
+                )
             else:
                 # For reasoning requests, process with the model using the gathered context
                 enriched_context = {**request.context, **result.complete_params}
                 context_str = "\n".join([f"{k}: {v}" for k, v in enriched_context.items()])
 
-                enriched_message = f"Context: {context_str}\n\nUser request: {request.context.get('original_message', '')}"
+                enriched_message = (
+                    f"Context: {context_str}\n\n"
+                    f"User request: {request.context.get('original_message', '')}"
+                )
 
                 # Process with model using enriched context
                 messages = self._messages.copy()
@@ -774,7 +874,10 @@ class Agent:
 
         except Exception as e:
             logger.error(f"Error completing clarified request: {e}")
-            return "I apologize, but I encountered an error while processing your request. Please try again."
+            return (
+                "I apologize, but I encountered an error while processing your request. "
+                "Please try again."
+            )
 
     async def _handle_proactive_clarification_request(
         self, message: str, user_id: Any = None
@@ -808,11 +911,13 @@ class Agent:
                 return None
 
             # Handle different types of proactive requests
-            if proactive_request.request_type == ProactiveRequestType.PLAN_FEEDBACK:
+            has_plan_feedback = (
+                hasattr(proactive_request, 'request_type') and
+                proactive_request.request_type == "PLAN_FEEDBACK"
+            )
+            if has_plan_feedback:
                 # Multi-step plan analysis
-                return await self._start_plan_analysis_session(
-                    proactive_request, str(user_id)
-                )
+                return await self._start_plan_analysis_session(proactive_request, str(user_id))
             else:
                 # Goal-driven questioning mode
                 return await self._start_proactive_questioning_session(
@@ -823,27 +928,21 @@ class Agent:
             logger.error(f"Error handling proactive clarification request: {e}")
             return None
 
-    async def _handle_proactive_session_response(
-        self, session, message: str
-    ) -> str:
+    async def _handle_proactive_session_response(self, session, message: str) -> str:
         """Handle response in an ongoing proactive clarification session"""
         try:
             # Parse the user's response to extract information
             extracted_info = {}
             if self._clarification_parser:
                 result = await self._clarification_parser.parse_response(
-                    user_response=message,
-                    question=None,  # Generic parsing
-                    context={}
+                    user_response=message, question=None, context={}  # Generic parsing
                 )
                 extracted_info = result.extracted_info or {}
 
             # Update session progress
             questions_asked = session.questions_asked + 1
             await self._mode_manager.update_session_progress(
-                session.session_id,
-                collected_info=extracted_info,
-                questions_asked=questions_asked
+                session.session_id, collected_info=extracted_info, questions_asked=questions_asked
             )
 
             # Check if session is complete
@@ -852,7 +951,7 @@ class Agent:
                 return self._format_session_completion_response(session, complete_info)
 
             # Generate next question based on session mode
-            if session.mode == ClarificationMode.PLAN_ANALYSIS:
+            if hasattr(session, 'mode') and session.mode == "PLAN_ANALYSIS":
                 return await self._generate_next_plan_question(session, extracted_info)
             else:
                 return await self._generate_next_goal_question(session, extracted_info)
@@ -861,15 +960,14 @@ class Agent:
             logger.error(f"Error handling proactive session response: {e}")
             return "I had trouble processing your response. Could you please continue?"
 
-    async def _start_plan_analysis_session(
-        self, proactive_request, user_id: str
-    ) -> str:
+    async def _start_plan_analysis_session(self, proactive_request, user_id: str) -> str:
         """Start a plan analysis session for multi-step plans"""
         try:
             # Analyze the plan
-            if not hasattr(self, '_plan_analyzer'):
+            if not hasattr(self, "_plan_analyzer"):
                 # Create analyzer if needed
                 from .clarification.plan_analyzer import PlanAnalyzer
+
                 self._plan_analyzer = PlanAnalyzer(model=self.model)
 
             plan_analysis = await self._plan_analyzer.analyze_plan(
@@ -877,41 +975,40 @@ class Agent:
             )
 
             # Start plan analysis mode
-            session = await self._mode_manager.enter_plan_analysis_mode(
-                user_id=user_id,
-                agent_id=self.agent_id,
-                plan_analysis=plan_analysis
+            await self._mode_manager.enter_plan_analysis_mode(
+                user_id=user_id, agent_id=self.agent_id, plan_analysis=plan_analysis
             )
 
             # Generate initial response with plan feedback
             response_parts = [
                 f"I've analyzed your plan to {proactive_request.goal}. "
-                f"Overall, it looks {self._assess_feasibility_description(plan_analysis.overall_feasibility)}."
+                f"Overall, it looks "
+                f"{self._assess_feasibility_description(plan_analysis.overall_feasibility)}."
             ]
 
             if plan_analysis.recommendations:
                 response_parts.append(f"Here are my thoughts: {plan_analysis.recommendations[0]}")
 
             if plan_analysis.clarification_questions:
-                response_parts.append(f"I have a question: {plan_analysis.clarification_questions[0]}")
+                response_parts.append(
+                    f"I have a question: {plan_analysis.clarification_questions[0]}"
+                )
 
             return "\n\n".join(response_parts)
 
         except Exception as e:
             logger.error(f"Error starting plan analysis session: {e}")
-            return ("I'd be happy to help analyze your plan! However, I had trouble processing it. "
-                    "Could you break down your plan into clear steps?")
+            return (
+                "I'd be happy to help analyze your plan! However, I had trouble processing it. "
+                "Could you break down your plan into clear steps?"
+            )
 
-    async def _start_proactive_questioning_session(
-        self, proactive_request, user_id: str
-    ) -> str:
+    async def _start_proactive_questioning_session(self, proactive_request, user_id: str) -> str:
         """Start a proactive questioning session for goal-driven clarification"""
         try:
             # Enter proactive mode
             session = await self._mode_manager.enter_proactive_mode(
-                user_id=user_id,
-                agent_id=self.agent_id,
-                proactive_request=proactive_request
+                user_id=user_id, agent_id=self.agent_id, proactive_request=proactive_request
             )
 
             # Generate initial response
@@ -919,21 +1016,29 @@ class Agent:
 
             if session.goal_context and session.goal_context.required_info_areas:
                 first_area = session.goal_context.required_info_areas[0]
-                return f"{goal_intro} To get started, I need to understand your {first_area}. " \
-                       f"Could you tell me more about that?"
+                return (
+                    f"{goal_intro} To get started, I need to understand your {first_area}. "
+                    f"Could you tell me more about that?"
+                )
             else:
-                return f"{goal_intro} Let me ask you a few questions to understand your needs better. " \
-                       f"What's your current situation?"
+                return (
+                    f"{goal_intro} Let me ask you a few questions to understand your needs better. "
+                    f"What's your current situation?"
+                )
 
         except Exception as e:
             logger.error(f"Error starting proactive questioning session: {e}")
-            return ("I'd be happy to help guide you with questions! However, I had trouble "
-                    "understanding your request. Could you tell me what you'd like help with?")
+            return (
+                "I'd be happy to help guide you with questions! However, I had trouble "
+                "understanding your request. Could you tell me what you'd like help with?"
+            )
 
     async def _generate_next_plan_question(self, session, extracted_info) -> str:
         """Generate next question for plan analysis mode"""
         if session.plan_analysis and session.plan_analysis.clarification_questions:
-            remaining_questions = session.plan_analysis.clarification_questions[session.questions_asked:]
+            remaining_questions = session.plan_analysis.clarification_questions[
+                session.questions_asked:
+            ]
             if remaining_questions:
                 return remaining_questions[0]
 
@@ -943,7 +1048,9 @@ class Agent:
         """Generate next question for goal-driven mode"""
         if session.goal_context and session.goal_context.next_focus_area:
             area = session.goal_context.next_focus_area
-            return f"Great! Now I'd like to know more about your {area}. Could you share some details?"
+            return (
+                f"Great! Now I'd like to know more about your {area}. Could you share some details?"
+            )
 
         return "Is there anything else I should know to help you better?"
 
@@ -960,13 +1067,17 @@ class Agent:
 
     def _format_session_completion_response(self, session, complete_info) -> str:
         """Format the final response when a proactive session is complete"""
-        if session.mode == ClarificationMode.PLAN_ANALYSIS:
-            return ("Based on our discussion, I think your plan is ready to move forward! "
-                    "You've addressed the key areas and have a solid approach. Good luck!")
+        if hasattr(session, 'mode') and session.mode == "PLAN_ANALYSIS":
+            return (
+                "Based on our discussion, I think your plan is ready to move forward! "
+                "You've addressed the key areas and have a solid approach. Good luck!"
+            )
         else:
-            return ("Perfect! I now have a good understanding of your situation. "
-                    "Based on what you've shared, I can provide much better assistance. "
-                    "What would you like to focus on first?")
+            return (
+                "Perfect! I now have a good understanding of your situation. "
+                "Based on what you've shared, I can provide much better assistance. "
+                "What would you like to focus on first?"
+            )
 
     async def send_a2a_message(
         self,
