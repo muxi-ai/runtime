@@ -26,6 +26,7 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
 - **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, and background processing
 - **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
+- **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling and metadata
 
 ## Installation
 
