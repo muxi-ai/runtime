@@ -142,6 +142,14 @@ class ReasoningInformationAnalysis(InformationAnalysis):
 
 
 @dataclass
+class ClarificationContext:
+    """Context information for clarification operations"""
+    user_context: Optional[Dict[str, Any]] = None
+    conversation_history: Optional[List[str]] = None
+    session_data: Optional[Dict[str, Any]] = None
+
+
+@dataclass
 class ContextAnalysis:
     """Analysis of reasoning context needs"""
     needs_more_info: bool
