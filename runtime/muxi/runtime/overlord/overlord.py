@@ -303,6 +303,14 @@ class Overlord:
         # Track message counts per user for extraction
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
 
+        # Initialize clarification configuration with defaults
+        from ..clarification.types import ClarificationConfig, QuestionStyle
+        self.clarification_config = ClarificationConfig(
+            max_questions=5,
+            style=QuestionStyle.CONVERSATIONAL,
+            persist_learned_info=False
+        )
+
         # Initialize external registry clients (will be set up later)
         # For discovery (outbound)
         self.external_registry_client: Optional[A2ARegistryClient] = None
@@ -676,6 +684,9 @@ class Overlord:
         # Initialize logging configuration
         await self._initialize_logging_config()
 
+        # Initialize clarification configuration
+        await self._initialize_clarification_config()
+
         # Initialize document processing configuration
         await self._initialize_document_processing_config()
 
@@ -1006,6 +1017,68 @@ class Overlord:
         else:
             # Default format
             return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+
+    async def _initialize_clarification_config(self) -> None:
+        """
+        Initialize clarification configuration from formation config.
+
+        This processes the overlord.clarification configuration for intelligent
+        parameter collection and applies privacy-by-default settings with
+        industry-standard style preferences.
+        """
+        overlord_config = self.formation_config.get("overlord", {})
+        clarification_config = overlord_config.get("clarification", {})
+
+        if not clarification_config:
+            logger.debug("No clarification configuration found in formation")
+            return
+
+        try:
+            from ..clarification.types import ClarificationConfig, QuestionStyle
+
+            # Extract configuration with privacy-by-default approach
+            max_questions = clarification_config.get("max_questions", 5)
+            style_str = clarification_config.get("style", "conversational")
+            persist_learned_info = clarification_config.get("persist_learned_info", False)
+
+            # Validate and convert style string to enum
+            try:
+                style = QuestionStyle(style_str.lower())
+            except ValueError:
+                logger.warning(
+                    f"Invalid clarification style '{style_str}', defaulting to conversational"
+                )
+                style = QuestionStyle.CONVERSATIONAL
+
+            # Validate max_questions
+            if not isinstance(max_questions, int) or max_questions < 1:
+                logger.warning(f"Invalid max_questions '{max_questions}', defaulting to 5")
+                max_questions = 5
+            elif max_questions > 20:
+                logger.warning(
+                    f"max_questions '{max_questions}' is very high, consider reducing for better UX"
+                )
+
+            # Update the overlord's clarification configuration
+            self.clarification_config = ClarificationConfig(
+                max_questions=max_questions,
+                style=style,
+                persist_learned_info=persist_learned_info
+            )
+
+            logger.info(
+                f"✅ Initialized clarification configuration "
+                f"(max_questions={max_questions}, style={style.value}, "
+                f"persist_learned_info={persist_learned_info})"
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to initialize clarification configuration: {e}")
+            # Keep default configuration on error
+            logger.info("Using default clarification configuration")
+
+        if clarification_config:
+            logger.info("✅ Clarification configuration processing complete")
 
     async def _initialize_document_processing_config(self) -> None:
         """

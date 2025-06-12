@@ -51,6 +51,21 @@ from urllib.parse import urlparse
 from .mcp.message import MCPMessage
 from .mcp.service import MCPService
 from .llm import LLM
+from .clarification import (
+    InformationAnalyzer,
+    ClarificationManager,
+    ClarificationQuestionGenerator,
+    ContextualParameterEnricher,
+    ClarificationResponseParser,
+    ClarificationStatus,
+    RequestType,
+    ClarificationError,
+    # Phase 4: Proactive clarification components (commented out for Phase 5 testing)
+    # ProactiveClarificationIntentDetector,
+    # ClarificationModeManager,
+    # ClarificationMode,
+    # ProactiveRequestType
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,10 +143,66 @@ class Agent:
         # Set up MCP service access
         self._mcp_service = MCPService.get_instance()
 
+        # Initialize clarification system components
+        self._clarification_analyzer = None
+        self._clarification_manager = None
+        self._clarification_generator = None
+        self._clarification_enricher = None
+        self._clarification_parser = None
+
+        # Phase 4: Proactive clarification components (commented out for Phase 5 testing)
+        # self._proactive_detector = None
+        # self._mode_manager = None
+
+        self._initialize_clarification_system()
+
         # Initialize the context with system message
         self._messages = []
         if self.system_message:
             self._messages.append({"role": "system", "content": self.system_message})
+
+    def _initialize_clarification_system(self):
+        """
+        Initialize the clarification system components.
+
+        This method sets up all the clarification components that enable
+        the agent to handle incomplete requests that require additional
+        information gathering through natural clarifying questions.
+        """
+        try:
+            # Initialize analyzer for detecting missing information
+            self._clarification_analyzer = InformationAnalyzer(model=self.model)
+
+            # Initialize manager for tracking multi-turn clarification
+            self._clarification_manager = ClarificationManager(overlord=self.overlord)
+
+            # Initialize question generator for creating natural questions
+            self._clarification_generator = ClarificationQuestionGenerator(model=self.model)
+
+            # Initialize enricher for filling parameters from user context
+            self._clarification_enricher = ContextualParameterEnricher(overlord=self.overlord)
+
+            # Initialize parser for extracting structured information from responses
+            self._clarification_parser = ClarificationResponseParser(model=self.model)
+
+            # Phase 4: Initialize proactive clarification components
+            # self._proactive_detector = ProactiveClarificationIntentDetector(model=self.model)
+            # self._mode_manager = ClarificationModeManager(overlord=self.overlord)
+
+            logger.debug(f"Clarification system initialized for agent {self.agent_id}")
+
+        except Exception as e:
+            logger.warning(
+                f"Failed to initialize clarification system for agent {self.agent_id}: {e}"
+            )
+            # Set components to None so we can check if clarification is available
+            self._clarification_analyzer = None
+            self._clarification_manager = None
+            self._clarification_generator = None
+            self._clarification_enricher = None
+            self._clarification_parser = None
+            # self._proactive_detector = None
+            # self._mode_manager = None
 
     def get_mcp_service(self) -> MCPService:
         """
@@ -188,7 +259,79 @@ class Agent:
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
 
-        # Process the message with the model directly
+        # Check if this is a clarification response first (with error handling)
+        try:
+            clarification_result = await self._handle_potential_clarification_response(
+                message_obj.content, user_id
+            )
+            if clarification_result:
+                # This was a clarification response - return the result
+                response = MCPMessage(role="assistant", content=clarification_result)
+                self._messages.append({"role": "assistant", "content": response.content})
+
+                # Store response in memory
+                if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
+                    timestamp = datetime.datetime.now().timestamp()
+                    await self.overlord.add_message_to_memory(
+                        content=response.content,
+                        role="assistant",
+                        timestamp=timestamp,
+                        agent_id=self.agent_id,
+                        user_id=user_id,
+                    )
+                return response
+        except Exception as e:
+            logger.debug(f"Clarification response handling failed, continuing normally: {e}")
+
+        # Phase 4: Check for proactive clarification requests (with error handling)
+        try:
+            proactive_response = await self._handle_proactive_clarification_request(
+                message_obj.content, user_id
+            )
+            if proactive_response:
+                # This was a proactive request - return the response
+                response = MCPMessage(role="assistant", content=proactive_response)
+                self._messages.append({"role": "assistant", "content": response.content})
+
+                # Store response in memory
+                if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
+                    timestamp = datetime.datetime.now().timestamp()
+                    await self.overlord.add_message_to_memory(
+                        content=response.content,
+                        role="assistant",
+                        timestamp=timestamp,
+                        agent_id=self.agent_id,
+                        user_id=user_id,
+                    )
+                return response
+        except Exception as e:
+            logger.debug(f"Proactive clarification handling failed, continuing normally: {e}")
+
+        # Check if the request needs clarification before processing (with error handling)
+        try:
+            clarification_question = await self._check_for_clarification_needs(
+                message_obj.content, user_id
+            )
+            if clarification_question:
+                # Return clarification question instead of processing with model
+                response = MCPMessage(role="assistant", content=clarification_question)
+                self._messages.append({"role": "assistant", "content": response.content})
+
+                # Store clarification question in memory
+                if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
+                    timestamp = datetime.datetime.now().timestamp()
+                    await self.overlord.add_message_to_memory(
+                        content=response.content,
+                        role="assistant",
+                        timestamp=timestamp,
+                        agent_id=self.agent_id,
+                        user_id=user_id,
+                    )
+                return response
+        except Exception as e:
+            logger.debug(f"Clarification analysis failed, continuing normally: {e}")
+
+        # Process the message with the model directly (existing logic)
         raw_response = await self.model.chat(self._messages)
 
         # Debug logging to see what we got
@@ -395,6 +538,440 @@ class Agent:
             server_id=server_id,
             request_timeout=self.request_timeout,
         )
+
+    async def _handle_potential_clarification_response(
+        self, message: str, user_id: Any = None
+    ) -> Optional[str]:
+        """
+        Check if the incoming message is a response to an active clarification request.
+
+        If it is, process the response and either continue clarification or
+        complete the original request.
+
+        Args:
+            message: The user's message that might be a clarification response
+            user_id: The user ID for tracking clarification sessions
+
+        Returns:
+            The response content if this was a clarification response, None otherwise
+        """
+        if not self._clarification_manager or user_id is None:
+            return None
+
+        try:
+            # Check if there's an active clarification request for this user
+            request = await self._clarification_manager.get_active_request(
+                user_id=user_id,
+                agent_id=self.agent_id
+            )
+
+            if not request or request.status != ClarificationStatus.CLARIFYING:
+                return None
+
+            # This is a clarification response - process it
+            result = await self._clarification_parser.parse_response(
+                user_response=message,
+                question=request.clarification_plan[request.current_step] if request.clarification_plan else None,
+                context=request.context
+            )
+
+            # Update the clarification request with the extracted information
+            await self._clarification_manager.update_request_with_response(
+                request_id=request.request_id,
+                extracted_info=result.extracted_info,
+                confidence=result.confidence
+            )
+
+            # Check if we have enough information to proceed
+            if result.status == "complete":
+                # Complete the original request with all gathered information
+                return await self._complete_clarified_request(request, result)
+            elif result.status == "continue":
+                # Need more information - ask the next question
+                return result.next_question
+            else:
+                # Error in processing
+                await self._clarification_manager.mark_request_failed(
+                    request_id=request.request_id,
+                    error=result.error_message or "Failed to process clarification response"
+                )
+                return (
+                    "I'm sorry, I had trouble understanding your response. "
+                    "Could you please try again?"
+                )
+
+        except ClarificationError as e:
+            logger.error(f"Clarification processing error: {e}")
+            return (
+                "I'm sorry, I had trouble processing your response. "
+                "Could you please try again?"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error in clarification handling: {e}")
+            return None
+
+    async def _check_for_clarification_needs(
+        self, message: str, user_id: Any = None
+    ) -> Optional[str]:
+        """
+        Analyze if the incoming message needs clarification before processing.
+
+        This checks for missing information needed for tool calls or reasoning,
+        and starts a clarification process if needed.
+
+        Args:
+            message: The user's message to analyze
+            user_id: The user ID for context retrieval
+
+        Returns:
+            A clarification question if needed, None if the message can be processed directly
+        """
+        if not self._clarification_analyzer or user_id is None:
+            return None
+
+        try:
+            # Get user context for enrichment
+            user_context = {}
+            if self.overlord and hasattr(self.overlord, "get_user_context_memory"):
+                user_context = await self.overlord.get_user_context_memory(
+                    user_id=user_id
+                )
+
+            # Get available tools from MCP service
+            available_tools = []
+            if self._mcp_service:
+                try:
+                    available_tools = await self._mcp_service.list_available_tools()
+                except Exception as e:
+                    logger.debug(f"Could not get available tools: {e}")
+
+            # Analyze the request for missing information
+            analysis = await self._clarification_analyzer.analyze_request(
+                user_message=message,
+                intent=self._extract_intent_from_message(message),
+                available_tools=available_tools,
+                user_context=user_context
+            )
+
+            # If analysis shows we can proceed, no clarification needed
+            if analysis.can_proceed:
+                return None
+
+            # Missing information detected - start clarification process
+            if analysis.missing_info:
+                request_type = RequestType.TOOL_CALL if available_tools else RequestType.REASONING
+
+                # Start a new clarification request
+                request = await self._clarification_manager.start_clarification(
+                    user_id=user_id,
+                    agent_id=self.agent_id,
+                    request_type=request_type,
+                    intent=analysis.reasoning_context_needed or "general_assistance",
+                    tool_name=getattr(analysis, 'tool_name', None),
+                    missing_info=analysis.missing_info,
+                    provided_info=analysis.available_info,
+                    context={"original_message": message, "user_context": user_context}
+                )
+
+                # Generate the first clarification question
+                question = await self._clarification_generator.generate_question(
+                    request=request,
+                    missing_info=analysis.missing_info[0],  # Start with first missing item
+                    context=analysis.available_info
+                )
+
+                # Store the question in the clarification plan
+                await self._clarification_manager.add_question_to_plan(
+                    request_id=request.request_id,
+                    question=question
+                )
+
+                return question.question_text
+
+        except ClarificationError as e:
+            logger.error(f"Clarification analysis error: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in clarification analysis: {e}")
+
+        return None
+
+    def _extract_intent_from_message(self, message: str) -> str:
+        """
+        Extract the intent from a user message using simple keyword matching.
+
+        This is a fallback method for intent detection when more sophisticated
+        NLP is not available.
+
+        Args:
+            message: The user message to analyze
+
+        Returns:
+            The detected intent as a string
+        """
+        message_lower = message.lower()
+
+        # Financial/investment keywords
+        if any(word in message_lower for word in ['invest', 'money', 'financial', 'portfolio', 'stock']):
+            return "investment_advice"
+
+        # Technical explanation keywords
+        if any(word in message_lower for word in ['explain', 'how does', 'what is', 'tell me about']):
+            return "technical_explanation"
+
+        # Booking/reservation keywords
+        if any(word in message_lower for word in ['book', 'reserve', 'schedule', 'appointment']):
+            return "booking_request"
+
+        # Search keywords
+        if any(word in message_lower for word in ['find', 'search', 'look for', 'get me']):
+            return "search_request"
+
+        return "general_assistance"
+
+    async def _complete_clarified_request(self, request, result) -> str:
+        """
+        Complete the original request now that we have all needed information.
+
+        Args:
+            request: The clarification request with all gathered information
+            result: The final clarification result
+
+        Returns:
+            The response to the completed request
+        """
+        try:
+            # Mark the clarification as complete
+            await self._clarification_manager.mark_request_complete(
+                request_id=request.request_id,
+                final_params=result.complete_params
+            )
+
+            # If this was a tool call request, execute the tool
+            if request.request_type == RequestType.TOOL_CALL and request.tool_name:
+                tool_result = await self.invoke_tool(
+                    tool_name=request.tool_name,
+                    parameters=result.complete_params or {}
+                )
+                return f"I've completed your request. {tool_result.get('result', 'Task completed successfully.')}"
+            else:
+                # For reasoning requests, process with the model using the gathered context
+                enriched_context = {**request.context, **result.complete_params}
+                context_str = "\n".join([f"{k}: {v}" for k, v in enriched_context.items()])
+
+                enriched_message = f"Context: {context_str}\n\nUser request: {request.context.get('original_message', '')}"
+
+                # Process with model using enriched context
+                messages = self._messages.copy()
+                messages.append({"role": "user", "content": enriched_message})
+
+                raw_response = await self.model.chat(messages)
+                # Extract content (reusing existing logic from process_message)
+                if isinstance(raw_response, str):
+                    return raw_response
+                elif hasattr(raw_response, "choices") and raw_response.choices:
+                    message = raw_response.choices[0].message
+                    if isinstance(message, dict):
+                        return message.get("content", "")
+                    else:
+                        return getattr(message, "content", "")
+                else:
+                    return str(raw_response)
+
+        except Exception as e:
+            logger.error(f"Error completing clarified request: {e}")
+            return "I apologize, but I encountered an error while processing your request. Please try again."
+
+    async def _handle_proactive_clarification_request(
+        self, message: str, user_id: Any = None
+    ) -> Optional[str]:
+        """
+        Handle explicit turn-taking requests from users (Phase 4).
+
+        Detects when users explicitly ask for proactive questioning or
+        multi-step plan analysis and enters the appropriate mode.
+
+        Args:
+            message: The user's message to analyze for proactive requests
+            user_id: The user ID for session management
+
+        Returns:
+            Response to a proactive request if detected, None otherwise
+        """
+        if not self._proactive_detector or not self._mode_manager or user_id is None:
+            return None
+
+        try:
+            # Check for existing active session first
+            active_session = await self._mode_manager.get_active_session(str(user_id))
+            if active_session:
+                # Handle ongoing proactive session
+                return await self._handle_proactive_session_response(active_session, message)
+
+            # Detect proactive clarification requests
+            proactive_request = await self._proactive_detector.detect_proactive_request(message)
+            if not proactive_request:
+                return None
+
+            # Handle different types of proactive requests
+            if proactive_request.request_type == ProactiveRequestType.PLAN_FEEDBACK:
+                # Multi-step plan analysis
+                return await self._start_plan_analysis_session(
+                    proactive_request, str(user_id)
+                )
+            else:
+                # Goal-driven questioning mode
+                return await self._start_proactive_questioning_session(
+                    proactive_request, str(user_id)
+                )
+
+        except Exception as e:
+            logger.error(f"Error handling proactive clarification request: {e}")
+            return None
+
+    async def _handle_proactive_session_response(
+        self, session, message: str
+    ) -> str:
+        """Handle response in an ongoing proactive clarification session"""
+        try:
+            # Parse the user's response to extract information
+            extracted_info = {}
+            if self._clarification_parser:
+                result = await self._clarification_parser.parse_response(
+                    user_response=message,
+                    question=None,  # Generic parsing
+                    context={}
+                )
+                extracted_info = result.extracted_info or {}
+
+            # Update session progress
+            questions_asked = session.questions_asked + 1
+            await self._mode_manager.update_session_progress(
+                session.session_id,
+                collected_info=extracted_info,
+                questions_asked=questions_asked
+            )
+
+            # Check if session is complete
+            if session.completion_criteria_met:
+                complete_info = await self._mode_manager.complete_session(session.session_id)
+                return self._format_session_completion_response(session, complete_info)
+
+            # Generate next question based on session mode
+            if session.mode == ClarificationMode.PLAN_ANALYSIS:
+                return await self._generate_next_plan_question(session, extracted_info)
+            else:
+                return await self._generate_next_goal_question(session, extracted_info)
+
+        except Exception as e:
+            logger.error(f"Error handling proactive session response: {e}")
+            return "I had trouble processing your response. Could you please continue?"
+
+    async def _start_plan_analysis_session(
+        self, proactive_request, user_id: str
+    ) -> str:
+        """Start a plan analysis session for multi-step plans"""
+        try:
+            # Analyze the plan
+            if not hasattr(self, '_plan_analyzer'):
+                # Create analyzer if needed
+                from .clarification.plan_analyzer import PlanAnalyzer
+                self._plan_analyzer = PlanAnalyzer(model=self.model)
+
+            plan_analysis = await self._plan_analyzer.analyze_plan(
+                proactive_request.multi_step_plan
+            )
+
+            # Start plan analysis mode
+            session = await self._mode_manager.enter_plan_analysis_mode(
+                user_id=user_id,
+                agent_id=self.agent_id,
+                plan_analysis=plan_analysis
+            )
+
+            # Generate initial response with plan feedback
+            response_parts = [
+                f"I've analyzed your plan to {proactive_request.goal}. "
+                f"Overall, it looks {self._assess_feasibility_description(plan_analysis.overall_feasibility)}."
+            ]
+
+            if plan_analysis.recommendations:
+                response_parts.append(f"Here are my thoughts: {plan_analysis.recommendations[0]}")
+
+            if plan_analysis.clarification_questions:
+                response_parts.append(f"I have a question: {plan_analysis.clarification_questions[0]}")
+
+            return "\n\n".join(response_parts)
+
+        except Exception as e:
+            logger.error(f"Error starting plan analysis session: {e}")
+            return ("I'd be happy to help analyze your plan! However, I had trouble processing it. "
+                    "Could you break down your plan into clear steps?")
+
+    async def _start_proactive_questioning_session(
+        self, proactive_request, user_id: str
+    ) -> str:
+        """Start a proactive questioning session for goal-driven clarification"""
+        try:
+            # Enter proactive mode
+            session = await self._mode_manager.enter_proactive_mode(
+                user_id=user_id,
+                agent_id=self.agent_id,
+                proactive_request=proactive_request
+            )
+
+            # Generate initial response
+            goal_intro = f"I'd love to help you {proactive_request.goal}!"
+
+            if session.goal_context and session.goal_context.required_info_areas:
+                first_area = session.goal_context.required_info_areas[0]
+                return f"{goal_intro} To get started, I need to understand your {first_area}. " \
+                       f"Could you tell me more about that?"
+            else:
+                return f"{goal_intro} Let me ask you a few questions to understand your needs better. " \
+                       f"What's your current situation?"
+
+        except Exception as e:
+            logger.error(f"Error starting proactive questioning session: {e}")
+            return ("I'd be happy to help guide you with questions! However, I had trouble "
+                    "understanding your request. Could you tell me what you'd like help with?")
+
+    async def _generate_next_plan_question(self, session, extracted_info) -> str:
+        """Generate next question for plan analysis mode"""
+        if session.plan_analysis and session.plan_analysis.clarification_questions:
+            remaining_questions = session.plan_analysis.clarification_questions[session.questions_asked:]
+            if remaining_questions:
+                return remaining_questions[0]
+
+        return "Is there anything else about your plan you'd like me to review?"
+
+    async def _generate_next_goal_question(self, session, extracted_info) -> str:
+        """Generate next question for goal-driven mode"""
+        if session.goal_context and session.goal_context.next_focus_area:
+            area = session.goal_context.next_focus_area
+            return f"Great! Now I'd like to know more about your {area}. Could you share some details?"
+
+        return "Is there anything else I should know to help you better?"
+
+    def _assess_feasibility_description(self, score: float) -> str:
+        """Convert feasibility score to descriptive text"""
+        if score >= 0.8:
+            return "very promising and well thought out"
+        elif score >= 0.6:
+            return "good with some areas to refine"
+        elif score >= 0.4:
+            return "like it has potential but needs some adjustments"
+        else:
+            return "like it could benefit from more detailed planning"
+
+    def _format_session_completion_response(self, session, complete_info) -> str:
+        """Format the final response when a proactive session is complete"""
+        if session.mode == ClarificationMode.PLAN_ANALYSIS:
+            return ("Based on our discussion, I think your plan is ready to move forward! "
+                    "You've addressed the key areas and have a solid approach. Good luck!")
+        else:
+            return ("Perfect! I now have a good understanding of your situation. "
+                    "Based on what you've shared, I can provide much better assistance. "
+                    "What would you like to focus on first?")
 
     async def send_a2a_message(
         self,

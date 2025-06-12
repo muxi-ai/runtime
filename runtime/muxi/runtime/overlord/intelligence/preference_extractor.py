@@ -1,11 +1,11 @@
 """
 Preference Extractor for User Experience Intelligence
 
-Extracts explicit user preferences from conversation history using LLM analysis.
+Extracts explicit user preferences from conversation history using pure LLM analysis.
 Supports both multi-user and single-user deployment modes.
+Uses multilingual LLM detection instead of English-only regex patterns.
 """
 
-import re
 import json
 import time
 from typing import List, Dict, Any, Optional
@@ -17,147 +17,28 @@ from .types import (
 
 
 class PreferenceExtractor:
-    """Extract explicit user preferences from conversation history"""
+    """Extract explicit user preferences from conversation history using pure LLM analysis"""
 
     def __init__(self, model: Optional[LLM] = None):
         """
         Initialize preference extractor
 
         Args:
-            model: LLM model for preference extraction (optional, will use overlord's model if not provided)
+            model: LLM model for preference extraction (required for multilingual support)
         """
         self.model = model
-
-        # Preference extraction prompts for different preference types
-        self.extraction_prompts = {
-            PreferenceType.COMMUNICATION_STYLE: {
-                "patterns": [
-                    r"(?i)(?:i prefer|i like|please use|can you use)\s+(?:a\s+)?(?:more\s+)?(formal|informal|casual|professional|friendly|technical|simple)\s+(?:style|tone|approach)",
-                    r"(?i)(?:be more|write in a|use a)\s+(formal|informal|casual|professional|friendly|technical|simple)\s+(?:way|manner|style|tone)",
-                    r"(?i)(?:i want|i need|please be)\s+(?:more\s+)?(formal|informal|casual|professional|friendly|technical|simple)",
-                ],
-                "prompt": """Analyze the following conversation messages and identify any explicit preferences the user has stated about communication style (formal, informal, casual, professional, friendly, technical, simple).
-
-Look for phrases like:
-- "I prefer a more formal tone"
-- "Can you be more casual?"
-- "Please use simple language"
-- "I like technical explanations"
-
-Messages:
-{messages}
-
-Return a JSON list of preferences found:
-[
-  {{
-    "preference_type": "communication_style",
-    "value": "formal|informal|casual|professional|friendly|technical|simple",
-    "confidence": 0.0-1.0,
-    "source_message": "exact quote from message",
-    "reasoning": "why this indicates the preference"
-  }}
-]
-
-Only include clear, explicit statements. Return empty list [] if no preferences found."""
-            },
-
-            PreferenceType.DETAIL_LEVEL: {
-                "patterns": [
-                    r"(?i)(?:i want|i need|give me|provide)\s+(?:more\s+)?(detailed|brief|concise|thorough|comprehensive|quick|short|long)\s+(?:explanations?|responses?|answers?|information)",
-                    r"(?i)(?:keep it|make it|be more)\s+(brief|concise|detailed|thorough|short|simple)",
-                    r"(?i)(?:i prefer|i like)\s+(?:more\s+)?(detailed|brief|concise|comprehensive|quick)\s+(?:responses?|explanations?|answers?)",
-                ],
-                "prompt": """Analyze the following conversation messages and identify any explicit preferences the user has stated about response detail level (brief, concise, detailed, thorough, comprehensive, quick, short, long).
-
-Look for phrases like:
-- "I want detailed explanations"
-- "Keep it brief"
-- "Give me comprehensive information"
-- "I prefer concise answers"
-
-Messages:
-{messages}
-
-Return a JSON list of preferences found:
-[
-  {{
-    "preference_type": "detail_level",
-    "value": "brief|concise|detailed|thorough|comprehensive|quick|short|long",
-    "confidence": 0.0-1.0,
-    "source_message": "exact quote from message",
-    "reasoning": "why this indicates the preference"
-  }}
-]
-
-Only include clear, explicit statements. Return empty list [] if no preferences found."""
-            },
-
-            PreferenceType.RESPONSE_FORMAT: {
-                "patterns": [
-                    r"(?i)(?:can you|please)\s+(?:format|structure|organize|present)\s+(?:this|that|your response|the answer)\s+(?:as|in|using)\s+(?:a\s+)?(list|table|bullets?|numbered|markdown|json|html|steps?)",
-                    r"(?i)(?:i prefer|i like|use)\s+(?:a\s+)?(list|table|bullets?|numbered|markdown|json|html|step-by-step)\s+(?:format|structure|layout)",
-                    r"(?i)(?:show|give|present)\s+(?:this|that|me)\s+(?:as|in)\s+(?:a\s+)?(list|table|bullets?|numbered|markdown|json|html|steps?)",
-                ],
-                "prompt": """Analyze the following conversation messages and identify any explicit preferences the user has stated about response format (list, table, bullets, numbered, markdown, json, html, step-by-step).
-
-Look for phrases like:
-- "Can you format this as a list?"
-- "I prefer bullet points"
-- "Present this in a table"
-- "Use step-by-step format"
-
-Messages:
-{messages}
-
-Return a JSON list of preferences found:
-[
-  {{
-    "preference_type": "response_format",
-    "value": "list|table|bullets|numbered|markdown|json|html|step-by-step",
-    "confidence": 0.0-1.0,
-    "source_message": "exact quote from message",
-    "reasoning": "why this indicates the preference"
-  }}
-]
-
-Only include clear, explicit statements. Return empty list [] if no preferences found."""
-            },
-
-            PreferenceType.INTERACTION_PACE: {
-                "patterns": [
-                    r"(?i)(?:i'm in a|this is)\s+(hurry|rush|urgent|emergency)",
-                    r"(?i)(?:take your|no\s+)time|(?:don't|no need to)\s+rush",
-                    r"(?i)(?:i need|i want)\s+(?:a\s+)?(quick|fast|immediate|slow|thorough)\s+(?:response|answer|reply)",
-                ],
-                "prompt": """Analyze the following conversation messages and identify any explicit preferences the user has stated about interaction pace (quick, fast, immediate, slow, thorough, relaxed, urgent).
-
-Look for phrases like:
-- "I'm in a hurry"
-- "Take your time"
-- "I need a quick response"
-- "This is urgent"
-
-Messages:
-{messages}
-
-Return a JSON list of preferences found:
-[
-  {{
-    "preference_type": "interaction_pace",
-    "value": "quick|fast|immediate|slow|thorough|relaxed|urgent",
-    "confidence": 0.0-1.0,
-    "source_message": "exact quote from message",
-    "reasoning": "why this indicates the preference"
-  }}
-]
-
-Only include clear, explicit statements. Return empty list [] if no preferences found."""
-            }
-        }
+        if not model:
+            # Warn that preference extraction will be limited without LLM
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "PreferenceExtractor initialized without model - "
+                "preference extraction will be disabled"
+            )
 
     async def extract_explicit(self, conversation_history: List[Message]) -> PreferenceExtractionResult:
         """
-        Extract explicit preferences from conversation history
+        Extract explicit preferences from conversation history using pure LLM analysis
 
         Args:
             conversation_history: List of conversation messages
@@ -169,21 +50,24 @@ Only include clear, explicit statements. Return empty list [] if no preferences 
             return PreferenceExtractionResult(
                 explicit_preferences=[],
                 confidence_score=0.0,
-                extraction_method="pattern_matching",
+                extraction_method="no_data",
                 supporting_evidence=[]
             )
 
-        # First try pattern matching for quick extraction
-        pattern_preferences = await self._extract_with_patterns(conversation_history)
+        if not self.model:
+            # Return empty result if no model available
+            return PreferenceExtractionResult(
+                explicit_preferences=[],
+                confidence_score=0.0,
+                extraction_method="no_model_available",
+                supporting_evidence=[]
+            )
 
-        # Then use LLM for more sophisticated extraction if model is available
-        llm_preferences = []
-        if self.model:
-            llm_preferences = await self._extract_with_llm(conversation_history)
+        # Use pure LLM analysis for multilingual preference extraction
+        extracted_preferences = await self._extract_with_llm(conversation_history)
 
-        # Combine and deduplicate preferences
-        all_preferences = pattern_preferences + llm_preferences
-        deduplicated_preferences = self._deduplicate_preferences(all_preferences)
+        # Deduplicate preferences
+        deduplicated_preferences = self._deduplicate_preferences(extracted_preferences)
 
         # Calculate overall confidence
         confidence_score = self._calculate_extraction_confidence(
@@ -193,75 +77,74 @@ Only include clear, explicit statements. Return empty list [] if no preferences 
         # Collect supporting evidence
         supporting_evidence = [pref.source_message for pref in deduplicated_preferences]
 
-        extraction_method = "pattern_matching"
-        if self.model:
-            extraction_method = "pattern_matching + llm_analysis"
-
         return PreferenceExtractionResult(
             explicit_preferences=deduplicated_preferences,
             confidence_score=confidence_score,
-            extraction_method=extraction_method,
+            extraction_method="llm_analysis_multilingual",
             supporting_evidence=supporting_evidence
         )
 
-    async def _extract_with_patterns(self, messages: List[Message]) -> List[ExplicitPreference]:
-        """Extract preferences using regex patterns"""
-        preferences = []
-
-        for message in messages:
-            if message.role != "user":
-                continue
-
-            content = message.content.lower()
-
-            for pref_type, config in self.extraction_prompts.items():
-                for pattern in config["patterns"]:
-                    matches = re.finditer(pattern, content)
-                    for match in matches:
-                        # Extract the preference value from the match
-                        value = self._extract_value_from_match(match, pref_type)
-                        if value:
-                            confidence = ConfidenceScore(
-                                value=0.8,  # High confidence for pattern matches
-                                data_points=1,
-                                recency=self._calculate_message_recency(message.timestamp),
-                                consistency=1.0  # Single observation, so consistent
-                            )
-
-                            preference = ExplicitPreference(
-                                preference_type=pref_type,
-                                value=value,
-                                confidence=confidence,
-                                source_message=message.content,
-                                timestamp=message.timestamp,
-                                context={"extraction_method": "pattern_matching"}
-                            )
-                            preferences.append(preference)
-
-        return preferences
-
     async def _extract_with_llm(self, messages: List[Message]) -> List[ExplicitPreference]:
-        """Extract preferences using LLM analysis"""
+        """Extract preferences using pure LLM analysis for multilingual support"""
         preferences = []
 
         # Prepare messages for LLM analysis
         message_text = "\n".join([
-            f"{msg.role}: {msg.content}" for msg in messages[-10:]  # Last 10 messages
+            f"{msg.role}: {msg.content}" for msg in messages[-15:]  # Last 15 messages
         ])
 
-        # Extract preferences for each type
-        for pref_type, config in self.extraction_prompts.items():
-            try:
-                prompt = config["prompt"].format(messages=message_text)
-                response = await self.model.generate(prompt)
+        prompt = f"""
+        Analyze this conversation to identify explicit user preferences about how they like to
+        interact and receive information. Look for any language where users explicitly state
+        preferences about:
 
-                # Parse JSON response
-                preferences_data = self._parse_llm_response(response)
+        1. COMMUNICATION_STYLE: formal, informal, casual, professional, friendly, technical, simple
+        2. DETAIL_LEVEL: brief, concise, detailed, thorough, comprehensive, quick, short, long
+        3. RESPONSE_FORMAT: list, table, bullets, numbered, markdown, json, html, step-by-step
+        4. INTERACTION_PACE: quick, fast, immediate, slow, thorough, relaxed, urgent
 
-                for pref_data in preferences_data:
-                    if pref_data.get("preference_type") == pref_type.value:
+        Examples across languages:
+        - English: "I prefer a more formal tone", "Keep it brief", "Use bullet points"
+        - Spanish: "Prefiero un estilo más formal", "Hazlo breve", "Usa puntos"
+        - French: "Je préfère un ton plus formel", "Soyez bref", "Utilisez des puces"
+        - German: "Ich bevorzuge einen formelleren Stil", "Halten Sie es kurz"
+        - Chinese: "我喜欢正式的语调", "请简洁一些"
+        - Japanese: "もっと正式な口調を好みます", "簡潔にしてください"
+
+        Look for EXPLICIT statements only - not implied or inferred preferences.
+
+        Conversation:
+        {message_text}
+
+        Respond with JSON only:
+        [
+          {{
+            "preference_type": "communication_style|detail_level|response_format|interaction_pace",
+            "value": "specific preference value (e.g., formal, brief, bullets, quick)",
+            "confidence": 0.0-1.0,
+            "source_message": "exact quote from user that shows this preference",
+            "reasoning": "why this indicates the stated preference"
+          }}
+        ]
+
+        Return empty list [] if no explicit preferences found.
+        Minimum confidence threshold: 0.6
+        """
+
+        try:
+            response = await self.model.generate(prompt, temperature=0.1, max_tokens=800)
+
+            # Parse LLM response
+            preferences_data = self._parse_llm_response(response)
+
+            for pref_data in preferences_data:
+                if pref_data.get("confidence", 0) >= 0.6:
+                    # Map preference type string to enum
+                    pref_type = self._map_preference_type(pref_data.get("preference_type"))
+
+                    if pref_type:
                         confidence = ConfidenceScore(
-                            value=float(pref_data.get("confidence", 0.7)),
+                            value=float(pref_data.get("confidence", 0.6)),
                             data_points=1,
                             recency=self._calculate_recent_message_recency(messages),
                             consistency=1.0
@@ -269,33 +152,34 @@ Only include clear, explicit statements. Return empty list [] if no preferences 
 
                         preference = ExplicitPreference(
                             preference_type=pref_type,
-                            value=pref_data.get("value"),
+                            value=pref_data.get("value", ""),
                             confidence=confidence,
                             source_message=pref_data.get("source_message", ""),
                             timestamp=time.time(),
                             context={
-                                "extraction_method": "llm_analysis",
+                                "extraction_method": "llm_analysis_multilingual",
                                 "reasoning": pref_data.get("reasoning", "")
                             }
                         )
                         preferences.append(preference)
 
-            except Exception as e:
-                # Log error but continue with other preference types
-                print(f"Error extracting {pref_type.value} with LLM: {e}")
-                continue
+        except Exception as e:
+            # Log error but continue
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error extracting preferences with LLM: {e}")
 
         return preferences
 
-    def _extract_value_from_match(self, match, pref_type: PreferenceType) -> Optional[str]:
-        """Extract preference value from regex match"""
-        try:
-            groups = match.groups()
-            if groups:
-                return groups[0].lower()
-        except Exception:
-            pass
-        return None
+    def _map_preference_type(self, type_string: str) -> Optional[PreferenceType]:
+        """Map preference type string to enum"""
+        type_mapping = {
+            "communication_style": PreferenceType.COMMUNICATION_STYLE,
+            "detail_level": PreferenceType.DETAIL_LEVEL,
+            "response_format": PreferenceType.RESPONSE_FORMAT,
+            "interaction_pace": PreferenceType.INTERACTION_PACE
+        }
+        return type_mapping.get(type_string)
 
     def _parse_llm_response(self, response: str) -> List[Dict[str, Any]]:
         """Parse LLM response JSON"""
