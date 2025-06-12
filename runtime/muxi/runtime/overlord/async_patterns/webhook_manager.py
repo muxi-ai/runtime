@@ -42,6 +42,29 @@ class WebhookPayload:
         }
 
 
+@dataclass
+class ClarificationWebhookPayload:
+    """Webhook payload for clarification questions in async mode."""
+    request_id: str
+    clarification_question: str
+    clarification_request_id: Optional[str] = None
+    original_message: Optional[str] = None
+    user_id: Optional[str] = None
+    timestamp: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization."""
+        return {
+            "request_id": self.request_id,
+            "status": "awaiting_clarification",
+            "clarification_question": self.clarification_question,
+            "clarification_request_id": self.clarification_request_id,
+            "original_message": self.original_message,
+            "user_id": self.user_id,
+            "timestamp": self.timestamp,
+        }
+
+
 class WebhookManager:
     """Handles webhook delivery for async completions with retry logic."""
 
@@ -150,7 +173,8 @@ class WebhookManager:
                     )
                 else:
                     logger.error(
-                        f"❌ Webhook delivery failed permanently for request {request_id}: {error_summary}"
+                        f"❌ Webhook delivery failed permanently for request {request_id}: "
+                        f"{error_summary}"
                     )
 
             # Wait before retry (exponential backoff)
@@ -270,3 +294,141 @@ class WebhookManager:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Async context manager exit."""
         await self.close()
+
+    async def deliver_clarification(
+        self,
+        webhook_url: str,
+        request_id: str,
+        clarification_question: str,
+        clarification_request_id: Optional[str] = None,
+        original_message: Optional[str] = None,
+        user_id: Optional[str] = None,
+        retries: Optional[int] = None,
+        timeout: Optional[int] = None
+    ) -> bool:
+        """
+        Deliver clarification question to webhook URL for async requests.
+
+        Args:
+            webhook_url: URL to deliver the webhook to
+            request_id: Request ID that needs clarification
+            clarification_question: The clarification question to ask
+            clarification_request_id: ID of the clarification request
+            original_message: Original user message
+            user_id: User identifier
+            retries: Number of retry attempts (uses default if None)
+            timeout: Request timeout (uses default if None)
+
+        Returns:
+            True if delivery was successful, False otherwise
+        """
+        max_retries = retries if retries is not None else self.default_retries
+        request_timeout = (
+            timeout if timeout is not None else self.default_timeout
+        )
+
+        # Create clarification webhook payload
+        payload = ClarificationWebhookPayload(
+            request_id=request_id,
+            clarification_question=clarification_question,
+            clarification_request_id=clarification_request_id,
+            original_message=original_message,
+            user_id=user_id
+        )
+
+        for attempt in range(max_retries + 1):
+            try:
+                success = await self._deliver_clarification_webhook(
+                    webhook_url,
+                    payload,
+                    request_timeout
+                )
+                if success:
+                    if attempt > 0:
+                        logger.info(
+                            f"✅ Clarification webhook delivered successfully for request "
+                            f"{request_id} (succeeded on attempt {attempt + 1})"
+                        )
+                    else:
+                        logger.info(
+                            f"✅ Clarification webhook delivered successfully for request "
+                            f"{request_id}"
+                        )
+                    return True
+                else:
+                    if attempt < max_retries:
+                        logger.warning(
+                            f"🔄 Clarification webhook delivery attempt "
+                            f"{attempt + 1}/{max_retries + 1} failed for request "
+                            f"{request_id}, retrying..."
+                        )
+                    else:
+                        logger.error(
+                            f"❌ Clarification webhook delivery failed permanently for "
+                            f"request {request_id} after {max_retries + 1} attempts"
+                        )
+
+            except Exception as e:
+                error_summary = self._summarize_webhook_error(e)
+                if attempt < max_retries:
+                    logger.warning(
+                        f"🔄 Clarification webhook delivery attempt "
+                        f"{attempt + 1}/{max_retries + 1} failed for request "
+                        f"{request_id}: {error_summary}"
+                    )
+                else:
+                    logger.error(
+                        f"❌ Clarification webhook delivery failed permanently for "
+                        f"request {request_id}: {error_summary}"
+                    )
+
+            # Wait before retry (exponential backoff)
+            if attempt < max_retries:
+                wait_time = min(2 ** attempt, 60)  # Cap at 60 seconds
+                logger.debug(f"⏳ Waiting {wait_time}s before retry...")
+                await asyncio.sleep(wait_time)
+
+        return False
+
+    async def _deliver_clarification_webhook(
+        self,
+        webhook_url: str,
+        payload: ClarificationWebhookPayload,
+        timeout: int
+    ) -> bool:
+        """
+        Internal method to deliver a clarification webhook.
+
+        Args:
+            webhook_url: URL to deliver the webhook to
+            payload: Clarification webhook payload to send
+            timeout: Request timeout in seconds
+
+        Returns:
+            True if delivery was successful, False otherwise
+        """
+        session = await self._get_session()
+
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "MUXI-Runtime/1.0",
+        }
+
+        try:
+            async with session.post(
+                webhook_url,
+                json=payload.to_dict(),
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=timeout)
+            ) as response:
+                if response.status >= 200 and response.status < 300:
+                    return True
+                else:
+                    logger.debug(f"Clarification webhook returned HTTP {response.status}")
+                    return False
+
+        except asyncio.TimeoutError:
+            logger.debug(f"Clarification webhook request timed out after {timeout}s")
+            return False
+        except Exception as e:
+            raise e

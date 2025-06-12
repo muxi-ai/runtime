@@ -17,6 +17,7 @@ class RequestStatus(Enum):
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    AWAITING_CLARIFICATION = "awaiting_clarification"
 
 
 @dataclass
@@ -32,6 +33,10 @@ class RequestState:
     webhook_url: Optional[str] = None
     estimated_completion: Optional[float] = None
     created_at: float = field(default_factory=time.time)
+    # Clarification fields
+    clarification_question: Optional[str] = None
+    clarification_request_id: Optional[str] = None
+    original_message: Optional[str] = None
 
     @property
     def processing_time(self) -> Optional[float]:

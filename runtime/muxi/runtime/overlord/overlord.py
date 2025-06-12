@@ -3605,6 +3605,62 @@ class Overlord:
             start_time = time.time()
             logger.info(f"Request {request_id}: Starting background processing")
 
+            # NEW: Check if clarification is needed before processing
+            clarification_result = await self._check_clarification_needs_async(
+                message, user_id, agent_name
+            )
+
+            if clarification_result:
+                clarification_question, clarification_request_id = clarification_result
+
+                # Update request status to awaiting clarification
+                from .async_patterns.request_tracker import RequestStatus
+
+                # Update request state with clarification info
+                request_state = await self.request_tracker.get_request(request_id)
+                if request_state:
+                    request_state.clarification_question = clarification_question
+                    request_state.clarification_request_id = clarification_request_id
+                    request_state.original_message = message
+
+                await self.request_tracker.update_request(
+                    request_id, RequestStatus.AWAITING_CLARIFICATION
+                )
+
+                # Send clarification question via webhook
+                webhook_url = await self._get_webhook_url_for_request(request_id)
+                if webhook_url:
+                    success = await self.webhook_manager.deliver_clarification(
+                        webhook_url=webhook_url,
+                        request_id=request_id,
+                        clarification_question=clarification_question,
+                        clarification_request_id=clarification_request_id,
+                        original_message=message,
+                        user_id=user_id
+                    )
+                    if success:
+                        logger.info(
+                            f"Request {request_id}: Clarification question sent via webhook"
+                        )
+                        return  # Exit early, wait for clarification response
+                    else:
+                        logger.error(
+                            f"Request {request_id}: Failed to send clarification via webhook"
+                        )
+                        # Fall back to regular processing
+                        await self.request_tracker.update_request(
+                            request_id, RequestStatus.PROCESSING
+                        )
+                else:
+                    logger.warning(
+                        f"Request {request_id}: No webhook URL for clarification, "
+                        "proceeding with regular processing"
+                    )
+                    # No webhook available, proceed with regular processing
+                    await self.request_tracker.update_request(
+                        request_id, RequestStatus.PROCESSING
+                    )
+
             # Process using existing sync infrastructure
             result = await self._process_sync_chat(message, agent_name, user_id)
             processing_time = time.time() - start_time
@@ -3771,91 +3827,218 @@ class Overlord:
             logger.error(f"Error cleaning up async requests: {e}")
             return 0
 
-    def _generate_api_key(self, key_type: str) -> str:
+    async def _check_clarification_needs_async(
+        self, message: str, user_id: Any, agent_name: Optional[str]
+    ) -> Optional[tuple[str, str]]:
         """
-        Generate a new API key with appropriate prefix.
-
-        This internal method creates a random, secure API key with a prefix indicating
-        the key type (user or admin).
+        Check if message needs clarification in async mode.
 
         Args:
-            key_type: Type of key to generate ("user" or "admin").
-                Determines the prefix of the generated key.
+            message: User's message
+            user_id: User identifier
+            agent_name: Selected agent name
 
         Returns:
-            A new API key string in the format:
-            - User keys: "sk_muxi_user_[random string]"
-            - Admin keys: "sk_muxi_admin_[random string]"
+            Tuple of (clarification_question, clarification_request_id) if clarification
+            is needed, None if message can proceed without clarification
         """
-        # Generate a random string
-        alphabet = string.ascii_letters + string.digits
-        random_part = "".join(secrets.choice(alphabet) for _ in range(24))
+        try:
+            # Check if clarification system is available
+            if not hasattr(self, 'clarification_analyzer'):
+                logger.debug("Clarification system not available, proceeding without check")
+                return None
 
-        # Add the appropriate prefix
-        if key_type == "user":
-            return f"sk_muxi_user_{random_part}"
-        else:
-            return f"sk_muxi_admin_{random_part}"
+            # Get user context for analysis
+            user_id_int = None
+            if user_id is not None:
+                user_id_int = await self._enhance_existing_user_id_conversion(user_id)
 
-    def _display_splash_screen(self, host: str, port: int, api_keys: bool = False) -> None:
+            user_context = {}
+            if user_id_int:
+                user_context = await self.get_user_context_memory(user_id_int, agent_name)
+
+            # Analyze message for clarification needs
+            from .clarification import (
+                InformationAnalyzer,
+                ClarificationQuestionGenerator,
+                ClarificationManager,
+                RequestType,
+            )
+
+            # Create analyzer instance
+            model = await self.get_model_for_capability("clarification", agent_name)
+            analyzer = InformationAnalyzer(model=model)
+
+            # Analyze for missing information
+            analysis = await analyzer.analyze_request(
+                user_message=message,
+                intent="general",  # Could be enhanced with intent detection
+                available_tools=[],  # Could be enhanced with tool detection
+                user_context=user_context
+            )
+
+            # If no missing info, proceed
+            if analysis.can_proceed and not analysis.missing_info:
+                logger.debug("Message can proceed without clarification")
+                return None
+
+            # Generate clarification question
+            generator = ClarificationQuestionGenerator(model=model)
+            question = await generator.generate_questions(
+                missing_info=analysis.missing_info,
+                available_info=analysis.available_info,
+                intent="general",
+                confidence_scores=analysis.confidence_scores,
+                user_context=user_context
+            )
+
+            if question and len(question) > 0:
+                clarification_text = question[0].question_text
+
+                # Start clarification tracking
+                manager = ClarificationManager(overlord=self)
+                request = await manager.start_clarification(
+                    user_id=str(user_id),
+                    agent_id=agent_name or self.default_agent_id,
+                    request_type=RequestType.REASONING,
+                    intent="general"
+                )
+
+                logger.info(f"Clarification needed for async request: {clarification_text}")
+                return clarification_text, request.request_id
+
+            return None
+
+        except Exception as e:
+            logger.warning(f"Error checking clarification needs: {e}")
+            # On error, proceed without clarification to avoid blocking
+            return None
+
+    async def process_async_clarification_response(
+        self, request_id: str, clarification_response: str
+    ) -> bool:
         """
-        Display the MUXI splash screen with server information.
-
-        This internal method shows a formatted ASCII art splash screen with the MUXI logo
-        and information about the running server.
+        Process clarification response for an async request.
 
         Args:
-            host: Host the server is running on, displayed in the splash screen.
-            port: Port the server is running on, displayed in the splash screen.
-            api_keys: Whether to modify the splash screen for API key display.
-                If True, changes the footer line to support key display.
+            request_id: The async request ID awaiting clarification
+            clarification_response: User's response to the clarification question
+
+        Returns:
+            True if processing was successfully resumed, False otherwise
         """
-        # Get the package version
         try:
-            from importlib import metadata
+            # Import needed here to avoid circular imports
+            from .async_patterns.request_tracker import RequestStatus
 
-            version = metadata.version("muxi")
-        except (metadata.PackageNotFoundError, ImportError):
-            version = "1.0.0"
+            # Get the request state
+            request_state = await self.request_tracker.get_request(request_id)
+            if not request_state:
+                logger.error(f"Request {request_id} not found")
+                return False
 
-        # Calculate padding for the URL display
-        padding = " " * (24 - len(host) - len(str(port)))
+            if request_state.status != RequestStatus.AWAITING_CLARIFICATION:
+                logger.error(f"Request {request_id} is not awaiting clarification")
+                return False
 
-        last_line = "╰──────────────────────────────────────╯"
-        if api_keys:
-            last_line = "╰─────────────┬────────────────────────╯"
+            # Process the clarification response
+            if request_state.clarification_request_id:
+                from .clarification import ClarificationManager
 
-        print(
-            f"""
-╭──────────────────────────────────────╮
-│  ███╗   ███╗ ██╗   ██╗ ██╗  ██╗ ██╗  │
-│  ████╗ ████║ ██║   ██║ ╚██╗██╔╝ ██║  │
-│  ██╔████╔██║ ██║   ██║  ╚███╔╝  ██║  │
-│  ██║╚██╔╝██║ ██║   ██║  ██╔██╗  ██║  │
-│  ██║ ╚═╝ ██║ ╚██████╔╝ ██╔╝ ██╗ ██║  │
-│  ╚═╝     ╚═╝  ╚═════╝  ╚═╝  ╚═╝ ╚═╝  │
-│───────────────┬──────────────────────│
-│  * MUXI Core  │  Version: {version:<10} │
-│───────────────┴──────────────────────│
-│                                      │
-│  Running on:                         │
-│  http://{host}:{port}{padding}│
-│                                      │
-{last_line}
-"""
-        )
+                manager = ClarificationManager(overlord=self)
+                result = await manager.process_user_response(
+                    request_state.clarification_request_id,
+                    clarification_response
+                )
 
-    def _display_splash_screen_with_api_keys(self) -> None:
-        """
-        Display the MUXI splash screen with auto-generated API keys.
+                if result.status == "complete":
+                    # Resume processing with complete parameters
+                    logger.info(
+                        f"Request {request_id}: Clarification completed, resuming processing"
+                    )
 
-        This internal method shows the standard splash screen with an additional
-        section for API keys, which is displayed when keys have been auto-generated.
-        It includes a warning message about using auto-generated keys in production.
-        """
-        # This method is incomplete and the user_key_display variable was unused
-        # TODO: Complete implementation of splash screen with API keys
-        pass
+                    # Update request status back to processing
+                    await self.request_tracker.update_request(
+                        request_id, RequestStatus.PROCESSING
+                    )
+
+                    # Resume processing in background with enhanced message
+                    enhanced_message = (
+                        f"{request_state.original_message}\n\n"
+                        f"Additional context: {clarification_response}"
+                    )
+
+                    # Schedule background processing continuation
+                    import asyncio
+                    asyncio.create_task(
+                        self._execute_async_request(
+                            request_id,
+                            enhanced_message,
+                            None,  # Agent already selected
+                            request_state.user_id
+                        )
+                    )
+                    return True
+
+                elif result.status == "continue":
+                    # More clarification needed
+                    logger.info(f"Request {request_id}: Additional clarification needed")
+
+                    # Update stored clarification question
+                    request_state.clarification_question = result.next_question
+
+                    # Send new clarification via webhook
+                    webhook_url = await self._get_webhook_url_for_request(request_id)
+                    if webhook_url:
+                        success = await self.webhook_manager.deliver_clarification(
+                            webhook_url=webhook_url,
+                            request_id=request_id,
+                            clarification_question=result.next_question,
+                            clarification_request_id=request_state.clarification_request_id,
+                            original_message=request_state.original_message,
+                            user_id=request_state.user_id
+                        )
+                        if success:
+                            logger.info(
+                                f"Request {request_id}: Additional clarification question sent"
+                            )
+                        else:
+                            logger.error(
+                                f"Request {request_id}: Failed to send additional clarification"
+                            )
+
+                    return True
+
+                else:
+                    # Error or failed clarification
+                    logger.error(
+                        f"Request {request_id}: Clarification failed: {result.error_message}"
+                    )
+
+                    # Mark request as failed
+                    await self.request_tracker.update_request(
+                        request_id, RequestStatus.FAILED,
+                        error=f"Clarification failed: {result.error_message}"
+                    )
+
+                    return False
+
+            return False
+
+        except Exception as e:
+            logger.error(f"Error processing clarification response for request {request_id}: {e}")
+
+            # Mark request as failed on error
+            try:
+                from .async_patterns.request_tracker import RequestStatus
+                await self.request_tracker.update_request(
+                    request_id, RequestStatus.FAILED,
+                    error=f"Clarification processing error: {e}"
+                )
+            except Exception:
+                pass  # Avoid nested exceptions
+
+            return False
 
     async def _enhance_existing_user_id_conversion(self, external_user_id: Any) -> int:
         """
@@ -4034,3 +4217,31 @@ class Overlord:
     def _initialize_formation_server(self) -> None:
         """Initialize A2A formation server."""
         logger.debug("Formation server initialization - stub method")
+
+    def _generate_api_key(self, key_type: str) -> str:
+        """
+        Generate a new API key with appropriate prefix.
+
+        This internal method creates a random, secure API key with a prefix indicating
+        the key type (user or admin).
+
+        Args:
+            key_type: Type of key to generate ("user" or "admin").
+                Determines the prefix of the generated key.
+
+        Returns:
+            A new API key string in the format:
+            - User keys: "sk_muxi_user_[random string]"
+            - Admin keys: "sk_muxi_admin_[random string]"
+        """
+        # Generate a random string
+        import secrets
+        import string
+        alphabet = string.ascii_letters + string.digits
+        random_part = "".join(secrets.choice(alphabet) for _ in range(24))
+
+        # Add the appropriate prefix
+        if key_type == "user":
+            return f"sk_muxi_user_{random_part}"
+        else:
+            return f"sk_muxi_admin_{random_part}"
