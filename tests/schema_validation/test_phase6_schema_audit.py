@@ -9,7 +9,6 @@ of all SCHEMA_GUIDE.md features and validates our implementation completeness.
 import tempfile
 import yaml
 import pytest
-from typing import Dict, Any
 
 from muxi.runtime.config.validation import FormationValidator
 
@@ -47,7 +46,8 @@ class TestPhase6SchemaValidatorAudit:
                 yaml.dump(formation, f)
                 result = self.validator.validate(f.name)
 
-            assert not result.is_valid, f"Formation {i} should fail validation for missing required fields"
+            error_msg = f"Formation {i} should fail validation for missing required fields"
+            assert not result.is_valid, error_msg
             assert len(result.errors) >= 1, f"Formation {i} should have validation errors"
 
     def test_all_optional_formation_metadata_fields_supported(self):
@@ -231,46 +231,83 @@ class TestPhase6SchemaValidatorAudit:
             assert result.is_valid, f"Memory configuration should be valid: {result.errors}"
             assert len(result.errors) == 0
 
-    def test_all_logging_output_modes_validated(self):
-        """Test that ALL logging output modes are validated."""
+    def test_all_logging_transport_modes_validated(self):
+        """Test that ALL logging transport modes are validated."""
         logging_configurations = [
-            # stdout output
+            # stdout transport
             {
                 'schema': '1.0.0',
                 'id': 'logging-stdout-test',
                 'description': 'Testing stdout logging',
                 'logging': {
-                    'level': 'info',
-                    'format': 'jsonl',
-                    'output': 'stdout',
-                    'log': ['errors', 'system_health']
+                    'enabled': True,
+                    'streams': [
+                        {
+                            'transport': 'stdout',
+                            'level': 'info',
+                            'format': 'jsonl',
+                            'events': ['error.*', 'system_health']
+                        }
+                    ]
                 }
             },
-            # file output
+            # file transport
             {
                 'schema': '1.0.0',
                 'id': 'logging-file-test',
                 'description': 'Testing file logging',
                 'logging': {
-                    'level': 'debug',
-                    'format': 'text',
-                    'output': 'file',
-                    'path': '/var/logs/formation.log',
-                    'log': ['user_prompts_interaction', 'overlord_routing']
+                    'enabled': True,
+                    'streams': [
+                        {
+                            'transport': 'file',
+                            'level': 'debug',
+                            'format': 'text',
+                            'destination': '/var/logs/formation.log',
+                            'events': ['user_prompts_interaction', 'overlord_routing']
+                        }
+                    ]
                 }
             },
-            # stream output
+            # stream transport with ZMQ
             {
                 'schema': '1.0.0',
                 'id': 'logging-stream-test',
                 'description': 'Testing stream logging',
                 'logging': {
-                    'level': 'warning',
-                    'format': 'jsonl',
-                    'output': 'stream',
-                    'stream_url': 'tcp://logs.example.com:9000/ingest',
-                    'log': ['mcp_tool_calls', 'memory_recall'],
-                    'exclude': ['system_health']
+                    'enabled': True,
+                    'streams': [
+                        {
+                            'transport': 'stream',
+                            'level': 'warn',
+                            'format': 'msgpack',
+                            'destination': 'tcp://logs.example.com:9000/ingest',
+                            'protocol': 'zmq',
+                            'events': ['mcp_tool_calls', 'memory_recall'],
+                            'auth': {
+                                'type': 'token',
+                                'token': '${{ secrets.STREAM_TOKEN }}'
+                            }
+                        }
+                    ]
+                }
+            },
+            # trail transport
+            {
+                'schema': '1.0.0',
+                'id': 'logging-trail-test',
+                'description': 'Testing MUXI trail logging',
+                'logging': {
+                    'enabled': True,
+                    'streams': [
+                        {
+                            'transport': 'trail',
+                            'auth': {
+                                'type': 'bearer',
+                                'token': '${{ secrets.TRAIL_TOKEN }}'
+                            }
+                        }
+                    ]
                 }
             }
         ]
@@ -371,7 +408,8 @@ class TestPhase6SchemaValidatorAudit:
             result = self.validator.validate(f.name)
 
         assert not result.is_valid, "Invalid formation should fail validation"
-        assert len(result.errors) >= 5, f"Should have multiple specific errors, got {len(result.errors)}"
+        err_count_msg = f"Should have multiple specific errors, got {len(result.errors)}"
+        assert len(result.errors) >= 5, err_count_msg
 
         # Check that error messages are descriptive
         error_text = ' '.join(result.errors)
@@ -414,8 +452,10 @@ class TestPhase6SchemaValidatorAudit:
 
             validation_time = end_time - start_time
 
-        assert result.is_valid, f"Performance benchmark formation should be valid: {result.errors}"
-        assert validation_time < 3.0, f"Validation took too long: {validation_time:.3f}s (should be < 3s)"
+        perf_msg = f"Performance benchmark formation should be valid: {result.errors}"
+        assert result.is_valid, perf_msg
+        time_msg = f"Validation took too long: {validation_time:.3f}s (should be < 3s)"
+        assert validation_time < 3.0, time_msg
         print(f"✅ Phase 6 Performance: validated 50 models in {validation_time:.3f} seconds")
 
 

@@ -148,23 +148,36 @@ class TestComprehensiveSchemaValidation:
 
             # Full logging configuration
             'logging': {
-                'level': 'debug',
-                'format': 'jsonl',
-                'output': 'stream',
-                'stream_url': 'tcp://logs.example.com:9000/ingest',
-                'log': [
-                    'user_prompts_interaction',
-                    'multi_modal_metadata',
-                    'overlord_routing',
-                    'agent_reflections',
-                    'system_health',
-                    'mcp_tool_calls',
-                    'memory_recall',
-                    'memory_storage',
-                    'errors'
-                ],
-                'exclude': [
-                    'system_health'
+                'enabled': True,
+                'streams': [
+                    {
+                        'transport': 'stdout',
+                        'level': 'info',
+                        'format': 'jsonl',
+                        'events': ['request.received', 'response.delivered']
+                    },
+                    {
+                        'transport': 'stream',
+                        'level': 'debug',
+                        'format': 'msgpack',
+                        'destination': 'tcp://logs.example.com:9000/ingest',
+                        'protocol': 'zmq',
+                        'events': [
+                            'user_prompts_interaction',
+                            'multi_modal_metadata',
+                            'overlord_routing',
+                            'agent_reflections',
+                            'system_health',
+                            'mcp_tool_calls',
+                            'memory_recall',
+                            'memory_storage',
+                            'error.*'
+                        ],
+                        'auth': {
+                            'type': 'token',
+                            'token': '${{ secrets.LOGS_TOKEN }}'
+                        }
+                    }
                 ]
             },
 

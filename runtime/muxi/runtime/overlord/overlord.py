@@ -838,8 +838,8 @@ class Overlord:
         """
         Initialize logging configuration from formation config.
 
-        This processes the logging configuration according to SCHEMA_GUIDE.md
-        and configures the logging system for the formation.
+        This processes the multi-stream logging configuration and configures
+        the logging system for the formation.
         """
         logging_config = self.formation_config.get("logging", {})
 
@@ -848,55 +848,146 @@ class Overlord:
             return
 
         try:
-            # Import the logging config module
-            from ..config.logging import LoggingConfig, configure_logging
-
-            # Extract logging configuration
+            # Extract global logging settings
             enabled = logging_config.get("enabled", True)
-            level = logging_config.get("level", "info")
-            format_type = logging_config.get("format", "jsonl")
-            output = logging_config.get("output", "stdout")
-            path = logging_config.get("path")
-            stream_url = logging_config.get("stream_url")
-            stream_protocol = logging_config.get("stream_protocol")
-            log_events = logging_config.get("events", [])
+            streams = logging_config.get("streams", [])
 
             # Only configure logging if enabled
-            if enabled:
-                # Convert SCHEMA_GUIDE.md format to LoggingConfig format
-                # Map the new schema format to the existing LoggingConfig
-                config = LoggingConfig(
-                    level=level.upper(),  # Convert to uppercase for standard logging
-                    file=path if output == "file" else None,
-                    format=self._convert_logging_format(format_type),
-                )
-
-                # Configure the logging system
-                configure_logging(config)
-
-                # Store logging configuration for potential future use
-                # TODO: Implement hybrid logic - if events specified, ignore level;
-                # if events missing, use level-based defaults
-                self._logging_config = {
-                    "enabled": enabled,
-                    "level": level,
-                    "format": format_type,
-                    "output": output,
-                    "path": path,
-                    "stream_url": stream_url,
-                    "stream_protocol": stream_protocol,
-                    "log_events": log_events
-                }
-
-                logger.info(
-                    f"✅ Initialized logging configuration "
-                    f"(enabled={enabled}, level={level}, format={format_type}, output={output})"
-                )
-            else:
+            if not enabled:
                 logger.info("✅ Logging disabled in formation configuration")
+                return
+
+            if not streams:
+                logger.warning("⚠️  Logging enabled but no streams configured")
+                return
+
+            # Process each stream
+            processed_streams = []
+            for i, stream in enumerate(streams):
+                try:
+                    processed_stream = await self._process_logging_stream(stream, i)
+                    if processed_stream:
+                        processed_streams.append(processed_stream)
+                except Exception as e:
+                    logger.error(f"Failed to process logging stream {i}: {e}")
+                    continue
+
+            # Store processed logging configuration
+            self._logging_config = {
+                "enabled": enabled,
+                "streams": processed_streams
+            }
+
+            logger.info(
+                f"✅ Initialized logging configuration "
+                f"(enabled={enabled}, streams={len(processed_streams)})"
+            )
 
         except Exception as e:
             logger.error(f"Failed to initialize logging configuration: {e}")
+
+    async def _process_logging_stream(
+        self, stream: Dict[str, Any], index: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Process a single logging stream configuration.
+
+        Args:
+            stream: Stream configuration dictionary
+            index: Stream index for error reporting
+
+        Returns:
+            Processed stream configuration or None if invalid
+        """
+        # Extract basic stream configuration
+        transport = stream.get("transport")
+        level = stream.get("level", "info")
+        format_type = stream.get("format", "jsonl")
+        events = stream.get("events", [])
+        auth = stream.get("auth", {})
+
+        if not transport:
+            logger.error(f"Logging stream {index} missing transport")
+            return None
+
+        # Process transport-specific configuration
+        processed_stream = {
+            "transport": transport,
+            "level": level,
+            "format": format_type,
+            "events": events,
+            "auth": auth
+        }
+
+        if transport == "stdout":
+            # No additional configuration needed for stdout
+            pass
+
+        elif transport == "file":
+            destination = stream.get("destination")
+            if not destination:
+                logger.error(f"Logging stream {index} with file transport missing destination")
+                return None
+            processed_stream["destination"] = destination
+
+        elif transport == "stream":
+            destination = stream.get("destination")
+            protocol = stream.get("protocol")
+
+            if not destination:
+                logger.error(f"Logging stream {index} with stream transport missing destination")
+                return None
+
+            # Auto-detect protocol if not specified
+            if not protocol:
+                protocol = self._detect_stream_protocol(destination)
+
+            processed_stream["destination"] = destination
+            processed_stream["protocol"] = protocol
+
+        elif transport == "trail":
+            # MUXI Trail transport - special case with fixed destination
+            processed_stream["destination"] = "tcps://trail.muxi.ai/ingest"
+            processed_stream["protocol"] = "zmq"
+            processed_stream["format"] = "msgpack"  # Trail always uses msgpack
+
+            # Ensure auth is configured for trail
+            if not auth:
+                logger.error(f"Logging stream {index} with trail transport requires auth")
+                return None
+
+        else:
+            logger.error(f"Logging stream {index} has unsupported transport: {transport}")
+            return None
+
+        # Interpolate secrets in auth if needed
+        if auth:
+            try:
+                interpolated_auth = await self.interpolate_secrets(auth)
+                processed_stream["auth"] = interpolated_auth
+            except Exception as e:
+                logger.warning(f"Failed to interpolate secrets in logging stream {index} auth: {e}")
+
+        return processed_stream
+
+    def _detect_stream_protocol(self, destination: str) -> str:
+        """
+        Detect stream protocol from destination URL.
+
+        Args:
+            destination: Stream destination URL
+
+        Returns:
+            Detected protocol string
+        """
+        if destination.startswith(("https://", "http://")):
+            return "webhook"
+        elif destination.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
+            return "zmq"
+        elif destination.startswith(("ws://", "wss://")):
+            return "websocket"
+        else:
+            return "zmq"  # Default fallback
 
     def _convert_logging_format(self, schema_format: str) -> str:
         """

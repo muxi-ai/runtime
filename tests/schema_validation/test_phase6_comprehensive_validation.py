@@ -128,24 +128,31 @@ class TestPhase6ComprehensiveSchemaValidation:
             },
             # Complete logging configuration (all categories)
             "logging": {
-                "level": "debug",
-                "format": "jsonl",
-                "output": "stream",
-                "stream_url": "tcp://phase6-logs.test.com:9000/ingest",
-                "log": [
-                    "user_prompts_interaction",
-                    "multi_modal_metadata",
-                    "overlord_routing",
-                    "agent_reflections",
-                    "system_health",
-                    "mcp_tool_calls",
-                    "memory_recall",
-                    "memory_storage",
-                    "errors",
-                ],
-                "exclude": [
-                    "agent_reflections"  # Should create warning about conflicting categories
-                ],
+                "enabled": True,
+                "streams": [
+                    {
+                        "transport": "stream",
+                        "level": "debug",
+                        "format": "jsonl",
+                        "destination": "tcp://phase6-logs.test.com:9000/ingest",
+                        "protocol": "zmq",
+                        "events": [
+                            "user_prompts_interaction",
+                            "multi_modal_metadata",
+                            "overlord_routing",
+                            "agent_reflections",
+                            "system_health",
+                            "mcp_tool_calls",
+                            "memory_recall",
+                            "memory_storage",
+                            "error.*",
+                        ],
+                        "auth": {
+                            "type": "token",
+                            "token": "${{ secrets.PHASE6_LOGS_TOKEN }}"
+                        }
+                    }
+                ]
             },
             # Complete A2A configuration
             "a2a": {

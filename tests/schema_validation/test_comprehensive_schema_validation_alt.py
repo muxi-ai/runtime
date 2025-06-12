@@ -123,21 +123,28 @@ class TestComprehensiveSchemaValidation:
                 }
             },
 
-            # Full logging configuration with conflicting include/exclude
+            # Full logging configuration
             'logging': {
-                'level': 'debug',
-                'format': 'jsonl',
-                'output': 'stream',
-                'stream_url': 'tcp://logs.example.com:9000/ingest',
-                'log': [
-                    'user_prompts_interaction',
-                    'multi_modal_metadata',
-                    'overlord_routing',
-                    'system_health',
-                    'errors'
-                ],
-                'exclude': [
-                    'system_health'  # Should create warning
+                'enabled': True,
+                'streams': [
+                    {
+                        'transport': 'stream',
+                        'level': 'debug',
+                        'format': 'jsonl',
+                        'destination': 'tcp://logs.example.com:9000/ingest',
+                        'protocol': 'zmq',
+                        'events': [
+                            'user_prompts_interaction',
+                            'multi_modal_metadata',
+                            'overlord_routing',
+                            'system_health',
+                            'error.*'
+                        ],
+                        'auth': {
+                            'type': 'token',
+                            'token': '${{ secrets.LOGS_TOKEN }}'
+                        }
+                    }
                 ]
             },
 

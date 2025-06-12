@@ -1569,12 +1569,10 @@ class FormationValidator:
             )
 
     def _validate_logging_config(self, logging_config: Dict[str, Any]) -> None:
-        """Validate logging configuration according to SCHEMA_GUIDE.md."""
+        """Validate logging configuration according to multi-stream schema."""
         if not isinstance(logging_config, dict):
             self.result.add_error("Logging configuration must be a dictionary")
             return
-
-        # Allow any additional fields users might want to add for logging configuration
 
         # Validate enabled (boolean)
         if "enabled" in logging_config:
@@ -1582,87 +1580,201 @@ class FormationValidator:
             if not isinstance(enabled, bool):
                 self.result.add_error("Logging 'enabled' field must be a boolean")
 
-        # Validate level (enum: debug, info, warning, error)
-        if "level" in logging_config:
-            level = logging_config["level"]
-            valid_levels = ["debug", "info", "warning", "error"]
+        # Validate streams array (required)
+        if "streams" not in logging_config:
+            self.result.add_error("Logging configuration must include 'streams' array")
+            return
+
+        streams = logging_config["streams"]
+        if not isinstance(streams, list):
+            self.result.add_error("Logging 'streams' must be an array")
+            return
+
+        if len(streams) == 0:
+            self.result.add_warning("Logging streams array is empty - no logging will occur")
+
+        # Validate each stream
+        for i, stream in enumerate(streams):
+            self._validate_logging_stream(stream, i)
+
+    def _validate_logging_stream(self, stream: Dict[str, Any], index: int) -> None:
+        """Validate a single logging stream configuration."""
+        if not isinstance(stream, dict):
+            self.result.add_error(f"Logging stream {index} must be a dictionary")
+            return
+
+        # Validate transport (required)
+        if "transport" not in stream:
+            self.result.add_error(f"Logging stream {index} missing required field: transport")
+            return
+
+        transport = stream["transport"]
+        valid_transports = ["stdout", "file", "stream", "trail"]
+        if transport not in valid_transports:
+            self.result.add_error(
+                f"Logging stream {index} invalid transport '{transport}'. "
+                f"Valid transports: {', '.join(valid_transports)}"
+            )
+            return
+
+        # Validate level (optional, defaults to "info")
+        if "level" in stream:
+            level = stream["level"]
+            valid_levels = ["debug", "info", "warn", "error"]
             if level not in valid_levels:
                 self.result.add_error(
-                    f"Invalid logging level '{level}'. "
-                    f"Valid levels are: {', '.join(valid_levels)}"
+                    f"Logging stream {index} invalid level '{level}'. "
+                    f"Valid levels: {', '.join(valid_levels)}"
                 )
 
-        # Validate format (enum: jsonl, text)
-        if "format" in logging_config:
-            format_value = logging_config["format"]
-            valid_formats = ["jsonl", "text"]
+        # Validate format (optional, defaults to "jsonl")
+        if "format" in stream:
+            format_value = stream["format"]
+            valid_formats = [
+                "jsonl", "text", "msgpack", "protobuf",
+                "datadog_json", "splunk_hec", "elastic_bulk",
+                "grafana_loki", "newrelic_json", "opentelemetry"
+            ]
             if format_value not in valid_formats:
                 self.result.add_error(
-                    f"Invalid logging format '{format_value}'. "
-                    f"Valid formats are: {', '.join(valid_formats)}"
+                    f"Logging stream {index} invalid format '{format_value}'. "
+                    f"Valid formats: {', '.join(valid_formats)}"
                 )
 
-        # Validate output (enum: stdout, file, stream)
-        output = logging_config.get("output", "stdout")
-        valid_outputs = ["stdout", "file", "stream"]
-        if output not in valid_outputs:
+        # Validate transport-specific fields
+        if transport == "file":
+            self._validate_file_stream(stream, index)
+        elif transport == "stream":
+            self._validate_stream_stream(stream, index)
+        elif transport == "trail":
+            self._validate_trail_stream(stream, index)
+
+        # Validate events (optional)
+        if "events" in stream:
+            events = stream["events"]
+            if not isinstance(events, list):
+                self.result.add_error(f"Logging stream {index} 'events' must be an array")
+            else:
+                for event in events:
+                    if not isinstance(event, str):
+                        self.result.add_error(f"Logging stream {index} event must be a string")
+
+        # Validate auth (optional)
+        if "auth" in stream:
+            self._validate_logging_auth(stream["auth"], index)
+
+    def _validate_file_stream(self, stream: Dict[str, Any], index: int) -> None:
+        """Validate file transport specific fields."""
+        if "destination" not in stream:
             self.result.add_error(
-                f"Invalid logging output '{output}'. "
-                f"Valid outputs are: {', '.join(valid_outputs)}"
+                f"Logging stream {index} with file transport requires 'destination' field"
+            )
+        else:
+            destination = stream["destination"]
+            if not isinstance(destination, str) or not destination.strip():
+                self.result.add_error(
+                    f"Logging stream {index} destination must be a non-empty string"
+                )
+
+    def _validate_stream_stream(self, stream: Dict[str, Any], index: int) -> None:
+        """Validate stream transport specific fields."""
+        if "destination" not in stream:
+            self.result.add_error(
+                f"Logging stream {index} with stream transport requires 'destination' field"
+            )
+            return
+
+        destination = stream["destination"]
+        if not isinstance(destination, str) or not destination.strip():
+            self.result.add_error(
+                f"Logging stream {index} destination must be a non-empty string"
+            )
+            return
+
+        # Validate protocol (optional, auto-detected if not specified)
+        protocol = stream.get("protocol")
+        if protocol is not None:
+            valid_protocols = ["zmq", "webhook", "websocket", "kafka", "tcp", "udp"]
+            if protocol not in valid_protocols:
+                self.result.add_error(
+                    f"Logging stream {index} invalid protocol '{protocol}'. "
+                    f"Valid protocols: {', '.join(valid_protocols)}"
+                )
+        else:
+            # Auto-detect protocol from URL and suggest
+            if destination.startswith(("https://", "http://")):
+                suggested_protocol = "webhook"
+            elif destination.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
+                suggested_protocol = "zmq"
+            elif destination.startswith(("ws://", "wss://")):
+                suggested_protocol = "websocket"
+            else:
+                suggested_protocol = "zmq"  # Default fallback
+
+            self.result.add_suggestion(
+                f"Logging stream {index}: protocol not specified. Based on URL '{destination}', "
+                f"consider adding 'protocol: \"{suggested_protocol}\"'"
             )
 
-        # Validate path (required if output == "file")
-        if output == "file":
-            if "path" not in logging_config:
-                self.result.add_error("Logging path is required when output is 'file'")
-            else:
-                path = logging_config["path"]
-                if not isinstance(path, str) or not path.strip():
-                    self.result.add_error("Logging path must be a non-empty string")
+    def _validate_trail_stream(self, stream: Dict[str, Any], index: int) -> None:
+        """Validate trail transport specific fields."""
+        # Trail transport is a special case for MUXI - minimal configuration needed
+        # Auth is required but will be validated separately
+        if "auth" not in stream:
+            self.result.add_error(
+                f"Logging stream {index} with trail transport requires 'auth' configuration"
+            )
 
-        # Validate stream_url (required if output == "stream")
-        if output == "stream":
-            if "stream_url" not in logging_config:
-                self.result.add_error("Logging stream_url is required when output is 'stream'")
-            else:
-                stream_url = logging_config["stream_url"]
-                if not isinstance(stream_url, str) or not stream_url.strip():
-                    self.result.add_error("Logging stream_url must be a non-empty string")
+    def _validate_logging_auth(self, auth: Dict[str, Any], stream_index: int) -> None:
+        """Validate logging stream authentication configuration."""
+        if not isinstance(auth, dict):
+            self.result.add_error(f"Logging stream {stream_index} auth must be a dictionary")
+            return
 
-                # Validate stream_protocol with smart defaults
-                stream_protocol = logging_config.get("stream_protocol")
-                if stream_protocol is not None:
-                    valid_protocols = ["zmq", "webhook", "websocket", "kafka"]
-                    if stream_protocol not in valid_protocols:
-                        self.result.add_error(
-                            f"Invalid stream_protocol '{stream_protocol}'. "
-                            f"Valid protocols are: {', '.join(valid_protocols)}"
-                        )
-                else:
-                    # Auto-detect protocol from URL and suggest
-                    if stream_url.startswith(("https://", "http://")):
-                        suggested_protocol = "webhook"
-                    elif stream_url.startswith(("tcp://", "ipc://")):
-                        suggested_protocol = "zmq"
-                    elif stream_url.startswith(("ws://", "wss://")):
-                        suggested_protocol = "websocket"
-                    else:
-                        suggested_protocol = "zmq"  # Default fallback
+        # Validate auth type
+        auth_type = auth.get("type", "none")
+        valid_auth_types = ["bearer", "basic", "api_key", "token", "custom"]
+        if auth_type not in valid_auth_types:
+            self.result.add_error(
+                f"Logging stream {stream_index} invalid auth type '{auth_type}'. "
+                f"Valid types: {', '.join(valid_auth_types)}"
+            )
+            return
 
-                    self.result.add_suggestion(
-                        f"stream_protocol not specified. Based on URL '{stream_url}', "
-                        f"consider adding 'stream_protocol: \"{suggested_protocol}\"'"
-                    )
-
-        # Validate log categories (optional array)
-        if "events" in logging_config:
-            log_events = logging_config["events"]
-            if not isinstance(log_events, list):
-                self.result.add_error("Logging 'events' field must be an array")
-            else:
-                for logging_event in log_events:
-                    if not isinstance(logging_event, str):
-                        self.result.add_error("Logging event must be a string")
+        # Validate type-specific auth fields
+        if auth_type == "bearer":
+            if "token" not in auth:
+                self.result.add_error(
+                    f"Logging stream {stream_index} bearer auth requires 'token' field"
+                )
+        elif auth_type == "basic":
+            if "username" not in auth:
+                self.result.add_error(
+                    f"Logging stream {stream_index} basic auth requires 'username' field"
+                )
+            if "password" not in auth:
+                self.result.add_error(
+                    f"Logging stream {stream_index} basic auth requires 'password' field"
+                )
+        elif auth_type == "api_key":
+            if "key" not in auth:
+                self.result.add_error(
+                    f"Logging stream {stream_index} api_key auth requires 'key' field"
+                )
+        elif auth_type == "token":
+            if "token" not in auth:
+                self.result.add_error(
+                    f"Logging stream {stream_index} token auth requires 'token' field"
+                )
+        elif auth_type == "custom":
+            if "headers" not in auth:
+                self.result.add_error(
+                    f"Logging stream {stream_index} custom auth requires 'headers' field"
+                )
+            elif not isinstance(auth["headers"], dict):
+                self.result.add_error(
+                    f"Logging stream {stream_index} custom auth headers must be a dictionary"
+                )
 
     def _validate_overlord_config(self, overlord_config: Dict[str, Any]) -> None:
         """Validate overlord configuration according to SCHEMA_GUIDE.md."""
