@@ -2,7 +2,7 @@ import os
 from setuptools import setup, find_packages
 
 # Read version from .version file in the runtime package
-with open(os.path.join(os.path.dirname(__file__), 'runtime/muxi/runtime', '.version'), 'r') as f:
+with open(os.path.join(os.path.dirname(__file__), 'src/muxi/runtime', '.version'), 'r') as f:
     version = f.read().strip()
 
 setup(
