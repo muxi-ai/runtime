@@ -11,27 +11,16 @@ Features:
 - Index persistence and loading
 """
 
-import numpy as np
 import pickle
 import time
+import numpy as np
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
 from loguru import logger
 
-try:
-    from faissx.client import FaissXClient
-    FAISSX_AVAILABLE = True
-except ImportError:
-    FAISSX_AVAILABLE = False
-    logger.warning("FAISSx not available - falling back to local FAISS")
-
-try:
-    import faiss
-    FAISS_AVAILABLE = True
-except ImportError:
-    FAISS_AVAILABLE = False
-    logger.warning("FAISS not available - vector search disabled")
+from faissx.client import FaissXClient
+import faiss
 
 
 @dataclass
@@ -95,13 +84,10 @@ class DocumentSemanticIndex:
 
     def _initialize_index(self) -> None:
         """Initialize the appropriate index type"""
-        if self.mode == "remote" and FAISSX_AVAILABLE:
+        if self.mode == "remote":
             self._initialize_remote_index()
-        elif FAISS_AVAILABLE:
-            self._initialize_local_index()
         else:
-            logger.error("No vector indexing backend available")
-            raise RuntimeError("Neither FAISS nor FAISSx is available")
+            self._initialize_local_index()
 
         # Try to load existing index
         if self.persist_index:
@@ -124,9 +110,6 @@ class DocumentSemanticIndex:
 
     def _initialize_local_index(self) -> None:
         """Initialize local FAISS index"""
-        if not FAISS_AVAILABLE:
-            raise RuntimeError("FAISS is not available for local indexing")
-
         # Create L2 distance index for semantic similarity
         self._faiss_index = faiss.IndexFlatL2(self.vector_dimension)
         logger.info(f"Initialized local FAISS index with dimension {self.vector_dimension}")

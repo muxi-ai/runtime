@@ -58,11 +58,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 # Import markitdown for document conversion
-try:
-    from markitdown import MarkItDown
-    MARKITDOWN_AVAILABLE = True
-except ImportError:
-    MARKITDOWN_AVAILABLE = False
+from markitdown import MarkItDown
 
 
 class KnowledgeSource:
@@ -195,7 +191,7 @@ class FileKnowledge(KnowledgeSource):
         self.recursive = recursive
         self.max_files = max_files
         self.max_file_size = max_file_size
-        self.enable_markitdown = enable_markitdown and MARKITDOWN_AVAILABLE
+        self.enable_markitdown = enable_markitdown
 
         # Set default allowed extensions to include all supported formats
         if allowed_extensions is None:

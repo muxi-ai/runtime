@@ -18,20 +18,9 @@ from loguru import logger
 
 from ...config.document_processing import DocumentProcessingConfig
 
-try:
-    import nltk
-    from nltk.tokenize import sent_tokenize
-    NLTK_AVAILABLE = True
-except ImportError:
-    NLTK_AVAILABLE = False
-    logger.warning("NLTK not available - falling back to basic sentence splitting")
-
-try:
-    import spacy
-    SPACY_AVAILABLE = True
-except ImportError:
-    SPACY_AVAILABLE = False
-    logger.warning("spaCy not available - falling back to basic text processing")
+import nltk
+from nltk.tokenize import sent_tokenize
+import spacy
 
 
 @dataclass
@@ -99,27 +88,25 @@ class DocumentChunkManager:
 
         # Initialize NLP models if available
         self._nlp_model = None
-        if SPACY_AVAILABLE:
-            try:
-                # Use configured spacy model if available
-                model_name = (
-                    self.document_config.get_spacy_model()
-                    if self.document_config
-                    else "en_core_web_sm"
-                )
-                self._nlp_model = spacy.load(model_name)
-            except OSError:
-                logger.warning(
-                    "spaCy model not found - falling back to basic processing"
-                )
+        try:
+            # Use configured spacy model if available
+            model_name = (
+                self.document_config.get_spacy_model()
+                if self.document_config
+                else "en_core_web_sm"
+            )
+            self._nlp_model = spacy.load(model_name)
+        except OSError:
+            logger.warning(
+                "spaCy model not found - falling back to basic processing"
+            )
 
         # Ensure NLTK data is available
-        if NLTK_AVAILABLE:
-            try:
-                nltk.data.find('tokenizers/punkt')
-            except LookupError:
-                logger.info("Downloading NLTK punkt tokenizer...")
-                nltk.download('punkt', quiet=True)
+        try:
+            nltk.data.find('tokenizers/punkt')
+        except LookupError:
+            logger.info("Downloading NLTK punkt tokenizer...")
+            nltk.download('punkt', quiet=True)
 
     async def chunk_document(
         self,
@@ -218,45 +205,33 @@ class DocumentChunkManager:
             return "fixed"
 
     async def _semantic_chunking(self, content: str) -> List[str]:
-        """
-        Semantic boundary-aware chunking using NLP techniques.
-
-        Args:
-            content: Text content to chunk
-
-        Returns:
-            List of semantically coherent text chunks
-        """
+        """Use NLP libraries for intelligent sentence-aware chunking"""
         if self._nlp_model is not None:
             return await self._spacy_semantic_chunking(content)
-        elif NLTK_AVAILABLE:
-            return await self._nltk_semantic_chunking(content)
         else:
-            # Fallback to sentence-based chunking
-            return await self._sentence_based_chunking(content)
+            # Fallback to NLTK sentence tokenization
+            return await self._nltk_semantic_chunking(content)
 
     async def _spacy_semantic_chunking(self, content: str) -> List[str]:
         """Use spaCy for advanced semantic chunking"""
         doc = self._nlp_model(content)
+        sentences = [sent.text for sent in doc.sents]
 
         chunks = []
         current_chunk = []
         current_size = 0
 
-        for sent in doc.sents:
-            sent_text = sent.text.strip()
-            sent_size = len(sent_text)
+        for sentence in sentences:
+            sentence_size = len(sentence)
 
-            # Check if adding this sentence would exceed chunk size
-            if current_size + sent_size > self.default_chunk_size and current_chunk:
+            if current_size + sentence_size > self.default_chunk_size and current_chunk:
                 chunks.append(' '.join(current_chunk))
-                current_chunk = [sent_text]
-                current_size = sent_size
+                current_chunk = [sentence]
+                current_size = sentence_size
             else:
-                current_chunk.append(sent_text)
-                current_size += sent_size
+                current_chunk.append(sentence)
+                current_size += sentence_size
 
-        # Add final chunk
         if current_chunk:
             chunks.append(' '.join(current_chunk))
 
@@ -285,36 +260,6 @@ class DocumentChunkManager:
             chunks.append(' '.join(current_chunk))
 
         return chunks
-
-    async def _sentence_based_chunking(self, content: str) -> List[str]:
-        """Fallback sentence-based chunking without external dependencies"""
-        # Simple sentence splitting using punctuation
-        sentence_endings = re.compile(r'[.!?]+\s+')
-        sentences = sentence_endings.split(content)
-
-        chunks = []
-        current_chunk = []
-        current_size = 0
-
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-
-            sentence_size = len(sentence)
-
-            if current_size + sentence_size > self.default_chunk_size and current_chunk:
-                chunks.append(' '.join(current_chunk))
-                current_chunk = [sentence]
-                current_size = sentence_size
-            else:
-                current_chunk.append(sentence)
-                current_size += sentence_size
-
-        if current_chunk:
-            chunks.append(' '.join(current_chunk))
-
-        return chunks if chunks else [content]
 
     async def _adaptive_chunking(self, content: str) -> List[str]:
         """

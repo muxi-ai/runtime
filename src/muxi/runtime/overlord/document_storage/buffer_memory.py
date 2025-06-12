@@ -12,13 +12,9 @@ Features:
 """
 
 import time
-from typing import Dict, List, Any, Optional, TYPE_CHECKING
+from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from loguru import logger
-
-# Lazy import to avoid circular dependencies
-if TYPE_CHECKING:
-    from src.muxi.runtime.memory.short_term import ShortTermMemory  # noqa: F401
 
 from .chunk_manager import DocumentChunkManager
 from .metadata_store import DocumentMetadata, DocumentMetadataStore
@@ -91,50 +87,27 @@ class DocumentAwareBufferMemory:
             chunk_config: Configuration for document chunking
             metadata_storage_path: Path for document metadata storage
         """
-        # Lazy import to avoid circular dependencies
-        try:
-            from src.muxi.runtime.memory.short_term import ShortTermMemory  # noqa: F811
+        # Initialize the underlying short-term memory
+        from src.muxi.runtime.memory.short_term import ShortTermMemory
 
-            # Initialize the parent class attributes manually
-            self._short_term_memory = ShortTermMemory(
-                max_size=max_size,
-                buffer_multiplier=buffer_multiplier,
-                model=model,
-                vector_dimension=vector_dimension,
-                recency_bias=recency_bias,
-                mode=mode,
-                remote=remote,
-                max_memory_mb=max_memory_mb,
-                fifo_interval_min=fifo_interval_min
-            )
+        self._short_term_memory = ShortTermMemory(
+            max_size=max_size,
+            buffer_multiplier=buffer_multiplier,
+            model=model,
+            dimension=vector_dimension,
+            recency_bias=recency_bias,
+            mode=mode,
+            remote=remote,
+            max_memory_mb=max_memory_mb,
+            fifo_interval_min=fifo_interval_min
+        )
 
-            # Copy all attributes from the short-term memory instance
-            for attr_name in dir(self._short_term_memory):
-                if not attr_name.startswith('_'):
-                    setattr(self, attr_name, getattr(self._short_term_memory, attr_name))
-
-            # Copy important private attributes
-            for attr in ['buffer', 'max_size', 'buffer_multiplier', 'model',
-                         'vector_dimension', 'recency_bias', 'mode', 'remote',
-                         'max_memory_mb', 'fifo_interval_min', 'has_vector_search']:
-                if hasattr(self._short_term_memory, attr):
-                    setattr(self, attr, getattr(self._short_term_memory, attr))
-
-        except ImportError:
-            # Fallback if ShortTermMemory cannot be imported
-            logger.warning("Could not import ShortTermMemory, using minimal fallback")
-            self._short_term_memory = None
-            self.buffer = []
-            self.max_size = max_size
-            self.buffer_multiplier = buffer_multiplier
-            self.model = model
-            self.vector_dimension = vector_dimension
-            self.recency_bias = recency_bias
-            self.mode = mode
-            self.remote = remote
-            self.max_memory_mb = max_memory_mb
-            self.fifo_interval_min = fifo_interval_min
-            self.has_vector_search = False
+        # Copy important private attributes
+        for attr in ['buffer', 'max_size', 'buffer_multiplier', 'model',
+                     'vector_dimension', 'recency_bias', 'mode', 'remote',
+                     'max_memory_mb', 'fifo_interval_min', 'has_vector_search']:
+            if hasattr(self._short_term_memory, attr):
+                setattr(self, attr, getattr(self._short_term_memory, attr))
 
         # Document-specific components
         self.chunk_manager = DocumentChunkManager(chunk_config or {})

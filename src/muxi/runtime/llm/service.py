@@ -46,23 +46,13 @@ import logging
 from onellm import ChatCompletion, Embedding, set_api_key
 
 # Local imports
-try:
-    from .errors import (
-        OneLLMConnectionError,
-        OneLLMAuthenticationError,
-        OneLLMRateLimitError,
-        OneLLMTimeoutError,
-        OneLLMServiceError,
-    )
-except ImportError:
-    # Fallback for testing without package context
-    from errors import (
-        OneLLMConnectionError,
-        OneLLMAuthenticationError,
-        OneLLMRateLimitError,
-        OneLLMTimeoutError,
-        OneLLMServiceError,
-    )
+from .errors import (
+    OneLLMConnectionError,
+    OneLLMAuthenticationError,
+    OneLLMRateLimitError,
+    OneLLMTimeoutError,
+    OneLLMServiceError,
+)
 
 logger = logging.getLogger(__name__)
 

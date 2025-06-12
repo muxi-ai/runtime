@@ -3,11 +3,7 @@ from typing import Optional, List, Dict, Any
 from loguru import logger
 
 from .types import RequestAnalysis
-try:
-    from ...llm import LLM
-except ImportError:
-    # Fallback for development/testing
-    LLM = None
+from ...llm import LLM
 
 
 class RequestAnalyzer:
