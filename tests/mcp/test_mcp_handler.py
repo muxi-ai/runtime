@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import json
 
 # Fix imports to use the new structure
-from muxi.runtime.mcp.handler import (
+from src.muxi.runtime.mcp.handler import (
     MCPHandler,
     MCPServerClient
 )

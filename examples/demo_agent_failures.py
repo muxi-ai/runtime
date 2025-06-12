@@ -8,8 +8,8 @@ and how the discovery service detects and handles these scenarios.
 
 import asyncio
 from unittest.mock import MagicMock
-from runtime.muxi.runtime.a2a.discovery import LocalDiscoveryService, DiscoveryConfig
-from runtime.muxi.runtime.a2a.models import AgentCard, A2ACapability
+from src.muxi.runtime.a2a.discovery import LocalDiscoveryService, DiscoveryConfig
+from src.muxi.runtime.a2a.models import AgentCard, A2ACapability
 
 
 class MockFailingHTTPClient:

@@ -15,8 +15,8 @@ import pytest
 import aiohttp
 from unittest.mock import AsyncMock, MagicMock
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM
 
 
 @pytest.fixture

@@ -20,11 +20,11 @@ import time
 from typing import Dict, Any
 
 # Add the runtime directory to Python path
-sys.path.insert(0, "../runtime")  # noqa: E402
+sys.path.insert(0, "..")  # noqa: E402
 
-from runtime.muxi.runtime.overlord import Overlord  # noqa: E402
-from runtime.muxi.runtime.llm import LLM  # noqa: E402
-from runtime.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.llm import LLM  # noqa: E402
+from src.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
 
 
 class ComprehensiveA2ATest:
@@ -406,7 +406,7 @@ async def main():
     registry_url = "http://localhost:9090"
     print(f"🎯 Testing against registry server: {registry_url}")
     print("🏃 Make sure the mock A2A registry server is running!")
-    print("   Run: python runtime/runtime/muxi/runtime/utils/a2a_registry.py")
+    print("   Run: python runtime/src/muxi/runtime/utils/a2a_registry.py")
     print()
 
     # Run the comprehensive test

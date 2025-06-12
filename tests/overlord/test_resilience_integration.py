@@ -12,7 +12,7 @@ import os
 # Add the runtime directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..'))
 
-from runtime.muxi.runtime.overlord.resilience import (  # noqa: E402, F401
+from src.muxi.runtime.overlord.resilience import (  # noqa: E402, F401
     ResilientWorkflowManager,
     ResilienceConfig,
     ErrorClassifier,
@@ -96,7 +96,7 @@ async def test_recovery_strategy_selection():
     strategist = RecoveryStrategist()
 
     # Test strategy selection for network timeout
-    from runtime.muxi.runtime.overlord.resilience.resilience_types import ErrorContext
+    from src.muxi.runtime.overlord.resilience.resilience_types import ErrorContext
 
     error_context = ErrorContext(
         error=TimeoutError("Network timeout"),
@@ -126,7 +126,7 @@ async def test_circuit_breaker():
     """Test circuit breaker functionality."""
     print("⚡ Testing Circuit Breaker...")
 
-    from runtime.muxi.runtime.overlord.resilience.resilience_types import CircuitBreakerConfig
+    from src.muxi.runtime.overlord.resilience.resilience_types import CircuitBreakerConfig
 
     config = CircuitBreakerConfig(
         failure_threshold=2,

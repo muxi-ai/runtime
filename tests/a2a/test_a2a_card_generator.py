@@ -12,8 +12,8 @@ from pathlib import Path
 # Add the runtime to the path from tests directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.runtime.a2a.card_generator import AgentCardGenerator  # noqa: E402
-from muxi.runtime.a2a.cache_manager import A2ACacheManager  # noqa: E402
+from src.muxi.runtime.a2a.card_generator import AgentCardGenerator  # noqa: E402
+from src.muxi.runtime.a2a.cache_manager import A2ACacheManager  # noqa: E402
 
 
 def test_basic_card_generation():

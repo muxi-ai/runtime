@@ -33,7 +33,7 @@ except ImportError:
 
 # Avoid circular imports
 if TYPE_CHECKING:
-    from muxi.runtime.secrets import SecretsManager
+    from src.muxi.runtime.secrets import SecretsManager
 
 logger = logging.getLogger(__name__)
 

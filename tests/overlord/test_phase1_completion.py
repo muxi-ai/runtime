@@ -11,23 +11,23 @@ import asyncio
 
 from loguru import logger
 
-from runtime.muxi.runtime.overlord.workflow.interactive import (
+from src.muxi.runtime.overlord.workflow.interactive import (
     InteractiveElementGenerator,
     ResponseFormatter,
     MediaIntegrator,
     ButtonStyle
 )
-from runtime.muxi.runtime.overlord.workflow.multimodal_integration import (
+from src.muxi.runtime.overlord.workflow.multimodal_integration import (
     WorkflowMultiModalProcessor,
     TaskInputProcessor,
     TaskOutputProcessor
 )
-from runtime.muxi.runtime.overlord.workflow.multimodal import (
+from src.muxi.runtime.overlord.workflow.multimodal import (
     MultiModalFusionEngine,
     MultiModalContent,
     ModalityType
 )
-from runtime.muxi.runtime.overlord.workflow.types import (
+from src.muxi.runtime.overlord.workflow.types import (
     Workflow,
     SubTask,
     TaskStatus

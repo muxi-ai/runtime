@@ -17,7 +17,7 @@ Integration:
 - Context preservation for long-term document conversations
 
 Usage:
-    from muxi.runtime.overlord.document_workflow import (
+    from src.muxi.runtime.overlord.document_workflow import (
         DocumentWorkflowIntegrator,
         DocumentCrossReferenceManager,
         DocumentContextPreserver

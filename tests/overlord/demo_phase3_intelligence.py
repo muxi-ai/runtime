@@ -10,12 +10,12 @@ import time
 from unittest.mock import Mock
 
 # Import Phase 3 components
-from runtime.muxi.runtime.overlord.intelligence import (
+from src.muxi.runtime.overlord.intelligence import (
     UserPreferenceEngine,
     AdaptiveResponseGenerator,
 )
 
-from runtime.muxi.runtime.overlord.intelligence.types import (
+from src.muxi.runtime.overlord.intelligence.types import (
     Message,
     FeedbackEvent,
     ConversationContext,
@@ -341,7 +341,7 @@ class Phase3Demo:
             print(f"   📝 {profile_data['description']}")
 
             # Create preferences object
-            from runtime.muxi.runtime.overlord.intelligence.types import UserPreferences, ExplicitPreference, ConfidenceScore
+            from src.muxi.runtime.overlord.intelligence.types import UserPreferences, ExplicitPreference, ConfidenceScore
 
             explicit_prefs = []
             for pref_type_str, value in profile_data.items():

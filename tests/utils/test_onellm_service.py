@@ -33,7 +33,7 @@ sys.modules['onellm'] = type('MockModule', (), {
     'config': type('MockConfig', (), {'set_api_key': lambda *args: None})()
 })()
 
-from muxi.runtime.llm.service import OneLLMService  # noqa: E402
+from src.muxi.runtime.llm.service import OneLLMService  # noqa: E402
 
 
 async def test_singleton():

@@ -8,8 +8,8 @@ tools and reasoning scenarios.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from runtime.muxi.runtime.clarification.analyzer import InformationAnalyzer
-from runtime.muxi.runtime.clarification.types import (
+from src.muxi.runtime.clarification.analyzer import InformationAnalyzer
+from src.muxi.runtime.clarification.types import (
     InformationAnalysis,
     ToolInformationAnalysis,
     ReasoningInformationAnalysis,

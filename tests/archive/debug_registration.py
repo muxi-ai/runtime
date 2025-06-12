@@ -4,8 +4,8 @@ Debug script to isolate the registration issue
 """
 import asyncio
 import requests
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM
 
 
 async def test_registration():

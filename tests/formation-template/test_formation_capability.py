@@ -5,9 +5,9 @@ import sys
 import asyncio
 from pathlib import Path
 
-sys.path.insert(0, '../../runtime/muxi')  # noqa: E402
+sys.path.insert(0, '../..')  # noqa: E402
 
-from runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
 
 
 async def test_formation_capabilities():

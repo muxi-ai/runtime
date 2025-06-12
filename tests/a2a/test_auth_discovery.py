@@ -11,7 +11,7 @@ from pathlib import Path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+from src.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
 
 
 async def test_discovery():

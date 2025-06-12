@@ -6,10 +6,10 @@ import asyncio
 from pathlib import Path
 
 # Add runtime to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "runtime" / "muxi" / "runtime"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from overlord import Overlord  # noqa: E402
-from secrets import SecretsManager  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.secrets import SecretsManager  # noqa: E402
 
 
 async def test_capability_resolution():

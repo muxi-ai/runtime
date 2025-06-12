@@ -14,7 +14,7 @@ sys.path.insert(0, str(runtime_path))
 
 try:
     # Import only what we need to test A2A without document processing
-    from muxi.runtime.a2a.registry_client import A2ARegistryClient
+    from src.muxi.runtime.a2a.registry_client import A2ARegistryClient
     print("✅ A2A imports successful")
 except ImportError as e:
     print(f"❌ A2A import failed: {e}")

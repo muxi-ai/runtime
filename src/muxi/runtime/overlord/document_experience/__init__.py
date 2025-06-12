@@ -17,7 +17,7 @@ Integration:
 - User experience optimization for document workflows
 
 Usage:
-    from muxi.runtime.overlord.document_experience import (
+    from src.muxi.runtime.overlord.document_experience import (
         DocumentAcknowledgmentGenerator,
         DocumentSummarizer,
         DocumentErrorHandler

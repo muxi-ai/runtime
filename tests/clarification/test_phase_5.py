@@ -4,8 +4,8 @@ Simple test script to verify Phase 5 clarification configuration
 """
 
 import asyncio
-from runtime.muxi.runtime.overlord.overlord import Overlord
-from runtime.muxi.runtime.clarification.types import QuestionStyle
+from src.muxi.runtime.overlord.overlord import Overlord
+from src.muxi.runtime.clarification.types import QuestionStyle
 
 
 async def test_phase_5():

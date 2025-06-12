@@ -11,9 +11,9 @@ import os
 
 from dotenv import load_dotenv
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM, set_llm_api_key
-from muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM, set_llm_api_key
+from src.muxi.runtime.memory.short_term import ShortTermMemory
 
 # Load environment variables
 load_dotenv()

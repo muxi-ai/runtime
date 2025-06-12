@@ -44,7 +44,7 @@ async def validate_implementation_structure():
     print("\n🔍 Validating Document Processing Implementation Structure")
     print("=" * 70)
 
-    base_path = Path(__file__).parent.parent.parent / "runtime" / "muxi" / "runtime" / "overlord"
+    base_path = Path(__file__).parent.parent.parent / "src" / "muxi" / "runtime" / "overlord"
 
     # Define expected components with line count claims from report
     components = {
@@ -118,7 +118,7 @@ async def test_document_storage_integration():
 
     try:
         # Import storage components
-        from runtime.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.overlord.document_storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
             DocumentSemanticIndex,
@@ -265,7 +265,7 @@ async def test_document_experience_integration():
 
     try:
         # Import experience components
-        from runtime.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.overlord.document_experience import (
             DocumentAcknowledgmentGenerator,
             DocumentSummarizer,
             DocumentErrorHandler
@@ -421,7 +421,7 @@ async def test_document_workflow_integration():
 
     try:
         # Import workflow components
-        from runtime.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.overlord.document_workflow import (
             DocumentWorkflowIntegrator,
             DocumentCrossReferenceManager,
             DocumentContextPreserver
@@ -641,13 +641,13 @@ async def test_end_to_end_integration():
 
     try:
         # Import all components for full integration test
-        from runtime.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.overlord.document_storage import (
             DocumentChunkManager, DocumentMetadataStore, DocumentSemanticIndex, DocumentReferenceSystem
         )
-        from runtime.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.overlord.document_experience import (
             DocumentAcknowledgmentGenerator, DocumentSummarizer, DocumentErrorHandler
         )
-        from runtime.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.overlord.document_workflow import (
             DocumentWorkflowIntegrator, DocumentCrossReferenceManager, DocumentContextPreserver
         )
 

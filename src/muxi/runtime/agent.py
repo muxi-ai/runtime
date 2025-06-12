@@ -1228,7 +1228,7 @@ class Agent:
             }
 
             # 3. Apply authentication based on discovered agent requirements
-            from muxi.runtime.a2a.auth import get_auth_manager, AuthType
+            from src.muxi.runtime.a2a.auth import get_auth_manager, AuthType
 
             auth_manager = get_auth_manager()
 

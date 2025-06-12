@@ -7,8 +7,8 @@ parameter collection clarification system.
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from runtime.muxi.runtime.overlord.overlord import Overlord
-from runtime.muxi.runtime.clarification.types import QuestionStyle
+from src.muxi.runtime.overlord.overlord import Overlord
+from src.muxi.runtime.clarification.types import QuestionStyle
 
 
 class TestClarificationConfiguration:
@@ -75,7 +75,7 @@ class TestClarificationConfiguration:
 
         overlord = Overlord(formation_config=formation_config)
 
-        with patch('runtime.muxi.runtime.overlord.overlord.logger') as mock_logger:
+        with patch('src.muxi.runtime.overlord.overlord.logger') as mock_logger:
             await overlord._initialize_clarification_config()
 
             # Should fall back to conversational and log warning
@@ -95,7 +95,7 @@ class TestClarificationConfiguration:
 
         overlord = Overlord(formation_config=formation_config)
 
-        with patch('runtime.muxi.runtime.overlord.overlord.logger') as mock_logger:
+        with patch('src.muxi.runtime.overlord.overlord.logger') as mock_logger:
             await overlord._initialize_clarification_config()
 
             # Should fall back to default and log warning
@@ -115,7 +115,7 @@ class TestClarificationConfiguration:
 
         overlord = Overlord(formation_config=formation_config)
 
-        with patch('runtime.muxi.runtime.overlord.overlord.logger') as mock_logger:
+        with patch('src.muxi.runtime.overlord.overlord.logger') as mock_logger:
             await overlord._initialize_clarification_config()
 
             # Should accept the value but log warning

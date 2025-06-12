@@ -15,8 +15,8 @@ import socket
 import yaml
 
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM
 
 
 def load_formation_config(file_path: str):

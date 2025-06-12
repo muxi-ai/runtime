@@ -12,8 +12,8 @@ from pathlib import Path
 # Add the runtime to the path for testing from tests directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from muxi.runtime.overlord import Overlord  # noqa: E402
-from muxi.runtime.llm import LLM  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.llm import LLM  # noqa: E402
 
 
 def test_simple_a2a_discovery():

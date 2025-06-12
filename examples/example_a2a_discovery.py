@@ -13,8 +13,8 @@ from pathlib import Path
 # Add the runtime to the path for testing from examples directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from runtime.muxi.runtime.overlord import Overlord  # noqa: E402
-from runtime.muxi.runtime.llm import LLM  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.llm import LLM  # noqa: E402
 
 
 def example_basic_discovery():

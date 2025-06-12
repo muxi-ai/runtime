@@ -24,11 +24,11 @@ print(f"Adding {root_dir} to sys.path")
 sys.path.insert(0, root_dir)
 
 # Direct imports of the key modules
-sys.path.insert(0, os.path.join(root_dir, "packages/core/src"))
+sys.path.insert(0, root_dir)
 
 try:
     # Try to import directly from the package
-    from muxi.runtime.mcp.handler import (
+    from src.muxi.runtime.mcp.handler import (
         MCPTransportFactory,
         HTTPSSETransport,
         CommandLineTransport,
@@ -47,7 +47,7 @@ except ImportError as e:
         import importlib.util
         spec = importlib.util.spec_from_file_location(
             "mcp_handler",
-            os.path.join(root_dir, "packages/core/muxi/core/mcp/handler.py")
+            os.path.join(root_dir, "src/muxi/runtime/mcp/handler.py")
         )
         mcp_handler = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mcp_handler)

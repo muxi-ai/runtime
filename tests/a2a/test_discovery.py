@@ -2,8 +2,8 @@ import sys
 import asyncio
 sys.path.append('.')
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM
 
 async def test():
     config = {

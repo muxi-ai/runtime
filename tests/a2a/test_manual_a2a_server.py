@@ -10,8 +10,8 @@ import sys
 import aiohttp
 from unittest.mock import AsyncMock, MagicMock
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM
 
 
 async def test_a2a_formation_server():

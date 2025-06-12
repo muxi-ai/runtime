@@ -28,10 +28,10 @@ import yaml
 from typing import Dict, Any, List
 
 # Add the runtime directory to Python path
-sys.path.insert(0, '../runtime')
+sys.path.insert(0, '..')
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.llm import LLM  # noqa: E402
 
 
 class Task112CompletionTest:
@@ -127,7 +127,7 @@ class Task112CompletionTest:
         """Start the A2A registry server"""
         try:
             # Start the registry server as a subprocess
-            registry_script = "./runtime/muxi/runtime/utils/a2a_registry.py"
+            registry_script = "./src/muxi/runtime/utils/a2a_registry.py"
             self.registry_process = subprocess.Popen([
                 sys.executable, registry_script
             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -434,7 +434,7 @@ async def start_a2a_registry() -> bool:
     """Start the A2A registry server"""
     try:
         # Start the registry server as a subprocess
-        registry_script = "./runtime/muxi/runtime/utils/a2a_registry.py"
+        registry_script = "./src/muxi/runtime/utils/a2a_registry.py"
         _ = subprocess.Popen([
             sys.executable, registry_script
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)

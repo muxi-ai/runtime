@@ -14,8 +14,8 @@ import yaml
 from pathlib import Path
 
 # Import the classes to test
-from muxi.runtime.config.validation import FormationValidator
-from muxi.runtime.overlord import Overlord
+from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.runtime.overlord import Overlord
 
 
 class TestLoggingConfigValidation:

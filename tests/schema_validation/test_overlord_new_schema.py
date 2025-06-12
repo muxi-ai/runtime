@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.config.validation import FormationValidator
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.config.validation import FormationValidator
 
 
 class TestOverlordNewSchema:
@@ -162,7 +162,7 @@ class TestOverlordNewSchema:
         assert len(result.errors) == 0
 
     @pytest.mark.asyncio
-    @patch('runtime.muxi.runtime.overlord.Overlord.create_model')
+    @patch('src.muxi.runtime.overlord.Overlord.create_model')
     async def test_overlord_initialization_new_schema(self, mock_create_model,
                                                      new_schema_formation):
         """Test overlord initialization with new schema."""
@@ -184,7 +184,7 @@ class TestOverlordNewSchema:
         assert overlord.routing_system_message == 'You are the MUXI Overlord routing messages.'
 
     @pytest.mark.asyncio
-    @patch('runtime.muxi.runtime.overlord.Overlord.create_model')
+    @patch('src.muxi.runtime.overlord.Overlord.create_model')
     async def test_overlord_initialization_legacy_schema(self, mock_create_model,
                                                         legacy_overlord_formation):
         """Test overlord initialization with legacy schema."""

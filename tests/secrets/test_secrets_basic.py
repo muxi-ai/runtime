@@ -8,7 +8,7 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from muxi.runtime.secrets import SecretsManager
+from src.muxi.runtime.secrets import SecretsManager
 
 
 async def test_basic_functionality():

@@ -23,13 +23,13 @@ except ImportError as e:
     print(f"Failed to import MCP: {e}")
 
 try:
-    from muxi.runtime.mcp import MCPMessage  # noqa: F401
+    from src.muxi.runtime.mcp import MCPMessage  # noqa: F401
     print("Successfully imported MCPMessage")
 except ImportError as e:
     print(f"Failed to import MCPMessage: {e}")
 
 try:
-    from muxi.runtime.mcp.handler import MCPHandler  # noqa: F401
+    from src.muxi.runtime.mcp.handler import MCPHandler  # noqa: F401
     print("Successfully imported MCPHandler")
 except ImportError as e:
     print(f"Failed to import MCPHandler: {e}")

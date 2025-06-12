@@ -24,7 +24,7 @@ sys.modules['spacy'] = type('MockSpacy', (), {
     '__version__': '3.7.0'
 })()
 
-from muxi.runtime.overlord.document_storage import DocumentChunkManager
+from src.muxi.runtime.overlord.document_storage import DocumentChunkManager
 
 
 class SimpleDocumentBenchmark:

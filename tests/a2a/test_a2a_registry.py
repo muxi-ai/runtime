@@ -8,8 +8,8 @@ Demonstrates external registry communication and service discovery.
 from pathlib import Path
 import pytest
 
-from muxi.runtime.config.formation_loader import FormationLoader  # noqa: F401
-from muxi.runtime.secrets import SecretsManager  # noqa: F401
+from src.muxi.runtime.config.formation_loader import FormationLoader  # noqa: F401
+from src.muxi.runtime.secrets import SecretsManager  # noqa: F401
 
 
 class TestA2ARegistry:

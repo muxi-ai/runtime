@@ -11,11 +11,11 @@ import os
 from unittest.mock import patch
 
 try:
-    from muxi.runtime.overlord import Overlord
+    from src.muxi.runtime.overlord import Overlord
 except ImportError:
     # Add the runtime directory to the Python path for testing
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'runtime'))
-    from muxi.runtime.overlord import Overlord
+    from src.muxi.runtime.overlord import Overlord
 
 
 class MockLLM:

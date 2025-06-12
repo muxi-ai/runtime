@@ -24,7 +24,7 @@ Phase 4B: Planning Workflow Detection & Continuity
 - PlanningContinuationManager: Manages planning workflow sessions
 
 Usage:
-    from runtime.muxi.runtime.clarification import (
+    from src.muxi.runtime.clarification import (
         InformationAnalyzer,
         ClarificationManager,
         ClarificationQuestionGenerator

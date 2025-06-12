@@ -10,8 +10,8 @@ import pytest
 import time
 from unittest.mock import Mock, AsyncMock
 
-from muxi.runtime.overlord.async_patterns.time_estimator import TimeEstimator
-from muxi.runtime.overlord.workflow.request_analyzer import RequestAnalysis
+from src.muxi.runtime.overlord.async_patterns.time_estimator import TimeEstimator
+from src.muxi.runtime.overlord.workflow.request_analyzer import RequestAnalysis
 
 
 class TestTimeEstimator:

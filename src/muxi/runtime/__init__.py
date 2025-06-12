@@ -8,7 +8,7 @@
 # Author:       Muxi Framework Team
 #
 # This file initializes the Muxi Core framework package and defines what's
-# available when importing from muxi.runtime. It exports:
+# available when importing from src.muxi.runtime. It exports:
 #
 # 1. High-Level Interfaces
 #    - Muxi facade for declarative framework usage

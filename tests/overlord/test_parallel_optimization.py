@@ -10,14 +10,14 @@ import pytest
 from typing import Dict, List, Any
 
 # Import the parallel optimization components
-from runtime.muxi.runtime.overlord.parallel import (
+from src.muxi.runtime.overlord.parallel import (
     ParallelWorkflowOptimizer,
     DependencyAnalyzer,
     ResourceManager,
     BottleneckDetector,
     ParallelExecutor,
 )
-from runtime.muxi.runtime.overlord.parallel.types import (
+from src.muxi.runtime.overlord.parallel.types import (
     AgentCapability,
     ExecutionPlan,
     OptimizedWorkflow,
@@ -185,7 +185,7 @@ class TestParallelOptimization:
         bottleneck_detector = BottleneckDetector(sensitivity_threshold=0.3)
 
         # Create a mock execution plan
-        from runtime.muxi.runtime.overlord.parallel.types import ExecutionPlan, ResourceAllocation
+        from src.muxi.runtime.overlord.parallel.types import ExecutionPlan, ResourceAllocation
 
         resource_allocation = ResourceAllocation(allocation_id="test_alloc")
         resource_allocation.parallel_efficiency = 0.4  # Low efficiency to trigger bottleneck

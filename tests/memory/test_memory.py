@@ -7,8 +7,8 @@ This module contains tests for the memory implementations in the muxi framework.
 import unittest
 import numpy as np
 
-from muxi.runtime.memory.short_term import ShortTermMemory
-from muxi.runtime.llm import LLM
+from src.muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.runtime.llm import LLM
 
 
 class TestShortTermMemory(unittest.IsolatedAsyncioTestCase):

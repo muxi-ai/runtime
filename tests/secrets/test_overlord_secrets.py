@@ -6,8 +6,8 @@ import tempfile
 import shutil
 from pathlib import Path
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.secrets import SecretsManager  # noqa: F401
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.secrets import SecretsManager  # noqa: F401
 
 
 async def test_overlord_secrets_integration():

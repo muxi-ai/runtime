@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Import errors from the proper module path
-from muxi.runtime.llm.errors import (  # noqa: E402
+from src.muxi.runtime.llm.errors import (  # noqa: E402
     OneLLMConnectionError,
     OneLLMAuthenticationError,
     OneLLMRateLimitError,
@@ -46,7 +46,7 @@ sys.modules['onellm'] = type('MockModule', (), {
 })()
 
 # Import the service module and patch it
-from muxi.runtime.llm import service  # noqa: E402
+from src.muxi.runtime.llm import service  # noqa: E402
 
 service.OneLLMConnectionError = OneLLMConnectionError
 service.OneLLMAuthenticationError = OneLLMAuthenticationError
@@ -54,7 +54,7 @@ service.OneLLMRateLimitError = OneLLMRateLimitError
 service.OneLLMTimeoutError = OneLLMTimeoutError
 service.OneLLMServiceError = OneLLMServiceError
 
-from muxi.runtime.llm.service import OneLLMService  # noqa: E402
+from src.muxi.runtime.llm.service import OneLLMService  # noqa: E402
 
 
 async def test():

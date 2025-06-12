@@ -647,7 +647,7 @@ class Muxi:
         Start the API server.
 
         This method starts the MUXI API server with the specified host and port.
-        It delegates to the run_server function from muxi.runtime.run.
+        It delegates to the run_server function from src.muxi.runtime.run.
 
         Args:
             host: Host address to bind to. Default "0.0.0.0" binds to all interfaces.

@@ -6,8 +6,8 @@ import tempfile
 import json
 from pathlib import Path
 
-from muxi.runtime.config.loader import ConfigLoader
-from muxi.runtime.secrets import SecretsManager
+from src.muxi.runtime.config.loader import ConfigLoader
+from src.muxi.runtime.secrets import SecretsManager
 
 
 async def test_config_loader_secrets():

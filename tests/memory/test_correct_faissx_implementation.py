@@ -23,9 +23,9 @@ import numpy as np
 # Add the runtime path before importing muxi modules
 sys.path.insert(0, "runtime")
 
-from muxi.runtime.knowledge.base import FileKnowledge  # noqa: E402
-from muxi.runtime.knowledge.handler import KnowledgeHandler  # noqa: E402
-from muxi.runtime.memory.short_term import ShortTermMemory  # noqa: E402
+from src.muxi.runtime.knowledge.base import FileKnowledge  # noqa: E402
+from src.muxi.runtime.knowledge.handler import KnowledgeHandler  # noqa: E402
+from src.muxi.runtime.memory.short_term import ShortTermMemory  # noqa: E402
 
 
 # Mock embedding function for testing

@@ -18,7 +18,7 @@ from loguru import logger
 
 # Lazy import to avoid circular dependencies
 if TYPE_CHECKING:
-    from muxi.runtime.memory.short_term import ShortTermMemory  # noqa: F401
+    from src.muxi.runtime.memory.short_term import ShortTermMemory  # noqa: F401
 
 from .chunk_manager import DocumentChunkManager
 from .metadata_store import DocumentMetadata, DocumentMetadataStore
@@ -93,7 +93,7 @@ class DocumentAwareBufferMemory:
         """
         # Lazy import to avoid circular dependencies
         try:
-            from muxi.runtime.memory.short_term import ShortTermMemory  # noqa: F811
+            from src.muxi.runtime.memory.short_term import ShortTermMemory  # noqa: F811
 
             # Initialize the parent class attributes manually
             self._short_term_memory = ShortTermMemory(

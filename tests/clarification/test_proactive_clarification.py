@@ -12,7 +12,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from typing import List
 
-from runtime.muxi.runtime.clarification import (
+from src.muxi.runtime.clarification import (
     ProactiveClarificationIntentDetector,
     ClarificationModeManager,
     ProactiveRequest,
@@ -336,7 +336,7 @@ class TestProactiveIntegration:
         mock_agent._mode_manager.enter_proactive_mode = AsyncMock(return_value=mock_session)
 
         # Import and patch the actual method
-        from runtime.muxi.runtime.agent import Agent
+        from src.muxi.runtime.agent import Agent
 
         # Test that proactive detection would be triggered
         message = "Ask me questions until you understand my investment goals"

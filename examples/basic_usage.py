@@ -9,8 +9,8 @@ import os
 
 from dotenv import load_dotenv
 
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.llm import LLM, set_llm_api_key
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.llm import LLM, set_llm_api_key
 
 
 # Load environment variables

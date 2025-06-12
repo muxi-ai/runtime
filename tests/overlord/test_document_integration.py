@@ -30,10 +30,10 @@ async def test_storage_experience_integration():
 
     try:
         # Import components from both layers
-        from runtime.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.overlord.document_storage import (
             DocumentChunkManager, DocumentMetadataStore
         )
-        from runtime.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.overlord.document_experience import (
             DocumentSummarizer, DocumentAcknowledgmentGenerator
         )
 
@@ -105,10 +105,10 @@ async def test_experience_workflow_integration():
 
     try:
         # Import components from both layers
-        from runtime.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.overlord.document_experience import (
             DocumentSummarizer, DocumentErrorHandler
         )
-        from runtime.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.overlord.document_workflow import (
             DocumentWorkflowIntegrator, DocumentContextPreserver
         )
 
@@ -177,10 +177,10 @@ async def test_storage_workflow_integration():
 
     try:
         # Import components from both layers
-        from runtime.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.overlord.document_storage import (
             DocumentChunkManager, DocumentReferenceSystem
         )
-        from runtime.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.overlord.document_workflow import (
             DocumentCrossReferenceManager, DocumentWorkflowIntegrator
         )
 
@@ -250,13 +250,13 @@ async def test_three_layer_integration():
 
     try:
         # Import components from all three layers
-        from runtime.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.overlord.document_storage import (
             DocumentChunkManager, DocumentMetadataStore
         )
-        from runtime.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.overlord.document_experience import (
             DocumentSummarizer, DocumentAcknowledgmentGenerator
         )
-        from runtime.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.overlord.document_workflow import (
             DocumentWorkflowIntegrator, DocumentContextPreserver
         )
 

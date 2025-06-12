@@ -20,8 +20,8 @@ import numpy as np
 import yaml
 
 # Use direct imports instead of from muxi import muxi
-from muxi.runtime.memory.short_term import ShortTermMemory
-from muxi.runtime.overlord import Overlord
+from src.muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.runtime.overlord import Overlord
 # Mock the muxi facade for testing
 # We'll patch its functionality directly in the test methods
 

@@ -11,7 +11,7 @@ registries for testing MUXI framework integration. This server:
 - Enables testing of external registry integration
 
 Usage:
-    python runtime/runtime/muxi/runtime/utils/a2a_registry.py
+    python runtime/src/muxi/runtime/utils/a2a_registry.py
 
 The server will start on http://localhost:9090
 

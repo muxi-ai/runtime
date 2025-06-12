@@ -10,10 +10,10 @@ import os
 import asyncio
 from dotenv import load_dotenv
 
-from muxi.runtime.llm import LLM
-from muxi.runtime.overlord import Overlord
-from muxi.runtime.memory.short_term import ShortTermMemory
-from muxi.runtime.mcp import MCPMessage
+from src.muxi.runtime.llm import LLM
+from src.muxi.runtime.overlord import Overlord
+from src.muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.runtime.mcp import MCPMessage
 
 
 # Load environment variables from .env file

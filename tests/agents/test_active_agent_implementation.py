@@ -14,12 +14,12 @@ import tempfile
 from pathlib import Path
 
 # Add the runtime to Python path
-sys.path.insert(0, str(Path(__file__).parent / "runtime/runtime"))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import after path modification
 try:
-    from muxi.runtime.config.formation_loader import FormationLoader
-    from muxi.runtime.overlord import Overlord
+    from src.muxi.runtime.config.formation_loader import FormationLoader
+    from src.muxi.runtime.overlord import Overlord
 except ImportError:
     print("❌ Could not import runtime modules. Check working directory.")
     sys.exit(1)

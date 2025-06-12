@@ -6,13 +6,13 @@ Tests the complete workflow from detection through synthesis to continuation.
 
 from unittest.mock import AsyncMock, MagicMock
 
-from runtime.muxi.runtime.clarification.planning_workflow_detector import (
+from src.muxi.runtime.clarification.planning_workflow_detector import (
     PlanningWorkflowDetector
 )
-from runtime.muxi.runtime.clarification.planning_continuation_manager import (
+from src.muxi.runtime.clarification.planning_continuation_manager import (
     PlanningContinuationManager
 )
-from runtime.muxi.runtime.clarification.types import (
+from src.muxi.runtime.clarification.types import (
     PlanningWorkflowType,
     WorkflowState,
     ToolExecutionResult,
@@ -60,7 +60,7 @@ class TestPhase4BIntegration:
     def test_session_creation_and_management(self):
         """Test planning session lifecycle"""
         # Create mock workflow request
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
         workflow_request = PlanningWorkflowRequest(
             workflow_type=PlanningWorkflowType.TRAVEL_PLANNING,
             planning_goal="book a trip to NYC",
@@ -83,7 +83,7 @@ class TestPhase4BIntegration:
 
     def test_tool_result_integration(self):
         """Test adding tool results and state transitions"""
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
 
         # Create session
         workflow_request = PlanningWorkflowRequest(
@@ -120,7 +120,7 @@ class TestPhase4BIntegration:
 
     def test_synthesis_update_and_response_generation(self):
         """Test synthesis update and response generation"""
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
 
         # Create session with tool results
         workflow_request = PlanningWorkflowRequest(
@@ -187,7 +187,7 @@ class TestPhase4BIntegration:
 
     def test_session_state_transitions(self):
         """Test complete session state transitions"""
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
 
         workflow_request = PlanningWorkflowRequest(
             workflow_type=PlanningWorkflowType.GENERAL_PLANNING,
@@ -246,7 +246,7 @@ class TestPhase4BIntegration:
 
     def test_session_summary(self):
         """Test session summary generation"""
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
 
         workflow_request = PlanningWorkflowRequest(
             workflow_type=PlanningWorkflowType.PRODUCT_SELECTION,
@@ -276,7 +276,7 @@ class TestPhase4BIntegration:
 
     def test_session_cleanup(self):
         """Test session cleanup functionality"""
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
 
         workflow_request = PlanningWorkflowRequest(
             workflow_type=PlanningWorkflowType.GENERAL_PLANNING,
@@ -326,7 +326,7 @@ class TestPhase4BIntegration:
 
     def test_multiple_concurrent_sessions(self):
         """Test handling multiple concurrent planning sessions"""
-        from runtime.muxi.runtime.clarification.types import PlanningWorkflowRequest
+        from src.muxi.runtime.clarification.types import PlanningWorkflowRequest
 
         # Create multiple sessions
         sessions = []

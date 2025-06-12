@@ -8,10 +8,10 @@ import sys
 import yaml
 
 # Add the runtime directory to Python path
-sys.path.insert(0, '../runtime')
+sys.path.insert(0, '..')
 
-from muxi.runtime.overlord import Overlord  # noqa: E402
-from muxi.runtime.llm import LLM  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.llm import LLM  # noqa: E402
 
 
 async def debug_registration_deregistration():

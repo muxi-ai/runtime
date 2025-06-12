@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 6 Final Comprehensive Validation Test"""
 
-from muxi.runtime.config.validation import FormationValidator
+from src.muxi.runtime.config.validation import FormationValidator
 import tempfile
 import yaml
 

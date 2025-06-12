@@ -13,9 +13,9 @@ from pathlib import Path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from muxi.runtime.overlord import Overlord  # noqa: E402
-from muxi.runtime.agent import Agent  # noqa: E402
-from muxi.runtime.a2a.auth import get_auth_manager, AuthType  # noqa: E402
+from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.runtime.agent import Agent  # noqa: E402
+from src.muxi.runtime.a2a.auth import get_auth_manager, AuthType  # noqa: E402
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)

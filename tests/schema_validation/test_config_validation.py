@@ -5,7 +5,7 @@ Test script to validate updated configuration files.
 import sys
 sys.path.append('.')
 
-from muxi.runtime.config.validation import FormationValidator
+from src.muxi.runtime.config.validation import FormationValidator
 
 
 def test_config_validations():

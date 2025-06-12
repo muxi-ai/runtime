@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 # Add the registry module to the path
-sys.path.insert(0, '../runtime/muxi/runtime/utils')
+sys.path.insert(0, '../src/muxi/runtime/utils')
 
 # Import the storage classes
 from a2a_registry import RegistryStorage, AgentCard  # noqa: E402
