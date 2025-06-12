@@ -18,9 +18,9 @@ from src.muxi.runtime.overlord.async_patterns.request_tracker import (  # noqa: 
     RequestStatus
 )
 from src.muxi.runtime.overlord.async_patterns.webhook_manager import (  # noqa: E402
-    WebhookManager,
-    WebhookPayload
+    WebhookManager
 )
+from src.muxi.runtime.utils.response_converter import create_unified_response  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -59,15 +59,20 @@ def sample_request_state():
 
 @pytest.fixture
 def sample_webhook_payload():
-    """Create a sample WebhookPayload for testing."""
-    return WebhookPayload(
+    """Create a sample unified response payload for testing."""
+    return create_unified_response(
         request_id="test_request_123",
         status="completed",
-        result="Test processing completed successfully",
-        processing_mode="async",
+        formation_id="test_formation",
+        user_id="test_user_456",
         processing_time=42.5,
-        timestamp=1640995200.0,
-        user_id="test_user_456"
+        processing_mode="async",
+        webhook_url="https://example.com/webhook",
+        error=None,
+        response=[{
+            "type": "text",
+            "content": "Test processing completed successfully"
+        }]
     )
 
 
