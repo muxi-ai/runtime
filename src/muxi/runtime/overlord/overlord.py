@@ -77,8 +77,6 @@
 
 import asyncio
 import hashlib
-import secrets
-import string
 import time
 from typing import Any, Dict, List, Optional, Union
 import datetime
@@ -162,6 +160,13 @@ from .async_patterns import (
     RequestTracker,
     WebhookManager,
     TimeEstimator,
+)
+
+# Unified Response Components (Phase 3)
+from ..utils.response_converter import (
+    create_unified_response,
+    extract_user_content,
+    create_error_response
 )
 
 
@@ -277,7 +282,7 @@ class Overlord:
         self.agents: Dict[str, Agent] = {}
         self.agent_descriptions: Dict[str, str] = {}  # Legacy compatibility
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
-        self.default_agent_id: Optional[str] = None
+
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
 
         # ENHANCE existing initialization instead of adding separate service
@@ -285,6 +290,9 @@ class Overlord:
 
         # Store formation configuration for A2A and other features
         self.formation_config = formation_config or {}
+
+        # Set formation_id for unified response format
+        self.formation_id = self.formation_config.get("formation_id", "default-formation")
 
         # Initialize SecretsManager if formation_path is provided
         self.secrets_manager: Optional[SecretsManager] = None
@@ -1685,7 +1693,6 @@ class Overlord:
         model: LLM,
         system_message: Optional[str] = None,
         description: Optional[str] = None,
-        set_as_default: bool = False,
         request_timeout: Optional[int] = None,
         a2a_internal: bool = True,
         a2a_external: bool = True,
@@ -1707,8 +1714,7 @@ class Overlord:
             description: Optional description of the agent's capabilities and purpose.
                 Used for intelligent message routing to select the appropriate agent for
                 specific queries. If not provided, falls back to system_message.
-            set_as_default: Whether to set this agent as the default for unrouted messages.
-                If True, or if this is the first agent being created, it will become the default.
+
             request_timeout: Optional timeout in seconds for MCP requests.
                 If not provided, defaults to the overlord's timeout setting.
             a2a_internal: Whether the agent participates in internal A2A communication.
@@ -1746,10 +1752,6 @@ class Overlord:
             "description": description or system_message or f"Agent {agent_id}",
         }
 
-        # Set as default if requested or if it's the first agent
-        if set_as_default or len(self.agents) == 1:
-            self.default_agent_id = agent_id
-
         logger.info(f"Created agent with ID '{agent_id}'")
 
         # Track agents that need external registration (but don't register yet)
@@ -1772,7 +1774,6 @@ class Overlord:
     def add_agent(
         self,
         agent: Agent,
-        set_as_default: bool = False,
     ) -> Agent:
         """
         Add an existing agent to the overlord.
@@ -1784,8 +1785,7 @@ class Overlord:
         Args:
             agent: The agent instance to add. Must have a unique agent_id not already
                 registered with this overlord.
-            set_as_default: Whether to set this agent as the default for unrouted messages.
-                If True, or if this is the first agent being added, it will become the default.
+
 
         Returns:
             The added agent instance (same as input).
@@ -1810,9 +1810,7 @@ class Overlord:
             "description": agent.system_message or "",
         }
 
-        # Set as default if requested or if it's the first agent
-        if set_as_default or len(self.agents) == 1:
-            self.default_agent_id = agent.agent_id
+
 
         logger.info(f"Created agent with ID '{agent.agent_id}'")
 
@@ -2387,8 +2385,7 @@ class Overlord:
 
         This method analyzes the content of a message and determines which agent is best
         suited to handle it, based on agent descriptions and capabilities. It uses the
-        routing model to make this determination, with fallbacks to ensure a valid
-        agent is always selected.
+        routing model to make this determination with intelligent fallbacks.
 
         Args:
             message: The message to route. This is the user's message or query
@@ -2401,18 +2398,13 @@ class Overlord:
         Raises:
             ValueError: If no agents are available in the overlord.
         """
-        # If there's only one agent, use it
-        if len(self.agents) == 1:
-            return next(iter(self.agents))
-
-        # If there's no default agent and we have agents, set the first one as default
-        if self.default_agent_id is None and self.agents:
-            self.default_agent_id = next(iter(self.agents))
-            logger.info(f"Set agent '{self.default_agent_id}' as default (only agent)")
-
         # If there are no agents, raise an error
         if not self.agents:
             raise ValueError("No agents available")
+
+        # If there's only one agent, use it
+        if len(self.agents) == 1:
+            return next(iter(self.agents))
 
         # Get caching configuration
         overlord_config = self.formation_config.get("overlord", {})
@@ -2450,12 +2442,9 @@ class Overlord:
                 routing_model = await self.get_model_for_capability("text")
                 logger.info("Using capability-based text model for routing")
             except Exception as e:
-                # Fall back to default agent if model creation fails
-                logger.info(
-                    f"No routing model available ({e}), "
-                    f"using default agent '{self.default_agent_id}'"
-                )
-                return self.default_agent_id
+                # Fall back to intelligent selection if model creation fails
+                logger.info(f"No routing model available ({e}), using intelligent selection")
+                return self._select_best_available_agent(message)
 
         try:
             # Create a prompt for the routing model
@@ -2467,13 +2456,13 @@ class Overlord:
             # Parse the response
             selected_agent_id = self._parse_routing_response(response)
 
-            # If parsing failed or the agent doesn't exist, use the default
+            # If parsing failed or the agent doesn't exist, use intelligent fallback
             if selected_agent_id is None or selected_agent_id not in self.agents:
-                logger.warning(
-                    f"Routing failed or returned invalid agent: '{selected_agent_id}'. "
-                    f"Using default: '{self.default_agent_id}'"
+                selected_agent_id = self._select_best_available_agent(message)
+                logger.info(
+                    f"Routing model returned invalid agent. "
+                    f"Selected best available agent: '{selected_agent_id}'"
                 )
-                selected_agent_id = self.default_agent_id
             else:
                 logger.info(f"Routed message to agent: '{selected_agent_id}'")
 
@@ -2487,9 +2476,9 @@ class Overlord:
             return selected_agent_id
 
         except Exception as e:
-            # If anything goes wrong, use the default agent
+            # If anything goes wrong, use intelligent selection
             logger.error(f"Error routing message: {str(e)}")
-            return self.default_agent_id
+            return self._select_best_available_agent(message)
 
     def _create_routing_prompt(self, message: str) -> str:
         """
@@ -2566,6 +2555,53 @@ class Overlord:
         prompt += f"<user-message>\n{message}\n</user-message>\n"
 
         return prompt
+
+    def _select_best_available_agent(self, message: str) -> str:
+        """
+        Intelligently select the best available agent based on message content.
+
+        This method uses simple heuristics to match message content with agent
+        descriptions when the routing model fails or is unavailable.
+
+        Args:
+            message: The message to analyze for agent selection
+
+        Returns:
+            The ID of the best matching agent
+        """
+        if not self.agents:
+            raise ValueError("No agents available")
+
+        # If only one agent, return it
+        if len(self.agents) == 1:
+            return next(iter(self.agents))
+
+        # Simple keyword matching against agent descriptions
+        message_lower = message.lower()
+        best_match = None
+        best_score = 0
+
+        for agent_id, description in self.agent_descriptions.items():
+            if not description:
+                continue
+
+            description_lower = description.lower()
+            score = 0
+
+            # Simple keyword scoring
+            keywords = [
+                "business", "writer", "assistant", "help", "support", "analysis", "research"
+            ]
+            for keyword in keywords:
+                if keyword in message_lower and keyword in description_lower:
+                    score += 1
+
+            if score > best_score:
+                best_score = score
+                best_match = agent_id
+
+        # If no good match found, return the first agent
+        return best_match or next(iter(self.agents))
 
     def _parse_routing_response(self, response: str) -> Optional[str]:
         """
@@ -3559,17 +3595,18 @@ class Overlord:
                 f"Request {request_id}: Started async processing (estimated: {estimated_time:.1f}s)"
             )
 
-            # Return immediate async response
-            return {
-                "request_id": request_id,
-                "status": "processing",
-                "result": None,
-                "processing_mode": "async",
-                "timestamp": timestamp,
-                "estimated_completion_time": estimated_time,
-                "webhook_url": webhook_url,
-                "user_id": user_id,
-            }
+            # Return immediate async response using unified format
+            return create_unified_response(
+                request_id=request_id,
+                status="processing",
+                content=[],  # Empty content for processing status
+                formation_id=self.formation_id,
+                processing_mode="async",
+                processing_time=None,  # Not available yet
+                webhook_url=webhook_url,
+                error=None,
+                user_id=str(user_id) if user_id is not None else None
+            )
         else:
             # Synchronous processing path
             start_time = time.time()
@@ -3580,16 +3617,22 @@ class Overlord:
                 f"Request {request_id}: Completed sync processing in {processing_time:.2f}s"
             )
 
-            # Return sync response format for compatibility
-            return {
-                "request_id": request_id,
-                "status": "completed",
-                "result": result.content if hasattr(result, "content") else str(result),
-                "processing_mode": "sync",
-                "processing_time": processing_time,
-                "timestamp": timestamp,
-                "user_id": user_id,
-            }
+            # Extract user-facing content from result
+            result_content = result.content if hasattr(result, "content") else str(result)
+            user_content = extract_user_content(result_content)
+
+            # Return sync response using unified format
+            return create_unified_response(
+                request_id=request_id,
+                status="completed",
+                content=user_content,
+                formation_id=self.formation_id,
+                processing_mode="sync",
+                processing_time=processing_time,
+                webhook_url=None,  # Not used for sync
+                error=None,
+                user_id=str(user_id) if user_id is not None else None
+            )
 
     async def _execute_async_request(
         self, request_id: str, message: str, agent_name: Optional[str], user_id: Any

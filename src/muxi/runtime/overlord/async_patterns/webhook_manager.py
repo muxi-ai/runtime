@@ -8,38 +8,20 @@ retry logic and error handling.
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Optional, Any, Dict
+from typing import Optional, Any, Dict, List
 import aiohttp
 import logging
 
+# Import unified response types
+from ...types.response import (
+    MuxiUnifiedResponse,
+    MuxiContentItem,
+    MuxiErrorDetails
+)
+from ...utils.response_converter import create_unified_response
+
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class WebhookPayload:
-    """Standardized webhook completion payload."""
-    request_id: str
-    status: str
-    result: Optional[Any] = None
-    error: Optional[str] = None
-    processing_time: Optional[float] = None
-    processing_mode: Optional[str] = None  # NEW: async or sync
-    user_id: Optional[str] = None  # NEW: user identifier
-    timestamp: float = field(default_factory=time.time)
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary for JSON serialization."""
-        return {
-            "request_id": self.request_id,
-            "status": self.status,
-            "result": self.result,
-            "error": self.error,
-            "processing_time": self.processing_time,
-            "processing_mode": self.processing_mode,
-            "user_id": self.user_id,
-            "timestamp": self.timestamp
-        }
 
 
 @dataclass
@@ -94,13 +76,14 @@ class WebhookManager:
         result: Any = None,
         error: Optional[str] = None,
         processing_time: Optional[float] = None,
-        processing_mode: Optional[str] = None,  # NEW: async or sync
-        user_id: Optional[str] = None,  # NEW: user identifier
+        processing_mode: Optional[str] = None,  # async or sync
+        user_id: Optional[str] = None,
+        formation_id: Optional[str] = None,
         retries: Optional[int] = None,
         timeout: Optional[int] = None
     ) -> bool:
         """
-        Deliver async completion to webhook URL.
+        Deliver async completion to webhook URL using unified response format.
 
         Args:
             webhook_url: URL to deliver the webhook to
@@ -110,6 +93,7 @@ class WebhookManager:
             processing_time: Time taken to process the request
             processing_mode: Processing mode (async or sync)
             user_id: User identifier
+            formation_id: Formation identifier
             retries: Number of retry attempts (uses default if None)
             timeout: Request timeout (uses default if None)
 
@@ -121,46 +105,85 @@ class WebhookManager:
             timeout if timeout is not None else self.default_timeout
         )
 
-        # Determine status based on presence of error
-        status = "failed" if error else "completed"
+        # Create unified response payload
+        if error:
+            # Failed completion
+            error_details: MuxiErrorDetails = {
+                "code": "processing_failed",
+                "message": error,
+                "trace": None
+            }
+            unified_response = create_unified_response(
+                request_id=request_id,
+                status="failed",
+                content=[],
+                formation_id=formation_id,
+                user_id=user_id,
+                processing_time=processing_time,
+                processing_mode=processing_mode or "async",
+                webhook_url=webhook_url,
+                error=error_details
+            )
+        else:
+            # Successful completion
+            # Convert result to content items
+            response_content = []
+            if result:
+                if hasattr(result, 'content'):
+                    # MCPMessage or similar object
+                    content_str = str(result.content)
+                else:
+                    content_str = str(result)
 
-        # Create webhook payload
-        payload = WebhookPayload(
-            request_id=request_id,
-            status=status,
-            result=result,
-            error=error,
-            processing_time=processing_time,
-            processing_mode=processing_mode,
-            user_id=user_id
-        )
+                response_content: List[MuxiContentItem] = [{
+                    "type": "text",
+                    "text": content_str,
+                    "file": None
+                }]
+
+            unified_response = create_unified_response(
+                request_id=request_id,
+                status="completed",
+                content=response_content,
+                formation_id=formation_id,
+                user_id=user_id,
+                processing_time=processing_time,
+                processing_mode=processing_mode or "async",
+                webhook_url=webhook_url,
+                error=None
+            )
 
         for attempt in range(max_retries + 1):
             try:
                 success = await self._deliver_webhook(
                     webhook_url,
-                    payload,
+                    unified_response,
                     request_timeout
                 )
                 if success:
                     if attempt > 0:
                         logger.info(
-                            f"✅ Webhook delivered successfully for request {request_id} "
-                            f"(succeeded on attempt {attempt + 1})"
+                            f"✅ Webhook delivered successfully for request "
+                            f"{request_id} (succeeded on attempt {attempt + 1})"
                         )
                     else:
-                        logger.info(f"✅ Webhook delivered successfully for request {request_id}")
+                        logger.info(
+                            f"✅ Webhook delivered successfully for request "
+                            f"{request_id}"
+                        )
                     return True
                 else:
                     if attempt < max_retries:
                         logger.warning(
-                            f"🔄 Webhook delivery attempt {attempt + 1}/{max_retries + 1} failed "
+                            f"🔄 Webhook delivery attempt "
+                            f"{attempt + 1}/{max_retries + 1} failed "
                             f"for request {request_id}, retrying..."
                         )
                     else:
                         logger.error(
-                            f"❌ Webhook delivery failed permanently for request {request_id} "
-                            f"after {max_retries + 1} attempts"
+                            f"❌ Webhook delivery failed permanently for "
+                            f"request {request_id} after {max_retries + 1} "
+                            f"attempts"
                         )
 
             except Exception as e:
@@ -168,13 +191,14 @@ class WebhookManager:
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
                     logger.warning(
-                        f"🔄 Webhook delivery attempt {attempt + 1}/{max_retries + 1} failed "
+                        f"🔄 Webhook delivery attempt "
+                        f"{attempt + 1}/{max_retries + 1} failed "
                         f"for request {request_id}: {error_summary}"
                     )
                 else:
                     logger.error(
-                        f"❌ Webhook delivery failed permanently for request {request_id}: "
-                        f"{error_summary}"
+                        f"❌ Webhook delivery failed permanently for "
+                        f"request {request_id}: {error_summary}"
                     )
 
             # Wait before retry (exponential backoff)
@@ -184,6 +208,36 @@ class WebhookManager:
                 await asyncio.sleep(wait_time)
 
         return False
+
+    def _clean_payload_for_serialization(self, payload: MuxiUnifiedResponse) -> Dict[str, Any]:
+        """
+        Clean the payload for JSON serialization by removing null fields from content items.
+
+        Args:
+            payload: The unified response payload
+
+        Returns:
+            Cleaned dictionary ready for JSON serialization
+        """
+        payload_dict = dict(payload)
+
+        # Clean the response content items
+        if "response" in payload_dict and payload_dict["response"]:
+            cleaned_response = []
+            for item in payload_dict["response"]:
+                cleaned_item = {"type": item["type"]}
+
+                # Only include non-null fields
+                if item["type"] == "text" and item.get("text") is not None:
+                    cleaned_item["text"] = item["text"]
+                elif item["type"] == "file" and item.get("file") is not None:
+                    cleaned_item["file"] = item["file"]
+
+                cleaned_response.append(cleaned_item)
+
+            payload_dict["response"] = cleaned_response
+
+        return payload_dict
 
     def _summarize_webhook_error(self, exception: Exception) -> str:
         """
@@ -239,48 +293,46 @@ class WebhookManager:
     async def _deliver_webhook(
         self,
         webhook_url: str,
-        payload: WebhookPayload,
+        payload: MuxiUnifiedResponse,
         timeout: int
     ) -> bool:
         """
-        Internal method to deliver a single webhook.
+        Internal method to deliver a single webhook using unified response format.
 
         Args:
             webhook_url: URL to deliver the webhook to
-            payload: Webhook payload to send
+            payload: Unified response payload to send
             timeout: Request timeout in seconds
 
         Returns:
             True if delivery was successful, False otherwise
         """
-        session = await self._get_session()
-
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "MUXI-Runtime/1.0",
-        }
-
         try:
+            session = await self._get_session()
+
+            # Convert unified response to dict for JSON serialization, excluding null fields
+            payload_dict = self._clean_payload_for_serialization(payload)
+
             async with session.post(
                 webhook_url,
-                json=payload.to_dict(),
-                headers=headers,
+                json=payload_dict,
                 timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
-                if response.status >= 200 and response.status < 300:
+                # Consider 2xx status codes as successful
+                if 200 <= response.status < 300:
+                    logger.debug(
+                        f"Webhook delivered successfully (HTTP {response.status})"
+                    )
                     return True
                 else:
-                    # Don't log the full response text, just the status
-                    logger.debug(f"Webhook returned HTTP {response.status}")
+                    logger.warning(
+                        f"Webhook delivery failed with HTTP {response.status}"
+                    )
                     return False
 
-        except asyncio.TimeoutError:
-            logger.debug(f"Webhook request timed out after {timeout}s")
-            return False
         except Exception as e:
-            # Don't log the exception here - let the caller handle it
-            # This prevents duplicate logging
-            raise e
+            logger.debug(f"Webhook delivery exception: {e}")
+            return False
 
     async def close(self):
         """Close the HTTP session."""
@@ -307,13 +359,13 @@ class WebhookManager:
         timeout: Optional[int] = None
     ) -> bool:
         """
-        Deliver clarification question to webhook URL for async requests.
+        Deliver clarification question to webhook URL.
 
         Args:
             webhook_url: URL to deliver the webhook to
-            request_id: Request ID that needs clarification
-            clarification_question: The clarification question to ask
-            clarification_request_id: ID of the clarification request
+            request_id: Original request ID
+            clarification_question: Question that needs clarification
+            clarification_request_id: ID for the clarification request
             original_message: Original user message
             user_id: User identifier
             retries: Number of retry attempts (uses default if None)
@@ -327,7 +379,7 @@ class WebhookManager:
             timeout if timeout is not None else self.default_timeout
         )
 
-        # Create clarification webhook payload
+        # Create clarification payload
         payload = ClarificationWebhookPayload(
             request_id=request_id,
             clarification_question=clarification_question,
@@ -346,26 +398,28 @@ class WebhookManager:
                 if success:
                     if attempt > 0:
                         logger.info(
-                            f"✅ Clarification webhook delivered successfully for request "
-                            f"{request_id} (succeeded on attempt {attempt + 1})"
+                            f"✅ Clarification webhook delivered successfully "
+                            f"for request {request_id} (succeeded on attempt "
+                            f"{attempt + 1})"
                         )
                     else:
                         logger.info(
-                            f"✅ Clarification webhook delivered successfully for request "
-                            f"{request_id}"
+                            f"✅ Clarification webhook delivered successfully "
+                            f"for request {request_id}"
                         )
                     return True
                 else:
                     if attempt < max_retries:
                         logger.warning(
                             f"🔄 Clarification webhook delivery attempt "
-                            f"{attempt + 1}/{max_retries + 1} failed for request "
-                            f"{request_id}, retrying..."
+                            f"{attempt + 1}/{max_retries + 1} failed "
+                            f"for request {request_id}, retrying..."
                         )
                     else:
                         logger.error(
-                            f"❌ Clarification webhook delivery failed permanently for "
-                            f"request {request_id} after {max_retries + 1} attempts"
+                            f"❌ Clarification webhook delivery failed "
+                            f"permanently for request {request_id} "
+                            f"after {max_retries + 1} attempts"
                         )
 
             except Exception as e:
@@ -373,13 +427,14 @@ class WebhookManager:
                 if attempt < max_retries:
                     logger.warning(
                         f"🔄 Clarification webhook delivery attempt "
-                        f"{attempt + 1}/{max_retries + 1} failed for request "
-                        f"{request_id}: {error_summary}"
+                        f"{attempt + 1}/{max_retries + 1} failed "
+                        f"for request {request_id}: {error_summary}"
                     )
                 else:
                     logger.error(
-                        f"❌ Clarification webhook delivery failed permanently for "
-                        f"request {request_id}: {error_summary}"
+                        f"❌ Clarification webhook delivery failed "
+                        f"permanently for request {request_id}: "
+                        f"{error_summary}"
                     )
 
             # Wait before retry (exponential backoff)
@@ -401,34 +456,34 @@ class WebhookManager:
 
         Args:
             webhook_url: URL to deliver the webhook to
-            payload: Clarification webhook payload to send
+            payload: Clarification payload to send
             timeout: Request timeout in seconds
 
         Returns:
             True if delivery was successful, False otherwise
         """
-        session = await self._get_session()
-
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "MUXI-Runtime/1.0",
-        }
-
         try:
+            session = await self._get_session()
+
             async with session.post(
                 webhook_url,
                 json=payload.to_dict(),
-                headers=headers,
                 timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
-                if response.status >= 200 and response.status < 300:
+                # Consider 2xx status codes as successful
+                if 200 <= response.status < 300:
+                    logger.debug(
+                        f"Clarification webhook delivered successfully "
+                        f"(HTTP {response.status})"
+                    )
                     return True
                 else:
-                    logger.debug(f"Clarification webhook returned HTTP {response.status}")
+                    logger.warning(
+                        f"Clarification webhook delivery failed with "
+                        f"HTTP {response.status}"
+                    )
                     return False
 
-        except asyncio.TimeoutError:
-            logger.debug(f"Clarification webhook request timed out after {timeout}s")
-            return False
         except Exception as e:
-            raise e
+            logger.debug(f"Clarification webhook delivery exception: {e}")
+            return False

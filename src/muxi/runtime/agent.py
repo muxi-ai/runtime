@@ -560,10 +560,7 @@ class Agent:
 
         try:
             # Check if there's an active clarification request for this user
-            request = await self._clarification_manager.get_active_request(
-                user_id=user_id,
-                agent_id=self.agent_id
-            )
+            request = self._clarification_manager.get_active_clarification(user_id)
 
             if not request or request.status != ClarificationStatus.CLARIFYING:
                 return None
@@ -668,23 +665,21 @@ class Agent:
                     request_type=request_type,
                     intent=analysis.reasoning_context_needed or "general_assistance",
                     tool_name=getattr(analysis, 'tool_name', None),
-                    missing_info=analysis.missing_info,
-                    provided_info=analysis.available_info,
-                    context={"original_message": message, "user_context": user_context}
+                    provided_info=analysis.available_info
                 )
 
                 # Generate the first clarification question
+                missing_item = analysis.missing_info[0] if analysis.missing_info else "information"
                 question = await self._clarification_generator.generate_question(
-                    request=request,
-                    missing_info=analysis.missing_info[0],  # Start with first missing item
-                    context=analysis.available_info
+                    request_type=request_type,
+                    info_name=missing_item,
+                    info_schema={"type": "string", "description": f"Missing {missing_item}"},
+                    user_context=user_context,
+                    conversation_context=message,
+                    intent=analysis.reasoning_context_needed or "general_assistance"
                 )
 
-                # Store the question in the clarification plan
-                await self._clarification_manager.add_question_to_plan(
-                    request_id=request.request_id,
-                    question=question
-                )
+                # Question generated successfully
 
                 return question.question_text
 
