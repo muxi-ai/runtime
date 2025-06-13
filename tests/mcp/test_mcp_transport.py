@@ -10,7 +10,7 @@ import uuid
 from typing import Any, Dict
 
 import httpx
-from loguru import logger
+# Loguru import removed - add observability import if needed
 from mcp.client.session import ClientSession as MCPClient
 from mcp import JSONRPCRequest
 
@@ -38,7 +38,7 @@ class SimpleHTTPTransport:
 
     async def connect(self) -> None:
         """Connect to the MCP server."""
-        logger.info(f"Connecting to {self.url}")
+        #  Info - add observability event
         self.http_client = httpx.AsyncClient()
         self.connected = True
 
@@ -47,7 +47,7 @@ class SimpleHTTPTransport:
         if self.http_client:
             await self.http_client.aclose()
         self.connected = False
-        logger.info("Disconnected from MCP server")
+        #  Info - add observability event
 
     async def request(self, request_obj: Any) -> Dict[str, Any]:
         """
@@ -68,7 +68,7 @@ class SimpleHTTPTransport:
         else:
             request_data = request_obj
 
-        logger.debug(f"Sending request: {request_data}")
+        #  Debug - add observability event
 
         try:
             response = await self.http_client.post(
@@ -78,7 +78,7 @@ class SimpleHTTPTransport:
             )
             response.raise_for_status()
             response_data = response.json()
-            logger.debug(f"Received response: {response_data}")
+            #  Debug - add observability event
             return response_data
         except Exception as e:
             logger.error(f"Error during request: {str(e)}")
@@ -98,7 +98,7 @@ async def test_mcp_client():
 
         # Connect
         await client.connect()
-        logger.info("Connected to MCP server")
+        #  Info - add observability event
 
         # Create and send a ping request
         request = JSONRPCRequest(
@@ -110,7 +110,7 @@ async def test_mcp_client():
 
         # Send request
         response = await client.request(request)
-        logger.info(f"Ping response: {response}")
+        #  Info - add observability event
 
     except Exception as e:
         logger.error(f"Error: {str(e)}")
@@ -119,7 +119,7 @@ async def test_mcp_client():
         # Disconnect
         if 'client' in locals():
             await client.disconnect()
-            logger.info("Disconnected from MCP server")
+            #  Info - add observability event
 
 
 if __name__ == "__main__":

@@ -1017,7 +1017,7 @@ async def deregister_agent(request: dict):
 
     except Exception as e:
         if not isinstance(e, HTTPException):
-            logger.error(f"Error deregistering agent: {e}")
+            #  Error - add observability event
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
@@ -1109,7 +1109,7 @@ async def deregister_agent_legacy(agent_url_encoded: str):
 
     except Exception as e:
         if not isinstance(e, HTTPException):
-            logger.error(f"Error deregistering agent: {e}")
+            #  Error - add observability event
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
@@ -1209,7 +1209,7 @@ async def discover_agents(
                     provider_filter in agent.metadata.get("organization", "").lower())
             ]
 
-        logger.info(
+        #  Info - add observability event
             f"Discovery query returned {len(filtered_agents)} agents "
             f"(capabilities={capabilities}, tags={tags}, provider={provider})"
         )
@@ -1246,7 +1246,7 @@ async def discover_agents(
         return response_data
 
     except Exception as e:
-        logger.error(f"Error during discovery: {e}")
+        #  Error - add observability event
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
@@ -1321,7 +1321,7 @@ async def health_check():
         return response_data
 
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        #  Error - add observability event
 
         if ObservabilityManager and ConversationEventType:
             try:
@@ -1358,9 +1358,9 @@ def main():
     print(f"🧪 Hardcoded test agents: {len(HARDCODED_AGENTS)}")
 
     # Initialize storage and log startup info
-    logger.info("Mock A2A Registry Server starting up...")
-    logger.info(f"Data directory: {REGISTRY_CONFIG['data_dir']}")
-    logger.info(f"Hardcoded test agents: {len(HARDCODED_AGENTS)}")
+    #  Info - add observability event
+    #  Info - add observability event
+    #  Info - add observability event
 
     print()
     print("Available endpoints:")

@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 class DocumentErrorType(Enum):
@@ -125,7 +125,7 @@ class DocumentErrorHandler:
         # Recovery suggestion templates
         self._recovery_templates = self._initialize_recovery_templates()
 
-        logger.info("Initialized DocumentErrorHandler")
+        #  Info - add observability event
 
     def _initialize_error_classifications(self) -> Dict[str, Dict[str, Any]]:
         """Initialize error type classifications"""
@@ -224,10 +224,10 @@ class DocumentErrorHandler:
             self.simplified_pdf_processor = self._create_simplified_pdf_processor()
             self.simplified_docx_processor = self._create_simplified_docx_processor()
 
-            logger.info("✅ Fallback processors initialized successfully")
+            #  Info - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to initialize fallback processors: {e}")
+            #  Error - add observability event
 
     async def handle_document_error(
         self,
@@ -254,7 +254,7 @@ class DocumentErrorHandler:
         # Attempt fallback strategy
         fallback_strategy = self.fallback_strategies.get(error_type, FallbackStrategy.SKIP_WITH_WARNING)
 
-        logger.warning(
+        #  Warning - add observability event
             f"Document error for {filename}: {error_type.value}, "
             f"attempting fallback: {fallback_strategy.value}"
         )
@@ -293,7 +293,7 @@ class DocumentErrorHandler:
                 return None, f"⚠️ Skipping document due to {error_type.value}: {str(original_error)}"
 
         except Exception as fallback_error:
-            logger.error(f"Fallback strategy {strategy.value} failed: {fallback_error}")
+            #  Error - add observability event
             return None, f"❌ All processing methods failed. Original: {error_type.value}, Fallback: {str(fallback_error)}"
 
     async def _fallback_text_extraction(self, filename: str) -> Optional[str]:
@@ -308,7 +308,7 @@ class DocumentErrorHandler:
             else:
                 return f"Unable to extract text from {Path(filename).suffix} files"
         except Exception as e:
-            logger.error(f"Basic text extraction failed for {filename}: {e}")
+            #  Error - add observability event
             return None
 
     async def _fallback_simplified_processing(self, filename: str) -> Optional[str]:
@@ -322,17 +322,17 @@ class DocumentErrorHandler:
             else:
                 return await self._fallback_text_extraction(filename)
         except Exception as e:
-            logger.error(f"Simplified processing failed for {filename}: {e}")
+            #  Error - add observability event
             return await self._fallback_text_extraction(filename)
 
     async def _fallback_external_service(self, filename: str) -> Optional[str]:
         """Use external service for processing"""
         try:
             # This could integrate with cloud services like AWS Textract, Google Document AI, etc.
-            logger.info(f"External service processing not implemented for {filename}")
+            #  Info - add observability event
             return await self._fallback_text_extraction(filename)
         except Exception as e:
-            logger.error(f"External service processing failed for {filename}: {e}")
+            #  Error - add observability event
             return await self._fallback_text_extraction(filename)
 
     def _classify_error(self, error: Exception, file_size_mb: float) -> DocumentErrorType:
@@ -380,7 +380,7 @@ class DocumentErrorHandler:
 
             if breaker.failure_count >= breaker.failure_threshold:
                 breaker.state = "open"
-                logger.warning(f"Circuit breaker opened for {operation} after {breaker.failure_count} failures")
+                #  Warning - add observability event
 
     def _is_circuit_breaker_open(self, operation: str) -> bool:
         """Check if circuit breaker is open"""
@@ -393,7 +393,7 @@ class DocumentErrorHandler:
         if breaker.state == "open":
             if current_time - breaker.last_failure_time > breaker.timeout_seconds:
                 breaker.state = "half_open"
-                logger.info(f"Circuit breaker for {operation} moved to half-open state")
+                #  Info - add observability event
                 return False
             return True
 
@@ -518,7 +518,7 @@ class DocumentErrorHandler:
     ) -> None:
         """Queue document for manual review"""
         # This could integrate with a ticketing system, email alerts, etc.
-        logger.warning(
+        #  Warning - add observability event
             f"Document {filename} queued for manual review: "
             f"{error_type.value} - {str(error)}"
         )

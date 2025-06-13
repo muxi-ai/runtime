@@ -2,7 +2,7 @@ import asyncio
 from typing import Optional, Dict, Any, List, Tuple
 import json
 import re
-from loguru import logger
+from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from .types import (
     Workflow, SubTask, TaskStatus, WorkflowStatus, ApprovalStatus,
@@ -82,7 +82,7 @@ class TaskDecomposer:
             # Validate workflow structure
             validated_workflow = self._validate_workflow(workflow)
 
-            logger.info(
+            #  Decomposer info - add observability event
                 f"Decomposed request into workflow {workflow_id} with "
                 f"{len(validated_workflow.tasks)} tasks"
             )
@@ -90,7 +90,7 @@ class TaskDecomposer:
             return validated_workflow
 
         except Exception as e:
-            logger.error(f"Error decomposing request: {e}")
+            #  Decomposer error - add observability event
             # Return minimal fallback workflow
             return self._create_fallback_workflow(request)
 
@@ -131,7 +131,7 @@ class TaskDecomposer:
             return self._validate_workflow(modified_workflow)
 
         except Exception as e:
-            logger.error(f"Error modifying workflow: {e}")
+            #  Decomposer error - add observability event
             return workflow  # Return original on error
 
     async def _generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -177,7 +177,7 @@ class TaskDecomposer:
             return workflow
 
         except Exception as e:
-            logger.warning(f"LLM decomposition failed, falling back to heuristics: {e}")
+            #  Decomposer warning - add observability event
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
     def _create_decomposition_prompt(
@@ -291,7 +291,7 @@ Provide a clear, structured response that can be parsed into executable tasks.
                     if task:
                         tasks[task.id] = task
                 except Exception as e:
-                    logger.warning(f"Error parsing task block: {e}")
+                    #  Decomposer warning - add observability event
                     continue
 
             if not tasks:
@@ -308,7 +308,7 @@ Provide a clear, structured response that can be parsed into executable tasks.
             return workflow
 
         except Exception as e:
-            logger.error(f"Error parsing LLM decomposition: {e}")
+            #  Decomposer error - add observability event
             return self._heuristic_decompose_request(workflow_id, request)
 
     def _parse_task_block(self, block: str) -> Optional[SubTask]:
@@ -367,7 +367,7 @@ Provide a clear, structured response that can be parsed into executable tasks.
             )
 
         except Exception as e:
-            logger.error(f"Error parsing task block: {e}")
+            #  Decomposer error - add observability event
             return None
 
     def _heuristic_decompose_request(
@@ -504,7 +504,7 @@ Keep it concise but comprehensive.
             return plan_preview
 
         except Exception as e:
-            logger.error(f"Error generating LLM plan preview: {e}")
+            #  Decomposer error - add observability event
             return self._heuristic_generate_plan_preview(workflow, original_request)
 
     def _heuristic_generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -564,7 +564,7 @@ Keep it concise but comprehensive.
             return "\n".join(plan_lines)
 
         except Exception as e:
-            logger.error(f"Error generating heuristic plan preview: {e}")
+            #  Decomposer error - add observability event
             return f"""
 I'll work on your request: "{original_request}"
 
@@ -606,19 +606,19 @@ Would you like me to proceed with this plan?
         try:
             # Validate DAG structure
             if not validate_workflow_dag(workflow):
-                logger.warning("Workflow contains cycles, attempting to fix")
+                #  Decomposer warning - add observability event
                 workflow = self._fix_workflow_cycles(workflow)
 
             # Build execution phases
             try:
                 build_execution_phases(workflow)
             except Exception as e:
-                logger.warning(f"Could not build execution phases: {e}")
+                #  Decomposer warning - add observability event
 
             return workflow
 
         except Exception as e:
-            logger.error(f"Error validating workflow: {e}")
+            #  Decomposer error - add observability event
             return workflow
 
     def _fix_workflow_cycles(self, workflow: Workflow) -> Workflow:
@@ -641,7 +641,7 @@ Would you like me to proceed with this plan?
             else:
                 task.dependencies = [task_ids[i-1]]
 
-        logger.info("Fixed workflow cycles by making tasks sequential")
+        #  Decomposer info - add observability event
         return workflow
 
     def _create_fallback_workflow(self, request: str) -> Workflow:
@@ -690,7 +690,7 @@ Would you like me to proceed with this plan?
         """
         # This is a placeholder for LLM-based workflow modification
         # For now, return the original workflow
-        logger.info("LLM workflow modification not yet implemented")
+        #  Decomposer info - add observability event
         return workflow
 
     def _heuristic_modify_workflow(
@@ -709,7 +709,7 @@ Would you like me to proceed with this plan?
             Modified workflow (currently just returns original)
         """
         # Simple heuristic modification - just return original for now
-        logger.info("Heuristic workflow modification not yet implemented")
+        #  Decomposer info - add observability event
         return workflow
 
 

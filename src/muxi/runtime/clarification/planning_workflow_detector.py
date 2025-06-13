@@ -40,7 +40,7 @@ class PlanningWorkflowDetector:
         """
         self.model = model
         if not model:
-            logger.warning(
+            #  Warning - add observability event
                 "PlanningWorkflowDetector initialized without model - "
                 "all detection will fail"
             )
@@ -61,17 +61,17 @@ class PlanningWorkflowDetector:
             PlanningWorkflowRequest if detected, None otherwise
         """
         if not self.model:
-            logger.debug("No model available for planning workflow detection")
+            #  Debug - add observability event
             return None
 
         try:
-            logger.debug(f"Analyzing message for planning workflow: {message[:100]}...")
+            #  Debug - add observability event
 
             # Use pure LLM detection for multilingual support
             workflow_request = await self._detect_with_llm(message, context)
 
             if workflow_request:
-                logger.info(
+                #  Info - add observability event
                     f"Detected planning workflow: {workflow_request.workflow_type} "
                     f"(confidence: {workflow_request.confidence})"
                 )
@@ -79,7 +79,7 @@ class PlanningWorkflowDetector:
             return workflow_request
 
         except Exception as e:
-            logger.error(f"Error detecting planning workflow: {e}")
+            #  Error - add observability event
             return None
 
     async def _detect_with_llm(
@@ -170,12 +170,12 @@ class PlanningWorkflowDetector:
                     confidence=result.get("confidence", 0.6)
                 )
             else:
-                logger.debug(
+                #  Debug - add observability event
                     f"Planning workflow not detected. "
                     f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
                 )
 
         except Exception as e:
-            logger.warning(f"LLM planning workflow detection failed: {e}")
+            #  Warning - add observability event
 
         return None

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 class ElementType(Enum):
@@ -396,7 +396,7 @@ class ResponseFormatter:
             }
 
         except Exception as e:
-            logger.error(f"Error formatting response: {e}")
+            #  Error - add observability event
             return {
                 "content": content,
                 "elements": [],

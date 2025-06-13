@@ -21,8 +21,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src/muxi/runtime'
 
 from src.muxi.runtime.observability import (  # noqa: E402
     EventLogger, ObservabilityManager, RequestContextManager,
-    RequestContext, EventType, EventLevel, StreamProcessor,
-    LoggingConfig, StreamConfig
+    RequestContext, ConversationEventType, SystemEventType, EventLevel
 )
 
 
@@ -30,39 +29,35 @@ class TestEventLogger:
     """Test the EventLogger class functionality"""
 
     @pytest.fixture
-    def mock_config(self):
-        """Mock logging configuration for testing"""
-        return LoggingConfig(
-            enabled=True,
-            streams=[
-                StreamConfig(
-                    transport="stdout",
-                    destination="stdout",
-                    level="info",
-                    format="jsonl",
-                    events=["*"]
-                )
-            ]
+    def event_logger(self):
+        """Create an EventLogger instance for testing"""
+        return EventLogger(
+            level=EventLevel.INFO,
+            output="stdout",
+            events=["*"]
         )
 
-    @pytest.fixture
-    def event_logger(self, mock_config):
-        """Create an EventLogger instance for testing"""
-        return EventLogger(config=mock_config)
-
-    def test_event_logger_initialization(self, mock_config):
+    def test_event_logger_initialization(self):
         """Test EventLogger initializes correctly"""
-        logger = EventLogger(config=mock_config)
-        assert logger.enabled is True
-        assert len(logger.streams) == 1
-        assert logger.server_ip is not None
+        logger = EventLogger(
+            level=EventLevel.INFO,
+            output="stdout",
+            events=["*"]
+        )
+        assert logger.level == EventLevel.INFO
+        assert logger.output == "stdout"
+        assert "*" in logger.events
 
-    def test_event_logger_disabled(self):
-        """Test EventLogger when disabled"""
-        config = LoggingConfig(enabled=False, streams=[])
-        logger = EventLogger(config=config)
-        assert logger.enabled is False
-        assert len(logger.streams) == 0
+    def test_event_logger_with_specific_events(self):
+        """Test EventLogger with specific event filtering"""
+        logger = EventLogger(
+            level=EventLevel.WARNING,
+            output="stdout",
+            events=["overlord.routing.started", "agent.message.received"]
+        )
+        assert logger.level == EventLevel.WARNING
+        assert "overlord.routing.started" in logger.events
+        assert "agent.message.received" in logger.events
 
     @pytest.mark.asyncio
     async def test_emit_event_basic(self, event_logger):
@@ -77,7 +72,7 @@ class TestEventLogger:
 
         with patch('builtins.print') as mock_print:
             await event_logger.emit_event(
-                event_type=EventType.OVERLORD_ROUTING_STARTED,
+                event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"test": "data"},
@@ -111,7 +106,7 @@ class TestEventLogger:
 
         with patch('builtins.print') as mock_print:
             await logger.emit_event(
-                event_type=EventType.OVERLORD_ROUTING_STARTED,
+                event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"test": "data"},
@@ -124,9 +119,9 @@ class TestEventLogger:
     def test_event_type_to_string_conversion(self):
         """Test that event types are properly converted to strings"""
         test_cases = [
-            (EventType.OVERLORD_ROUTING_STARTED, "overlord.routing.started"),
-            (EventType.AGENT_MESSAGE_RECEIVED, "agent.message.received"),
-            (EventType.MCP_TOOL_CALL_STARTED, "mcp.tool.call.started"),
+            (ConversationEventType.OVERLORD_ROUTING_STARTED, "overlord.routing.started"),
+            (ConversationEventType.AGENT_MESSAGE_RECEIVED, "agent.message.received"),
+            (ConversationEventType.MCP_TOOL_CALL_STARTED, "mcp.tool.call.started"),
         ]
 
         for event_type, expected_string in test_cases:
@@ -255,11 +250,11 @@ class TestObservabilityManager:
 
             # Check first call (request started)
             first_call = mock_emit.call_args_list[0]
-            assert first_call[1]['event_type'] == EventType.REQUEST_STARTED
+            assert first_call[1]['event_type'] == ConversationEventType.REQUEST_STARTED
 
             # Check second call (request completed)
             second_call = mock_emit.call_args_list[1]
-            assert second_call[1]['event_type'] == EventType.REQUEST_COMPLETED
+            assert second_call[1]['event_type'] == ConversationEventType.REQUEST_COMPLETED
 
 
 class TestStreamProcessor:
@@ -427,7 +422,7 @@ class TestPerformance:
         with patch('builtins.print'):  # Suppress actual output
             for _ in range(100):  # Emit 100 events
                 await logger.emit_event(
-                    event_type=EventType.AGENT_MESSAGE_RECEIVED,
+                    event_type=ConversationEventType.AGENT_MESSAGE_RECEIVED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"test": "performance"},
@@ -458,7 +453,7 @@ class TestPerformance:
 
         for _ in range(1000):  # Emit 1000 events with disabled logger
             await logger.emit_event(
-                event_type=EventType.AGENT_MESSAGE_RECEIVED,
+                event_type=ConversationEventType.AGENT_MESSAGE_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"test": "performance"},
@@ -502,7 +497,7 @@ class TestErrorHandling:
         with patch('builtins.print') as mock_print:
             # This should not raise an exception
             await logger.emit_event(
-                event_type=EventType.AGENT_MESSAGE_RECEIVED,
+                event_type=ConversationEventType.AGENT_MESSAGE_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"function": lambda x: x},  # Non-serializable

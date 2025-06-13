@@ -47,6 +47,7 @@ class SystemEventType(Enum):
     MCP_SERVER_CONNECTING = "mcp.server.connecting"
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
+    MCP_SERVER_REGISTRATION_STARTED = "mcp.server.registration.started"
     MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
     MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
@@ -57,9 +58,17 @@ class SystemEventType(Enum):
     # A2A SYSTEM EVENTS
     # ===================================================================
     A2A_REGISTRY_CLIENT_INITIALIZED = "a2a.registry.client.initialized"
+    A2A_REGISTRY_CONNECTED = "a2a.registry.connected"
+    A2A_REGISTRY_DISCONNECTED = "a2a.registry.disconnected"
+    A2A_HEALTH_CHECK = "a2a.health.check"
+    A2A_REGISTRATION_STARTED = "a2a.registration.started"
+    A2A_REGISTRATION_COMPLETED = "a2a.registration.completed"
+    A2A_REGISTRATION_FAILED = "a2a.registration.failed"
+    A2A_DISCOVERY_STARTED = "a2a.discovery.started"
+    A2A_DISCOVERY_COMPLETED = "a2a.discovery.completed"
+    A2A_DISCOVERY_FAILED = "a2a.discovery.failed"
     A2A_AGENT_REGISTERED = "a2a.agent.registered"
     A2A_AGENT_DEREGISTERED = "a2a.agent.deregistered"
-    A2A_DISCOVERY_COMPLETED = "a2a.discovery.completed"
     A2A_FORMATION_SERVER_STARTED = "a2a.formation.server.started"
     A2A_FORMATION_SERVER_STOPPED = "a2a.formation.server.stopped"
     A2A_REGISTRY_HEALTH_CHECK_COMPLETED = "a2a.registry.health_check.completed"
@@ -72,6 +81,12 @@ class SystemEventType(Enum):
     MCP_CONFIG_LOADED = "mcp.config.loaded"
     A2A_CONFIG_LOADED = "a2a.config.loaded"
     OVERLORD_SERVICES_STARTED = "overlord.services.started"
+    OVERLORD_INITIALIZATION_STARTED = "overlord.initialization.started"
+    OVERLORD_INITIALIZATION_COMPLETED = "overlord.initialization.completed"
+    OVERLORD_ROUTING_STARTED = "overlord.routing.started"
+    OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
+    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection.started"
+    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection.completed"
     CACHE_MANAGER_STARTED = "cache.manager.started"
     MEMORY_OPTIMIZER_STARTED = "memory.optimizer.started"
 
@@ -95,6 +110,8 @@ class SystemEventType(Enum):
     # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTTYPE)
     # ===================================================================
     RESOURCE_USAGE_MEASURED = "resource.usage.measured"
+    RESOURCE_ALLOCATED = "resource.allocated"
+    ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
     OVERLORD_INITIALIZED = "overlord.initialized"
 
 
@@ -121,11 +138,7 @@ class ConversationEventType(Enum):
     # ===================================================================
     # OVERLORD ORCHESTRATION
     # ===================================================================
-    OVERLORD_ROUTING_STARTED = "overlord.routing.started"
-    OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
     OVERLORD_ROUTING_FAILED = "overlord.routing.failed"
-    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection.started"
-    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection.completed"
     OVERLORD_AGENT_SELECTED = "overlord.agent.selected"
     OVERLORD_AGENT_NOTFOUND = "overlord.agent.not_found"
     OVERLORD_TASK_DECOMPOSED = "overlord.task.decomposed"
@@ -148,6 +161,7 @@ class ConversationEventType(Enum):
     # AGENT PROCESSING
     # ===================================================================
     AGENT_SELECTED = "agent.selected"
+    AGENT_INITIALIZED = "agent.initialized"
     AGENT_THINKING_STARTED = "agent.thinking.started"
     AGENT_THINKING_COMPLETED = "agent.thinking.completed"
     AGENT_PLANNING_CREATED = "agent.planning.created"
@@ -155,6 +169,7 @@ class ConversationEventType(Enum):
     AGENT_MESSAGE_PROCESSING = "agent.message.processing"
     AGENT_MESSAGE_COMPLETED = "agent.message.completed"
     AGENT_MESSAGE_FAILED = "agent.message.failed"
+    AGENT_RESPONSE_GENERATED = "agent.response.generated"
 
     # ===================================================================
     # MODEL OPERATIONS
@@ -175,11 +190,13 @@ class ConversationEventType(Enum):
     MCP_TOOL_FAILED = "mcp.tool.failed"
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
+    MCP_TOOL_INVOCATION_STARTED = "mcp.tool.invocation.started"
+    MCP_TOOL_INVOCATION_COMPLETED = "mcp.tool.invocation.completed"
+    MCP_TOOL_INVOCATION_FAILED = "mcp.tool.invocation.failed"
 
     # ===================================================================
     # A2A & COLLABORATION
     # ===================================================================
-    A2A_DISCOVERY_STARTED = "a2a.discovery.started"
     A2A_REQUEST_SENT = "a2a.request.sent"
     A2A_RESPONSE_RECEIVED = "a2a.response.received"
     COLLABORATION_INTERNAL_STARTED = "collaboration.internal.started"
@@ -207,9 +224,10 @@ class ConversationEventType(Enum):
     # ERROR HANDLING & RECOVERY
     # ===================================================================
     ERROR_TIMEOUT_DETECTED = "error.timeout.detected"
-    ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
     ERROR_FALLBACK_ACTIVATED = "error.fallback.activated"
     ERROR_RECOVERY_COMPLETED = "error.recovery.completed"
+    ERROR_CLARIFICATION_FAILED = "error.clarification.failed"
+    ERROR_AGENT_PROCESSING = "error.agent.processing"
 
     # ===================================================================
     # PERFORMANCE & MONITORING

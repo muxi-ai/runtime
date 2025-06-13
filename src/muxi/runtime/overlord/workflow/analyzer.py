@@ -1,6 +1,6 @@
 import asyncio
 from typing import Optional, List, Dict, Any
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .types import RequestAnalysis
 from ...llm import LLM
@@ -57,7 +57,7 @@ class RequestAnalyzer:
             # Determine if decomposition is needed
             analysis.requires_decomposition = await self.should_decompose(analysis)
 
-            logger.debug(
+            #  Debug - add observability event
                 f"Request analysis: complexity={analysis.complexity_score:.1f}, "
                 f"decomposition={analysis.requires_decomposition}, "
                 f"approval={analysis.requires_approval}"
@@ -66,7 +66,7 @@ class RequestAnalyzer:
             return analysis
 
         except Exception as e:
-            logger.error(f"Error analyzing request: {e}")
+            #  Error - add observability event
             # Return safe fallback analysis
             return RequestAnalysis(
                 complexity_score=5.0,
@@ -305,7 +305,7 @@ class RequestAnalyzer:
             return self._parse_llm_analysis(response)
 
         except Exception as e:
-            logger.warning(f"LLM analysis failed, falling back to heuristics: {e}")
+            #  Warning - add observability event
             return self._heuristic_analyze_request(user_message)
 
     def _create_analysis_prompt(
@@ -389,7 +389,7 @@ Focus on identifying:
                 raise ValueError("No valid JSON found in response")
 
         except Exception as e:
-            logger.error(f"Error parsing LLM analysis: {e}")
+            #  Error - add observability event
             # Return fallback analysis
             return RequestAnalysis(
                 complexity_score=5.0,

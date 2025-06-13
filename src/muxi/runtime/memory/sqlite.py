@@ -37,7 +37,6 @@ import time
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from loguru import logger
 
 from .base import BaseMemory
 from ..extensions import SQLiteVecExtension
@@ -397,7 +396,7 @@ class SQLiteMemory(BaseMemory):
         # Log the result order for debugging
         if results:
             orders = [m.get("metadata", {}).get("order") for m in results]
-            logger.debug(f"Recent memories order: {orders}")
+            #  Memory ordering debug - add observability event
 
         return results
 

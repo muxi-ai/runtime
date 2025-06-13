@@ -41,7 +41,7 @@ class PlanAnalyzer:
             PlanAnalysis with detailed feedback and recommendations
         """
         try:
-            logger.info(f"Analyzing {len(plan.steps)}-step plan: {plan.goal}")
+            #  Info - add observability event
 
             # Analyze individual steps
             step_analyses = []
@@ -78,11 +78,11 @@ class PlanAnalyzer:
                 recommendations=recommendations
             )
 
-            logger.info(f"Plan analysis complete. Overall feasibility: {overall_feasibility:.2f}")
+            #  Info - add observability event
             return analysis
 
         except Exception as e:
-            logger.error(f"Error analyzing plan: {e}")
+            #  Error - add observability event
             raise ClarificationError(f"Failed to analyze plan: {e}")
 
     async def _analyze_step(self, index: int, step: str, plan: MultiStepPlan) -> PlanStepAnalysis:
@@ -110,7 +110,7 @@ class PlanAnalyzer:
             )
 
         except Exception as e:
-            logger.warning(f"Error analyzing step {index}: {e}")
+            #  Warning - add observability event
             # Return basic analysis on error
             return PlanStepAnalysis(
                 step_index=index,

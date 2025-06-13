@@ -17,7 +17,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
-from loguru import logger
+from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from faissx.client import FaissXClient
 import faiss
@@ -80,7 +80,7 @@ class DocumentSemanticIndex:
         # Initialize index
         self._initialize_index()
 
-        logger.info(f"Initialized DocumentSemanticIndex in {mode} mode")
+        #  Semantic index info - add observability event
 
     def _initialize_index(self) -> None:
         """Initialize the appropriate index type"""
@@ -101,9 +101,9 @@ class DocumentSemanticIndex:
                 api_key=self.remote_config.get("api_key"),
                 tenant_id=self.remote_config.get("tenant_id")
             )
-            logger.info("Initialized remote FAISSx client")
+            #  Semantic index info - add observability event
         except Exception as e:
-            logger.error(f"Failed to initialize FAISSx client: {e}")
+            #  Semantic index error - add observability event
             # Fall back to local FAISS
             self.mode = "local"
             self._initialize_local_index()
@@ -112,7 +112,7 @@ class DocumentSemanticIndex:
         """Initialize local FAISS index"""
         # Create L2 distance index for semantic similarity
         self._faiss_index = faiss.IndexFlatL2(self.vector_dimension)
-        logger.info(f"Initialized local FAISS index with dimension {self.vector_dimension}")
+        #  Semantic index info - add observability event
 
     async def add_document_chunks(
         self,
@@ -131,7 +131,7 @@ class DocumentSemanticIndex:
         if len(chunks) != len(embeddings):
             raise ValueError("Number of chunks must match number of embeddings")
 
-        logger.info(f"Adding {len(chunks)} document chunks to semantic index")
+        #  Semantic index info - add observability event
 
         # Prepare vectors and metadata
         vectors = []
@@ -197,10 +197,10 @@ class DocumentSemanticIndex:
                 self._id_to_index[chunk_id] = index_pos
                 self._index_to_id[index_pos] = chunk_id
 
-            logger.info(f"Added {len(vectors)} vectors to remote FAISSx index")
+            #  Semantic index info - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to add vectors to remote index: {e}")
+            #  Semantic index error - add observability event
             # Fall back to local index
             await self._add_to_local_index(vectors, metadata_list)
 
@@ -225,7 +225,7 @@ class DocumentSemanticIndex:
             self._id_to_index[chunk_id] = index_pos
             self._index_to_id[index_pos] = chunk_id
 
-        logger.info(f"Added {len(vectors)} vectors to local FAISS index")
+        #  Semantic index info - add observability event
 
     async def search_documents(
         self,
@@ -331,7 +331,7 @@ class DocumentSemanticIndex:
         Returns:
             True if document was removed, False if not found
         """
-        logger.info(f"Removing document {document_id} from semantic index")
+        #  Semantic index info - add observability event
 
         # Find all chunks for this document
         chunks_to_remove = []
@@ -348,7 +348,7 @@ class DocumentSemanticIndex:
         elif self.mode == "remote" and self._faissx_client:
             await self._remove_from_remote_index(chunks_to_remove)
 
-        logger.info(f"Removed document {document_id} with {len(chunks_to_remove)} chunks")
+        #  Semantic index info - add observability event
         return True
 
     async def _rebuild_local_index_without_chunks(self, indices_to_remove: List[int]) -> None:
@@ -396,7 +396,7 @@ class DocumentSemanticIndex:
                 if chunk_id:
                     await self._faissx_client.delete_vector(chunk_id)
         except Exception as e:
-            logger.error(f"Failed to remove vectors from remote index: {e}")
+            #  Semantic index error - add observability event
 
     def get_index_stats(self) -> Dict[str, Any]:
         """Get statistics about the semantic index"""
@@ -454,10 +454,10 @@ class DocumentSemanticIndex:
             if self.mode == "local" and self._faiss_index:
                 faiss.write_index(self._faiss_index, f"{self.index_path}.faiss")
 
-            logger.info(f"Saved semantic index to {self.index_path}")
+            #  Semantic index info - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to save semantic index: {e}")
+            #  Semantic index error - add observability event
 
     def _load_index(self) -> None:
         """Load index from disk"""
@@ -481,8 +481,8 @@ class DocumentSemanticIndex:
             if self.mode == "local" and Path(faiss_path).exists():
                 self._faiss_index = faiss.read_index(faiss_path)
 
-            logger.info(f"Loaded semantic index with {len(self._document_vectors)} vectors")
+            #  Semantic index info - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to load semantic index: {e}")
+            #  Semantic index error - add observability event
             # Continue with empty index

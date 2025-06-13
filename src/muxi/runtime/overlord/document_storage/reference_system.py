@@ -17,7 +17,7 @@ import uuid
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 @dataclass
@@ -76,7 +76,7 @@ class DocumentReferenceSystem:
         # Load existing references
         self._load_references()
 
-        logger.info("Initialized DocumentReferenceSystem")
+        #  Info - add observability event
 
     async def create_reference(
         self,
@@ -124,7 +124,7 @@ class DocumentReferenceSystem:
         # Persist changes
         await self._persist_references()
 
-        logger.info(f"Created reference {reference_id} for document {source_document_id}")
+        #  Info - add observability event
         return reference_id
 
     async def create_lineage(
@@ -167,7 +167,7 @@ class DocumentReferenceSystem:
         # Persist changes
         await self._persist_references()
 
-        logger.info(f"Created lineage {lineage_id} with {len(root_reference_ids)} root references")
+        #  Info - add observability event
         return lineage_id
 
     async def add_derived_reference(
@@ -192,7 +192,7 @@ class DocumentReferenceSystem:
         lineage.derived_references.append(derived_reference_id)
         await self._persist_references()
 
-        logger.info(f"Added derived reference {derived_reference_id} to lineage {lineage_id}")
+        #  Info - add observability event
         return True
 
     async def get_references_for_document(
@@ -482,10 +482,10 @@ class DocumentReferenceSystem:
                         output_hash = self._hash_content(lineage.final_output)
                         self._output_to_lineage[output_hash] = lineage_id
 
-                logger.info(f"Loaded {len(self._references)} references and {len(self._lineages)} lineages")
+                #  Info - add observability event
 
         except Exception as e:
-            logger.warning(f"Failed to load references from {self.storage_path}: {e}")
+            #  Warning - add observability event
 
     async def _persist_references(self) -> None:
         """Persist references to storage"""
@@ -527,5 +527,5 @@ class DocumentReferenceSystem:
             Path(temp_path).rename(self.storage_path)
 
         except Exception as e:
-            logger.error(f"Failed to persist references to {self.storage_path}: {e}")
+            #  Error - add observability event
             raise

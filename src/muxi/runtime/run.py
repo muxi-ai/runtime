@@ -35,12 +35,12 @@
 # =============================================================================
 
 import socket
-from loguru import logger
+# Loguru import removed - add observability import
 
 # Observability imports
 try:
     from muxi.runtime.observability.manager import ObservabilityManager
-    from muxi.runtime.observability.events import ConversationEventType, EventLevel
+    from muxi.runtime.observability.events import ConversationEventType, EventLevel, SystemEventType
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
@@ -67,7 +67,7 @@ def is_port_in_use(port):
         try:
             obs = ObservabilityManager.get_instance()
             obs.log_event(
-                ConversationEventType.RESOURCE_ALLOCATED,
+                SystemEventType.RESOURCE_ALLOCATED,
                 EventLevel.DEBUG,
                 "Port availability check initiated",
                 data={"port": port, "operation": "port_check"}
@@ -85,7 +85,7 @@ def is_port_in_use(port):
             try:
                 obs = ObservabilityManager.get_instance()
                 obs.log_event(
-                    ConversationEventType.RESOURCE_ALLOCATED if not result else ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    SystemEventType.RESOURCE_ALLOCATED if not result else SystemEventType.ERROR_RETRY_ATTEMPTED,
                     EventLevel.INFO if not result else EventLevel.WARNING,
                     f"Port {port} {'in use' if result else 'available'}",
                     data={"port": port, "in_use": result, "operation": "port_check_result"}
@@ -151,7 +151,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
                 try:
                     obs = ObservabilityManager.get_instance()
                     obs.log_event(
-                        ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                        SystemEventType.ERROR_RETRY_ATTEMPTED,
                         EventLevel.ERROR,
                         "Server startup failed due to port conflict",
                         data={
@@ -165,7 +165,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
                     pass  # Don't let observability failures break error handling
 
             # Log the error to the application logs
-            logger.error(msg)
+            #  Error - add observability event
             # Print user-friendly error messages to the console
             print(f"Error: {msg}")
             print(f"Please stop any other processes using port {port} and try again.")
@@ -173,7 +173,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
 
         # For now, we'll just log that we would have started a server
         # This will be replaced with actual implementation later
-        logger.info(
+        #  Info - add observability event
             f"[PLACEHOLDER] Starting MUXI server on {host}:{port} " f"(reload={reload}, mcp={mcp})"
         )
         print(f"[PLACEHOLDER] MUXI server would start on {host}:{port}")
@@ -206,7 +206,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             try:
                 obs = ObservabilityManager.get_instance()
                 obs.log_event(
-                    ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    SystemEventType.ERROR_RETRY_ATTEMPTED,
                     EventLevel.ERROR,
                     "Server startup failed with exception",
                     data={
@@ -222,7 +222,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
 
         # Catch any unexpected exceptions during server startup
         # Log the error with detailed information for debugging
-        logger.error(f"Failed to start MUXI server: {str(e)}")
+        #  Error - add observability event
         # Provide a simplified error message to the user
         print(f"Error: Failed to start MUXI server: {str(e)}")
         return False

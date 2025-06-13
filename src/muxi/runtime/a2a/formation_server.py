@@ -23,8 +23,7 @@ from fastapi import FastAPI, Path, Request
 import uvicorn
 from pydantic import BaseModel
 
-from loguru import logger
-from ..observability import ObservabilityManager, ConversationEventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, EventLevel, SystemEventType
 
 
 class A2AMessageRequest(BaseModel):
@@ -112,7 +111,21 @@ class A2AFormationServer:
                 }
             )
 
-            logger.info(f"Initialized A2A Formation Server for '{formation_name}' on port {port}")
+            # Emit A2A formation server initialization event
+            try:
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=SystemEventType.A2A_FORMATION_SERVER_STARTED,
+                    level=EventLevel.INFO,
+                    data={
+                        "formation_name": formation_name,
+                        "port": port,
+                        "host": self.host,
+                        "auth_mode": self.auth_mode if self.auth else "none"
+                    },
+                    description=f"Initialized A2A Formation Server for '{formation_name}' on port {port}"
+                )
+            except Exception:
+                pass
 
         except Exception as e:
             # Emit error event for initialization failure
@@ -342,7 +355,7 @@ class A2AFormationServer:
                         }
                     )
 
-                    logger.warning(
+                    #  Warning - add observability event
                         f"Authentication failed for A2A request to {agent_id}: {auth_error}"
                     )
                     return {
@@ -364,7 +377,7 @@ class A2AFormationServer:
                     }
                 )
 
-                logger.debug(f"A2A request authenticated for client: {client_id}")
+                #  Authentication success event already emitted above
 
             # Get client host for security validation
             # Note: In a real implementation, this would come from the request headers
@@ -386,7 +399,7 @@ class A2AFormationServer:
                     }
                 )
 
-                logger.warning(f"Untrusted client {client_host} attempted A2A communication")
+                #  Untrusted client event already emitted above
                 return {"status": "error", "error": "Untrusted client", "message_id": message_id}
 
             # Check if agent exists in the formation
@@ -405,7 +418,7 @@ class A2AFormationServer:
                     }
                 )
 
-                logger.warning(f"Agent {agent_id} not found in formation")
+                #  Agent not found event already emitted above
                 return {
                     "status": "error",
                     "error": f"Agent {agent_id} not found",
@@ -430,7 +443,7 @@ class A2AFormationServer:
                     }
                 )
 
-                logger.warning(f"Agent {agent_id} not configured for external A2A")
+                #  Agent A2A config event already emitted above
                 return {
                     "status": "error",
                     "error": f"Agent {agent_id} not configured for external A2A",
@@ -438,7 +451,7 @@ class A2AFormationServer:
                 }
 
             # Log the incoming A2A message
-            logger.info(
+            #  Info - add observability event
                 f"A2A Message: external -> {agent_id} ({request.message_type}, id: {message_id})"
             )
 
@@ -527,7 +540,7 @@ class A2AFormationServer:
                 }
             )
 
-            logger.error(f"Error handling A2A message for agent {agent_id}: {e}")
+            #  Message handling error event already emitted above
             return {
                 "status": "error",
                 "error": f"Message handling failed: {str(e)}",
@@ -597,7 +610,7 @@ class A2AFormationServer:
 
             # Emit port discovery event
             ObservabilityManager.get_instance().emit_event(
-                event_type=ConversationEventType.RESOURCE_ALLOCATED,
+                event_type=SystemEventType.RESOURCE_ALLOCATED,
                 level=EventLevel.INFO,
                 message=f"Free port found for A2A Formation Server: {port}",
                 data={
@@ -642,7 +655,7 @@ class A2AFormationServer:
                     }
                 )
 
-                logger.warning("A2A Formation Server already running")
+                #  Server already running event - add observability
                 return await self.get_status()
 
             # Emit server starting event
@@ -668,7 +681,7 @@ class A2AFormationServer:
                 except OSError:
                     # Emit port unavailable event
                     ObservabilityManager.get_instance().emit_event(
-                        event_type=ConversationEventType.RESOURCE_ALLOCATED,
+                        event_type=SystemEventType.RESOURCE_ALLOCATED,
                         level=EventLevel.WARNING,
                         message=f"Port {self.port} unavailable, finding alternative",
                         data={
@@ -677,7 +690,7 @@ class A2AFormationServer:
                         }
                     )
 
-                    logger.warning(f"Port {self.port} unavailable, finding alternative")
+                    #  Port unavailable event - add observability
                     self.port = self._find_free_port()
 
             # Create uvicorn config
@@ -705,9 +718,9 @@ class A2AFormationServer:
                 }
             )
 
-            logger.info(f"A2A Formation Server started on http://{self.host}:{self.port}")
-            logger.info(f"Formation: {self.formation_name}")
-            logger.info(
+            #  Server started event - add observability
+            #  Formation info event - add observability
+            #  Info - add observability event
                 f"Available agents: {list(self.overlord.agents.keys()) if self.overlord else []}"
             )
 
@@ -734,7 +747,7 @@ class A2AFormationServer:
                 }
             )
 
-            logger.error(f"Failed to start A2A Formation Server: {e}")
+            #  Server start failure event - add observability
             self.is_running = False
             raise
 
@@ -758,7 +771,7 @@ class A2AFormationServer:
                     }
                 )
 
-                logger.warning("A2A Formation Server not running")
+                #  Server not running event - add observability
                 return {"status": "not_running"}
 
             # Emit server stopping event
@@ -792,7 +805,7 @@ class A2AFormationServer:
                 }
             )
 
-            logger.info(f"A2A Formation Server stopped on port {self.port}")
+            #  Server stopped event - add observability
 
             return {"status": "stopped", "formation": self.formation_name, "port": self.port}
 
@@ -809,7 +822,7 @@ class A2AFormationServer:
                 }
             )
 
-            logger.error(f"Error stopping A2A Formation Server: {e}")
+            #  Server stop error event - add observability
             raise
 
     async def get_status(self) -> Dict[str, Any]:
@@ -902,5 +915,5 @@ class A2AFormationServer:
                 }
             )
 
-            logger.error(f"A2A server health check failed: {e}")
+            #  Health check failure event - add observability
             return False

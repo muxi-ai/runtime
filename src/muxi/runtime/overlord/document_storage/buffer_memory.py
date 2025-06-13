@@ -14,7 +14,7 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .chunk_manager import DocumentChunkManager
 from .metadata_store import DocumentMetadata, DocumentMetadataStore
@@ -118,7 +118,7 @@ class DocumentAwareBufferMemory:
         self._chunk_to_document: Dict[str, str] = {}  # chunk_id -> document_id
         self._document_timestamps: Dict[str, float] = {}  # document_id -> upload_time
 
-        logger.info("Initialized DocumentAwareBufferMemory with document processing")
+        #  Info - add observability event
 
     async def add_document(
         self,
@@ -143,7 +143,7 @@ class DocumentAwareBufferMemory:
         Returns:
             Document ID
         """
-        logger.info(f"Adding document {filename} to buffer memory")
+        #  Info - add observability event
 
         # Chunk the document
         chunks = await self.chunk_manager.chunk_document(
@@ -201,7 +201,7 @@ class DocumentAwareBufferMemory:
         self._document_entries[document_id] = buffer_entries
         self._document_timestamps[document_id] = current_time
 
-        logger.info(f"Added document {filename} with {len(chunks)} chunks")
+        #  Info - add observability event
         return document_id
 
     async def search_documents(
@@ -322,7 +322,7 @@ class DocumentAwareBufferMemory:
         if document_id not in self._document_entries:
             return False
 
-        logger.info(f"Removing document {document_id} from buffer memory")
+        #  Info - add observability event
 
         # Remove all chunks from buffer
         entries = self._document_entries[document_id]
@@ -347,7 +347,7 @@ class DocumentAwareBufferMemory:
         if self.has_vector_search:
             await self._rebuild_vector_index()
 
-        logger.info(f"Removed document {document_id}")
+        #  Info - add observability event
         return True
 
     def get_document_stats(self) -> Dict[str, Any]:
@@ -388,7 +388,7 @@ class DocumentAwareBufferMemory:
         if current_memory <= self.max_memory_mb:
             return
 
-        logger.info(
+        #  Info - add observability event
             f"Document-aware FIFO cleanup triggered: {current_memory}MB > {self.max_memory_mb}MB"
         )
 
@@ -411,14 +411,14 @@ class DocumentAwareBufferMemory:
             # Recalculate memory usage
             current_memory = self._estimate_memory_usage()
 
-        logger.info(f"Document FIFO cleanup removed {removed_count} documents")
+        #  Info - add observability event
 
     async def _rebuild_vector_index(self) -> None:
         """Rebuild the vector index after document removal"""
         if not self.has_vector_search or not self.buffer:
             return
 
-        logger.info("Rebuilding vector index after document changes")
+        #  Info - add observability event
 
         # Get all current content for re-indexing
         contents = []
@@ -438,8 +438,8 @@ class DocumentAwareBufferMemory:
 
                 # Rebuild index
                 await self._build_index(embeddings)
-                logger.info("Vector index rebuilt successfully")
+                #  Info - add observability event
 
             except Exception as e:
-                logger.error(f"Failed to rebuild vector index: {e}")
+                #  Error - add observability event
                 self.has_vector_search = False

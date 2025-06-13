@@ -254,7 +254,7 @@ class A2AAuthManager:
         self._credentials_loaded = False
         self._oauth2_tokens: Dict[str, Dict[str, Any]] = {}
 
-        logger.debug("Initialized A2A auth manager with secrets")
+        #  A2A auth debug - add observability event
 
         # Log initialization
         try:
@@ -309,7 +309,7 @@ class A2AAuthManager:
 
     async def _load_default_credentials(self):
         """Load default credentials from secrets manager only."""
-        logger.debug("Loading A2A credentials from secrets manager...")
+        #  A2A auth debug - add observability event
 
         # Log credential loading start
         try:
@@ -389,7 +389,7 @@ class A2AAuthManager:
 
                 if credentials:
                     self._credentials[service_id] = AuthCredentials(auth_type, credentials)
-                    logger.debug(f"Loaded credentials for {service_id} ({auth_type})")
+                    #  A2A auth debug - add observability event
                     loaded_count += 1
 
                     # Log successful credential load
@@ -408,11 +408,11 @@ class A2AAuthManager:
                     except Exception:
                         pass
                 else:
-                    logger.warning(f"No credentials found for {service_id}")
+                    #  A2A auth warning - add observability event
                     failed_count += 1
 
             except Exception as e:
-                logger.warning(f"Failed to load credentials for {service_id}: {e}")
+                #  A2A auth warning - add observability event
                 failed_count += 1
 
                 # Log credential loading error
@@ -532,7 +532,7 @@ class A2AAuthManager:
                 )
             except Exception:
                 pass
-            logger.warning(f"Failed to load credential {secret_name}: {e}")
+            #  A2A auth warning - add observability event
 
         return None
 
@@ -569,7 +569,7 @@ class A2AAuthManager:
                 else:
                     missing_secrets.append(secret_name)
             except Exception as e:
-                logger.warning(f"Failed to load OAuth2 secret {secret_name}: {e}")
+                #  A2A auth warning - add observability event
                 missing_secrets.append(secret_name)
 
         if missing_secrets:
@@ -688,7 +688,7 @@ class A2AAuthManager:
                 )
             except Exception:
                 pass
-            logger.warning(f"Failed to load JWT credential {secret_name}: {e}")
+            #  A2A auth warning - add observability event
 
         return None
 
@@ -766,10 +766,10 @@ class A2AAuthManager:
 
                 # Add more auth types as needed...
 
-                logger.debug(f"Loaded formation credentials for {service_id} ({auth_type})")
+                #  A2A auth debug - add observability event
 
             except Exception as e:
-                logger.warning(f"Failed to load formation credentials for service: {e}")
+                #  A2A auth warning - add observability event
 
     def add_credentials(self, agent_id: str, auth_type: AuthType, credentials: Dict[str, Any]):
         """
@@ -782,9 +782,9 @@ class A2AAuthManager:
         """
         try:
             self._credentials[agent_id] = AuthCredentials(auth_type, credentials)
-            logger.info(f"Added credentials for {agent_id} ({auth_type})")
+            #  A2A auth info - add observability event
         except ValueError as e:
-            logger.error(f"Failed to add credentials for {agent_id}: {e}")
+            #  A2A auth error - add observability event
             raise
 
     def get_credentials(self, agent_id: str) -> Optional[AuthCredentials]:
@@ -820,22 +820,22 @@ class A2AAuthManager:
         """
         # If no auth required, return as-is
         if auth_type == AuthType.NONE:
-            logger.debug(f"No authentication required for {agent_id}")
+            #  A2A auth debug - add observability event
             return True, headers
 
         # Check if we have credentials
         creds = self.get_credentials(agent_id)
         if not creds:
             if required:
-                logger.error(f"No credentials available for {agent_id} (requires {auth_type})")
+                #  A2A auth error - add observability event
                 return False, headers
             else:
-                logger.warning(f"No credentials for {agent_id}, proceeding without auth")
+                #  A2A auth warning - add observability event
                 return True, headers
 
         # Verify credential type matches requirement
         if creds.auth_type != auth_type:
-            logger.error(
+            #  A2A auth error - add observability event
                 f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
             )
             if required:
@@ -857,12 +857,12 @@ class A2AAuthManager:
                     header_name = "X-API-Key"
 
                 updated_headers[header_name] = api_key
-                logger.debug(f"Applied API key authentication for {agent_id}")
+                #  A2A auth debug - add observability event
 
             elif auth_type == AuthType.BEARER:
                 token = creds.credentials["token"]
                 updated_headers["Authorization"] = f"Bearer {token}"
-                logger.debug(f"Applied Bearer token authentication for {agent_id}")
+                #  A2A auth debug - add observability event
 
             elif auth_type == AuthType.BASIC:
                 username = creds.credentials["username"]
@@ -870,22 +870,22 @@ class A2AAuthManager:
                 credentials_str = f"{username}:{password}"
                 encoded_credentials = base64.b64encode(credentials_str.encode()).decode()
                 updated_headers["Authorization"] = f"Basic {encoded_credentials}"
-                logger.debug(f"Applied Basic authentication for {agent_id}")
+                #  A2A auth debug - add observability event
 
             elif auth_type == AuthType.OAUTH2:
                 # For OAuth2, we might need to get a token first
                 token = await self._get_oauth2_token(agent_id, creds)
                 if token:
                     updated_headers["Authorization"] = f"Bearer {token}"
-                    logger.debug(f"Applied OAuth2 authentication for {agent_id}")
+                    #  A2A auth debug - add observability event
                 else:
-                    logger.error(f"Failed to get OAuth2 token for {agent_id}")
+                    #  A2A auth error - add observability event
                     return False, headers
 
             elif auth_type == AuthType.HMAC:
                 # HMAC signature authentication - need URL, method, and payload
                 # This will be handled by the new method with additional parameters
-                logger.error(
+                #  A2A auth error - add observability event
                     "HMAC authentication requires URL, method, and payload"
                     " - use apply_authentication_with_context instead"
                 )
@@ -896,15 +896,15 @@ class A2AAuthManager:
                 token = self._create_jwt_token(creds.credentials, agent_id)
                 if token:
                     updated_headers["Authorization"] = f"Bearer {token}"
-                    logger.debug(f"Applied JWT authentication for {agent_id}")
+                    #  A2A auth debug - add observability event
                 else:
-                    logger.error(f"Failed to create JWT token for {agent_id}")
+                    #  A2A auth error - add observability event
                     return False, headers
 
             return True, updated_headers
 
         except Exception as e:
-            logger.error(f"Failed to apply authentication for {agent_id}: {e}")
+            #  A2A auth error - add observability event
             return False, headers
 
     async def apply_authentication_with_context(
@@ -934,22 +934,22 @@ class A2AAuthManager:
         """
         # If no auth required, return as-is
         if auth_type == AuthType.NONE:
-            logger.debug(f"No authentication required for {agent_id}")
+            #  A2A auth debug - add observability event
             return True, headers
 
         # Check if we have credentials
         creds = self.get_credentials(agent_id)
         if not creds:
             if required:
-                logger.error(f"No credentials available for {agent_id} (requires {auth_type})")
+                #  A2A auth error - add observability event
                 return False, headers
             else:
-                logger.warning(f"No credentials for {agent_id}, proceeding without auth")
+                #  A2A auth warning - add observability event
                 return True, headers
 
         # Verify credential type matches requirement
         if creds.auth_type != auth_type:
-            logger.error(
+            #  A2A auth error - add observability event
                 f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
             )
             if required:
@@ -964,20 +964,20 @@ class A2AAuthManager:
             if auth_type == AuthType.HMAC:
                 success = self._apply_hmac_auth(updated_headers, creds, url, method, payload)
                 if success:
-                    logger.debug(f"Applied HMAC authentication for {agent_id}")
+                    #  A2A auth debug - add observability event
                     return True, updated_headers
                 else:
-                    logger.error(f"Failed to apply HMAC authentication for {agent_id}")
+                    #  A2A auth error - add observability event
                     return False, headers
 
             elif auth_type == AuthType.JWT:
                 token = self._create_jwt_token(creds.credentials, agent_id)
                 if token:
                     updated_headers["Authorization"] = f"Bearer {token}"
-                    logger.debug(f"Applied JWT authentication for {agent_id}")
+                    #  A2A auth debug - add observability event
                     return True, updated_headers
                 else:
-                    logger.error(f"Failed to create JWT token for {agent_id}")
+                    #  A2A auth error - add observability event
                     return False, headers
 
             else:
@@ -985,7 +985,7 @@ class A2AAuthManager:
                 return await self.apply_authentication(agent_id, auth_type, headers, required)
 
         except Exception as e:
-            logger.error(f"Failed to apply authentication for {agent_id}: {e}")
+            #  A2A auth error - add observability event
             return False, headers
 
     def _apply_hmac_auth(
@@ -1026,13 +1026,13 @@ class A2AAuthManager:
             return True
 
         except Exception as e:
-            logger.error(f"HMAC signature generation failed: {e}")
+            #  A2A auth error - add observability event
             return False
 
     def _create_jwt_token(self, credentials: Dict[str, Any], agent_id: str) -> Optional[str]:
         """Create a JWT token for authentication"""
         if not JWT_AVAILABLE:
-            logger.error("JWT functionality not available - install PyJWT and cryptography")
+            #  A2A auth error - add observability event
             return None
 
         try:
@@ -1075,7 +1075,7 @@ class A2AAuthManager:
             return token
 
         except Exception as e:
-            logger.error(f"JWT token creation failed: {e}")
+            #  A2A auth error - add observability event
             return None
 
     async def _get_oauth2_token(
@@ -1142,7 +1142,7 @@ class A2AAuthManager:
                     )
                 except Exception:
                     pass
-                logger.error(f"Missing OAuth2 configuration for {service_id}")
+                #  A2A auth error - add observability event
                 return None
 
             # Make token request
@@ -1222,7 +1222,7 @@ class A2AAuthManager:
                             )
                         except Exception:
                             pass
-                        logger.error(
+                        #  A2A auth error - add observability event
                             f"OAuth2 token request failed for {service_id}: "
                             f"{response.status}"
                         )
@@ -1243,7 +1243,7 @@ class A2AAuthManager:
                 )
             except Exception:
                 pass
-            logger.error(f"Failed to get OAuth2 token for {service_id}: {e}")
+            #  A2A auth error - add observability event
 
         return None
 
@@ -1311,7 +1311,7 @@ class A2AAuthManager:
                 )
             except Exception:
                 pass
-            logger.error(f"Failed to generate HMAC signature: {e}")
+            #  A2A auth error - add observability event
             return ""
 
     def _generate_jwt_token(self, credentials: AuthCredentials) -> Optional[str]:
@@ -1358,7 +1358,7 @@ class A2AAuthManager:
                     )
                 except Exception:
                     pass
-                logger.error("Missing private key for JWT token generation")
+                #  A2A auth error - add observability event
                 return None
 
             # Create JWT payload
@@ -1418,7 +1418,7 @@ class A2AAuthManager:
                 )
             except Exception:
                 pass
-            logger.error(f"Failed to generate JWT token: {e}")
+            #  A2A auth error - add observability event
 
         return None
 
@@ -1426,7 +1426,7 @@ class A2AAuthManager:
         """Remove credentials for an agent"""
         if agent_id in self._credentials:
             del self._credentials[agent_id]
-            logger.info(f"Removed credentials for {agent_id}")
+            #  A2A auth info - add observability event
 
     def list_agents_with_credentials(self) -> Dict[str, AuthType]:
         """Get a list of agents that have credentials configured"""

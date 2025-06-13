@@ -70,7 +70,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import random
 
-from loguru import logger
+from ..observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 # File processing imports
 # Required runtime dependencies
@@ -172,17 +172,17 @@ class FileProcessor:
             # Check file size limits
             file_size = file_path.stat().st_size
             if file_size > FILE_SIZE_LIMITS["default"]:
-                logger.warning(f"File {file_path} exceeds size limit: {file_size} bytes")
+                #  LLM warning - add observability event
                 return False
 
             # Basic security check - avoid obviously dangerous files
             if file_path.suffix.lower() in [".exe", ".bat", ".sh", ".scr"]:
-                logger.warning(f"Potentially dangerous file type: {file_path.suffix}")
+                #  LLM warning - add observability event
                 return False
 
             return True
         except Exception as e:
-            logger.error(f"File validation error: {str(e)}")
+            #  LLM error - add observability event
             return False
 
     @staticmethod
@@ -196,7 +196,7 @@ class FileProcessor:
             if mime_type:
                 return mime_type
         except Exception as e:
-            logger.debug(f"Magic MIME detection failed: {e}")
+            #  LLM debug - add observability event
 
         # Fallback to mimetypes module
         mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -329,7 +329,7 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = "open"
-            logger.warning("Circuit breaker OPENED after {} failures".format(self.failure_count))
+            #  LLM warning - add observability event
 
 
 # Global cache for responses (simple in-memory cache)
@@ -462,7 +462,7 @@ async def _exponential_backoff_retry(
         except LLMError as e:
             if attempt == max_retries or not e.retryable or e.error_type not in retryable_errors:
                 _retry_stats["failed_requests"] += 1
-                logger.error(
+                #  LLM error - add observability event
                     f"Request failed after {attempt + 1} attempts: {str(e)}",
                     extra={
                         "error_type": e.error_type.value,
@@ -480,7 +480,7 @@ async def _exponential_backoff_retry(
             if jitter:
                 delay = delay * (0.5 + random.random() * 0.5)  # Add 50% jitter
 
-            logger.warning(
+            #  LLM warning - add observability event
                 f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {str(e)}. "
                 f"Retrying in {delay:.2f}s",
                 extra={
@@ -508,7 +508,7 @@ def set_llm_api_key(api_key: str, provider: str) -> None:
         provider: The provider to set the key for (e.g., "openai", "anthropic")
     """
     set_api_key(provider, api_key)
-    logger.debug(f"API key set for provider: {provider}")
+    #  LLM debug - add observability event
 
 
 class LLM:
@@ -588,7 +588,7 @@ class LLM:
         if api_key:
             set_llm_api_key(api_key, self._provider)
 
-        logger.info(
+        #  LLM info - add observability event
             f"Initialized LLM with {self.model_name}",
             extra={
                 "provider": self._provider,
@@ -610,9 +610,9 @@ class LLM:
                 from ..overlord.workflow.multimodal import MultiModalFusionEngine
 
                 self._fusion_engine = MultiModalFusionEngine(self)
-                logger.debug("Initialized fusion engine for advanced multimodal processing")
+                #  LLM debug - add observability event
             except ImportError as e:
-                logger.warning(
+                #  LLM warning - add observability event
                     f"Could not import fusion engine: {e}. " "Falling back to basic processing."
                 )
                 self._fusion_engine = None
@@ -781,7 +781,7 @@ class LLM:
                 description=f"LLM chat request started for {self.model_name}",
             )
         except Exception as e:
-            logger.warning(f"Failed to emit LLM request started event: {e}")
+            #  LLM warning - add observability event
 
         # Handle text-only conversations
         if not files:
@@ -842,7 +842,7 @@ class LLM:
 
             if multimodal_content is None:
                 # Fallback to basic processing if conversion failed
-                logger.warning(
+                #  LLM warning - add observability event
                     "Failed to convert files to multimodal content, " "using basic processing"
                 )
                 return await self._legacy_chat_with_files(messages, files, **kwargs)
@@ -871,7 +871,7 @@ class LLM:
             return await self._synthesize_chat_response(fusion_result, user_message, **kwargs)
 
         except Exception as e:
-            logger.error(f"Error in advanced multimodal processing: {e}")
+            #  LLM error - add observability event
             # Fallback to basic processing on any error
             return await self._legacy_chat_with_files(messages, files, **kwargs)
 
@@ -921,7 +921,7 @@ Provide a helpful, conversational response that directly addresses what the user
                         file_data = await FileProcessor.convert_file_for_onellm(file_path)
                         processed_files.append(file_data)
 
-                        logger.debug(f"Successfully processed file: {file_path}")
+                        #  LLM debug - add observability event
 
                     except LLMError:
                         # Re-raise LLMErrors as-is
@@ -984,7 +984,7 @@ Provide a helpful, conversational response that directly addresses what the user
             if not files:
                 cached_response = _get_cached_response(cache_key)
                 if cached_response is not None:
-                    logger.debug(f"Cache hit for chat request: {cache_key}")
+                    #  LLM debug - add observability event
                     return cached_response
 
             # Call OneLLM ChatCompletion using async method
@@ -1058,7 +1058,7 @@ Provide a helpful, conversational response that directly addresses what the user
             cache_key = _get_cache_key("embed", **params)
             cached_response = _get_cached_response(cache_key)
             if cached_response is not None:
-                logger.debug(f"Cache hit for embedding request: {cache_key}")
+                #  LLM debug - add observability event
                 return cached_response
 
             # Call OneLLM Embedding using async method
@@ -1108,7 +1108,7 @@ Provide a helpful, conversational response that directly addresses what the user
             cache_key = _get_cache_key("embed_batch", **params)
             cached_response = _get_cached_response(cache_key)
             if cached_response is not None:
-                logger.debug(f"Cache hit for batch embedding request: {cache_key}")
+                #  LLM debug - add observability event
                 return cached_response
 
             # Call OneLLM Embedding using async method
@@ -1172,14 +1172,14 @@ def clear_llm_cache():
     """Clear the LLM response cache."""
     global _response_cache
     _response_cache.clear()
-    logger.info("LLM cache cleared")
+    #  LLM info - add observability event
 
 
 def set_cache_ttl(ttl: int):
     """Set the cache TTL in seconds."""
     global _cache_ttl
     _cache_ttl = ttl
-    logger.info(f"LLM cache TTL set to {ttl} seconds")
+    #  LLM info - add observability event
 
 
 def get_cache_stats():
@@ -1235,4 +1235,4 @@ def reset_all_stats():
     }
     _circuit_breakers.clear()
     clear_llm_cache()
-    logger.info("All LLM statistics and circuit breakers reset")
+    #  LLM info - add observability event

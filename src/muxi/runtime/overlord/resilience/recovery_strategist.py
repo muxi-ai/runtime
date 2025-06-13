@@ -9,7 +9,7 @@ import asyncio
 import random
 import time
 from typing import Any, Dict, List, Optional, Callable
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .resilience_types import (
     ErrorType,
@@ -207,21 +207,21 @@ class RecoveryStrategist:
             # Check for custom strategy override
             if error_context.error_type in self.config.custom_strategies:
                 strategy = self.config.custom_strategies[error_context.error_type]
-                logger.debug(f"Using custom strategy for {error_context.error_type.value}: {strategy.value}")
+                #  Debug - add observability event
                 return strategy
 
             # Get candidate strategies
             candidates = available_strategies or self._get_candidate_strategies(error_context)
 
             if not candidates:
-                logger.warning(f"No recovery strategies available for {error_context.error_type.value}")
+                #  Warning - add observability event
                 return RecoveryStrategy.ABORT_WORKFLOW
 
             # Filter strategies based on configuration
             filtered_candidates = self._filter_strategies_by_config(candidates)
 
             if not filtered_candidates:
-                logger.warning("All strategies filtered out by configuration, using first candidate")
+                #  Warning - add observability event
                 return candidates[0]
 
             # Select best strategy based on performance and context
@@ -230,7 +230,7 @@ class RecoveryStrategist:
                 error_context
             )
 
-            logger.debug(
+            #  Debug - add observability event
                 f"Selected strategy {selected_strategy.value} for error {error_context.error_type.value} "
                 f"(severity: {error_context.severity.value}, attempt: {error_context.attempt_count})"
             )
@@ -238,7 +238,7 @@ class RecoveryStrategist:
             return selected_strategy
 
         except Exception as selection_error:
-            logger.error(f"Error selecting recovery strategy: {selection_error}")
+            #  Error - add observability event
             return RecoveryStrategy.ABORT_WORKFLOW
 
     def _get_candidate_strategies(self, error_context: ErrorContext) -> List[RecoveryStrategy]:
@@ -325,7 +325,7 @@ class RecoveryStrategist:
         # Select strategy with highest score
         best_strategy = max(strategy_scores.keys(), key=lambda s: strategy_scores[s])
 
-        logger.debug(f"Strategy scores: {[(s.value, round(score, 2)) for s, score in strategy_scores.items()]}")
+        #  Debug - add observability event
 
         return best_strategy
 
@@ -409,7 +409,7 @@ class RecoveryStrategist:
             (1 - alpha) * current_performance + alpha * new_result
         )
 
-        logger.debug(
+        #  Debug - add observability event
             f"Updated strategy performance: {performance_key} = "
             f"{self._strategy_performance[performance_key]:.3f} (success: {success})"
         )
@@ -421,7 +421,7 @@ class RecoveryStrategist:
     def reset_strategy_performance(self) -> None:
         """Reset all strategy performance metrics."""
         self._strategy_performance.clear()
-        logger.info("Reset all strategy performance metrics")
+        #  Info - add observability event
 
     def add_custom_strategy_mapping(
         self,
@@ -430,7 +430,7 @@ class RecoveryStrategist:
     ) -> None:
         """Add or update custom strategy mapping for an error type."""
         self.default_strategies[error_type] = strategies
-        logger.debug(f"Added custom strategy mapping for {error_type.value}: {[s.value for s in strategies]}")
+        #  Debug - add observability event
 
     def get_available_strategies(self, error_type: ErrorType) -> List[RecoveryStrategy]:
         """Get available strategies for a specific error type."""

@@ -45,7 +45,7 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, TypeVar, Union
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 # Type variables
 T = TypeVar("T")  # Return type for retried functions
@@ -298,7 +298,7 @@ async def retry_async(
                 msg = part1 + part2
 
                 # Log the final failure
-                logger.warning(msg)
+                #  Warning - add observability event
 
                 # Re-raise the last exception to signal failure to caller
                 raise
@@ -314,7 +314,7 @@ async def retry_async(
                 on_retry(attempt, e, delay)
 
             # Log the retry attempt with details
-            logger.info(
+            #  Info - add observability event
                 f"Retry {attempt}/{config.max_retries} after error: {str(e)}. "
                 f"Retrying in {delay:.2f} seconds..."
             )
@@ -385,10 +385,10 @@ async def with_retries(
             f"{exc_name}: {exc_str}. {retry_msg}"
         )
         # Log at warning level to highlight the retry event
-        logger.warning(warning_msg)
+        #  Warning - add observability event
 
     # Log the start of the operation
-    logger.info(f"Starting {operation_name} with retry support")
+    #  Info - add observability event
     # Record the start time for calculating total operation duration
     start_time = time.time()
 
@@ -406,7 +406,7 @@ async def with_retries(
 
         # Calculate and log the total elapsed time on success
         elapsed = time.time() - start_time
-        logger.info(f"{operation_name} completed successfully in {elapsed:.2f} seconds")
+        #  Info - add observability event
         # Return the successful result to the caller
         return result
 
@@ -420,5 +420,5 @@ async def with_retries(
             f"{type(e).__name__}: {str(e)}"
         )
         # Log at error level since this is a complete failure after all retries
-        logger.error(error_msg)
+        #  Error - add observability event
         raise  # Re-raise the exception to the caller

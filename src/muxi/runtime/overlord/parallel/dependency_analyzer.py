@@ -59,7 +59,7 @@ class DependencyAnalyzer:
                 if dependency_id in self.dependency_graph:
                     self.dependency_graph[dependency_id].dependents.add(task_id)
                 else:
-                    logger.warning(f"Task {task_id} depends on non-existent task {dependency_id}")
+                    #  Warning - add observability event
 
         return self.dependency_graph
 

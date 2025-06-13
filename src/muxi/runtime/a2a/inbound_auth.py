@@ -78,7 +78,7 @@ class A2AInboundAuthenticator:
                 }
             )
 
-            logger.info(f"Initialized A2A inbound authenticator with mode: {self.auth_mode}")
+            #  A2A inbound auth info - add observability event
 
         except Exception as e:
             # Emit error event for initialization failure
@@ -117,7 +117,7 @@ class A2AInboundAuthenticator:
                     message="No SecretsManager provided - no credentials will be available",
                     data={"auth_mode": self.auth_mode.value}
                 )
-                logger.warning("No SecretsManager provided - no credentials will be available")
+                #  A2A inbound auth warning - add observability event
 
             # Emit successful initialization event
             ObservabilityManager.get_instance().emit_event(
@@ -157,10 +157,10 @@ class A2AInboundAuthenticator:
                     message="SecretsManager not available for credential loading",
                     data={"auth_mode": self.auth_mode.value}
                 )
-                logger.warning("SecretsManager not available for credential loading")
+                #  A2A inbound auth warning - add observability event
                 return
 
-            logger.debug("Loading A2A inbound credentials from secrets manager...")
+            #  A2A inbound auth debug - add observability event
 
             # Define credential mappings for expected external clients
             credential_configs = {
@@ -223,7 +223,7 @@ class A2AInboundAuthenticator:
                             }
                         )
 
-                        logger.debug(f"Loaded inbound credential for {client_id} ({auth_type})")
+                        #  A2A inbound auth debug - add observability event
                         successful_loads += 1
                     else:
                         # Emit warning for missing credentials
@@ -236,7 +236,7 @@ class A2AInboundAuthenticator:
                                 "auth_type": auth_type.value
                             }
                         )
-                        logger.warning(f"No credentials found for {client_id}")
+                        #  A2A inbound auth warning - add observability event
                         failed_loads += 1
 
                 except Exception as e:
@@ -250,7 +250,7 @@ class A2AInboundAuthenticator:
                             "error": str(e)
                         }
                     )
-                    logger.warning(f"Failed to load credentials for {client_id}: {e}")
+                    #  A2A inbound auth warning - add observability event
                     failed_loads += 1
 
             # Emit summary event
@@ -306,7 +306,7 @@ class A2AInboundAuthenticator:
                     "error": str(e)
                 }
             )
-            logger.warning(f"Failed to get secret {secret_name}: {e}")
+            #  A2A inbound auth warning - add observability event
 
         return None
 
@@ -332,7 +332,7 @@ class A2AInboundAuthenticator:
                             "auth_type": "basic"
                         }
                     )
-                    logger.warning(f"Secret {secret_name} not found for Basic auth {key}")
+                    #  A2A inbound auth warning - add observability event
                     return None
             except Exception as e:
                 # Emit error event for secret retrieval failure
@@ -347,7 +347,7 @@ class A2AInboundAuthenticator:
                         "error": str(e)
                     }
                 )
-                logger.warning(f"Failed to get secret {secret_name}: {e}")
+                #  A2A inbound auth warning - add observability event
                 return None
 
         # Return credentials only if we have both username and password
@@ -414,7 +414,7 @@ class A2AInboundAuthenticator:
                 }
             )
 
-            logger.debug(f"Added inbound credential for client {client_id} ({auth_type})")
+            #  A2A inbound auth debug - add observability event
 
         except Exception as e:
             # Emit error event for credential addition failure
@@ -515,7 +515,7 @@ class A2AInboundAuthenticator:
                     "error": str(e)
                 }
             )
-            logger.error(f"Authentication error: {e}")
+            #  A2A inbound auth error - add observability event
             return False, None, f"Authentication error: {str(e)}"
 
     async def _authenticate_api_key(
@@ -898,7 +898,7 @@ class A2AInboundAuthenticator:
                 }
             )
 
-            logger.info(f"Removed client {client_id} ({auth_type})")
+            #  A2A inbound auth info - add observability event
 
         except Exception as e:
             # Emit error event for client removal failure

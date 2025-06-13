@@ -80,13 +80,13 @@ import pickle
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
-from loguru import logger
+# Loguru import removed - add observability import
 
 # FAISSx will be imported dynamically in _setup_faissx method
 
 from ..utils import load_document, chunk_text
 from .base import FileKnowledge
-from ..observability import ConversationEventType, EventLevel, ObservabilityManager
+from ..observability import ConversationEventType, EventLevel, ObservabilityManager, SystemEventType
 
 
 class KnowledgeHandler:
@@ -269,7 +269,7 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=ConversationEventType.RESOURCE_ALLOCATED,
+                    event_type=SystemEventType.RESOURCE_ALLOCATED,
                     level=EventLevel.INFO,
                     message="FAISSx setup completed",
                     data={
@@ -323,7 +323,7 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=ConversationEventType.RESOURCE_ALLOCATED,
+                    event_type=SystemEventType.RESOURCE_ALLOCATED,
                     level=EventLevel.WARNING,
                     message="Knowledge source limit reached",
                     data={
@@ -712,7 +712,7 @@ class KnowledgeHandler:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.log_event(
-                            event_type=ConversationEventType.RESOURCE_ALLOCATED,
+                            event_type=SystemEventType.RESOURCE_ALLOCATED,
                             level=EventLevel.WARNING,
                             message="Knowledge sources limited for performance",
                             data={
@@ -842,7 +842,7 @@ class KnowledgeHandler:
         try:
             file_mtime = os.path.getmtime(file_path)
         except FileNotFoundError:
-            logger.error(f"File not found: {file_path}")
+            #  Error - add observability event
 
             # Log file not found
             try:
@@ -861,7 +861,7 @@ class KnowledgeHandler:
         for doc in self.documents:
             if doc.get("source") == file_path and doc.get("mtime") == file_mtime:
                 # File already processed and hasn't changed
-                logger.info(f"File {file_path} already processed and hasn't changed")
+                #  Info - add observability event
 
                 # Log file already processed
                 try:
@@ -882,7 +882,7 @@ class KnowledgeHandler:
             chunks = chunk_text(content)
 
             if not chunks:
-                logger.warning(f"No content found in {file_path}")
+                #  Warning - add observability event
 
                 # Log no content
                 try:
@@ -925,7 +925,7 @@ class KnowledgeHandler:
             # Save updated embeddings
             self._save_cached_embeddings(embeddings)
 
-            logger.info(f"Added {len(chunks)} chunks from {file_path} to knowledge base")
+            #  Info - add observability event
 
             # Log successful file addition
             try:
@@ -947,7 +947,7 @@ class KnowledgeHandler:
             return len(chunks)
 
         except Exception as e:
-            logger.error(f"Error adding file {file_path} to knowledge base: {e}")
+            #  Error - add observability event
 
             # Log file addition error
             try:
@@ -1082,8 +1082,8 @@ class KnowledgeHandler:
             try:
                 knowledge_source = FileKnowledge.from_config(source_config)
                 await self.add_file(knowledge_source, generate_embeddings_fn)
-                logger.info(f"Loaded knowledge source: {knowledge_source.path}")
+                #  Info - add observability event
             except Exception as e:
                 source_path = source_config.get("path", "unknown")
-                logger.error(f"Failed to load knowledge source {source_path}: {e}")
+                #  Error - add observability event
                 continue

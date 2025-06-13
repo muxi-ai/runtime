@@ -14,7 +14,7 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 @dataclass
@@ -55,7 +55,7 @@ class DocumentSummarizer:
         self.llm_model = llm_model
         self.persona_config = persona_config or {}
         self._summary_cache: Dict[str, DocumentSummary] = {}
-        logger.info("Initialized DocumentSummarizer")
+        #  Info - add observability event
 
     async def summarize_document(
         self,
@@ -92,7 +92,7 @@ class DocumentSummarizer:
             return summary
 
         except Exception as e:
-            logger.error(f"Failed to generate summary for {document_id}: {e}")
+            #  Error - add observability event
             raise
 
     def _extract_key_points(self, content: str) -> List[str]:
@@ -122,7 +122,7 @@ class DocumentSummarizer:
         Returns:
             Dictionary with individual summaries and cross-document insights
         """
-        logger.info(f"Summarizing {len(documents)} documents")
+        #  Info - add observability event
 
         # Generate individual summaries
         summaries = {}
@@ -135,7 +135,7 @@ class DocumentSummarizer:
                 )
                 summaries[doc["id"]] = summary
             except Exception as e:
-                logger.error(f"Failed to summarize document {doc['id']}: {e}")
+                #  Error - add observability event
                 continue
 
         result = {"individual_summaries": summaries}
@@ -162,7 +162,7 @@ class DocumentSummarizer:
         Returns:
             DocumentSummary object with progressive summary
         """
-        logger.info(f"Generating progressive summary for {len(document_chunks)} chunks")
+        #  Info - add observability event
 
         # Summarize chunks in batches
         chunk_summaries = []
@@ -188,7 +188,7 @@ class DocumentSummarizer:
             config=SummaryConfig(summary_type=final_summary_type)
         )
 
-        logger.info("Progressive summary generation completed")
+        #  Info - add observability event
         return final_summary
 
     def _build_summarization_prompt(
@@ -301,7 +301,7 @@ class DocumentSummarizer:
         self, summaries: Dict[str, DocumentSummary]
     ) -> Dict[str, Any]:
         """Generate insights across multiple document summaries"""
-        logger.info(f"Generating cross-document insights for {len(summaries)} summaries")
+        #  Info - add observability event
 
         # Combine all summary content
         combined_content = "\n\n".join([
@@ -335,7 +335,7 @@ class DocumentSummarizer:
             }
 
         except Exception as e:
-            logger.error(f"Failed to generate cross-document insights: {e}")
+            #  Error - add observability event
             return {"error": str(e)}
 
     async def _summarize_content_batch(self, content: str, batch_id: str) -> str:
@@ -353,7 +353,7 @@ class DocumentSummarizer:
             response = await self.llm_model.generate_response(prompt)
             return response.strip()
         except Exception as e:
-            logger.error(f"Failed to summarize batch {batch_id}: {e}")
+            #  Error - add observability event
             return f"[Error summarizing batch {batch_id}]"
 
     def _extract_themes(self, insights_text: str) -> List[str]:

@@ -52,7 +52,7 @@ class ResourceManager:
     async def register_agent(self, agent_capability: AgentCapability) -> None:
         """Register an agent's capabilities for resource allocation."""
         self.agent_capabilities[agent_capability.agent_id] = agent_capability
-        logger.info(f"Registered agent {agent_capability.agent_id} with capabilities: "
+        #  Info - add observability event
                    f"{list(agent_capability.capabilities)}")
 
     async def update_agent_load(self, agent_id: str, current_load: int) -> None:
@@ -85,7 +85,7 @@ class ResourceManager:
         ]
 
         if not valid_agents:
-            logger.warning("No valid agents available for allocation")
+            #  Warning - add observability event
             return allocation
 
         # Process each parallel group
@@ -99,7 +99,7 @@ class ResourceManager:
         self.current_allocations[allocation_id] = allocation
         self.allocation_history.append(allocation)
 
-        logger.info(f"Created allocation {allocation_id} with efficiency: "
+        #  Info - add observability event
                    f"{allocation.parallel_efficiency:.2f}")
 
         return allocation
@@ -155,7 +155,7 @@ class ResourceManager:
             if least_loaded:
                 task_duration = self._get_task_duration(task_id, group_tasks)
                 allocation.assign_task(task_id, least_loaded, task_duration)
-                logger.warning(f"Fallback assignment: task {task_id} to agent {least_loaded}")
+                #  Warning - add observability event
 
     async def _score_agents_for_task(
         self,
@@ -385,7 +385,7 @@ class ResourceManager:
                 # Update assignment
                 allocation.task_assignments[task_id] = target_agent
 
-                logger.info(f"Rebalanced task {task_id} from {overloaded_agent} to {target_agent}")
+                #  Info - add observability event
 
         # Recalculate load balance score
         new_workload_sizes = [len(tasks) for tasks in allocation.agent_workloads.values()]
@@ -430,4 +430,4 @@ class ResourceManager:
             # Remove from current allocations
             del self.current_allocations[allocation_id]
 
-            logger.info(f"Cleaned up allocation {allocation_id}")
+            #  Info - add observability event

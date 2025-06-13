@@ -30,10 +30,10 @@ class DocumentProcessingConfig:
         for model in models:
             if "documents" in model:
                 settings = model.get("settings", {})
-                logger.debug(f"Found document model settings: {settings}")
+                #  Document model config - add observability event
                 return settings, True
 
-        logger.debug("No document model configuration found, using defaults")
+        #  Document model default - add observability event
         return {}, False
 
     def _apply_defaults(self) -> None:

@@ -72,7 +72,7 @@ class ParallelExecutor:
         execution_id = f"exec_{int(time.time())}_{optimized_workflow.workflow_id}"
         start_time = time.time()
 
-        logger.info(f"Starting parallel execution {execution_id}")
+        #  Info - add observability event
 
         # Initialize execution result
         execution_result = ParallelExecutionResult(
@@ -107,7 +107,7 @@ class ParallelExecutor:
             self.successful_executions += 1
             execution_result.success = True
 
-            logger.info(f"Execution {execution_id} completed successfully. "
+            #  Info - add observability event
                        f"Duration: {execution_result.actual_duration:.1f}s, "
                        f"Speedup: {execution_result.actual_speedup:.1f}x")
 
@@ -120,7 +120,7 @@ class ParallelExecutor:
 
             self.failed_executions += 1
 
-            logger.error(f"Execution {execution_id} failed: {e}")
+            #  Error - add observability event
 
         finally:
             # Clean up
@@ -147,7 +147,7 @@ class ParallelExecutor:
 
         # Execute groups sequentially (groups contain parallel tasks)
         for group_index, group in enumerate(execution_plan.parallel_groups):
-            logger.debug(f"Executing group {group.group_id} ({group_index + 1}/{len(execution_plan.parallel_groups)})")
+            #  Debug - add observability event
 
             # Execute tasks in this group in parallel
             await self._execute_group_tasks(
@@ -184,7 +184,7 @@ class ParallelExecutor:
         for task_id in group.task_ids:
             agent_id = resource_allocation.task_assignments.get(task_id)
             if not agent_id:
-                logger.warning(f"No agent assigned to task {task_id}, skipping")
+                #  Warning - add observability event
                 continue
 
             task_execution = TaskExecution(
@@ -226,7 +226,7 @@ class ParallelExecutor:
         task_execution.start_time = time.time()
 
         try:
-            logger.debug(f"Starting task {task_execution.task_id} on agent {task_execution.agent_id}")
+            #  Debug - add observability event
 
             # Execute the task
             result = await task_executor(
@@ -240,7 +240,7 @@ class ParallelExecutor:
             task_execution.status = TaskStatus.COMPLETED
             task_execution.end_time = time.time()
 
-            logger.debug(f"Task {task_execution.task_id} completed successfully")
+            #  Debug - add observability event
 
         except Exception as e:
             # Task failed
@@ -248,7 +248,7 @@ class ParallelExecutor:
             task_execution.status = TaskStatus.FAILED
             task_execution.end_time = time.time()
 
-            logger.error(f"Task {task_execution.task_id} failed: {e}")
+            #  Error - add observability event
 
     async def _calculate_actual_speedup(
         self,
@@ -355,7 +355,7 @@ class ParallelExecutor:
         # Clean up task executions
         await self._cleanup_task_executions(execution_id)
 
-        logger.info(f"Execution {execution_id} cancelled")
+        #  Info - add observability event
         return True
 
     def get_execution_statistics(self) -> Dict[str, Any]:

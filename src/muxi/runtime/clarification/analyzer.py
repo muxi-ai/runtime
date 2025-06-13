@@ -53,7 +53,7 @@ class InformationAnalyzer:
             InformationAnalysis with missing info, suggestions, and confidence
         """
         try:
-            logger.info(f"Analyzing request for intent: {intent}")
+            #  Info - add observability event
 
             missing_info = []
             available_info = {}
@@ -101,7 +101,7 @@ class InformationAnalyzer:
             )
 
         except Exception as e:
-            logger.error(f"Error analyzing request: {e}")
+            #  Error - add observability event
             raise InformationAnalysisError(f"Failed to analyze request: {e}")
 
     async def analyze_tool_requirements(
@@ -122,7 +122,7 @@ class InformationAnalyzer:
             ToolInformationAnalysis with missing parameters and confidence scores
         """
         try:
-            logger.info(f"Analyzing tool requirements for: {tool_name}")
+            #  Info - add observability event
 
             # Get tool schema (this would typically come from MCP service)
             tool_schema = await self._get_tool_schema(tool_name)
@@ -172,7 +172,7 @@ class InformationAnalyzer:
             )
 
         except Exception as e:
-            logger.error(f"Error analyzing tool requirements: {e}")
+            #  Error - add observability event
             raise InformationAnalysisError(f"Failed to analyze tool requirements: {e}")
 
     async def analyze_reasoning_requirements(
@@ -193,7 +193,7 @@ class InformationAnalyzer:
             ReasoningInformationAnalysis with context gaps and requirements
         """
         try:
-            logger.info(f"Analyzing reasoning requirements for intent: {intent}")
+            #  Info - add observability event
 
             context_gaps = []
             user_background_needed = []
@@ -232,7 +232,7 @@ class InformationAnalyzer:
             )
 
         except Exception as e:
-            logger.error(f"Error analyzing reasoning requirements: {e}")
+            #  Error - add observability event
             raise InformationAnalysisError(f"Failed to analyze reasoning requirements: {e}")
 
     async def enrich_with_context(

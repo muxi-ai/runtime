@@ -31,7 +31,7 @@ class ProactiveClarificationIntentDetector:
         """
         self.model = model
         if not model:
-            logger.warning(
+            #  Proactive detector warning - add observability event
                 "ProactiveClarificationIntentDetector initialized without model - "
                 "all detection will fail"
             )
@@ -47,23 +47,23 @@ class ProactiveClarificationIntentDetector:
             ProactiveRequest if detected, None otherwise
         """
         if not self.model:
-            logger.debug("No model available for proactive intent detection")
+            #  Proactive detector debug - add observability event
             return None
 
         try:
-            logger.debug(f"Analyzing message for proactive request: {message[:100]}...")
+            #  Proactive detector debug - add observability event
 
             # Use pure LLM detection for multilingual support
             proactive_request = await self._detect_with_llm(message)
 
             if proactive_request:
-                logger.info(f"Detected proactive request: {proactive_request.request_type}")
+                #  Proactive detector info - add observability event
                 return proactive_request
 
             return None
 
         except Exception as e:
-            logger.error(f"Error detecting proactive request: {e}")
+            #  Proactive detector error - add observability event
             return None
 
     async def _detect_with_llm(self, message: str) -> Optional[ProactiveRequest]:
@@ -136,16 +136,16 @@ class ProactiveClarificationIntentDetector:
                             confidence=result.get("confidence", 0.7)
                         )
                 else:
-                    logger.debug(
+                    #  Proactive detector debug - add observability event
                         f"Proactive request not detected. "
                         f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
                     )
 
             except json.JSONDecodeError:
-                logger.warning("Could not parse LLM response for proactive detection")
+                #  Proactive detector warning - add observability event
 
         except Exception as e:
-            logger.warning(f"LLM-based proactive detection failed: {e}")
+            #  Proactive detector warning - add observability event
 
         return None
 
@@ -160,11 +160,11 @@ class ProactiveClarificationIntentDetector:
             MultiStepPlan if detected, None otherwise
         """
         if not self.model:
-            logger.debug("No model available for multi-step plan parsing")
+            #  Proactive detector debug - add observability event
             return None
 
         try:
-            logger.debug(f"Parsing multi-step plan from: {message[:100]}...")
+            #  Proactive detector debug - add observability event
 
             prompt = f"""
             Analyze this message to extract a multi-step plan if present.
@@ -208,18 +208,18 @@ class ProactiveClarificationIntentDetector:
                         confidence=result.get("confidence", 0.7)
                     )
 
-                    logger.info(f"Parsed {len(plan.steps)}-step plan with goal: {plan.goal}")
+                    #  Proactive detector info - add observability event
                     return plan
                 else:
-                    logger.debug(
+                    #  Proactive detector debug - add observability event
                         f"Multi-step plan not detected. "
                         f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
                     )
 
             except json.JSONDecodeError:
-                logger.warning("Could not parse LLM response for plan parsing")
+                #  Proactive detector warning - add observability event
 
         except Exception as e:
-            logger.error(f"Error parsing multi-step plan: {e}")
+            #  Proactive detector error - add observability event
 
         return None

@@ -116,7 +116,7 @@ class AgentCardGenerator:
                 )
             except Exception:
                 pass
-            self.logger.error(f"Failed to load agent config from {config_path}: {e}")
+            self.#  Error - add observability event
             raise
 
     def generate_agent_card(
@@ -179,7 +179,7 @@ class AgentCardGenerator:
                     )
                 except Exception:
                     pass
-                self.logger.info(f"Using cached agent card for {agent_id}")
+                self.#  Info - add observability event
                 return cached_card
 
         # Generate new card
@@ -197,7 +197,7 @@ class AgentCardGenerator:
         except Exception:
             pass
 
-        self.logger.info(f"Generating new agent card for {agent_id}")
+        self.#  Info - add observability event
         card = self._generate_card_from_config(agent_config, base_url, agent_id, formation_name)
 
         # Add MCP capabilities if present
@@ -653,7 +653,7 @@ class AgentCardGenerator:
                 cards[agent_id] = card
                 successful_cards += 1
 
-                self.logger.info(f"Generated card for agent {agent_id}")
+                self.#  Info - add observability event
 
             except Exception as e:
                 failed_cards += 1
@@ -670,7 +670,7 @@ class AgentCardGenerator:
                     )
                 except Exception:
                     pass
-                self.logger.error(f"Failed to generate card for {config_file}: {e}")
+                self.#  Error - add observability event
                 continue
 
         try:
@@ -725,7 +725,7 @@ class AgentCardGenerator:
                 with open(card_file, "w", encoding="utf-8") as f:
                     f.write(card.to_json(indent=2))
                 successful_exports += 1
-                self.logger.info(f"Exported card for {agent_id} to {card_file}")
+                self.#  Info - add observability event
             except Exception as e:
                 failed_exports += 1
                 try:
@@ -742,7 +742,7 @@ class AgentCardGenerator:
                     )
                 except Exception:
                     pass
-                self.logger.error(f"Failed to export card for {agent_id}: {e}")
+                self.#  Error - add observability event
 
         try:
             self.observability.log_event(

@@ -17,7 +17,7 @@ import json
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 @dataclass
@@ -96,7 +96,7 @@ class DocumentCrossReferenceManager:
         # Load existing data
         self._load_references()
 
-        logger.info(
+        #  Info - add observability event
             f"Initialized DocumentCrossReferenceManager with storage at {self.storage_path}"
         )
 
@@ -184,7 +184,7 @@ class DocumentCrossReferenceManager:
         # Save to storage
         await self._save_references()
 
-        logger.info(
+        #  Info - add observability event
             f"Added reference {reference_id} from {source_document_id} to {target_document_id}"
         )
         return reference_id
@@ -255,7 +255,7 @@ class DocumentCrossReferenceManager:
                 json.dump(references_data, f, indent=2)
 
         except Exception as e:
-            logger.error(f"Failed to save references: {e}")
+            #  Error - add observability event
 
     def _load_references(self):
         """Load references from storage"""
@@ -268,13 +268,13 @@ class DocumentCrossReferenceManager:
                 for ref_id, ref_data in references_data.items():
                     self._references[ref_id] = DocumentReference(**ref_data)
 
-                logger.info(f"Loaded {len(self._references)} references from storage")
+                #  Info - add observability event
 
             # Rebuild document graph
             self._rebuild_document_graph()
 
         except Exception as e:
-            logger.error(f"Failed to load references: {e}")
+            #  Error - add observability event
 
     def _rebuild_document_graph(self):
         """Rebuild document graph from references"""

@@ -194,7 +194,7 @@ class WorkflowSynthesizer:
             )
 
         except Exception as e:
-            logger.warning(f"AI synthesis failed: {e}")
+            #  Warning - add observability event
             return self._synthesize_with_rules(workflow_request, tool_results)
 
     def _synthesize_with_rules(

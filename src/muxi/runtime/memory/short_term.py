@@ -72,7 +72,6 @@ from typing import Any, Dict, List, Optional
 
 import faiss
 import numpy as np
-from loguru import logger
 import multitasking
 
 # Set multitasking to thread mode for shared memory access
@@ -245,7 +244,7 @@ class ShortTermMemory:
                 self.index_count += 1
             except Exception as e:
                 # Handle embedding generation failures gracefully
-                logger.error(f"Error generating embedding: {e}")
+                #  Embedding generation error - add observability event
                 item["embedding"] = None
         else:
             # No embedding if model is not available
@@ -293,7 +292,7 @@ class ShortTermMemory:
         self.index_count = new_count
         self.needs_rebuild = False
 
-        logger.debug(f"Rebuilt FAISS index with {new_count} embeddings")
+        #  FAISS index rebuild - add observability event
 
     def check_memory_usage_and_cleanup(self) -> None:
         """
@@ -321,7 +320,7 @@ class ShortTermMemory:
                 item_size_mb = (text_size + metadata_size + embedding_size) / (1024**2)
                 estimated_usage_mb += item_size_mb
 
-            logger.debug(
+            #  Debug - add observability event
                 f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
                 f"configured limit: {self.max_memory_mb}MB"
             )
@@ -329,7 +328,7 @@ class ShortTermMemory:
             # If we exceed the configured limit, remove oldest items
             if estimated_usage_mb > self.max_memory_mb:
                 items_to_remove = max(1, len(self.buffer) // 4)  # Remove 25% of items
-                logger.info(
+                #  Info - add observability event
                     f"Buffer memory limit ({self.max_memory_mb}MB) exceeded. "
                     f"Removing {items_to_remove} oldest items"
                 )
@@ -344,7 +343,7 @@ class ShortTermMemory:
                     self._rebuild_index()
 
         except Exception as e:
-            logger.error(f"Error during buffer memory cleanup: {e}")
+            #  Buffer cleanup error - add observability event
 
     def _recency_search(
         self,
@@ -458,7 +457,7 @@ class ShortTermMemory:
 
         # If we don't have a model, return most recent messages
         if not self.model:
-            logger.debug("Using recency-only search (no model available)")
+            #  Recency search fallback - add observability event
             recency_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Emit memory retrieval completed event for recency-only search
@@ -497,7 +496,7 @@ class ShortTermMemory:
             try:
                 query_vector = await self.model.embed(query)
             except Exception as e:
-                logger.error(f"Error generating query embedding: {e}")
+                #  Query embedding error - add observability event
                 # Fallback to recency search if embedding generation fails
                 embedding_fallback_results = self._recency_search(
                     limit, filter_metadata, use_entire_buffer=True
@@ -620,7 +619,7 @@ class ShortTermMemory:
 
         except Exception as e:
             # Handle FAISS search errors gracefully
-            logger.error(f"Error in vector search: {e}")
+            #  Vector search error - add observability event
             fallback_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Emit memory retrieval completed event for fallback
@@ -756,7 +755,7 @@ def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
     """
     import time
 
-    logger.info(
+    #  Info - add observability event
         f"Starting FIFO cleanup task with {buffer_memory.fifo_interval_min} minute interval"
     )
 
@@ -769,5 +768,5 @@ def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
             time.sleep(buffer_memory.fifo_interval_min * 60)
 
         except Exception as e:
-            logger.error(f"Error in cleanup task: {e}")
+            #  Cleanup task error - add observability event
             time.sleep(60)  # Wait a minute before retrying

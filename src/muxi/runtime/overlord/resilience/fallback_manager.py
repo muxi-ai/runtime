@@ -7,7 +7,7 @@ when primary recovery strategies fail.
 
 import asyncio
 from typing import Any, Dict, List, Optional, Callable, Union
-from loguru import logger
+from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from .resilience_types import (
     ErrorType,
@@ -51,28 +51,28 @@ class FallbackManager:
             # Try cached response first
             cached_response = await self._get_cached_fallback(workflow, context)
             if cached_response is not None:
-                logger.info(f"Using cached fallback response for workflow {getattr(workflow, 'id', 'unknown')}")
+                #  Fallback manager info - add observability event
                 return cached_response
 
             # Try simplified workflow
             simplified_response = await self._get_simplified_workflow_response(workflow, context)
             if simplified_response is not None:
-                logger.info(f"Using simplified workflow response for workflow {getattr(workflow, 'id', 'unknown')}")
+                #  Fallback manager info - add observability event
                 return simplified_response
 
             # Try partial response
             partial_response = await self._get_partial_response(workflow, context)
             if partial_response is not None:
-                logger.info(f"Using partial response for workflow {getattr(workflow, 'id', 'unknown')}")
+                #  Fallback manager info - add observability event
                 return partial_response
 
             # Generate error message as last resort
             error_response = await self._generate_error_message(workflow, error_type, context)
-            logger.warning(f"Using error message fallback for workflow {getattr(workflow, 'id', 'unknown')}")
+            #  Fallback manager warning - add observability event
             return error_response
 
         except Exception as fallback_error:
-            logger.error(f"Fallback generation failed: {fallback_error}")
+            #  Fallback manager error - add observability event
             return self._get_emergency_response(workflow, error_type)
 
     async def _get_cached_fallback(
@@ -94,7 +94,7 @@ class FallbackManager:
                     return cached_data.get('response')
 
         except Exception as cache_error:
-            logger.debug(f"Cache lookup failed: {cache_error}")
+            #  Fallback manager debug - add observability event
 
         return None
 
@@ -114,7 +114,7 @@ class FallbackManager:
                 return await self._execute_simplified_workflow(workflow, simplified_config, context)
 
         except Exception as simplification_error:
-            logger.debug(f"Simplified workflow generation failed: {simplification_error}")
+            #  Fallback manager debug - add observability event
 
         return None
 
@@ -147,7 +147,7 @@ class FallbackManager:
                     }
 
         except Exception as partial_error:
-            logger.debug(f"Partial response generation failed: {partial_error}")
+            #  Fallback manager debug - add observability event
 
         return None
 
@@ -263,10 +263,10 @@ class FallbackManager:
                 # Keep only the newest 800 entries
                 self._fallback_cache = dict(sorted_items[-800:])
 
-            logger.debug(f"Cached successful response for workflow {getattr(workflow, 'id', 'unknown')}")
+            #  Fallback manager debug - add observability event
 
         except Exception as cache_error:
-            logger.error(f"Failed to cache response: {cache_error}")
+            #  Fallback manager error - add observability event
 
     def register_fallback_function(
         self,
@@ -275,7 +275,7 @@ class FallbackManager:
     ) -> None:
         """Register a custom fallback function."""
         self._fallback_functions[name] = function
-        logger.debug(f"Registered fallback function: {name}")
+        #  Fallback manager debug - add observability event
 
     def register_simplified_workflow(
         self,
@@ -284,12 +284,12 @@ class FallbackManager:
     ) -> None:
         """Register a simplified workflow configuration."""
         self._simplified_workflows[workflow_type] = config
-        logger.debug(f"Registered simplified workflow for type: {workflow_type}")
+        #  Fallback manager debug - add observability event
 
     def clear_cache(self) -> None:
         """Clear the fallback cache."""
         self._fallback_cache.clear()
-        logger.info("Cleared fallback cache")
+        #  Fallback manager info - add observability event
 
     def get_cache_stats(self) -> Dict[str, Any]:
         """Get fallback cache statistics."""

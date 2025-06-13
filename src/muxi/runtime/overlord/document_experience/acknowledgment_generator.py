@@ -14,7 +14,7 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 @dataclass
@@ -76,7 +76,7 @@ class DocumentAcknowledgmentGenerator:
         # Message templates by persona type
         self._message_templates = self._initialize_templates()
 
-        logger.info("Initialized DocumentAcknowledgmentGenerator")
+        #  Info - add observability event
 
     def _initialize_templates(self) -> Dict[str, Dict[str, List[str]]]:
         """Initialize message templates for different persona types and stages"""
@@ -203,7 +203,7 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(base_message)
 
-        logger.info(f"Generated receipt acknowledgment for {filename}")
+        #  Info - add observability event
         return final_message
 
     async def generate_progress_update(
@@ -250,7 +250,7 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(message)
 
-        logger.info(f"Generated progress update for {status.filename}: {progress_percentage}%")
+        #  Info - add observability event
         return final_message
 
     async def generate_completion_acknowledgment(
@@ -301,7 +301,7 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(base_message)
 
-        logger.info(f"Generated completion acknowledgment for {status.filename}")
+        #  Info - add observability event
         return final_message
 
     async def generate_error_acknowledgment(
@@ -345,7 +345,7 @@ class DocumentAcknowledgmentGenerator:
         # Apply persona styling
         final_message = self._apply_persona_styling(base_message)
 
-        logger.info(f"Generated error acknowledgment for {filename}: {error_type}")
+        #  Info - add observability event
         return final_message
 
     def _get_template_message(self, stage: str, **kwargs) -> str:

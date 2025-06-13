@@ -37,7 +37,7 @@ import json
 import re
 from typing import Dict, List, Any, Optional, Tuple
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 class ToolCall:
@@ -213,7 +213,7 @@ class ToolParser:
                         )
                     )
             except Exception as e:
-                logger.warning(f"Failed to parse JSON block: {e}")
+                #  Warning - add observability event
 
         return tool_calls
 
@@ -282,7 +282,7 @@ class ToolParser:
                     )
                 )
             except Exception as e:
-                logger.warning(f"Failed to parse function call: {e}")
+                #  Warning - add observability event
 
         return tool_calls
 
@@ -312,7 +312,7 @@ class ToolParser:
                 try:
                     params = json.loads(params_str)
                 except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse parameters for tool {tool_name}")
+                    #  Warning - add observability event
 
                 tool_calls.append(
                     ToolCall(
@@ -324,7 +324,7 @@ class ToolParser:
                     )
                 )
             except Exception as e:
-                logger.warning(f"Failed to parse explicit tool call: {e}")
+                #  Warning - add observability event
 
         return tool_calls
 

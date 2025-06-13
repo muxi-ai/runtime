@@ -9,7 +9,7 @@ and fallback mechanisms.
 import asyncio
 import time
 from typing import Any, Dict, Optional, Callable
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .resilience_types import (
     ResilienceConfig,
@@ -53,7 +53,7 @@ class ResilientWorkflowManager:
         # Set default circuit breaker config
         self.circuit_breaker_registry.set_default_config(self.config.circuit_breaker)
 
-        logger.info("Initialized ResilientWorkflowManager with resilience capabilities")
+        #  Info - add observability event
 
     async def execute_resilient_workflow(
         self,
@@ -74,7 +74,7 @@ class ResilientWorkflowManager:
         effective_config = resilience_config or self.config
         workflow_id = getattr(workflow, 'id', f'workflow_{int(time.time())}')
 
-        logger.debug(f"Starting resilient execution of workflow {workflow_id}")
+        #  Debug - add observability event
 
         try:
             # Get circuit breaker for this workflow type
@@ -116,7 +116,7 @@ class ResilientWorkflowManager:
         except Exception as error:
             execution_time = time.time() - start_time
 
-            logger.error(f"Workflow {workflow_id} failed after {execution_time:.2f}s: {error}")
+            #  Error - add observability event
 
             return ResilientWorkflowResult(
                 result=None,
@@ -187,7 +187,7 @@ class ResilientWorkflowManager:
             # Select recovery strategy
             recovery_strategy = await self.recovery_strategist.select_strategy(error_context)
 
-            logger.info(
+            #  Info - add observability event
                 f"Attempting recovery for workflow {getattr(workflow, 'id', 'unknown')} "
                 f"using strategy: {recovery_strategy.value} (attempt {attempt_count})"
             )
@@ -286,7 +286,7 @@ class ResilientWorkflowManager:
                 return await self._execute_escalation_strategy(strategy, workflow, error_context)
 
             else:
-                logger.warning(f"Unsupported recovery strategy: {strategy.value}")
+                #  Warning - add observability event
                 return RecoveryResult(
                     success=False,
                     strategy_used=strategy,
@@ -294,7 +294,7 @@ class ResilientWorkflowManager:
                 )
 
         except Exception as recovery_error:
-            logger.error(f"Recovery strategy {strategy.value} failed: {recovery_error}")
+            #  Error - add observability event
             return RecoveryResult(
                 success=False,
                 strategy_used=strategy,
@@ -330,7 +330,7 @@ class ResilientWorkflowManager:
         delay = min(delay, config.retry.max_delay)
 
         if delay > 0:
-            logger.debug(f"Waiting {delay:.2f}s before retry (strategy: {strategy.value})")
+            #  Debug - add observability event
             await asyncio.sleep(delay)
 
         # Retry the workflow
@@ -413,7 +413,7 @@ class ResilientWorkflowManager:
         from .resilience_types import RecoveryResult
 
         # Log escalation
-        logger.warning(
+        #  Warning - add observability event
             f"Escalating workflow {getattr(workflow, 'id', 'unknown')} "
             f"due to {error_context.error_type.value} (strategy: {strategy.value})"
         )
@@ -472,11 +472,11 @@ class ResilientWorkflowManager:
         await self.circuit_breaker_registry.reset_all()
         self.recovery_strategist.reset_strategy_performance()
         self.fallback_manager.clear_cache()
-        logger.info("Reset all resilience state")
+        #  Info - add observability event
 
     def update_config(self, config: ResilienceConfig) -> None:
         """Update resilience configuration."""
         self.config = config
         self.recovery_strategist.config = config
         self.circuit_breaker_registry.set_default_config(config.circuit_breaker)
-        logger.info("Updated resilience configuration")
+        #  Info - add observability event

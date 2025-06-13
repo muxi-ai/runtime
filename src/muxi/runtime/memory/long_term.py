@@ -34,7 +34,6 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from loguru import logger
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Column, DateTime, String, Text, create_engine, desc, func, select
 from sqlalchemy.dialects.postgresql import JSONB
@@ -143,9 +142,9 @@ class LongTermMemory:
 
             # Create tables
             Base.metadata.create_all(self.engine)
-            logger.info("Database tables created or already exist")
+            #  Database initialization - add observability event
         except Exception as e:
-            logger.error(f"Error creating database tables: {e}")
+            #  Database creation error - add observability event
             raise
 
     def _create_default_collection(self) -> None:
@@ -166,7 +165,7 @@ class LongTermMemory:
                 )
                 session.add(collection)
                 session.commit()
-                logger.info(f"Created default collection: {self.default_collection}")
+                #  Default collection creation - add observability event
 
     async def add(
         self,

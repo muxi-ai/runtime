@@ -75,7 +75,7 @@ class ParallelWorkflowOptimizer:
         """
         workflow_id = workflow_definition.get('id', f"workflow_{uuid.uuid4().hex[:8]}")
 
-        logger.info(f"Starting optimization for workflow {workflow_id}")
+        #  Info - add observability event
 
         # Step 1: Build dependency graph
         dependency_graph = await self.dependency_analyzer.build_dependency_graph(
@@ -85,7 +85,7 @@ class ParallelWorkflowOptimizer:
         # Step 2: Validate dependencies
         validation_errors = await self.dependency_analyzer.validate_dependencies()
         if validation_errors:
-            logger.warning(f"Dependency validation errors: {validation_errors}")
+            #  Warning - add observability event
 
         # Step 3: Find parallel groups
         parallel_groups = await self.dependency_analyzer.find_parallel_groups()
@@ -143,7 +143,7 @@ class ParallelWorkflowOptimizer:
         # Store in history
         self.optimization_history.append(optimized_workflow)
 
-        logger.info(f"Optimization complete for workflow {workflow_id}. "
+        #  Info - add observability event
                    f"Expected speedup: {optimized_workflow.expected_speedup:.1f}x, "
                    f"Confidence: {optimized_workflow.optimization_confidence:.2f}")
 
@@ -164,7 +164,7 @@ class ParallelWorkflowOptimizer:
         Returns:
             Re-optimized workflow
         """
-        logger.info(f"Re-optimizing workflow {optimized_workflow.workflow_id}")
+        #  Info - add observability event
 
         # Update agent performance based on feedback
         if feedback and "agent_performance" in feedback:
@@ -393,7 +393,7 @@ class ParallelWorkflowOptimizer:
                 if "capability_scores" in performance_data:
                     agent.performance_scores.update(performance_data["capability_scores"])
 
-                logger.debug(f"Updated performance for agent {agent_id}")
+                #  Debug - add observability event
 
     def get_optimization_summary(self) -> Dict[str, Any]:
         """Get a summary of optimization activities."""

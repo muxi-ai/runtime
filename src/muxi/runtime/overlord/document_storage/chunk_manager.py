@@ -14,7 +14,7 @@ Supports:
 import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-from loguru import logger
+# Loguru import removed - add observability import
 
 from ...config.document_processing import DocumentProcessingConfig
 
@@ -97,7 +97,7 @@ class DocumentChunkManager:
             )
             self._nlp_model = spacy.load(model_name)
         except OSError:
-            logger.warning(
+            #  Warning - add observability event
                 "spaCy model not found - falling back to basic processing"
             )
 
@@ -105,7 +105,7 @@ class DocumentChunkManager:
         try:
             nltk.data.find('tokenizers/punkt')
         except LookupError:
-            logger.info("Downloading NLTK punkt tokenizer...")
+            #  Info - add observability event
             nltk.download('punkt', quiet=True)
 
     async def chunk_document(
@@ -134,12 +134,12 @@ class DocumentChunkManager:
         if document_id is None:
             document_id = self._generate_document_id(filename)
 
-        logger.info(f"Chunking document {filename} using {strategy} strategy")
+        #  Info - add observability event
 
         # Select chunking strategy
         if strategy == "adaptive":
             strategy = self._determine_chunk_strategy(content, filename)
-            logger.info(f"Adaptive strategy selected: {strategy}")
+            #  Info - add observability event
 
         # Execute chunking based on strategy
         if strategy == "semantic":
@@ -149,7 +149,7 @@ class DocumentChunkManager:
         elif strategy == "fixed":
             chunks = await self._fixed_chunking(content)
         else:
-            logger.warning(f"Unknown strategy {strategy}, falling back to adaptive")
+            #  Warning - add observability event
             chunks = await self._adaptive_chunking(content)
 
         # Convert to DocumentChunk objects
@@ -172,7 +172,7 @@ class DocumentChunkManager:
             )
             document_chunks.append(chunk)
 
-        logger.info(f"Generated {len(document_chunks)} chunks for document {filename}")
+        #  Info - add observability event
         return document_chunks
 
     def _determine_chunk_strategy(self, content: str, filename: str) -> str:

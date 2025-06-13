@@ -185,7 +185,7 @@ class Agent:
                 # Schedule the event emission
                 asyncio.create_task(emit_init_event())
             except Exception as e:
-                logger.debug(f"Failed to emit agent initialization event: {e}")
+                #  Agent init event error - add observability event
 
     def _initialize_clarification_system(self):
         """
@@ -215,10 +215,10 @@ class Agent:
             # self._proactive_detector = ProactiveClarificationIntentDetector(model=self.model)
             # self._mode_manager = ClarificationModeManager(overlord=self.overlord)
 
-            logger.debug(f"Clarification system initialized for agent {self.agent_id}")
+            #  Clarification system init - add observability event
 
         except Exception as e:
-            logger.warning(
+            #  Warning - add observability event
                 f"Failed to initialize clarification system for agent {self.agent_id}: {e}"
             )
             # Set components to None so we can check if clarification is available
@@ -323,7 +323,7 @@ class Agent:
                     )
                 return response
         except Exception as e:
-            logger.debug(f"Clarification response handling failed, continuing normally: {e}")
+            #  Clarification handling error - add observability event
 
         # Phase 4: Check for proactive clarification requests (with error handling)
         try:
@@ -347,7 +347,7 @@ class Agent:
                     )
                 return response
         except Exception as e:
-            logger.debug(f"Proactive clarification handling failed, continuing normally: {e}")
+            #  Debug - add observability event
 
         # Check if the request needs clarification before processing (with error handling)
         try:
@@ -371,36 +371,36 @@ class Agent:
                     )
                 return response
         except Exception as e:
-            logger.debug(f"Clarification analysis failed, continuing normally: {e}")
+            #  Debug - add observability event
 
         # Process the message with the model directly (existing logic)
         raw_response = await self.model.chat(self._messages)
 
         # Debug logging to see what we got
-        logger.debug(f"Raw response type: {type(raw_response)}")
-        logger.debug(f"Raw response: {str(raw_response)[:200]}...")  # Truncate for readability
+        #  Response processing debug - add observability event
+        #  Response processing debug - add observability event
 
         # Extract the actual content string from the response
         if isinstance(raw_response, str):
             content = raw_response
-            logger.debug("Used string path")
+            #  Response extraction debug - add observability event
         elif hasattr(raw_response, "choices") and raw_response.choices:
             # Handle ChatCompletionResponse object
             message = raw_response.choices[0].message
-            logger.debug(f"Message type: {type(message)}")
-            logger.debug(f"Message: {message}")
+            #  Message type debug - add observability event
+            #  Debug - add observability event
             if isinstance(message, dict):
                 content = message.get("content", "")
-                logger.debug("Used ChatCompletionResponse dict path")
+                #  Response extraction debug - add observability event
             else:
                 # Handle message as object with content attribute/property
                 content = getattr(message, "content", "")
-                logger.debug("Used ChatCompletionResponse object path")
-            logger.debug("Used ChatCompletionResponse path")
+                #  Response extraction debug - add observability event
+            #  Response extraction debug - add observability event
         elif isinstance(raw_response, dict) and "choices" in raw_response:
             # Handle dict response format
             content = raw_response["choices"][0]["message"]["content"]
-            logger.debug("Used dict path")
+            #  Response extraction debug - add observability event
         else:
             # Try to extract content from string representation if it's embedded
             response_str = str(raw_response)
@@ -412,15 +412,15 @@ class Agent:
                 content_match = re.search(pattern, response_str)
                 if content_match:
                     content = content_match.group(1) or content_match.group(2)
-                    logger.debug("Extracted content from string representation")
+                    #  Content extraction debug - add observability event
                 else:
                     content = response_str
-                    logger.debug("Used full string representation")
+                    #  Debug - add observability event
             else:
                 content = response_str
-                logger.debug("Used fallback string conversion")
+                #  Debug - add observability event
 
-        logger.debug(f"Final extracted content: {content[:100]}...")
+        #  Content extraction debug - add observability event
 
         # Create response message
         response = MCPMessage(role="assistant", content=content)
@@ -718,7 +718,7 @@ class Agent:
                 )
 
         except ClarificationError as e:
-            logger.error(f"Clarification processing error: {e}")
+            #  Clarification error - add observability event
 
             # Emit clarification error event
             if hasattr(self.overlord, "observability_manager"):
@@ -742,7 +742,7 @@ class Agent:
                 "I'm sorry, I had trouble processing your response. " "Could you please try again?"
             )
         except Exception as e:
-            logger.error(f"Unexpected error in clarification handling: {e}")
+            #  Unexpected error - add observability event
 
             # Emit general error event
             if hasattr(self.overlord, "observability_manager"):
@@ -796,7 +796,7 @@ class Agent:
                 try:
                     available_tools = await self._mcp_service.list_available_tools()
                 except Exception as e:
-                    logger.debug(f"Could not get available tools: {e}")
+                    #  Tools availability debug - add observability event
 
             # Analyze the request for missing information
             analysis = await self._clarification_analyzer.analyze_request(
@@ -840,9 +840,9 @@ class Agent:
                 return question.question_text
 
         except ClarificationError as e:
-            logger.error(f"Clarification analysis error: {e}")
+            #  Clarification error - add observability event
         except Exception as e:
-            logger.error(f"Unexpected error in clarification analysis: {e}")
+            #  Unexpected error - add observability event
 
         return None
 
@@ -938,7 +938,7 @@ class Agent:
                     return str(raw_response)
 
         except Exception as e:
-            logger.error(f"Error completing clarified request: {e}")
+            #  Agent error - add observability event
             return (
                 "I apologize, but I encountered an error while processing your request. "
                 "Please try again."
@@ -990,7 +990,7 @@ class Agent:
                 )
 
         except Exception as e:
-            logger.error(f"Error handling proactive clarification request: {e}")
+            #  Agent error - add observability event
             return None
 
     async def _handle_proactive_session_response(self, session, message: str) -> str:
@@ -1022,7 +1022,7 @@ class Agent:
                 return await self._generate_next_goal_question(session, extracted_info)
 
         except Exception as e:
-            logger.error(f"Error handling proactive session response: {e}")
+            #  Agent error - add observability event
             return "I had trouble processing your response. Could you please continue?"
 
     async def _start_plan_analysis_session(self, proactive_request, user_id: str) -> str:
@@ -1062,7 +1062,7 @@ class Agent:
             return "\n\n".join(response_parts)
 
         except Exception as e:
-            logger.error(f"Error starting plan analysis session: {e}")
+            #  Agent error - add observability event
             return (
                 "I'd be happy to help analyze your plan! However, I had trouble processing it. "
                 "Could you break down your plan into clear steps?"
@@ -1092,7 +1092,7 @@ class Agent:
                 )
 
         except Exception as e:
-            logger.error(f"Error starting proactive questioning session: {e}")
+            #  Agent error - add observability event
             return (
                 "I'd be happy to help guide you with questions! However, I had trouble "
                 "understanding your request. Could you tell me what you'd like help with?"
@@ -1259,7 +1259,7 @@ class Agent:
             )
 
         # Log the A2A communication
-        logger.info(
+        #  Info - add observability event
             f"A2A Message (local): {self.agent_id} -> {target_agent_id} "
             f"({message_type}, id: {message_id})"
         )
@@ -1284,7 +1284,7 @@ class Agent:
                 return None
 
         except asyncio.TimeoutError:
-            logger.error(
+            #  Error - add observability event
                 f"Local A2A message timed out after {timeout}s: "
                 f"{self.agent_id} -> {target_agent_id}"
             )
@@ -1297,7 +1297,7 @@ class Agent:
             else:
                 raise
         except Exception as e:
-            logger.error(f"Local A2A message failed: {e}")
+            #  Error - add observability event
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
@@ -1330,14 +1330,14 @@ class Agent:
             )
 
         # Log the external A2A communication
-        logger.info(
+        #  Info - add observability event
             f"A2A Message (external): {self.agent_id} -> {target_agent_id} "
             f"({message_type}, id: {message_id})"
         )
 
         try:
             # 1. Discover the target agent via registry
-            logger.debug(f"Discovering external agent: {target_agent_id}")
+            #  External agent discovery - add observability event
             discovered_agents = await registry_client.discover_agents()
 
             # Find the target agent across all registries
@@ -1353,7 +1353,7 @@ class Agent:
                             and agent_card.muxi_agent_id == target_agent_id
                         ):
                             all_matches.append(agent_card)
-                            logger.debug(
+                            #  Debug - add observability event
                                 f"Found potential agent {target_agent_id} at {agent_card.url}"
                             )
             else:
@@ -1364,7 +1364,7 @@ class Agent:
                         and agent_card.muxi_agent_id == target_agent_id
                     ):
                         all_matches.append(agent_card)
-                        logger.debug(f"Found potential agent {target_agent_id} at {agent_card.url}")
+                        #  Agent discovery - add observability event
 
             # Handle duplicate agent registrations by preferring specific criteria
             if all_matches:
@@ -1392,16 +1392,16 @@ class Agent:
                     # If no non-local match found, take the last one (most recent registration)
                     target_agent_url = (preferred_match or all_matches[-1]).url
 
-                    logger.info(
+                    #  Info - add observability event
                         f"Multiple agents found for {target_agent_id}, "
                         f"selected: {target_agent_url}"
                     )
 
-                logger.debug(f"Selected agent {target_agent_id} at {target_agent_url}")
+                #  Agent selection - add observability event
 
             if not target_agent_url:
                 error_msg = f"Agent {target_agent_id} not found in external registries"
-                logger.error(error_msg)
+                #  Error - add observability event
                 if message_type == "request" and wait_for_response:
                     return {"status": "error", "error": error_msg, "message_id": message_id}
                 else:
@@ -1472,12 +1472,12 @@ class Agent:
                 )
                 auth_type = AuthType(auth_type_value)
                 auth_required = auth_info.required
-                logger.debug(
+                #  Debug - add observability event
                     f"Agent {target_agent_id} requires {auth_type} authentication "
                     f"(required: {auth_required})"
                 )
             else:
-                logger.debug(f"No authentication requirements found for {target_agent_id}")
+                #  Authentication debug - add observability event
 
             # Prepare headers with authentication
             headers = {"Content-Type": "application/json"}
@@ -1508,7 +1508,7 @@ class Agent:
 
             if not auth_success and auth_required:
                 error_msg = f"Authentication failed for {target_agent_id} (requires {auth_type})"
-                logger.error(error_msg)
+                #  Error - add observability event
                 if message_type == "request" and wait_for_response:
                     return {"status": "error", "error": error_msg, "message_id": message_id}
                 else:
@@ -1531,9 +1531,9 @@ class Agent:
             # Formation server expects: /agents/{agent_id}/message
             endpoint_url = f"{base_url}/agents/{target_agent_id}/message"
 
-            logger.debug(f"Sending HTTP request to: {endpoint_url}")
+            #  HTTP request debug - add observability event
             if auth_type != AuthType.NONE:
-                logger.debug(f"Using {auth_type} authentication for {target_agent_id}")
+                #  Authentication method debug - add observability event
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(endpoint_url, json=message_payload, headers=headers)
@@ -1541,7 +1541,7 @@ class Agent:
                 # 4. Handle HTTP response
                 if response.status_code == 200:
                     response_data = response.json()
-                    logger.info(
+                    #  Info - add observability event
                         f"External A2A message successful: {self.agent_id} -> {target_agent_id} "
                         f"(status: {response_data.get('status', 'unknown')})"
                     )
@@ -1553,7 +1553,7 @@ class Agent:
 
                 else:
                     error_msg = f"HTTP {response.status_code}: {response.text}"
-                    logger.error(f"External A2A request failed: {error_msg}")
+                    #  Error - add observability event
 
                     if message_type == "request" and wait_for_response:
                         return {"status": "error", "error": error_msg, "message_id": message_id}
@@ -1562,14 +1562,14 @@ class Agent:
 
         except httpx.TimeoutException:
             error_msg = f"Request timed out after {timeout} seconds"
-            logger.error(f"External A2A message timed out: {error_msg}")
+            #  Error - add observability event
             if message_type == "request" and wait_for_response:
                 return {"status": "error", "error": error_msg, "message_id": message_id}
             else:
                 raise RuntimeError(error_msg)
 
         except Exception as e:
-            logger.error(f"External A2A message failed: {e}")
+            #  Error - add observability event
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
@@ -1646,7 +1646,7 @@ class Agent:
                 )
 
         except Exception as e:
-            logger.error(f"Error handling A2A message: {e}")
+            #  Agent error - add observability event
             if message_type == "request":
                 return {
                     "status": "error",
@@ -1691,8 +1691,8 @@ class Agent:
         raw_response = await self.model.chat([{"role": "user", "content": consultation_prompt}])
 
         # Debug: Log what we received
-        logger.debug(f"Consultation raw response type: {type(raw_response)}")
-        logger.debug(f"Consultation raw response: {str(raw_response)[:100]}...")
+        #  Debug - add observability event
+        #  Debug - add observability event
 
         # For A2A protocol compatibility, ensure we return a clean string
         # Handle different response formats and extract text content
@@ -1701,24 +1701,24 @@ class Agent:
         try:
             if isinstance(raw_response, str):
                 content = raw_response
-                logger.debug("Consultation: Used string path")
+                #  Response extraction debug - add observability event
             elif hasattr(raw_response, "choices") and raw_response.choices:
                 # Handle ChatCompletionResponse object
                 choice = raw_response.choices[0]
                 message_obj = choice.message
-                logger.debug(f"Consultation choice type: {type(choice)}")
-                logger.debug(f"Consultation message obj type: {type(message_obj)}")
+                #  Debug - add observability event
+                #  Debug - add observability event
 
                 # Try multiple ways to extract content
                 if hasattr(message_obj, "content") and message_obj.content:
                     content = str(message_obj.content)
-                    logger.debug("Consultation: Used message.content attribute")
+                    #  Debug - add observability event
                 elif isinstance(message_obj, dict) and "content" in message_obj:
                     content = str(message_obj["content"])
-                    logger.debug("Consultation: Used message dict content")
+                    #  Debug - add observability event
                 elif hasattr(message_obj, "get") and message_obj.get("content"):
                     content = str(message_obj.get("content"))
-                    logger.debug("Consultation: Used message.get content")
+                    #  Debug - add observability event
                 else:
                     # Convert the message object to string and try to extract content
                     message_str = str(message_obj)
@@ -1728,42 +1728,42 @@ class Agent:
                         match = re.search(r"'content':\s*'([^']*)'", message_str)
                         if match:
                             content = match.group(1)
-                            logger.debug("Consultation: Extracted from string representation")
+                            #  Content extraction debug - add observability event
                         else:
                             content = f"Consultation response for topic: {topic}"
-                            logger.warning("Consultation: Failed regex extraction")
+                            #  Warning - add observability event
                     else:
                         content = f"Consultation response for topic: {topic}"
-                        logger.warning(f"Consultation: No content found in: {message_str[:200]}")
+                        #  Warning - add observability event
             elif isinstance(raw_response, dict) and "choices" in raw_response:
                 # Handle dict response format
                 try:
                     content = str(raw_response["choices"][0]["message"]["content"])
-                    logger.debug("Consultation: Used dict path")
+                    #  Response extraction debug - add observability event
                 except (KeyError, IndexError) as e:
-                    logger.error(f"Consultation: Error extracting from dict: {e}")
+                    #  Agent error - add observability event
                     content = f"Consultation response for topic: {topic}"
             else:
                 # Unknown format
                 content = f"Consultation response for topic: {topic}"
-                logger.warning(f"Consultation: Unknown response format: {type(raw_response)}")
+                #  Warning - add observability event
 
         except Exception as e:
-            logger.error(f"Consultation: Content extraction error: {e}")
+            #  Error - add observability event
             content = f"Consultation response for topic: {topic}"
 
         # Ensure content is a valid string
         if not content or not isinstance(content, str):
             content = f"Consultation response for topic: {topic}"
-            logger.warning("Consultation: Used fallback content due to extraction failure")
+            #  Warning - add observability event
 
         if not content.strip():
             content = f"Consultation response for topic: {topic}"
-            logger.warning("Consultation: Used fallback content due to empty result")
+            #  Warning - add observability event
 
-        logger.debug(f"Consultation final content: {content[:100]}...")
+        #  Debug - add observability event
 
-        logger.info(
+        #  Info - add observability event
             f"Agent {self.agent_id} provided consultation to {source_agent_id} "
             f"on topic: {topic}"
         )
@@ -1799,7 +1799,7 @@ class Agent:
         if relevance_reason:
             log_parts.append(f"Relevance: {relevance_reason}")
 
-        logger.info(" | ".join(log_parts))
+        #  Info - add observability event
 
         # Optionally store the shared information in memory
         if self.overlord and hasattr(self.overlord, "add_to_buffer_memory"):
@@ -1815,7 +1815,7 @@ class Agent:
                     agent_id=self.agent_id,
                 )
             except Exception as e:
-                logger.warning(f"Failed to store shared information: {e}")
+                #  Storage warning - add observability event
 
         return None  # Notifications don't return responses
 
@@ -1840,7 +1840,7 @@ class Agent:
         else:
             response_content = f"Acknowledged coordination request: {coordination_type}"
 
-        logger.info(
+        #  Info - add observability event
             f"Agent {self.agent_id} coordinated with {source_agent_id} " f"({coordination_type})"
         )
 
@@ -1929,18 +1929,18 @@ class Agent:
 
         elif message_type == "notification":
             # For notifications, just acknowledge receipt
-            logger.info(
+            #  Info - add observability event
                 f"Agent {self.agent_id} received notification from {source_agent_id}: {message}"
             )
             return None
 
         elif message_type == "response":
             # For responses, log the response (typically handled by the sender)
-            logger.info(f"Agent {self.agent_id} received response from {source_agent_id}")
+            #  Agent message received - add observability event
             return None
 
         else:
-            logger.warning(f"Agent {self.agent_id} received unknown message type: {message_type}")
+            #  Unknown message type - add observability event
             return None
 
     async def request_consultation(
@@ -1990,20 +1990,20 @@ class Agent:
             )
 
             if response and response.get("status") == "success":
-                logger.info(
+                #  Info - add observability event
                     f"Agent {self.agent_id} received consultation from {target_agent_id} "
                     f"on topic: {topic}"
                 )
                 return response
             else:
-                logger.warning(
+                #  Warning - add observability event
                     f"Consultation failed: {self.agent_id} -> {target_agent_id} "
                     f"on topic: {topic}"
                 )
                 return None
 
         except Exception as e:
-            logger.error(f"Consultation error: {e}")
+            #  Error - add observability event
             return None
 
     async def share_information(
@@ -2053,14 +2053,14 @@ class Agent:
                 wait_for_response=False,
             )
 
-            logger.info(
+            #  Info - add observability event
                 f"Agent {self.agent_id} shared information with {target_agent_id} "
                 f"on topic: {topic}"
             )
             return True
 
         except Exception as e:
-            logger.error(f"Information sharing error: {e}")
+            #  Error - add observability event
             return False
 
     async def register_expertise(
@@ -2090,7 +2090,7 @@ class Agent:
             ... )
         """
         if not self.overlord or not hasattr(self.overlord, "register_agent_expertise"):
-            logger.warning("Overlord does not support expertise registry")
+            #  Feature not supported warning - add observability event
             return False
 
         try:
@@ -2100,7 +2100,7 @@ class Agent:
                 proficiency_levels=proficiency_levels or {},
             )
         except Exception as e:
-            logger.error(f"Expertise registration error: {e}")
+            #  Error - add observability event
             return False
 
     async def find_expert(
@@ -2141,7 +2141,7 @@ class Agent:
                 topic=topic, min_proficiency=min_proficiency, requesting_agent_id=self.agent_id
             )
         except Exception as e:
-            logger.error(f"Expert discovery error: {e}")
+            #  Error - add observability event
             return {}
 
     async def coordinate_with_peer(
@@ -2191,18 +2191,18 @@ class Agent:
             )
 
             if response and response.get("status") == "success":
-                logger.info(
+                #  Info - add observability event
                     f"Agent {self.agent_id} coordinated with {peer_agent_id} "
                     f"({coordination_type})"
                 )
                 return response
             else:
-                logger.warning(
+                #  Warning - add observability event
                     f"Coordination failed: {self.agent_id} -> {peer_agent_id} "
                     f"({coordination_type})"
                 )
                 return None
 
         except Exception as e:
-            logger.error(f"Coordination error: {e}")
+            #  Error - add observability event
             return None

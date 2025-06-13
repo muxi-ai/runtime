@@ -51,7 +51,7 @@ class ClarificationResponseParser:
             Tuple of (extracted_value, confidence_score)
         """
         try:
-            logger.info(f"Parsing response for parameter: {question.parameter_name}")
+            #  Info - add observability event
 
             # Clean and normalize the response
             cleaned_response = self._clean_response(user_response)
@@ -76,7 +76,7 @@ class ClarificationResponseParser:
                 return await self._parse_string_response(cleaned_response, question)
 
         except Exception as e:
-            logger.error(f"Error parsing response: {e}")
+            #  Error - add observability event
             raise ParameterExtractionError(f"Failed to parse response: {e}")
 
     async def extract_multiple_parameters(
@@ -107,7 +107,7 @@ class ClarificationResponseParser:
             return extracted
 
         except Exception as e:
-            logger.error(f"Error extracting multiple parameters: {e}")
+            #  Error - add observability event
             raise ParameterExtractionError(f"Failed to extract multiple parameters: {e}")
 
     # Private parsing methods

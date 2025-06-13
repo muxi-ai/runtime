@@ -9,7 +9,7 @@ This test demonstrates the completed Phase 1 components:
 
 import asyncio
 
-from loguru import logger
+# Loguru import removed - add observability import if needed
 
 from src.muxi.runtime.overlord.workflow.interactive import (
     InteractiveElementGenerator,
@@ -36,7 +36,7 @@ from src.muxi.runtime.overlord.workflow.types import (
 
 async def test_interactive_elements():
     """Test interactive element generation and formatting"""
-    logger.info("🧪 Testing Interactive Elements...")
+    #  Info - add observability event
 
     # Initialize components
     generator = InteractiveElementGenerator()
@@ -98,8 +98,8 @@ async def test_interactive_elements():
         context={"user": "test_user", "workflow_id": "test_001"}
     )
 
-    logger.info("✅ Interactive elements test completed")
-    logger.info(f"📝 Formatted response preview:\n{formatted_response['content'][:500]}...")
+    #  Info - add observability event
+    #  Info - add observability event
 
     return {
         "buttons": [approve_button, reject_button],
@@ -112,7 +112,7 @@ async def test_interactive_elements():
 
 async def test_media_integration():
     """Test media integration capabilities"""
-    logger.info("🧪 Testing Media Integration...")
+    #  Info - add observability event
 
     integrator = MediaIntegrator()
 
@@ -165,8 +165,8 @@ async def test_media_integration():
         format_type="markdown"
     )
 
-    logger.info("✅ Media integration test completed")
-    logger.info(f"📊 Enhanced content preview:\n{enhanced_content[:400]}...")
+    #  Info - add observability event
+    #  Info - add observability event
 
     return {
         "media_items": media_items,
@@ -176,7 +176,7 @@ async def test_media_integration():
 
 async def test_multimodal_workflow_processing():
     """Test enhanced multimodal workflow processing"""
-    logger.info("🧪 Testing Enhanced Multimodal Workflow Processing...")
+    #  Info - add observability event
 
     try:
         # Create a mock LLM for testing
@@ -244,10 +244,10 @@ async def test_multimodal_workflow_processing():
             raw_outputs=raw_outputs
         )
 
-        logger.info("✅ Multimodal workflow processing test completed")
-        logger.info(f"📋 Enhanced workflow: {enhanced_workflow.id}")
-        logger.info(f"🔄 Processed inputs count: {len(processed_inputs)}")
-        logger.info(f"📤 Processed outputs count: {len(processed_outputs)}")
+        #  Info - add observability event
+        #  Info - add observability event
+        #  Info - add observability event
+        #  Info - add observability event
 
         return {
             "enhanced_workflow": enhanced_workflow,
@@ -263,7 +263,7 @@ async def test_multimodal_workflow_processing():
 
 async def test_integrated_workflow_experience():
     """Test the complete integrated workflow experience with all Phase 1 components"""
-    logger.info("🧪 Testing Integrated Workflow Experience...")
+    #  Info - add observability event
 
     try:
         # Initialize all components together
@@ -351,8 +351,8 @@ async def test_integrated_workflow_experience():
             format_type="markdown"
         )
 
-        logger.info("✅ Integrated workflow experience test completed")
-        logger.info(f"📄 Final response length: {len(final_response)} characters")
+        #  Info - add observability event
+        #  Info - add observability event
 
         return {
             "success": True,
@@ -375,8 +375,8 @@ async def test_integrated_workflow_experience():
 
 async def run_phase1_completion_tests():
     """Run all Phase 1 completion tests"""
-    logger.info("🚀 Starting Phase 1 Completion Tests")
-    logger.info("=" * 60)
+    #  Info - add observability event
+    #  Info - add observability event
 
     results = {}
 
@@ -393,13 +393,13 @@ async def run_phase1_completion_tests():
     results["integrated_experience"] = await test_integrated_workflow_experience()
 
     # Summary
-    logger.info("=" * 60)
-    logger.info("📊 PHASE 1 COMPLETION TEST SUMMARY")
-    logger.info("=" * 60)
+    #  Info - add observability event
+    #  Info - add observability event
+    #  Info - add observability event
 
     for test_name, result in results.items():
         status = "✅ PASS" if not result.get("error") else "❌ FAIL"
-        logger.info(f"{test_name.replace('_', ' ').title()}: {status}")
+        #  Info - add observability event
 
         if result.get("error"):
             logger.error(f"  Error: {result['error']}")
@@ -408,15 +408,15 @@ async def run_phase1_completion_tests():
     passed_tests = sum(1 for r in results.values() if not r.get("error"))
     total_tests = len(results)
 
-    logger.info(f"\n🎯 Overall: {passed_tests}/{total_tests} tests passed")
+    #  Info - add observability event
 
     if passed_tests == total_tests:
-        logger.info("🎉 PHASE 1 COMPLETION: SUCCESS!")
-        logger.info(
+        #  Info - add observability event
+        #  Info - add observability event
             "✅ All interactive elements and enhanced multimodal integration "
             "components are working correctly"
         )
-        logger.info("🚀 Ready to proceed to Phase 2: Performance & Scalability")
+        #  Info - add observability event
     else:
         logger.warning("⚠️ Some tests failed - review errors above")
 

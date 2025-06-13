@@ -162,25 +162,25 @@ class WebhookManager:
                 )
                 if success:
                     if attempt > 0:
-                        logger.info(
+                        #  Webhook info - add observability event
                             f"✅ Webhook delivered successfully for request "
                             f"{request_id} (succeeded on attempt {attempt + 1})"
                         )
                     else:
-                        logger.info(
+                        #  Webhook info - add observability event
                             f"✅ Webhook delivered successfully for request "
                             f"{request_id}"
                         )
                     return True
                 else:
                     if attempt < max_retries:
-                        logger.warning(
+                        #  Webhook warning - add observability event
                             f"🔄 Webhook delivery attempt "
                             f"{attempt + 1}/{max_retries + 1} failed "
                             f"for request {request_id}, retrying..."
                         )
                     else:
-                        logger.error(
+                        #  Webhook error - add observability event
                             f"❌ Webhook delivery failed permanently for "
                             f"request {request_id} after {max_retries + 1} "
                             f"attempts"
@@ -190,13 +190,13 @@ class WebhookManager:
                 # Provide elegant error messages instead of verbose HTTP details
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
-                    logger.warning(
+                    #  Webhook warning - add observability event
                         f"🔄 Webhook delivery attempt "
                         f"{attempt + 1}/{max_retries + 1} failed "
                         f"for request {request_id}: {error_summary}"
                     )
                 else:
-                    logger.error(
+                    #  Webhook error - add observability event
                         f"❌ Webhook delivery failed permanently for "
                         f"request {request_id}: {error_summary}"
                     )
@@ -204,7 +204,7 @@ class WebhookManager:
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
                 wait_time = min(2 ** attempt, 60)  # Cap at 60 seconds
-                logger.debug(f"⏳ Waiting {wait_time}s before retry...")
+                #  Webhook debug - add observability event
                 await asyncio.sleep(wait_time)
 
         return False
@@ -320,18 +320,18 @@ class WebhookManager:
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
-                    logger.debug(
+                    #  Webhook debug - add observability event
                         f"Webhook delivered successfully (HTTP {response.status})"
                     )
                     return True
                 else:
-                    logger.warning(
+                    #  Webhook warning - add observability event
                         f"Webhook delivery failed with HTTP {response.status}"
                     )
                     return False
 
         except Exception as e:
-            logger.debug(f"Webhook delivery exception: {e}")
+            #  Webhook debug - add observability event
             return False
 
     async def close(self):
@@ -397,26 +397,26 @@ class WebhookManager:
                 )
                 if success:
                     if attempt > 0:
-                        logger.info(
+                        #  Webhook info - add observability event
                             f"✅ Clarification webhook delivered successfully "
                             f"for request {request_id} (succeeded on attempt "
                             f"{attempt + 1})"
                         )
                     else:
-                        logger.info(
+                        #  Webhook info - add observability event
                             f"✅ Clarification webhook delivered successfully "
                             f"for request {request_id}"
                         )
                     return True
                 else:
                     if attempt < max_retries:
-                        logger.warning(
+                        #  Webhook warning - add observability event
                             f"🔄 Clarification webhook delivery attempt "
                             f"{attempt + 1}/{max_retries + 1} failed "
                             f"for request {request_id}, retrying..."
                         )
                     else:
-                        logger.error(
+                        #  Webhook error - add observability event
                             f"❌ Clarification webhook delivery failed "
                             f"permanently for request {request_id} "
                             f"after {max_retries + 1} attempts"
@@ -425,13 +425,13 @@ class WebhookManager:
             except Exception as e:
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
-                    logger.warning(
+                    #  Webhook warning - add observability event
                         f"🔄 Clarification webhook delivery attempt "
                         f"{attempt + 1}/{max_retries + 1} failed "
                         f"for request {request_id}: {error_summary}"
                     )
                 else:
-                    logger.error(
+                    #  Webhook error - add observability event
                         f"❌ Clarification webhook delivery failed "
                         f"permanently for request {request_id}: "
                         f"{error_summary}"
@@ -440,7 +440,7 @@ class WebhookManager:
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
                 wait_time = min(2 ** attempt, 60)  # Cap at 60 seconds
-                logger.debug(f"⏳ Waiting {wait_time}s before retry...")
+                #  Webhook debug - add observability event
                 await asyncio.sleep(wait_time)
 
         return False
@@ -472,18 +472,18 @@ class WebhookManager:
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
-                    logger.debug(
+                    #  Webhook debug - add observability event
                         f"Clarification webhook delivered successfully "
                         f"(HTTP {response.status})"
                     )
                     return True
                 else:
-                    logger.warning(
+                    #  Webhook warning - add observability event
                         f"Clarification webhook delivery failed with "
                         f"HTTP {response.status}"
                     )
                     return False
 
         except Exception as e:
-            logger.debug(f"Clarification webhook delivery exception: {e}")
+            #  Webhook debug - add observability event
             return False

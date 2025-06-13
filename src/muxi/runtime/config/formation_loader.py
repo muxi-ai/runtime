@@ -50,7 +50,6 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from loguru import logger
 
 from .loader import ConfigLoader
 
@@ -90,11 +89,11 @@ class FormationLoader:
 
         if path_obj.is_file():
             # Flattened formation file
-            logger.info(f"Loading flattened formation from file: {path}")
+            #  Formation loading - add observability event
             return await self._load_flattened_formation(path, secrets_manager)
         elif path_obj.is_dir():
             # Modular formation directory
-            logger.info(f"Loading modular formation from directory: {path}")
+            #  Modular formation loading - add observability event
             return await self._load_modular_formation(path, secrets_manager)
         else:
             raise ValueError(f"Invalid formation path: {path} (not a file or directory)")
@@ -123,7 +122,7 @@ class FormationLoader:
         formation_dir = os.path.dirname(os.path.abspath(file_path))
         config = self._resolve_knowledge_paths(config, formation_dir)
 
-        logger.info(f"✅ Loaded flattened formation: {config.get('id', 'unnamed')}")
+        #  Formation loaded successfully - add observability event
         return config
 
     async def _load_modular_formation(
@@ -178,7 +177,7 @@ class FormationLoader:
         # Resolve knowledge paths relative to formation directory
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
 
-        logger.info(f"✅ Loaded modular formation: {main_config.get('id', 'unnamed')}")
+        #  Modular formation loaded successfully - add observability event
         return main_config
 
     async def _discover_and_merge_agents(
@@ -194,7 +193,7 @@ class FormationLoader:
         """
         agents_dir = formation_dir / "agents"
         if not agents_dir.exists():
-            logger.debug("No agents/ directory found, skipping agent discovery")
+            #  Agent discovery - add observability event
             return
 
         # Find all YAML files in agents directory
@@ -203,7 +202,7 @@ class FormationLoader:
             agent_files.extend(agents_dir.glob(pattern))
 
         if not agent_files:
-            logger.debug("No agent configuration files found in agents/ directory")
+            #  Agent config discovery - add observability event
             return
 
         # Initialize agents list if not present
@@ -213,7 +212,7 @@ class FormationLoader:
         # Load and merge each agent configuration
         for agent_file in sorted(agent_files):
             try:
-                logger.debug(f"Loading agent config: {agent_file}")
+                #  Agent config loading - add observability event
                 agent_config = self.config_loader.load(str(agent_file))
                 agent_config = await self.config_loader.process_secrets(
                     agent_config, secrets_manager
@@ -229,15 +228,15 @@ class FormationLoader:
 
                 if is_active:
                     config["agents"].append(agent_config)
-                    logger.info(f"✅ Agent {agent_id} loaded")
+                    #  Agent loaded successfully - add observability event
                 else:
-                    logger.info(f"🔇 Agent {agent_id} skipped (disabled)")
+                    #  Agent disabled - add observability event
 
             except Exception as e:
-                logger.error(f"Failed to load agent config from {agent_file}: {e}")
+                #  Agent config error - add observability event
                 continue
 
-        logger.info(f"✅ Discovered {len(config['agents'])} agents from agents/ directory")
+        #  Agent discovery complete - add observability event
 
     def _filter_inline_agents_by_active(self, config: Dict[str, Any]) -> None:
         """
@@ -263,9 +262,9 @@ class FormationLoader:
 
             if is_active:
                 filtered_agents.append(agent_config)
-                logger.info(f"✅ Agent {agent_id} loaded")
+                #  Agent loaded successfully - add observability event
             else:
-                logger.info(f"🔇 Agent {agent_id} skipped (disabled)")
+                #  Agent disabled - add observability event
 
         config["agents"] = filtered_agents
 
@@ -282,7 +281,7 @@ class FormationLoader:
         """
         mcp_dir = formation_dir / "mcp"
         if not mcp_dir.exists():
-            logger.debug("No mcp/ directory found, skipping MCP server discovery")
+            #  MCP discovery - add observability event
             return
 
         # Find all YAML files in mcp directory
@@ -291,7 +290,7 @@ class FormationLoader:
             mcp_files.extend(mcp_dir.glob(pattern))
 
         if not mcp_files:
-            logger.debug("No MCP server configuration files found in mcp/ directory")
+            #  MCP config discovery - add observability event
             return
 
         # Initialize MCP servers structure if not present
@@ -303,7 +302,7 @@ class FormationLoader:
         # Load and merge each MCP server configuration
         for mcp_file in sorted(mcp_files):
             try:
-                logger.debug(f"Loading MCP server config: {mcp_file}")
+                #  MCP config loading - add observability event
                 mcp_config = self.config_loader.load(str(mcp_file))
                 mcp_config = await self.config_loader.process_secrets(mcp_config, secrets_manager)
 
@@ -312,13 +311,13 @@ class FormationLoader:
                     mcp_config["id"] = mcp_file.stem
 
                 config["mcp"]["servers"].append(mcp_config)
-                logger.info(f"✅ Discovered MCP server: {mcp_config.get('id', mcp_file.stem)}")
+                #  MCP server discovered - add observability event
 
             except Exception as e:
-                logger.error(f"Failed to load MCP server config from {mcp_file}: {e}")
+                #  MCP config error - add observability event
                 continue
 
-        logger.info(
+        #  Info - add observability event
             f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
         )
 
@@ -335,7 +334,7 @@ class FormationLoader:
         """
         a2a_dir = formation_dir / "a2a"
         if not a2a_dir.exists():
-            logger.debug("No a2a/ directory found, skipping A2A service discovery")
+            #  A2A discovery - add observability event
             return
 
         # Find all YAML files in a2a directory
@@ -344,7 +343,7 @@ class FormationLoader:
             a2a_files.extend(a2a_dir.glob(pattern))
 
         if not a2a_files:
-            logger.debug("No A2A service configuration files found in a2a/ directory")
+            #  A2A config discovery - add observability event
             return
 
         # Initialize A2A outbound services structure if not present
@@ -358,7 +357,7 @@ class FormationLoader:
         # Load and merge each A2A service configuration
         for a2a_file in sorted(a2a_files):
             try:
-                logger.debug(f"Loading A2A service config: {a2a_file}")
+                #  A2A config loading - add observability event
                 a2a_config = self.config_loader.load(str(a2a_file))
                 a2a_config = await self.config_loader.process_secrets(a2a_config, secrets_manager)
 
@@ -367,13 +366,13 @@ class FormationLoader:
                     a2a_config["id"] = a2a_file.stem
 
                 config["a2a"]["outbound"]["services"].append(a2a_config)
-                logger.info(f"✅ Discovered A2A service: {a2a_config.get('id', a2a_file.stem)}")
+                #  A2A service discovered - add observability event
 
             except Exception as e:
-                logger.error(f"Failed to load A2A service config from {a2a_file}: {e}")
+                #  A2A config error - add observability event
                 continue
 
-        logger.info(
+        #  Info - add observability event
             f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
             "A2A services from a2a/ directory"
         )

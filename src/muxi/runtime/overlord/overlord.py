@@ -82,7 +82,6 @@ from typing import Any, Dict, List, Optional, Union
 import datetime
 import os
 
-from loguru import logger
 
 from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 from ..agent import Agent
@@ -356,12 +355,12 @@ class Overlord:
                         extraction_model=self.extraction_model,
                         auto_extract=self.auto_extract_user_info,
                     )
-                    logger.info(
+                    #  Info - add observability event
                         "Initialized MemoryExtractor for automatic user information extraction"
                     )
                 except ImportError:
                     # Log warning but continue if extractor can't be imported
-                    logger.warning(
+                    #  Warning - add observability event
                         "Could not import MemoryExtractor, automatic extraction disabled"
                     )
                     self.auto_extract_user_info = False
@@ -492,7 +491,7 @@ class Overlord:
         # Initialize observability system (Task 5)
         self.observability_manager = ObservabilityManager(config=self.formation_config)
 
-        logger.info(
+        #  Info - add observability event
             "Enhanced Overlord initialized with workflow capabilities and async orchestration"
         )
 
@@ -505,20 +504,20 @@ class Overlord:
             # Start cache manager
             if hasattr(self, "cache_manager") and self.cache_manager:
                 await self.cache_manager.start()
-                logger.info("Cache manager started successfully")
+                #  Cache manager startup - add observability event
 
             # Start observability system
             await self.observability_manager.start()
-            logger.info("Observability system started successfully")
+            #  Observability startup - add observability event
 
             # Initialize other services if needed
             self._initialize_external_registry_client()
             self._initialize_inbound_registry_client()
             self._initialize_formation_server()
 
-            logger.info("Overlord services started successfully")
+            #  Overlord services startup - add observability event
         except Exception as e:
-            logger.error(f"Error starting overlord services: {e}")
+            #  Overlord startup error - add observability event
             raise
 
     def _load_default_persona(self) -> None:
@@ -531,19 +530,19 @@ class Overlord:
             if os.path.exists(persona_path):
                 with open(persona_path, "r", encoding="utf-8") as f:
                     self._default_persona = f.read().strip()
-                logger.debug(f"Loaded default persona from {persona_path}")
+                #  Persona loading debug - add observability event
             else:
                 # Fallback if file doesn't exist
                 fallback = "You are a friendly and helpful assistant."
                 self._default_persona = fallback
                 msg = f"Persona file not found at {persona_path}, using fallback"
-                logger.warning(msg)
+                #  Warning - add observability event
 
         except Exception as e:
             # Fallback if there's an error reading the file
             fallback = "You are a friendly and helpful assistant."
             self._default_persona = fallback
-            logger.error(f"Error loading persona file: {e}, using fallback")
+            #  Loading error - add observability event
 
     def _create_overlord_system_message(self, persona: Optional[str] = None) -> str:
         """
@@ -566,7 +565,7 @@ class Overlord:
                 with open(system_message_path, "r", encoding="utf-8") as f:
                     system_message = f.read().strip()
         except Exception as e:
-            logger.error(f"Error loading technical instructions: {e}")
+            #  Loading error - add observability event
             # Fallback technical instructions
             system_message = (
                 "You are the system overlord. You are responsible for routing messages "
@@ -605,7 +604,7 @@ class Overlord:
             # Emit formation loading started event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    ConversationEventType.OVERLORD_INITIALIZATION_STARTED,
+                    SystemEventType.OVERLORD_INITIALIZATION_STARTED,
                     level=EventLevel.INFO,
                     data={"formation_path": formation_path},
                     description=f"Starting formation loading from {formation_path}",
@@ -616,19 +615,19 @@ class Overlord:
             from ..config.validation import validate_formation
 
             # Validate formation before loading
-            logger.info(f"Validating formation: {formation_path}")
+            #  Formation validation - add observability event
             validation_result = validate_formation(formation_path, self.secrets_manager)
 
             if not validation_result.is_valid:
                 error_msg = (
                     f"Formation validation failed:\n" f"{validation_result.detailed_report()}"
                 )
-                logger.error(error_msg)
+                #  Error - add observability event
                 raise ValueError(error_msg)
 
             # Log warnings if any
             if validation_result.warnings:
-                logger.warning(
+                #  Warning - add observability event
                     f"Formation validation warnings:\n" f"{validation_result.detailed_report()}"
                 )
 
@@ -639,7 +638,7 @@ class Overlord:
             # Update overlord's formation config
             self.formation_config = formation_config
 
-            logger.info(f"✅ Loaded formation: {formation_config.get('id', 'unnamed')}")
+            #  Formation loaded - add observability event
 
             # Apply configuration to overlord
             await self._apply_formation_config()
@@ -647,7 +646,7 @@ class Overlord:
             # Emit formation loading completed event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    ConversationEventType.OVERLORD_INITIALIZATION_COMPLETED,
+                    SystemEventType.OVERLORD_INITIALIZATION_COMPLETED,
                     level=EventLevel.INFO,
                     data={
                         "formation_id": formation_config.get("id", "unnamed"),
@@ -665,7 +664,7 @@ class Overlord:
             return formation_config
 
         except Exception as e:
-            logger.error(f"Failed to load formation from {formation_path}: {e}")
+            #  Formation loading error - add observability event
 
             # Emit formation loading failed event
             if hasattr(self, "observability_manager"):
@@ -706,7 +705,7 @@ class Overlord:
             }
 
         except Exception as e:
-            logger.error(f"Failed to validate formation {formation_path}: {e}")
+            #  Formation validation error - add observability event
             return {
                 "is_valid": False,
                 "errors": [str(e)],
@@ -757,11 +756,11 @@ class Overlord:
 
                 if is_active:
                     await self._create_agent_from_config(agent_config)
-                    logger.info(f"✅ Agent {agent_id} loaded")
+                    #  Agent loaded - add observability event
                 else:
-                    logger.info(f"🔇 Agent {agent_id} skipped (disabled)")
+                    #  Agent disabled - add observability event
             except Exception as e:
-                logger.error(f"Failed to create agent from config: {e}")
+                #  Agent creation error - add observability event
                 continue
 
         # Register MCP servers from configuration
@@ -771,7 +770,7 @@ class Overlord:
             try:
                 await self._register_mcp_server_from_config(server_config)
             except Exception as e:
-                logger.error(f"Failed to register MCP server from config: {e}")
+                #  MCP registration error - add observability event
                 continue
 
         # Apply A2A configuration
@@ -780,9 +779,9 @@ class Overlord:
             try:
                 await self._apply_a2a_config(a2a_config)
             except Exception as e:
-                logger.error(f"Failed to apply A2A configuration: {e}")
+                #  A2A config error - add observability event
 
-        logger.info("✅ Applied formation configuration to overlord")
+        #  Formation config applied - add observability event
 
     async def _initialize_llm_config(self) -> None:
         """
@@ -815,7 +814,7 @@ class Overlord:
         self._global_api_keys = llm_config.get("api_keys", {})
 
         capabilities = list(self._capability_models.keys())
-        logger.info(f"✅ Initialized LLM config with capabilities: {capabilities}")
+        #  LLM config initialized - add observability event
 
     async def _initialize_auth_config(self) -> None:
         """
@@ -836,10 +835,10 @@ class Overlord:
                     interpolated_config = await self.interpolate_secrets({"admin_key": admin_key})
                     admin_key = interpolated_config.get("admin_key", admin_key)
                 except Exception as e:
-                    logger.warning(f"Failed to interpolate secrets in admin_key: {e}")
+                    #  Secret interpolation warning - add observability event
 
             self.admin_api_key = admin_key
-            logger.info("✅ Updated admin API key from formation config")
+            #  Admin API key updated - add observability event
 
         if "user_key" in auth_api_keys:
             user_key = auth_api_keys["user_key"]
@@ -849,13 +848,13 @@ class Overlord:
                     interpolated_config = await self.interpolate_secrets({"user_key": user_key})
                     user_key = interpolated_config.get("user_key", user_key)
                 except Exception as e:
-                    logger.warning(f"Failed to interpolate secrets in user_key: {e}")
+                    #  Secret interpolation warning - add observability event
 
             self.user_api_key = user_key
-            logger.info("✅ Updated user API key from formation config")
+            #  User API key updated - add observability event
 
         if auth_api_keys:
-            logger.info("✅ Initialized auth configuration")
+            #  Auth config initialized - add observability event
 
     async def _initialize_memory_config(self) -> None:
         """
@@ -868,7 +867,7 @@ class Overlord:
         memory_config = self.formation_config.get("memory", {})
 
         if not memory_config:
-            logger.debug("No memory configuration found in formation")
+            #  Config debug - add observability event
             return
 
         # Initialize buffer memory configuration
@@ -884,20 +883,20 @@ class Overlord:
 
         # Handle legacy short_term configuration with warning
         if "short_term" in memory_config:
-            logger.warning(
+            #  Warning - add observability event
                 "Legacy memory.short_term configuration detected. "
                 "Please migrate to memory.working and memory.buffer structure."
             )
 
         # Handle legacy long_term configuration with warning
         if "long_term" in memory_config:
-            logger.warning(
+            #  Warning - add observability event
                 "Legacy memory.long_term configuration detected. "
                 "Please migrate to memory.persistent structure."
             )
 
         if memory_config:
-            logger.info("✅ Initialized memory configuration")
+            #  Memory config initialized - add observability event
 
     async def _initialize_logging_config(self) -> None:
         """
@@ -909,7 +908,7 @@ class Overlord:
         logging_config = self.formation_config.get("logging", {})
 
         if not logging_config:
-            logger.debug("No logging configuration found in formation")
+            #  Config debug - add observability event
             return
 
         try:
@@ -919,11 +918,11 @@ class Overlord:
 
             # Only configure logging if enabled
             if not enabled:
-                logger.info("✅ Logging disabled in formation configuration")
+                #  Logging config disabled - add observability event
                 return
 
             if not streams:
-                logger.warning("⚠️  Logging enabled but no streams configured")
+                #  Logging config warning - add observability event
                 return
 
             # Process each stream
@@ -934,19 +933,19 @@ class Overlord:
                     if processed_stream:
                         processed_streams.append(processed_stream)
                 except Exception as e:
-                    logger.error(f"Failed to process logging stream {i}: {e}")
+                    #  Logging stream error - add observability event
                     continue
 
             # Store processed logging configuration
             self._logging_config = {"enabled": enabled, "streams": processed_streams}
 
-            logger.info(
+            #  Info - add observability event
                 f"✅ Initialized logging configuration "
                 f"(enabled={enabled}, streams={len(processed_streams)})"
             )
 
         except Exception as e:
-            logger.error(f"Failed to initialize logging configuration: {e}")
+            #  Logging init error - add observability event
 
     async def _process_logging_stream(
         self, stream: Dict[str, Any], index: int
@@ -969,7 +968,7 @@ class Overlord:
         auth = stream.get("auth", {})
 
         if not transport:
-            logger.error(f"Logging stream {index} missing transport")
+            #  Logging stream config error - add observability event
             return None
 
         # Process transport-specific configuration
@@ -988,7 +987,7 @@ class Overlord:
         elif transport == "file":
             destination = stream.get("destination")
             if not destination:
-                logger.error(f"Logging stream {index} with file transport missing destination")
+                #  Logging stream config error - add observability event
                 return None
             processed_stream["destination"] = destination
 
@@ -997,7 +996,7 @@ class Overlord:
             protocol = stream.get("protocol")
 
             if not destination:
-                logger.error(f"Logging stream {index} with stream transport missing destination")
+                #  Logging stream config error - add observability event
                 return None
 
             # Auto-detect protocol if not specified
@@ -1015,11 +1014,11 @@ class Overlord:
 
             # Ensure auth is configured for trail
             if not auth:
-                logger.error(f"Logging stream {index} with trail transport requires auth")
+                #  Error - add observability event
                 return None
 
         else:
-            logger.error(f"Logging stream {index} has unsupported transport: {transport}")
+            #  Unsupported transport error - add observability event
             return None
 
         # Interpolate secrets in auth if needed
@@ -1028,7 +1027,7 @@ class Overlord:
                 interpolated_auth = await self.interpolate_secrets(auth)
                 processed_stream["auth"] = interpolated_auth
             except Exception as e:
-                logger.warning(f"Failed to interpolate secrets in logging stream {index} auth: {e}")
+                #  Secret interpolation warning - add observability event
 
         return processed_stream
 
@@ -1081,7 +1080,7 @@ class Overlord:
         clarification_config = overlord_config.get("clarification", {})
 
         if not clarification_config:
-            logger.debug("No clarification configuration found in formation")
+            #  Config debug - add observability event
             return
 
         try:
@@ -1096,17 +1095,17 @@ class Overlord:
             try:
                 style = QuestionStyle(style_str.lower())
             except ValueError:
-                logger.warning(
+                #  Warning - add observability event
                     f"Invalid clarification style '{style_str}', defaulting to conversational"
                 )
                 style = QuestionStyle.CONVERSATIONAL
 
             # Validate max_questions
             if not isinstance(max_questions, int) or max_questions < 1:
-                logger.warning(f"Invalid max_questions '{max_questions}', defaulting to 5")
+                #  Invalid config warning - add observability event
                 max_questions = 5
             elif max_questions > 20:
-                logger.warning(
+                #  Warning - add observability event
                     f"max_questions '{max_questions}' is very high, consider reducing for better UX"
                 )
 
@@ -1115,19 +1114,19 @@ class Overlord:
                 max_questions=max_questions, style=style, persist_learned_info=persist_learned_info
             )
 
-            logger.info(
+            #  Info - add observability event
                 f"✅ Initialized clarification configuration "
                 f"(max_questions={max_questions}, style={style.value}, "
                 f"persist_learned_info={persist_learned_info})"
             )
 
         except Exception as e:
-            logger.error(f"Failed to initialize clarification configuration: {e}")
+            #  Clarification init error - add observability event
             # Keep default configuration on error
-            logger.info("Using default clarification configuration")
+            #  Default clarification config - add observability event
 
         if clarification_config:
-            logger.info("✅ Clarification configuration processing complete")
+            #  Clarification config - add observability event
 
     async def _initialize_document_processing_config(self) -> None:
         """
@@ -1153,16 +1152,16 @@ class Overlord:
                 max_file_size = self.document_processing_config.get_max_file_size_mb()
                 strategy = self.document_processing_config.get_extraction_strategy()
 
-                logger.info(
+                #  Info - add observability event
                     f"✅ Initialized document processing configuration "
                     f"(enabled={enabled}, chunk_size={chunk_size}, "
                     f"max_file_size={max_file_size}MB, strategy={strategy})"
                 )
             else:
-                logger.info("✅ Document processing not configured (no documents model found)")
+                #  Document processing config - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to initialize document processing configuration: {e}")
+            #  Document processing init error - add observability event
             # Fall back to default configuration
             from ..config.document_processing import DocumentProcessingConfig
 
@@ -1183,10 +1182,10 @@ class Overlord:
                 not hasattr(self, "document_processing_config")
                 or not self.document_processing_config.is_enabled()
             ):
-                logger.info("Document processing not enabled, skipping component initialization")
+                #  Document processing disabled - add observability event
                 return
 
-            logger.info("Initializing document processing components...")
+            #  Document processing init - add observability event
 
             # Subtask 3.7: Document Storage Foundation Layer
             self.document_chunker = DocumentChunkManager()
@@ -1206,10 +1205,10 @@ class Overlord:
             self.document_cross_referencer = DocumentCrossReferenceManager()
             self.document_context_preserver = DocumentContextPreserver()
 
-            logger.info("✅ Document processing components initialized successfully")
+            #  Document processing components ready - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to initialize document processing components: {e}")
+            #  Document processing init error - add observability event
             # Set all components to None on failure
             self.document_chunker = None
             self.document_metadata_store = None
@@ -1240,7 +1239,7 @@ class Overlord:
                 try:
                     embedding_model = await self.get_model_for_capability("embedding")
                 except Exception as e:
-                    logger.warning(f"Could not get embedding model for buffer memory: {e}")
+                    #  Model creation warning - add observability event
                     vector_search = False
 
             # Create buffer memory instance
@@ -1253,13 +1252,13 @@ class Overlord:
                 remote=remote_config if mode == "remote" else None,
             )
 
-            logger.info(
+            #  Info - add observability event
                 f"✅ Initialized buffer memory (size={size}, multiplier={multiplier}, "
                 f"vector_search={vector_search}, mode={mode})"
             )
 
         except Exception as e:
-            logger.error(f"Failed to initialize buffer memory: {e}")
+            #  Buffer memory init error - add observability event
 
     async def _initialize_persistent_memory(self, persistent_config: Dict[str, Any]) -> None:
         """Initialize persistent memory from configuration."""
@@ -1268,7 +1267,7 @@ class Overlord:
             embedding_model_name = persistent_config.get("embedding_model")
 
             if not connection_string:
-                logger.warning("No connection_string provided for persistent memory")
+                #  Connection string warning - add observability event
                 return
 
             # Interpolate secrets in connection string if needed
@@ -1279,7 +1278,7 @@ class Overlord:
                     )
                     connection_string = interpolated.get("connection_string", connection_string)
                 except Exception as e:
-                    logger.error(f"Failed to interpolate secrets in connection_string: {e}")
+                    #  Error - add observability event
                     return
 
             # Get embedding model
@@ -1289,12 +1288,12 @@ class Overlord:
                     # Create model from specific name override
                     embedding_model = await self.create_model(model=embedding_model_name)
                 except Exception as e:
-                    logger.warning(f"Could not create embedding model {embedding_model_name}: {e}")
+                    #  Model creation warning - add observability event
                     try:
                         # Fall back to default embedding capability
                         embedding_model = await self.get_model_for_capability("embedding")
                     except Exception as e2:
-                        logger.warning(f"Could not get default embedding model: {e2}")
+                        #  Model creation warning - add observability event
 
             # Determine memory type based on connection string
             if connection_string.startswith("postgresql://") or connection_string.startswith(
@@ -1305,7 +1304,7 @@ class Overlord:
                 self.long_term_memory = Memobase(
                     connection_string=connection_string, model=embedding_model
                 )
-                logger.info("✅ Initialized PostgreSQL-based long-term memory (Memobase)")
+                #  PostgreSQL memory initialized - add observability event
             elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
                 from ..memory.sqlite import SQLiteMemory
 
@@ -1319,16 +1318,16 @@ class Overlord:
                         embedding_llm = await self.get_model_for_capability("embedding")
                         self.long_term_memory.embedding_provider = embedding_llm
                     except Exception as e:
-                        logger.warning(
+                        #  Warning - add observability event
                             f"Could not set embedding provider for long-term memory: {e}"
                         )
 
-                logger.info(f"✅ Initialized SQLite-based long-term memory ({db_path})")
+                #  SQLite memory initialized - add observability event
             else:
-                logger.error(f"Unsupported connection string format: {connection_string}")
+                #  Connection string format error - add observability event
 
         except Exception as e:
-            logger.error(f"Failed to initialize persistent memory: {e}")
+            #  Persistent memory init error - add observability event
 
     async def get_model_for_capability(
         self, capability: str, agent_id: Optional[str] = None
@@ -1376,7 +1375,7 @@ class Overlord:
         # Fall back to text capability if current capability not found
         if not model_config and capability != "text" and "text" in self._capability_models:
             model_config = self._capability_models["text"]
-            logger.warning(f"No {capability} model found, falling back to text model")
+            #  Model fallback warning - add observability event
 
         # If still no model config, raise error
         if not model_config:
@@ -1402,7 +1401,7 @@ class Overlord:
                 interpolated_config = await self.interpolate_secrets({"api_key": final_api_key})
                 final_api_key = interpolated_config.get("api_key", final_api_key)
             except Exception as e:
-                logger.warning(f"Failed to interpolate secrets in api_key: {e}")
+                #  Secret interpolation warning - add observability event
 
         # Create model instance
         model = LLM(model=model_name, api_key=final_api_key, **final_settings)
@@ -1410,7 +1409,7 @@ class Overlord:
         # Cache the model
         self._model_cache[cache_key] = model
 
-        logger.debug(f"Created {capability} model for {agent_id or 'default'}: {model_name}")
+        #  Model creation debug - add observability event
         return model
 
     async def _create_agent_from_config(self, agent_config: Dict[str, Any]) -> None:
@@ -1422,7 +1421,7 @@ class Overlord:
         """
         agent_id = agent_config.get("id")
         if not agent_id:
-            logger.error("Agent configuration missing id")
+            #  Agent config missing error - add observability event
             return
 
         # Create model from configuration (support both new and legacy formats)
@@ -1468,7 +1467,7 @@ class Overlord:
                 }
             )
 
-        logger.info(f"✅ Created agent from config: {agent_id}")
+        #  Agent created from config - add observability event
 
     async def _register_mcp_server_from_config(self, server_config: Dict[str, Any]) -> None:
         """
@@ -1479,7 +1478,7 @@ class Overlord:
         """
         server_id = server_config.get("id")
         if not server_id:
-            logger.error("MCP server configuration missing id")
+            #  MCP config missing error - add observability event
             return
 
         # Extract server parameters
@@ -1492,7 +1491,7 @@ class Overlord:
             server_id=server_id, url=url, command=command, credentials=credentials
         )
 
-        logger.info(f"✅ Registered MCP server from config: {server_id}")
+        #  MCP server registered from config - add observability event
 
     async def _apply_a2a_config(self, a2a_config: Dict[str, Any]) -> None:
         """
@@ -1509,11 +1508,11 @@ class Overlord:
                 try:
                     # Apply outbound service configuration
                     service_id = service_config.get("id")
-                    logger.info(f"✅ Applied A2A outbound service config: {service_id}")
+                    #  A2A service applied - add observability event
                 except Exception as e:
-                    logger.error(f"Failed to apply A2A service config: {e}")
+                    #  A2A service error - add observability event
 
-        logger.info("✅ Applied A2A configuration")
+        #  A2A configuration applied - add observability event
 
     async def _initialize_routing_model(self):
         """Initialize the model used for agent routing decisions."""
@@ -1618,7 +1617,7 @@ class Overlord:
                     try:
                         # Don't create a task, just set to None and handle later
                         self.routing_model = None
-                        logger.info("Will use capability-based text model for routing")
+                        #  Routing model selection - add observability event
                     except Exception:
                         # Fall back to create_model with defaults
                         self.routing_model = await self.create_model()
@@ -1641,7 +1640,7 @@ class Overlord:
                     self.plan_approval_threshold = 7
                     self._routing_cache_expiry: Dict[str, float] = {}
 
-            logger.info(
+            #  Info - add observability event
                 f"✅ Initialized overlord routing with "
                 f"cache_enabled={self.routing_cache_enabled}, "
                 f"ttl={self.routing_cache_ttl}, "
@@ -1659,7 +1658,7 @@ class Overlord:
 
         except Exception as e:
             # If initialization fails, log error but continue (routing will fall back to default)
-            logger.error(f"Failed to initialize routing model: {str(e)}")
+            #  Routing model init error - add observability event
             self.routing_model = None
             self.routing_cache_enabled = True
             self.routing_cache_ttl = 3600
@@ -1716,7 +1715,7 @@ class Overlord:
                 interpolated_config = await self.interpolate_secrets({"api_key": api_key})
                 final_api_key = interpolated_config.get("api_key", api_key)
             except Exception as e:
-                logger.warning(f"Failed to interpolate secrets in api_key: {e}")
+                #  Secret interpolation warning - add observability event
                 # Continue with original api_key
 
         # Create and return a new model instance
@@ -1793,7 +1792,7 @@ class Overlord:
             "description": description or system_message or f"Agent {agent_id}",
         }
 
-        logger.info(f"Created agent with ID '{agent_id}'")
+        #  Agent created - add observability event
 
         # Track agents that need external registration (but don't register yet)
         a2a_config = self.formation_config.get("a2a", {}) if self.formation_config else {}
@@ -1805,7 +1804,7 @@ class Overlord:
             if not hasattr(self, "pending_external_registrations"):
                 self.pending_external_registrations = set()
             self.pending_external_registrations.add(agent_id)
-            logger.info(
+            #  Info - add observability event
                 f"Agent '{agent_id}' queued for external registration "
                 f"after formation server starts"
             )
@@ -1851,7 +1850,7 @@ class Overlord:
             "description": agent.system_message or "",
         }
 
-        logger.info(f"Created agent with ID '{agent.agent_id}'")
+        #  Agent created - add observability event
 
         return agent
 
@@ -1896,7 +1895,7 @@ class Overlord:
             await self.buffer_memory.add(message, metadata=full_metadata)
             return True
         except Exception as e:
-            logger.error(f"Error adding to buffer memory: {e}")
+            #  Buffer memory add error - add observability event
             return False
 
     async def add_to_long_term_memory(
@@ -1980,7 +1979,7 @@ class Overlord:
 
                 return memory_id
             except Exception as e:
-                logger.error(f"Error adding to Memobase: {e}")
+                #  Memobase add error - add observability event
                 # Emit memory storage failed event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
@@ -2017,7 +2016,7 @@ class Overlord:
 
             return memory_id
         except Exception as e:
-            logger.error(f"Error adding to long-term memory: {e}")
+            #  Long-term memory add error - add observability event
             # Emit memory storage failed event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
@@ -2126,7 +2125,7 @@ class Overlord:
                         }
                     )
             except Exception as e:
-                logger.error(f"Error searching buffer memory: {e}")
+                #  Buffer memory search error - add observability event
 
         # Search long-term memory if available and enabled
         if self.long_term_memory and use_long_term:
@@ -2187,7 +2186,7 @@ class Overlord:
                     ]
                 )
             except Exception as e:
-                logger.error(f"Error searching long-term memory: {e}")
+                #  Long-term memory search error - add observability event
 
         # Sort by distance and limit to k results
         results.sort(key=lambda x: x["distance"])
@@ -2227,7 +2226,7 @@ class Overlord:
                     filter_metadata=filter_metadata if filter_metadata else None
                 )
             except Exception as e:
-                logger.error(f"Error clearing buffer memory: {e}")
+                #  Buffer memory clear error - add observability event
 
         # Clear long-term memory if requested
         if clear_long_term and self.long_term_memory:
@@ -2246,7 +2245,7 @@ class Overlord:
                         filter_metadata=filter_metadata if filter_metadata else None
                     )
             except Exception as e:
-                logger.error(f"Error clearing long-term memory: {e}")
+                #  Long-term memory clear error - add observability event
 
     async def clear_all_memories(self, clear_long_term: bool = False) -> None:
         """
@@ -2280,7 +2279,7 @@ class Overlord:
             await self.secrets_manager.initialize_encryption()
             return True
         except Exception as e:
-            logger.error(f"Failed to initialize SecretsManager: {e}")
+            #  SecretsManager init error - add observability event
             return False
 
     async def store_secret(self, name: str, value: str) -> bool:
@@ -2295,14 +2294,14 @@ class Overlord:
             bool: True if successful, False otherwise
         """
         if not await self.ensure_secrets_manager():
-            logger.error("SecretsManager not available")
+            #  SecretsManager unavailable - add observability event
             return False
 
         try:
             await self.secrets_manager.store_secret(name, value)
             return True
         except Exception as e:
-            logger.error(f"Failed to store secret '{name}': {e}")
+            #  Secret storage error - add observability event
             return False
 
     async def get_secret(self, name: str) -> Optional[str]:
@@ -2321,7 +2320,7 @@ class Overlord:
         try:
             return await self.secrets_manager.get_secret(name)
         except Exception as e:
-            logger.error(f"Failed to retrieve secret '{name}': {e}")
+            #  Secret retrieval error - add observability event
             return None
 
     async def list_secrets(self) -> List[str]:
@@ -2337,7 +2336,7 @@ class Overlord:
         try:
             return await self.secrets_manager.list_secrets()
         except Exception as e:
-            logger.error(f"Failed to list secrets: {e}")
+            #  Error - add observability event
             return []
 
     async def delete_secret(self, name: str) -> bool:
@@ -2357,7 +2356,7 @@ class Overlord:
             await self.secrets_manager.delete_secret(name)
             return True
         except Exception as e:
-            logger.error(f"Failed to delete secret '{name}': {e}")
+            #  Error - add observability event
             return False
 
     async def interpolate_secrets(self, config: Dict[str, Any]) -> Dict[str, Any]:
@@ -2376,7 +2375,7 @@ class Overlord:
         try:
             return await self.secrets_manager.interpolate_secrets(config)
         except Exception as e:
-            logger.error(f"Failed to interpolate secrets: {e}")
+            #  Error - add observability event
             return config
 
     def get_agent(self, agent_id: Optional[str] = None) -> Agent:
@@ -2434,10 +2433,10 @@ class Overlord:
             try:
                 # Run deregistration in background - don't block removal
                 asyncio.create_task(self.deregister_agent_from_external_registry(agent_id))
-                logger.debug(f"Scheduled external registry deregistration for agent {agent_id}")
+                #  Debug - add observability event
             except Exception as e:
                 # Log warning but don't fail the removal
-                logger.warning(f"Failed to schedule external deregistration for {agent_id}: {e}")
+                #  Warning - add observability event
 
         # Remove the agent
         del self.agents[agent_id]
@@ -2447,7 +2446,7 @@ class Overlord:
             # Set the first available agent as default, or None if no agents remain
             self.default_agent_id = next(iter(self.agents)) if self.agents else None
 
-        logger.info(f"Removed agent with ID '{agent_id}'")
+        #  Info - add observability event
 
         return True
 
@@ -2469,7 +2468,7 @@ class Overlord:
             raise ValueError(f"No agent with ID '{agent_id}' exists")
 
         self.default_agent_id = agent_id
-        logger.info(f"Set agent '{agent_id}' as default")
+        #  Info - add observability event
 
     async def run_agent(
         self, input_text: str, agent_id: Optional[str] = None, use_memory: bool = True
@@ -2526,7 +2525,7 @@ class Overlord:
             # Check if port is already in use
             if is_port_in_use(port):
                 msg = f"Port {port} is already in use. MUXI server cannot start."
-                logger.error(msg)
+                #  Error - add observability event
                 print(f"Error: {msg}")
                 print(f"Please stop any other processes using port {port} and try again.")
                 return
@@ -2541,7 +2540,7 @@ class Overlord:
             run_server(host=host, port=port, reload=reload, mcp=mcp)
 
         except Exception as e:
-            logger.error(f"Failed to start MUXI server: {str(e)}")
+            #  Error - add observability event
             print(f"Error: Failed to start MUXI server: {str(e)}")
 
     async def select_agent_for_message(self, message: str) -> str:
@@ -2605,10 +2604,10 @@ class Overlord:
             try:
                 # Try to get text model from formation
                 routing_model = await self.get_model_for_capability("text")
-                logger.info("Using capability-based text model for routing")
+                #  Routing model selection - add observability event
             except Exception as e:
                 # Fall back to intelligent selection if model creation fails
-                logger.info(f"No routing model available ({e}), using intelligent selection")
+                #  Routing fallback - add observability event
                 return self._select_best_available_agent(message)
 
         try:
@@ -2624,12 +2623,12 @@ class Overlord:
             # If parsing failed or the agent doesn't exist, use intelligent fallback
             if selected_agent_id is None or selected_agent_id not in self.agents:
                 selected_agent_id = self._select_best_available_agent(message)
-                logger.info(
+                #  Info - add observability event
                     f"Routing model returned invalid agent. "
                     f"Selected best available agent: '{selected_agent_id}'"
                 )
             else:
-                logger.info(f"Routed message to agent: '{selected_agent_id}'")
+                #  Message routing - add observability event
 
             # Cache the result for future identical messages (if caching is enabled)
             if caching_enabled:
@@ -2642,7 +2641,7 @@ class Overlord:
 
         except Exception as e:
             # If anything goes wrong, use intelligent selection
-            logger.error(f"Error routing message: {str(e)}")
+            #  Message routing error - add observability event
             return self._select_best_available_agent(message)
 
     def _create_routing_prompt(self, message: str) -> str:
@@ -2943,7 +2942,7 @@ class Overlord:
         try:
             internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
-            logger.error(f"User ID conversion failed during extraction: {e}")
+            #  Error - add observability event
             return
 
         # Skip extraction for anonymous users
@@ -2970,10 +2969,10 @@ class Overlord:
                     extraction_model=extraction_model,
                 )
             )
-            logger.debug(f"Automatic extraction scheduled for user {internal_user_id}")
+            #  Debug - add observability event
         except Exception as e:
             # Log but don't fail if extraction errors occur
-            logger.warning(f"User information extraction failed: {str(e)}")
+            #  Warning - add observability event
 
     async def _run_extraction(
         self,
@@ -3060,7 +3059,7 @@ class Overlord:
         try:
             internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
-            logger.error(f"User ID conversion failed during context memory retrieval: {e}")
+            #  Error - add observability event
             return {}
 
         return await self.long_term_memory.get_user_context_memory(user_id=internal_user_id)
@@ -3104,7 +3103,7 @@ class Overlord:
         try:
             internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
-            logger.error(f"User ID conversion failed during context memory addition: {e}")
+            #  Error - add observability event
             return []
 
         return await self.long_term_memory.add_user_context_memory(
@@ -3140,7 +3139,7 @@ class Overlord:
         try:
             internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
-            logger.error(f"User ID conversion failed during context memory clearing: {e}")
+            #  Error - add observability event
             return False
 
         return await self.long_term_memory.clear_user_context_memory(
@@ -3195,7 +3194,7 @@ class Overlord:
             try:
                 final_auth = await self.interpolate_secrets(auth)
             except Exception as e:
-                logger.warning(f"Failed to interpolate secrets in MCP auth: {e}")
+                #  Secret interpolation warning - add observability event
                 # Continue with original auth
 
         # Register the server with the MCP service
@@ -3293,7 +3292,7 @@ class Overlord:
             try:
                 internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
             except Exception as e:
-                logger.error(f"User ID conversion failed during message memory addition: {e}")
+                #  Error - add observability event
                 return
 
             # Skip for anonymous users
@@ -3337,7 +3336,7 @@ class Overlord:
                 except Exception as e:
                     # Log error and fall back to original message
                     error_msg = "Error enhancing message with user context:"
-                    logger.error(f"{error_msg} {e}")  # noqa: E501
+                    #  Error - add observability event
                     await self.long_term_memory.add(
                         content=content, metadata=metadata, user_id=internal_user_id
                     )
@@ -3397,7 +3396,7 @@ class Overlord:
             if not self._is_document_processing_available():
                 return self._generate_document_unavailable_message()
 
-            logger.info(
+            #  Info - add observability event
                 f"Processing {len(attachments)} document(s) for user request: "
                 f"{user_request[:100]}..."
             )
@@ -3428,7 +3427,7 @@ class Overlord:
                 return acknowledgment
 
         except Exception as e:
-            logger.error(f"Error in document processing: {e}")
+            #  Error - add observability event
             if self.document_error_handler:
                 return await self.document_error_handler.handle_document_error(
                     e, "document_upload", context or {}
@@ -3454,7 +3453,7 @@ class Overlord:
                 filename = attachment.get("filename", "unknown")
                 content = attachment.get("content", "")
 
-                logger.info(f"Processing document: {filename}")
+                #  Info - add observability event
 
                 # Chunk the document using adaptive strategies
                 if self.document_chunker:
@@ -3472,7 +3471,7 @@ class Overlord:
                     try:
                         internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
                     except Exception as e:
-                        logger.warning(f"User ID conversion failed for document storage: {e}")
+                        #  Warning - add observability event
                         internal_user_id = None
 
                 doc_metadata = {
@@ -3514,10 +3513,10 @@ class Overlord:
                     }
                 )
 
-                logger.info(f"✅ Processed {filename}: {len(chunks)} chunks")
+                #  Info - add observability event
 
             except Exception as e:
-                logger.error(
+                #  Error - add observability event
                     f"Error processing document {attachment.get('filename', 'unknown')}: {e}"
                 )
                 continue
@@ -3554,7 +3553,7 @@ class Overlord:
             return acknowledgment
 
         except Exception as e:
-            logger.error(f"Error in document experience phase: {e}")
+            #  Error - add observability event
             return (
                 "I've processed your documents, though I encountered some issues "
                 "with the acknowledgment generation."
@@ -3599,7 +3598,7 @@ class Overlord:
                     )
 
         except Exception as e:
-            logger.error(f"Error in document workflow phase: {e}")
+            #  Error - add observability event
             return (
                 "I processed your documents but encountered an issue generating "
                 "the workflow response."
@@ -3625,7 +3624,7 @@ class Overlord:
                 return f"{acknowledgment}\n\n{workflow_result}\n\n*Sources: {source_list}*"
 
         except Exception as e:
-            logger.error(f"Error generating final response: {e}")
+            #  Error - add observability event
             return f"{acknowledgment}\n\n{workflow_result}"
 
     def _is_document_processing_available(self) -> bool:
@@ -3712,7 +3711,7 @@ class Overlord:
         request_id = f"req_{generate_nanoid()}"
         timestamp = time.time()
 
-        logger.info(f"Chat request {request_id}: {message[:100]}...")
+        #  Chat request received - add observability event
 
         # Start request tracking with observability
         async with self.observability_manager.track_request(
@@ -3749,7 +3748,7 @@ class Overlord:
 
             # Emit routing started event
             await self.observability_manager.event_logger.emit_event(
-                ConversationEventType.OVERLORD_ROUTING_STARTED,
+                SystemEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"message": message[:200], "agent_name": agent_name},
@@ -3763,17 +3762,17 @@ class Overlord:
             # Async decision logic
             if use_async is False:
                 use_async_mode = False  # Force synchronous
-                logger.debug(f"Request {request_id}: Forced synchronous processing")
+                #  Debug - add observability event
             elif use_async is True:
                 use_async_mode = True  # Force asynchronous
-                logger.debug(f"Request {request_id}: Forced asynchronous processing")
+                #  Debug - add observability event
             else:  # use_async is None - intelligent decision
                 if self.async_enable_estimation:
                     estimated_time = await self.time_estimator.estimate_processing_time(message)
                     use_async_mode = self.time_estimator.should_use_async(
                         estimated_time, threshold_seconds
                     )
-                    logger.debug(
+                    #  Debug - add observability event
                         f"Request {request_id}: Estimated {estimated_time:.1f}s, "
                         f"threshold {threshold_seconds}s, async={use_async_mode}"
                     )
@@ -3804,7 +3803,7 @@ class Overlord:
                     self._execute_async_request(request_id, message, agent_name, user_id)
                 )
 
-                logger.info(
+                #  Info - add observability event
                     f"Request {request_id}: Started async processing "
                     f"(estimated: {estimated_time:.1f}s)"
                 )
@@ -3858,13 +3857,13 @@ class Overlord:
                     description=f"Performance monitoring completed: {processing_time:.2f}s",
                 )
 
-                logger.info(
+                #  Info - add observability event
                     f"Request {request_id}: Completed sync processing in {processing_time:.2f}s"
                 )
 
                 # Emit routing completed event
                 await self.observability_manager.event_logger.emit_event(
-                    ConversationEventType.OVERLORD_ROUTING_COMPLETED,
+                    SystemEventType.OVERLORD_ROUTING_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"processing_time": processing_time, "mode": "sync"},
@@ -3900,7 +3899,7 @@ class Overlord:
         """
         try:
             start_time = time.time()
-            logger.info(f"Request {request_id}: Starting background processing")
+            #  Background processing started - add observability event
 
             # NEW: Check if clarification is needed before processing
             clarification_result = await self._check_clarification_needs_async(
@@ -3936,12 +3935,12 @@ class Overlord:
                         user_id=user_id,
                     )
                     if success:
-                        logger.info(
+                        #  Info - add observability event
                             f"Request {request_id}: Clarification question sent via webhook"
                         )
                         return  # Exit early, wait for clarification response
                     else:
-                        logger.error(
+                        #  Error - add observability event
                             f"Request {request_id}: Failed to send clarification via webhook"
                         )
                         # Fall back to regular processing
@@ -3949,7 +3948,7 @@ class Overlord:
                             request_id, RequestStatus.PROCESSING
                         )
                 else:
-                    logger.warning(
+                    #  Warning - add observability event
                         f"Request {request_id}: No webhook URL for clarification, "
                         "proceeding with regular processing"
                     )
@@ -3970,7 +3969,7 @@ class Overlord:
                 request_id, RequestStatus.COMPLETED, result=result_content
             )
 
-            logger.info(
+            #  Info - add observability event
                 f"Request {request_id}: Completed async processing in {processing_time:.2f}s"
             )
 
@@ -3986,16 +3985,16 @@ class Overlord:
                     user_id=user_id,  # NEW: include user identifier
                 )
                 if success:
-                    logger.info(f"Request {request_id}: Webhook delivered successfully")
+                    #  Webhook delivery success - add observability event
                 else:
-                    logger.error(f"Request {request_id}: Webhook delivery failed")
+                    #  Webhook delivery error - add observability event
             else:
-                logger.debug(
+                #  Debug - add observability event
                     f"Request {request_id}: No webhook URL configured, skipping notification"
                 )
 
         except Exception as e:
-            logger.error(f"Request {request_id}: Error in async processing: {e}")
+            #  Error - add observability event
 
             # Update request as failed
             from .async_patterns.request_tracker import RequestStatus
@@ -4031,7 +4030,7 @@ class Overlord:
             # Emit agent selection started event
             if request_context and hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    ConversationEventType.OVERLORD_AGENT_SELECTION_STARTED,
+                    SystemEventType.OVERLORD_AGENT_SELECTION_STARTED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"message": message[:200]},
@@ -4043,7 +4042,7 @@ class Overlord:
             # Emit agent selection completed event
             if request_context and hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    ConversationEventType.OVERLORD_AGENT_SELECTION_COMPLETED,
+                    SystemEventType.OVERLORD_AGENT_SELECTION_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"selected_agent": agent_name},
@@ -4082,7 +4081,7 @@ class Overlord:
             # Fall back to formation default
             return self.async_webhook_url
         except Exception as e:
-            logger.error(f"Error getting webhook URL for request {request_id}: {e}")
+            #  Error - add observability event
             return self.async_webhook_url
 
     async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
@@ -4121,7 +4120,7 @@ class Overlord:
             return None
 
         except Exception as e:
-            logger.error(f"Error getting async request status for {request_id}: {e}")
+            #  Error - add observability event
             return None
 
     async def cleanup_async_requests(self, max_age_hours: float = 24) -> int:
@@ -4141,7 +4140,7 @@ class Overlord:
             max_age_seconds = max_age_hours * 3600
             return await self.request_tracker.cleanup_completed_requests(max_age_seconds)
         except Exception as e:
-            logger.error(f"Error cleaning up async requests: {e}")
+            #  Error - add observability event
             return 0
 
     async def _check_clarification_needs_async(
@@ -4162,7 +4161,7 @@ class Overlord:
         try:
             # Check if clarification system is available
             if not hasattr(self, "clarification_analyzer"):
-                logger.debug("Clarification system not available, proceeding without check")
+                #  Debug - add observability event
                 return None
 
             # Get user context for analysis
@@ -4196,7 +4195,7 @@ class Overlord:
 
             # If no missing info, proceed
             if analysis.can_proceed and not analysis.missing_info:
-                logger.debug("Message can proceed without clarification")
+                #  Debug - add observability event
                 return None
 
             # Generate clarification question
@@ -4221,13 +4220,13 @@ class Overlord:
                     intent="general",
                 )
 
-                logger.info(f"Clarification needed for async request: {clarification_text}")
+                #  Info - add observability event
                 return clarification_text, request.request_id
 
             return None
 
         except Exception as e:
-            logger.warning(f"Error checking clarification needs: {e}")
+            #  Warning - add observability event
             # On error, proceed without clarification to avoid blocking
             return None
 
@@ -4251,11 +4250,11 @@ class Overlord:
             # Get the request state
             request_state = await self.request_tracker.get_request(request_id)
             if not request_state:
-                logger.error(f"Request {request_id} not found")
+                #  Error - add observability event
                 return False
 
             if request_state.status != RequestStatus.AWAITING_CLARIFICATION:
-                logger.error(f"Request {request_id} is not awaiting clarification")
+                #  Error - add observability event
                 return False
 
             # Process the clarification response
@@ -4269,7 +4268,7 @@ class Overlord:
 
                 if result.status == "complete":
                     # Resume processing with complete parameters
-                    logger.info(
+                    #  Info - add observability event
                         f"Request {request_id}: Clarification completed, resuming processing"
                     )
 
@@ -4297,7 +4296,7 @@ class Overlord:
 
                 elif result.status == "continue":
                     # More clarification needed
-                    logger.info(f"Request {request_id}: Additional clarification needed")
+                    #  Info - add observability event
 
                     # Update stored clarification question
                     request_state.clarification_question = result.next_question
@@ -4314,11 +4313,11 @@ class Overlord:
                             user_id=request_state.user_id,
                         )
                         if success:
-                            logger.info(
+                            #  Info - add observability event
                                 f"Request {request_id}: Additional clarification question sent"
                             )
                         else:
-                            logger.error(
+                            #  Error - add observability event
                                 f"Request {request_id}: Failed to send additional clarification"
                             )
 
@@ -4326,7 +4325,7 @@ class Overlord:
 
                 else:
                     # Error or failed clarification
-                    logger.error(
+                    #  Error - add observability event
                         f"Request {request_id}: Clarification failed: {result.error_message}"
                     )
 
@@ -4342,7 +4341,7 @@ class Overlord:
             return False
 
         except Exception as e:
-            logger.error(f"Error processing clarification response for request {request_id}: {e}")
+            #  Error - add observability event
 
             # Mark request as failed on error
             try:
@@ -4495,7 +4494,7 @@ class Overlord:
                         }
 
         except Exception as e:
-            logger.warning(f"Database operation failed for user ID resolution: {e}")
+            #  Warning - add observability event
 
         # Fallback: generate synthetic internal ID based on hash
         # This maintains functionality even if database operations fail
@@ -4527,15 +4526,15 @@ class Overlord:
 
     def _initialize_external_registry_client(self) -> None:
         """Initialize external registry client for outbound A2A discovery."""
-        logger.debug("External registry client initialization - stub method")
+        #  Debug - add observability event
 
     def _initialize_inbound_registry_client(self) -> None:
         """Initialize inbound registry client for A2A registration."""
-        logger.debug("Inbound registry client initialization - stub method")
+        #  Debug - add observability event
 
     def _initialize_formation_server(self) -> None:
         """Initialize A2A formation server."""
-        logger.debug("Formation server initialization - stub method")
+        #  Debug - add observability event
 
     def _generate_api_key(self, key_type: str) -> str:
         """

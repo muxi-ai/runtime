@@ -100,7 +100,7 @@ class EnhancedToolProcessor:
                         enhanced_call.set_result(result)
                         processed_calls.append(enhanced_call)
                     except Exception as e:
-                        logger.error(f"Tool execution failed for {enhanced_call.tool_name}: {e}")
+                        #  Error - add observability event
                         # Set error result
                         enhanced_call.set_result({
                             "error": str(e),
@@ -117,7 +117,7 @@ class EnhancedToolProcessor:
                 return final_text, processed_calls, None
 
         except Exception as e:
-            logger.error(f"Error in enhanced tool processing: {e}")
+            #  Error - add observability event
             # Fall back to original text without processing
             return text, [], None
 
@@ -146,7 +146,7 @@ class EnhancedToolProcessor:
                 try:
                     available_tools = await self.agent._mcp_service.list_available_tools()
                 except Exception as e:
-                    logger.debug(f"Could not get available tools: {e}")
+                    #  Debug - add observability event
 
             # Analyze the tool call for missing information
             analysis = await self.clarification_analyzer.analyze_tool_call(
@@ -192,7 +192,7 @@ class EnhancedToolProcessor:
                 }
 
         except Exception as e:
-            logger.error(f"Error validating tool call {tool_call.tool_name}: {e}")
+            #  Error - add observability event
             # On error, assume tool call is valid as-is
             return {
                 "needs_clarification": False,
@@ -272,7 +272,7 @@ class EnhancedToolProcessor:
             return None
 
         except Exception as e:
-            logger.error(f"Error validating tool response: {e}")
+            #  Error - add observability event
             return None
 
     async def handle_clarified_tool_execution(
@@ -307,7 +307,7 @@ class EnhancedToolProcessor:
             return result
 
         except Exception as e:
-            logger.error(f"Error executing clarified tool call: {e}")
+            #  Error - add observability event
             error_result = {
                 "error": str(e),
                 "status": "failed"

@@ -117,14 +117,14 @@ class MemoryOptimizer:
         """
         self.cache_components[name] = cache_component
         self.last_cleanup_times[name] = 0.0
-        logger.info(f"Registered cache component: {name}")
+        #  Memory optimizer info - add observability event
 
     def unregister_cache_component(self, name: str) -> None:
         """Remove a cache component from monitoring."""
         if name in self.cache_components:
             del self.cache_components[name]
             del self.last_cleanup_times[name]
-            logger.info(f"Unregistered cache component: {name}")
+            #  Memory optimizer info - add observability event
 
     async def start(self) -> None:
         """Start the memory optimization background task."""
@@ -133,7 +133,7 @@ class MemoryOptimizer:
 
         self.is_running = True
         self.cleanup_task = asyncio.create_task(self._cleanup_loop())
-        logger.info("Memory optimizer started")
+        #  Memory optimizer info - add observability event
 
     async def stop(self) -> None:
         """Stop the memory optimization background task."""
@@ -148,7 +148,7 @@ class MemoryOptimizer:
             except asyncio.CancelledError:
                 pass
 
-        logger.info("Memory optimizer stopped")
+        #  Memory optimizer info - add observability event
 
     async def force_cleanup(self, rule_name: Optional[str] = None) -> MemoryStats:
         """
@@ -160,7 +160,7 @@ class MemoryOptimizer:
         Returns:
             Memory statistics after cleanup
         """
-        logger.info(f"Force cleanup triggered: {rule_name or 'all rules'}")
+        #  Memory optimizer info - add observability event
 
         if rule_name:
             rule = next((r for r in self.cleanup_rules if r.name == rule_name), None)
@@ -217,7 +217,7 @@ class MemoryOptimizer:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in cleanup loop: {e}")
+                #  Memory optimizer error - add observability event
                 await asyncio.sleep(self.cleanup_interval_seconds)
 
     async def _perform_cleanup_check(self) -> None:
@@ -240,7 +240,7 @@ class MemoryOptimizer:
         # Sort by priority and apply rules
         applicable_rules.sort(key=lambda r: r.priority, reverse=True)
 
-        logger.info(
+        #  Memory optimizer info - add observability event
             f"Memory cleanup triggered: {current_percent:.1f}% usage, "
             f"applying {len(applicable_rules)} rules"
         )
@@ -291,13 +291,13 @@ class MemoryOptimizer:
                 if entry[0] > cutoff_time
             ]
 
-            logger.info(
+            #  Memory optimizer info - add observability event
                 f"Cleanup rule '{rule.name}' freed {bytes_freed:,} bytes "
                 f"in {(time.time() - start_time):.2f}s"
             )
 
         except Exception as e:
-            logger.error(f"Error applying cleanup rule '{rule.name}': {e}")
+            #  Memory optimizer error - add observability event
 
         return bytes_freed
 
@@ -327,7 +327,7 @@ class MemoryOptimizer:
                 await component.clear()
                 after_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
                 bytes_freed += before_size - after_size
-                logger.warning(f"Emergency cleanup: cleared cache '{name}' ({before_size:,} bytes)")
+                #  Memory optimizer warning - add observability event
 
         return bytes_freed
 
@@ -344,7 +344,7 @@ class MemoryOptimizer:
                 bytes_freed += component_freed
 
                 if expired_count > 0:
-                    logger.info(f"Expired cleanup: removed {expired_count} items from '{name}' ({component_freed:,} bytes)")
+                    #  Memory optimizer info - add observability event
 
         return bytes_freed
 
@@ -364,7 +364,7 @@ class MemoryOptimizer:
                 freed = await component._lru_cleanup(target_reduction)
                 bytes_freed += freed
                 if freed > 0:
-                    logger.info(f"LRU cleanup: freed {freed:,} bytes from '{name}'")
+                    #  Memory optimizer info - add observability event
 
         return bytes_freed
 
@@ -375,7 +375,7 @@ class MemoryOptimizer:
         # Force garbage collection to reclaim unused memory
         collected = gc.collect()
         if collected > 0:
-            logger.info(f"Garbage collection reclaimed {collected} objects")
+            #  Memory optimizer info - add observability event
 
         # Optimize individual cache components
         for name, component in self.cache_components.items():
@@ -387,7 +387,7 @@ class MemoryOptimizer:
                 bytes_freed += component_freed
 
                 if component_freed > 0:
-                    logger.info(f"Size optimization: optimized '{name}' ({component_freed:,} bytes)")
+                    #  Memory optimizer info - add observability event
 
         return bytes_freed
 
@@ -473,7 +473,7 @@ class MemoryOptimizer:
         # Update cleanup rules accordingly
         self._init_default_rules()
 
-        logger.info(f"Memory optimizer configured for '{workload_type}' workload")
+        #  Memory optimizer info - add observability event
 
 
 class ResourceMonitor:
@@ -507,7 +507,7 @@ class ResourceMonitor:
 
         self.is_monitoring = True
         self.monitor_task = asyncio.create_task(self._monitoring_loop())
-        logger.info("Resource monitoring started")
+        #  Memory optimizer info - add observability event
 
     async def stop_monitoring(self) -> None:
         """Stop resource monitoring."""
@@ -522,7 +522,7 @@ class ResourceMonitor:
             except asyncio.CancelledError:
                 pass
 
-        logger.info("Resource monitoring stopped")
+        #  Memory optimizer info - add observability event
 
     async def _monitoring_loop(self) -> None:
         """Main monitoring loop."""
@@ -562,7 +562,7 @@ class ResourceMonitor:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in resource monitoring: {e}")
+                #  Memory optimizer error - add observability event
                 await asyncio.sleep(self.monitoring_interval)
 
     def get_resource_summary(self, hours: int = 1) -> Dict[str, any]:

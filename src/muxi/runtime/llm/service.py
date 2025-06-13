@@ -58,7 +58,7 @@ from .errors import (
 # Observability imports
 try:
     from muxi.runtime.observability.manager import ObservabilityManager
-    from muxi.runtime.observability.events import ConversationEventType, EventLevel
+    from muxi.runtime.observability.events import ConversationEventType, EventLevel, SystemEventType
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
@@ -108,7 +108,7 @@ class OneLLMService:
         self._cache_ttl: float = 300.0  # 5 minutes
         self._cache_timestamps: Dict[str, float] = {}
 
-        logger.info("OneLLMService initialized")
+        #  LLM service info - add observability event
 
         # Emit service initialization event
         try:
@@ -127,7 +127,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit service initialization event: {e}")
+            #  LLM service warning - add observability event
 
     @classmethod
     async def get_instance(cls) -> 'OneLLMService':
@@ -146,7 +146,7 @@ class OneLLMService:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.emit_event(
-                            event_type=ConversationEventType.RESOURCE_ALLOCATED,
+                            event_type=SystemEventType.RESOURCE_ALLOCATED,
                             level=EventLevel.INFO,
                             message="OneLLMService singleton instance created",
                             data={
@@ -155,7 +155,7 @@ class OneLLMService:
                             }
                         )
                     except Exception as e:
-                        logger.warning(f"Failed to emit singleton creation event: {e}")
+                        #  LLM service warning - add observability event
 
         return cls._instance
 
@@ -170,7 +170,7 @@ class OneLLMService:
         self._api_keys[provider] = api_key
         # Also set it in onellm for immediate use
         set_api_key(provider, api_key)
-        logger.info(f"API key set for provider: {provider}")
+        #  LLM service info - add observability event
 
         # Emit API key configuration event
         try:
@@ -187,7 +187,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit API key configuration event: {e}")
+            #  LLM service warning - add observability event
 
     def get_api_key(self, provider: str) -> Optional[str]:
         """
@@ -216,7 +216,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit API key access event: {e}")
+            #  LLM service warning - add observability event
 
         return api_key
 
@@ -298,7 +298,7 @@ class OneLLMService:
                     }
                 )
             except Exception as e:
-                logger.warning(f"Failed to emit cache hit event: {e}")
+                #  LLM service warning - add observability event
 
             return self._response_cache.get(cache_key)
 
@@ -319,7 +319,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit cache miss event: {e}")
+            #  LLM service warning - add observability event
 
         return None
 
@@ -349,7 +349,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit cache store event: {e}")
+            #  LLM service warning - add observability event
 
     async def chat(
         self,
@@ -403,7 +403,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit chat request start event: {e}")
+            #  LLM service warning - add observability event
 
         # Check cache first
         cache_key = None
@@ -431,7 +431,7 @@ class OneLLMService:
                         }
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to emit cache completion event: {e}")
+                    #  LLM service warning - add observability event
 
                 return cached_response
 
@@ -477,13 +477,13 @@ class OneLLMService:
                     }
                 )
             except Exception as e:
-                logger.warning(f"Failed to emit completion event: {e}")
+                #  LLM service warning - add observability event
 
             return response
 
         except Exception as e:
             self._stats['failed_requests'] += 1
-            logger.error(f"Chat completion failed: {e}")
+            #  LLM service error - add observability event
 
             # Emit error event
             try:
@@ -504,7 +504,7 @@ class OneLLMService:
                     }
                 )
             except Exception as obs_e:
-                logger.warning(f"Failed to emit error event: {obs_e}")
+                #  LLM service warning - add observability event
 
             # Convert to appropriate OneLLM exception
             if "authentication" in str(e).lower():
@@ -574,7 +574,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit embedding request start event: {e}")
+            #  LLM service warning - add observability event
 
         # Check cache first
         cache_key = None
@@ -601,7 +601,7 @@ class OneLLMService:
                         }
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to emit cache completion event: {e}")
+                    #  LLM service warning - add observability event
 
                 return cached_response
 
@@ -643,13 +643,13 @@ class OneLLMService:
                     }
                 )
             except Exception as e:
-                logger.warning(f"Failed to emit completion event: {e}")
+                #  LLM service warning - add observability event
 
             return response
 
         except Exception as e:
             self._stats['failed_requests'] += 1
-            logger.error(f"Embedding generation failed: {e}")
+            #  LLM service error - add observability event
 
             # Emit error event
             try:
@@ -670,7 +670,7 @@ class OneLLMService:
                     }
                 )
             except Exception as obs_e:
-                logger.warning(f"Failed to emit error event: {obs_e}")
+                #  LLM service warning - add observability event
 
             # Convert to appropriate OneLLM exception
             if "authentication" in str(e).lower():
@@ -713,7 +713,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit stats access event: {e}")
+            #  LLM service warning - add observability event
 
         return stats
 
@@ -722,7 +722,7 @@ class OneLLMService:
         old_stats = self._stats.copy()
         for key in self._stats:
             self._stats[key] = 0
-        logger.info("Service statistics reset")
+        #  LLM service info - add observability event
 
         # Emit stats reset event
         try:
@@ -739,14 +739,14 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit stats reset event: {e}")
+            #  LLM service warning - add observability event
 
     def clear_cache(self) -> None:
         """Clear response cache."""
         cache_size = len(self._response_cache)
         self._response_cache.clear()
         self._cache_timestamps.clear()
-        logger.info("Response cache cleared")
+        #  LLM service info - add observability event
 
         # Emit cache clear event
         try:
@@ -762,7 +762,7 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit cache clear event: {e}")
+            #  LLM service warning - add observability event
 
     def configure(
         self,
@@ -796,7 +796,7 @@ class OneLLMService:
         if cache_ttl is not None:
             self._cache_ttl = cache_ttl
 
-        logger.info("Service configuration updated")
+        #  LLM service info - add observability event
 
         # Emit configuration update event
         try:
@@ -824,4 +824,4 @@ class OneLLMService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to emit configuration update event: {e}")
+            #  LLM service warning - add observability event

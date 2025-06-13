@@ -58,7 +58,7 @@ class ClarificationQuestionGenerator:
             ClarificationQuestion with natural language question
         """
         try:
-            logger.info(f"Generating question for {info_name} in {request_type} context")
+            #  Info - add observability event
 
             # Determine question approach based on context
             if self.model and await self._should_use_ai_generation(info_name, user_context):
@@ -84,7 +84,7 @@ class ClarificationQuestionGenerator:
             )
 
         except Exception as e:
-            logger.error(f"Error generating question: {e}")
+            #  Error - add observability event
             raise QuestionGenerationError(f"Failed to generate question: {e}")
 
     async def generate_clarification_plan(
@@ -111,7 +111,7 @@ class ClarificationQuestionGenerator:
             List of ClarificationQuestion objects in optimal order
         """
         try:
-            logger.info(f"Generating clarification plan for {len(missing_info)} items")
+            #  Info - add observability event
 
             questions = []
 
@@ -138,7 +138,7 @@ class ClarificationQuestionGenerator:
             return questions
 
         except Exception as e:
-            logger.error(f"Error generating clarification plan: {e}")
+            #  Error - add observability event
             raise QuestionGenerationError(f"Failed to generate clarification plan: {e}")
 
     async def generate_reasoning_question(
@@ -161,7 +161,7 @@ class ClarificationQuestionGenerator:
             ClarificationQuestion for reasoning context
         """
         try:
-            logger.info(f"Generating reasoning question for intent: {intent}")
+            #  Info - add observability event
 
             if self.model:
                 question_text = await self._generate_ai_reasoning_question(
@@ -183,7 +183,7 @@ class ClarificationQuestionGenerator:
             )
 
         except Exception as e:
-            logger.error(f"Error generating reasoning question: {e}")
+            #  Error - add observability event
             raise QuestionGenerationError(f"Failed to generate reasoning question: {e}")
 
     # Private helper methods
@@ -224,7 +224,7 @@ class ClarificationQuestionGenerator:
                 return question + "?"
 
         except Exception as e:
-            logger.warning(f"AI question generation failed, falling back to template: {e}")
+            #  Warning - add observability event
             return self._generate_template_question(request_type, info_name, info_schema, style)
 
     def _generate_template_question(
@@ -284,7 +284,7 @@ class ClarificationQuestionGenerator:
             return question if question.endswith('?') else question + "?"
 
         except Exception as e:
-            logger.warning(f"AI reasoning question generation failed: {e}")
+            #  Warning - add observability event
             return self._generate_template_reasoning_question(intent, missing_context, style)
 
     def _generate_template_reasoning_question(

@@ -9,7 +9,7 @@ when failure thresholds are exceeded.
 import time
 import asyncio
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
-from loguru import logger
+from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from .resilience_types import (
     CircuitState,
@@ -48,7 +48,7 @@ class CircuitBreaker(Generic[T]):
         self.state = CircuitBreakerState()
         self._lock = asyncio.Lock()
 
-        logger.debug(f"Initialized circuit breaker '{name}' with config: {self.config}")
+        #  Circuit breaker debug - add observability event
 
     async def execute(
         self,
@@ -76,7 +76,7 @@ class CircuitBreaker(Generic[T]):
             # Check if we should allow the request
             if not await self._should_allow_request():
                 if fallback:
-                    logger.warning(f"Circuit breaker '{self.name}' is open, using fallback")
+                    #  Circuit breaker warning - add observability event
                     return await self._execute_fallback(fallback, *args, **kwargs)
                 else:
                     estimated_recovery = self._get_estimated_recovery_time()
@@ -154,7 +154,7 @@ class CircuitBreaker(Generic[T]):
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(None, lambda: fallback(*args, **kwargs))
         except Exception as error:
-            logger.error(f"Fallback function failed for circuit breaker '{self.name}': {error}")
+            #  Circuit breaker error - add observability event
             raise WorkflowException(
                 f"Both primary function and fallback failed for circuit breaker '{self.name}'",
                 ErrorType.SYSTEM_OVERLOAD,
@@ -180,7 +180,7 @@ class CircuitBreaker(Generic[T]):
             # Reset failure count on success
             self.state.failure_count = max(0, self.state.failure_count - 1)
 
-        logger.debug(
+        #  Circuit breaker debug - add observability event
             f"Circuit breaker '{self.name}' recorded success "
             f"(execution_time: {execution_time:.2f}s, state: {self.state.state.value})"
         )
@@ -199,7 +199,7 @@ class CircuitBreaker(Generic[T]):
             self.state.failure_count >= self.config.failure_threshold):
             await self._transition_to_open()
 
-        logger.warning(
+        #  Circuit breaker warning - add observability event
             f"Circuit breaker '{self.name}' recorded failure: {error} "
             f"(execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})"
         )
@@ -210,7 +210,7 @@ class CircuitBreaker(Generic[T]):
         self.state.next_attempt_time = time.time() + self.config.recovery_timeout
         self.state.success_count = 0
 
-        logger.warning(
+        #  Circuit breaker warning - add observability event
             f"Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. "
             f"Will attempt recovery at {time.ctime(self.state.next_attempt_time)}"
         )
@@ -221,7 +221,7 @@ class CircuitBreaker(Generic[T]):
         self.state.success_count = 0
         self.state.failure_count = 0
 
-        logger.info(f"Circuit breaker '{self.name}' transitioned to half-open state")
+        #  Circuit breaker info - add observability event
 
     async def _transition_to_closed(self) -> None:
         """Transition circuit breaker to CLOSED state."""
@@ -230,7 +230,7 @@ class CircuitBreaker(Generic[T]):
         self.state.success_count = 0
         self.state.next_attempt_time = None
 
-        logger.info(f"Circuit breaker '{self.name}' closed after successful recovery")
+        #  Circuit breaker info - add observability event
 
     def _get_estimated_recovery_time(self) -> Optional[float]:
         """Get estimated time until circuit breaker recovery attempt."""
@@ -276,19 +276,19 @@ class CircuitBreaker(Generic[T]):
         """Reset circuit breaker to initial state."""
         async with self._lock:
             self.state = CircuitBreakerState()
-            logger.info(f"Circuit breaker '{self.name}' has been reset")
+            #  Circuit breaker info - add observability event
 
     async def force_open(self) -> None:
         """Force circuit breaker to OPEN state."""
         async with self._lock:
             await self._transition_to_open()
-            logger.warning(f"Circuit breaker '{self.name}' was forced open")
+            #  Circuit breaker warning - add observability event
 
     async def force_close(self) -> None:
         """Force circuit breaker to CLOSED state."""
         async with self._lock:
             await self._transition_to_closed()
-            logger.info(f"Circuit breaker '{self.name}' was forced closed")
+            #  Circuit breaker info - add observability event
 
 
 class CircuitBreakerRegistry:
@@ -317,7 +317,7 @@ class CircuitBreakerRegistry:
         if name not in self._circuit_breakers:
             effective_config = config or self._default_config
             self._circuit_breakers[name] = CircuitBreaker(name, effective_config)
-            logger.debug(f"Created new circuit breaker: {name}")
+            #  Circuit breaker debug - add observability event
 
         return self._circuit_breakers[name]
 
@@ -333,7 +333,7 @@ class CircuitBreakerRegistry:
         """
         if name in self._circuit_breakers:
             del self._circuit_breakers[name]
-            logger.debug(f"Removed circuit breaker: {name}")
+            #  Circuit breaker debug - add observability event
             return True
         return False
 
@@ -348,7 +348,7 @@ class CircuitBreakerRegistry:
         """Reset all circuit breakers."""
         for cb in self._circuit_breakers.values():
             await cb.reset()
-        logger.info("Reset all circuit breakers")
+        #  Circuit breaker info - add observability event
 
     def set_default_config(self, config: CircuitBreakerConfig) -> None:
         """Set default configuration for new circuit breakers."""

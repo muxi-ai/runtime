@@ -58,7 +58,7 @@ class ClarificationManager:
             ClarificationRequest object tracking the clarification
         """
         try:
-            logger.info(f"Starting clarification for user {user_id}, type: {request_type}")
+            #  Info - add observability event
 
             # Cancel any existing clarification for this user
             await self._cancel_existing_clarification(user_id)
@@ -79,11 +79,11 @@ class ClarificationManager:
             self.active_requests[request.request_id] = request
             self._user_to_request[user_id] = request.request_id
 
-            logger.info(f"Created clarification request {request.request_id}")
+            #  Info - add observability event
             return request
 
         except Exception as e:
-            logger.error(f"Error starting clarification: {e}")
+            #  Error - add observability event
             raise ClarificationError(f"Failed to start clarification: {e}")
 
     async def process_user_response(
@@ -102,7 +102,7 @@ class ClarificationManager:
             ClarificationResult with next steps
         """
         try:
-            logger.info(f"Processing user response for request {request_id}")
+            #  Info - add observability event
 
             request = self.active_requests.get(request_id)
             if not request:
@@ -160,7 +160,7 @@ class ClarificationManager:
                 )
 
         except Exception as e:
-            logger.error(f"Error processing user response: {e}")
+            #  Error - add observability event
             return ClarificationResult(
                 status="error",
                 error_message=f"Failed to process response: {e}"
@@ -189,11 +189,11 @@ class ClarificationManager:
             # Clean up the request
             self._cleanup_request(request_id)
 
-            logger.info(f"Completed clarification {request_id}")
+            #  Info - add observability event
             return complete_params
 
         except Exception as e:
-            logger.error(f"Error completing clarification: {e}")
+            #  Error - add observability event
             raise ClarificationError(f"Failed to complete clarification: {e}")
 
     def get_active_clarification(self, user_id: str) -> Optional[ClarificationRequest]:
@@ -239,12 +239,12 @@ class ClarificationManager:
             if request:
                 request.status = ClarificationStatus.CANCELLED
                 self._cleanup_request(request_id)
-                logger.info(f"Cancelled clarification {request_id}")
+                #  Info - add observability event
                 return True
             return False
 
         except Exception as e:
-            logger.error(f"Error cancelling clarification: {e}")
+            #  Error - add observability event
             return False
 
     # Private helper methods

@@ -14,7 +14,7 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 @dataclass
@@ -81,7 +81,7 @@ class DocumentWorkflowIntegrator:
         # Task generation prompts
         self._task_prompts = self._initialize_task_prompts()
 
-        logger.info("Initialized DocumentWorkflowIntegrator")
+        #  Info - add observability event
 
     def _initialize_task_prompts(self) -> Dict[str, str]:
         """Initialize task generation prompts"""
@@ -166,7 +166,7 @@ class DocumentWorkflowIntegrator:
         Returns:
             List of DocumentTask objects
         """
-        logger.info(f"Generating tasks from document {document_id}")
+        #  Info - add observability event
 
         categories = task_categories or ["action_tasks", "decision_tasks", "review_tasks"]
         all_tasks = []
@@ -178,14 +178,14 @@ class DocumentWorkflowIntegrator:
                 )
                 all_tasks.extend(tasks)
             except Exception as e:
-                logger.error(f"Failed to generate {category} from document {document_id}: {e}")
+                #  Error - add observability event
                 continue
 
         # Store generated tasks
         for task in all_tasks:
             self._generated_tasks[task.task_id] = task
 
-        logger.info(f"Generated {len(all_tasks)} tasks from document {document_id}")
+        #  Info - add observability event
         return all_tasks
 
     async def enrich_workflow_with_document(
@@ -207,7 +207,7 @@ class DocumentWorkflowIntegrator:
         Returns:
             WorkflowEnrichment object with insights and suggestions
         """
-        logger.info(f"Enriching workflow {workflow_id} with document {document_id}")
+        #  Info - add observability event
 
         # Analyze document for workflow insights
         insights_prompt = f"""
@@ -249,11 +249,11 @@ class DocumentWorkflowIntegrator:
             # Store enrichment
             self._workflow_enrichments[enrichment.enrichment_id] = enrichment
 
-            logger.info(f"Created workflow enrichment {enrichment.enrichment_id}")
+            #  Info - add observability event
             return enrichment
 
         except Exception as e:
-            logger.error(f"Failed to enrich workflow {workflow_id}: {e}")
+            #  Error - add observability event
             raise
 
     async def generate_follow_up_suggestions(
@@ -289,13 +289,13 @@ class DocumentWorkflowIntegrator:
             response = await self.llm_model.generate_response(follow_up_prompt)
             suggestions = self._parse_follow_up_suggestions(response)
 
-            logger.info(
+            #  Info - add observability event
                 f"Generated {len(suggestions)} follow-up suggestions for document {document_id}"
             )
             return suggestions
 
         except Exception as e:
-            logger.error(f"Failed to generate follow-up suggestions: {e}")
+            #  Error - add observability event
             return []
 
     async def _generate_tasks_for_category(
@@ -323,7 +323,7 @@ class DocumentWorkflowIntegrator:
             return tasks
 
         except Exception as e:
-            logger.error(f"Failed to generate {category} tasks: {e}")
+            #  Error - add observability event
             return []
 
     def _parse_task_response(

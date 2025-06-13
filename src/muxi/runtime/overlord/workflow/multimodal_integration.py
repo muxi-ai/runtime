@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .types import Workflow, SubTask, TaskInput, TaskOutput, TaskStatus
 from .multimodal import (
@@ -84,11 +84,11 @@ class WorkflowMultiModalProcessor:
             # Set up content flow between tasks
             await self._setup_content_flow(workflow)
 
-            logger.info(f"Enhanced workflow {workflow.id} with multi-modal processing")
+            #  Info - add observability event
             return workflow
 
         except Exception as e:
-            logger.error(f"Error processing workflow content: {e}")
+            #  Error - add observability event
             return workflow
 
     async def _register_content(self, content: MultiModalContent) -> str:
@@ -141,7 +141,7 @@ class WorkflowMultiModalProcessor:
             )
 
         except Exception as e:
-            logger.error(f"Error enhancing task {task.id} with multi-modal: {e}")
+            #  Error - add observability event
 
     def _get_required_modalities(self, task: SubTask) -> List[ModalityType]:
         """Determine which modalities this task requires"""
@@ -350,7 +350,7 @@ class TaskInputProcessor:
             return processed_inputs
 
         except Exception as e:
-            logger.error(f"Error processing task inputs: {e}")
+            #  Error - add observability event
             return []
 
     async def _process_single_input(self, raw_input: Any) -> List[MultiModalContent]:
@@ -398,7 +398,7 @@ class TaskInputProcessor:
             modality = self._detect_modality_from_mime(mime_type)
 
             if modality is None:
-                logger.warning(f"Unsupported file type: {file_path}")
+                #  Warning - add observability event
                 return None
 
             # Read file content
@@ -426,7 +426,7 @@ class TaskInputProcessor:
             return content_item
 
         except Exception as e:
-            logger.error(f"Error processing file input {file_path}: {e}")
+            #  Error - add observability event
             return None
 
     def _detect_modality_from_mime(self, mime_type: Optional[str]) -> Optional[ModalityType]:
@@ -482,7 +482,7 @@ class TaskInputProcessor:
             )
 
         except Exception as e:
-            logger.error(f"Error processing binary input: {e}")
+            #  Error - add observability event
             return None
 
     async def _process_structured_input(self, structured_data: Dict[str, Any]) -> Optional[MultiModalContent]:
@@ -511,7 +511,7 @@ class TaskInputProcessor:
             )
 
         except Exception as e:
-            logger.error(f"Error processing structured input: {e}")
+            #  Error - add observability event
             return None
 
 
@@ -552,7 +552,7 @@ class TaskOutputProcessor:
                 task_output = MultiModalTaskOutput(
                     name=f"output_{len(processed_outputs)}",
                     content_items=content_items,
-                    metadata={"task_id": task.id, "generated_at": logger._get_timestamp()}
+                    metadata={"task_id": task.id, "generated_at": time.time()}
                 )
 
                 processed_outputs.append(task_output)
@@ -560,7 +560,7 @@ class TaskOutputProcessor:
             return processed_outputs
 
         except Exception as e:
-            logger.error(f"Error processing task outputs: {e}")
+            #  Error - add observability event
             return []
 
     async def _convert_output_to_content(
@@ -650,7 +650,7 @@ class TaskOutputProcessor:
                 )
 
         except Exception as e:
-            logger.error(f"Error synthesizing outputs: {e}")
+            #  Error - add observability event
             return MultiModalProcessingResult(
                 unified_representation={"error": str(e)},
                 modality_results={}

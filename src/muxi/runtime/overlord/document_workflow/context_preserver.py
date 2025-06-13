@@ -17,7 +17,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
-from loguru import logger
+from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 
 @dataclass
@@ -104,7 +104,7 @@ class DocumentContextPreserver:
         # Load existing data
         self._load_contexts()
 
-        logger.info(
+        #  Context preserver info - add observability event
             f"Initialized DocumentContextPreserver with storage at {self.storage_path}"
         )
 
@@ -168,7 +168,7 @@ class DocumentContextPreserver:
         # Save contexts
         await self._save_contexts()
 
-        logger.info(
+        #  Context preserver info - add observability event
             f"Preserved context for document {document_id} in conversation {conversation_id}"
         )
         return document_id
@@ -273,7 +273,7 @@ class DocumentContextPreserver:
         # Save snapshots
         await self._save_snapshots()
 
-        logger.info(f"Created context snapshot {snapshot_id} for conversation {conversation_id}")
+        #  Context preserver info - add observability event
         return snapshot_id
 
     async def restore_context_snapshot(
@@ -290,14 +290,14 @@ class DocumentContextPreserver:
             ContextSnapshot object if found and valid
         """
         if snapshot_id not in self._context_snapshots:
-            logger.warning(f"Snapshot {snapshot_id} not found")
+            #  Context preserver warning - add observability event
             return None
 
         snapshot = self._context_snapshots[snapshot_id]
 
         # Check if snapshot has expired
         if snapshot.expires_at and time.time() > snapshot.expires_at:
-            logger.warning(f"Snapshot {snapshot_id} has expired")
+            #  Context preserver warning - add observability event
             del self._context_snapshots[snapshot_id]
             await self._save_snapshots()
             return None
@@ -306,7 +306,7 @@ class DocumentContextPreserver:
         for doc_context in snapshot.document_contexts:
             self._document_contexts[doc_context.document_id] = doc_context
 
-        logger.info(f"Restored context snapshot {snapshot_id}")
+        #  Context preserver info - add observability event
         return snapshot
 
     def get_context_statistics(self) -> Dict[str, Any]:
@@ -454,7 +454,7 @@ class DocumentContextPreserver:
             return [contexts[i] for i in relevant_indices]
 
         except Exception as e:
-            logger.error(f"Failed to filter contexts by query: {e}")
+            #  Context preserver error - add observability event
             return contexts
 
     async def _cleanup_snapshots(self):
@@ -469,7 +469,7 @@ class DocumentContextPreserver:
 
         for snapshot_id in expired_snapshots:
             del self._context_snapshots[snapshot_id]
-            logger.info(f"Removed expired snapshot {snapshot_id}")
+            #  Context preserver info - add observability event
 
         # Remove oldest snapshots if over limit
         if len(self._context_snapshots) > self.max_snapshots:
@@ -482,7 +482,7 @@ class DocumentContextPreserver:
             for i in range(excess_count):
                 snapshot_id = sorted_snapshots[i][0]
                 del self._context_snapshots[snapshot_id]
-                logger.info(f"Removed old snapshot {snapshot_id}")
+                #  Context preserver info - add observability event
 
     async def _save_contexts(self):
         """Save document and conversation contexts to storage"""
@@ -528,7 +528,7 @@ class DocumentContextPreserver:
                 json.dump(conv_contexts_data, f, indent=2)
 
         except Exception as e:
-            logger.error(f"Failed to save contexts: {e}")
+            #  Context preserver error - add observability event
 
     async def _save_snapshots(self):
         """Save context snapshots to storage"""
@@ -564,7 +564,7 @@ class DocumentContextPreserver:
                 json.dump(snapshots_data, f, indent=2)
 
         except Exception as e:
-            logger.error(f"Failed to save snapshots: {e}")
+            #  Context preserver error - add observability event
 
     def _load_contexts(self):
         """Load contexts from storage"""
@@ -578,7 +578,7 @@ class DocumentContextPreserver:
                 for doc_id, ctx_data in doc_contexts_data.items():
                     self._document_contexts[doc_id] = DocumentContext(**ctx_data)
 
-                logger.info(f"Loaded {len(self._document_contexts)} document contexts")
+                #  Context preserver info - add observability event
 
             # Load conversation contexts
             conv_contexts_file = self.storage_path / "conversation_contexts.json"
@@ -589,7 +589,7 @@ class DocumentContextPreserver:
                 for conv_id, ctx_data in conv_contexts_data.items():
                     self._conversation_contexts[conv_id] = ConversationContext(**ctx_data)
 
-                logger.info(f"Loaded {len(self._conversation_contexts)} conversation contexts")
+                #  Context preserver info - add observability event
 
             # Load snapshots
             snapshots_file = self.storage_path / "context_snapshots.json"
@@ -607,11 +607,11 @@ class DocumentContextPreserver:
 
                     self._context_snapshots[snap_id] = ContextSnapshot(**snap_data)
 
-                logger.info(f"Loaded {len(self._context_snapshots)} context snapshots")
+                #  Context preserver info - add observability event
 
             # Rebuild access maps
             for conv_id, ctx in self._conversation_contexts.items():
                 self._conversation_document_map[conv_id] = ctx.documents_referenced
 
         except Exception as e:
-            logger.error(f"Failed to load contexts: {e}")
+            #  Context preserver error - add observability event

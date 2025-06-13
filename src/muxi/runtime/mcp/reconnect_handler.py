@@ -33,7 +33,7 @@
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .handler import MCPHandler, MCPConnectionError
 from .reconnection import RetryConfiguration, with_retries
@@ -100,7 +100,7 @@ class ReconnectingMCPHandler(MCPHandler):
         server_url = url or command
 
         log_msg = f"Connecting to MCP server {name} at {server_url} " f"with reconnection support"
-        logger.info(log_msg)
+        #  Info - add observability event
 
         # Use the retry mechanism for connection
         try:
@@ -118,7 +118,7 @@ class ReconnectingMCPHandler(MCPHandler):
             return result
         except MCPConnectionError as e:
             error_msg = f"Failed to connect to MCP server {name} after retries: {str(e)}"
-            logger.error(error_msg)
+            #  Error - add observability event
             raise
 
     async def _connect_server_impl(
@@ -207,7 +207,7 @@ class ReconnectingMCPHandler(MCPHandler):
             return result
         except MCPConnectionError as e:
             error_msg = f"Failed to execute tool {tool_name} after retries: {str(e)}"
-            logger.error(error_msg)
+            #  Error - add observability event
             raise
 
     async def _execute_tool_impl(
@@ -246,7 +246,7 @@ class ReconnectingMCPHandler(MCPHandler):
             if server_name not in self._reconnection_in_progress:
                 self._reconnection_in_progress[server_name] = True
                 try:
-                    logger.info(f"Automatic reconnection to server {server_name} triggered")
+                    #  Info - add observability event
                     server_info = self.server_info.get(server_name, {})
                     url = server_info.get("url")
                     command = server_info.get("command")
@@ -267,7 +267,7 @@ class ReconnectingMCPHandler(MCPHandler):
                         credentials=credentials,
                         request_timeout=request_timeout,
                     )
-                    logger.info(f"Successfully reconnected to server {server_name}")
+                    #  Info - add observability event
                 finally:
                     self._reconnection_in_progress[server_name] = False
             else:
@@ -317,7 +317,7 @@ class ReconnectingMCPHandler(MCPHandler):
             )
             return result
         except MCPConnectionError as e:
-            logger.error(f"Failed to list tools after retries: {str(e)}")
+            #  Error - add observability event
             # Return empty list instead of raising to avoid breaking clients
             return []
 

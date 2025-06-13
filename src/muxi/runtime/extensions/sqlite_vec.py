@@ -58,7 +58,7 @@ import os
 import platform
 import sqlite3
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .base import Extension
 
@@ -127,7 +127,7 @@ class SQLiteVecExtension(Extension):
 
         ext_path = os.path.join(loadable_dir, f"sqlite_vec.{extension}")
 
-        logger.debug(f"Looking for SQLite Vector extension at: {ext_path}")
+        #  Debug - add observability event
         return ext_path
 
     @classmethod
@@ -151,7 +151,7 @@ class SQLiteVecExtension(Extension):
             ImportError: If the extension cannot be located or is incompatible
         """
         if cls._is_initialized:
-            logger.info("SQLite Vector extension already initialized")
+            #  Info - add observability event
             return True
 
         # If no explicit path is provided, use the platform-specific path
@@ -159,7 +159,7 @@ class SQLiteVecExtension(Extension):
             try:
                 path = cls._get_platform_extension_path()
             except ImportError as e:
-                logger.error(f"Failed to determine platform-specific extension path: {e}")
+                #  Error - add observability event
                 # Will try fallbacks in load_extension
 
         # Store the initialization info for later connections
@@ -168,7 +168,7 @@ class SQLiteVecExtension(Extension):
         # Flag that initialization was attempted (will be set to True on success)
         cls._is_initialized = True
 
-        logger.info(f"Initialized SQLite Vector extension with path: {path}")
+        #  Info - add observability event
         return True
 
     @classmethod
@@ -192,15 +192,15 @@ class SQLiteVecExtension(Extension):
         # If a specific path was provided during init, use it
         if cls._init_path:
             if not os.path.exists(cls._init_path):
-                logger.warning(f"SQLite Vector extension not found at: {cls._init_path}")
+                #  Warning - add observability event
                 # Will try fallbacks below
             else:
                 try:
                     conn.load_extension(cls._init_path)
-                    logger.info(f"Loaded SQLite Vector extension from: {cls._init_path}")
+                    #  Info - add observability event
                     return
                 except Exception as e:
-                    logger.warning(f"Failed to load SQLite Vector extension from path: {e}")
+                    #  Warning - add observability event
                     # Will try fallbacks below
 
         # Try to use the platform-specific extension
@@ -208,20 +208,20 @@ class SQLiteVecExtension(Extension):
             path = cls._get_platform_extension_path()
             if os.path.exists(path):
                 conn.load_extension(path)
-                logger.info(f"Loaded SQLite Vector extension from platform path: {path}")
+                #  Info - add observability event
                 return
             else:
-                logger.warning(f"SQLite Vector extension not found at: {path}")
-                logger.warning(f"You may need to place the sqlite_vec extension at: {path}")
+                #  Warning - add observability event
+                #  Warning - add observability event
         except Exception as e:
-            logger.warning(f"Failed to load platform-specific SQLite Vector extension: {e}")
+            #  Warning - add observability event
 
         # Otherwise try to use the Python package
         try:
             import sqlite_vec
 
             sqlite_vec.load(conn)
-            logger.info("Loaded SQLite Vector extension using Python package")
+            #  Info - add observability event
             return
         except ImportError:
             raise ImportError(

@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from loguru import logger
+from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from ...llm import LLM
 from .types import Workflow, SubTask
@@ -148,7 +148,7 @@ class TextProcessor(ModalityProcessor):
             return result
 
         except Exception as e:
-            logger.error(f"Error processing text content: {e}")
+            #  Multimodal error - add observability event
             return {'error': str(e), 'processed_text': content.content}
 
     async def extract_features(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -184,7 +184,7 @@ Extract features as JSON:
             return self._parse_json_response(response)
 
         except Exception as e:
-            logger.error(f"Error extracting text features: {e}")
+            #  Multimodal error - add observability event
             return {
                 'language': 'unknown',
                 'tone': 'neutral',
@@ -221,7 +221,7 @@ Analyze and provide as JSON:
             return self._parse_json_response(response)
 
         except Exception as e:
-            logger.error(f"Error in semantic analysis: {e}")
+            #  Multimodal error - add observability event
             return {'main_concepts': [], 'domain': 'general'}
 
     async def _generate_embedding(self, text: str) -> List[float]:
@@ -237,7 +237,7 @@ Analyze and provide as JSON:
                 return [(hash_value >> i) % 2 for i in range(512)]
 
         except Exception as e:
-            logger.error(f"Error generating embedding: {e}")
+            #  Multimodal error - add observability event
             return [0.0] * 512  # Zero embedding as fallback
 
     async def generate_description(self, content: MultiModalContent) -> str:
@@ -260,7 +260,7 @@ Analyze and provide as JSON:
             else:
                 return {}
         except Exception as e:
-            logger.error(f"Error parsing JSON response: {e}")
+            #  Multimodal error - add observability event
             return {}
 
 
@@ -296,7 +296,7 @@ class ImageProcessor(ModalityProcessor):
             return result
 
         except Exception as e:
-            logger.error(f"Error processing image content: {e}")
+            #  Multimodal error - add observability event
             return {'error': str(e)}
 
     async def extract_features(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -313,7 +313,7 @@ class ImageProcessor(ModalityProcessor):
             return features
 
         except Exception as e:
-            logger.error(f"Error extracting image features: {e}")
+            #  Multimodal error - add observability event
             return {}
 
     async def _extract_image_metadata(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -334,7 +334,7 @@ class ImageProcessor(ModalityProcessor):
             return metadata
 
         except Exception as e:
-            logger.error(f"Error extracting image metadata: {e}")
+            #  Multimodal error - add observability event
             return {}
 
     async def _perform_vision_analysis(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -354,7 +354,7 @@ class ImageProcessor(ModalityProcessor):
                 }
 
         except Exception as e:
-            logger.error(f"Error in vision analysis: {e}")
+            #  Multimodal error - add observability event
             return {'description': 'Vision analysis unavailable'}
 
     def _categorize_size(self, dimensions: Optional[Tuple[int, int]]) -> str:
@@ -433,7 +433,7 @@ class AudioProcessor(ModalityProcessor):
             return result
 
         except Exception as e:
-            logger.error(f"Error processing audio content: {e}")
+            #  Multimodal error - add observability event
             return {'error': str(e)}
 
     async def extract_features(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -449,7 +449,7 @@ class AudioProcessor(ModalityProcessor):
             return features
 
         except Exception as e:
-            logger.error(f"Error extracting audio features: {e}")
+            #  Multimodal error - add observability event
             return {}
 
     async def _extract_audio_metadata(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -464,7 +464,7 @@ class AudioProcessor(ModalityProcessor):
             return metadata
 
         except Exception as e:
-            logger.error(f"Error extracting audio metadata: {e}")
+            #  Multimodal error - add observability event
             return {}
 
     async def _perform_audio_analysis(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -483,7 +483,7 @@ class AudioProcessor(ModalityProcessor):
                 }
 
         except Exception as e:
-            logger.error(f"Error in audio analysis: {e}")
+            #  Multimodal error - add observability event
             return {'transcription': '', 'has_speech': False}
 
     def _categorize_duration(self, duration: Optional[float]) -> str:
@@ -595,7 +595,7 @@ class MultiModalFusionEngine:
                 redundancy_score=self._calculate_redundancy_score(modality_results)
             )
 
-            logger.info(
+            #  Multimodal info - add observability event
                 f"Multi-modal processing completed: {len(content_items)} modalities, "
                 f"fusion quality {fusion_quality:.2f}"
             )
@@ -603,7 +603,7 @@ class MultiModalFusionEngine:
             return result
 
         except Exception as e:
-            logger.error(f"Error in multi-modal processing: {e}")
+            #  Multimodal error - add observability event
             return self._create_fallback_result(content_items)
 
     async def _process_individual_modalities(
@@ -697,7 +697,7 @@ class MultiModalFusionEngine:
         except Exception as e:
             source_name = source_modality.name
             target_name = target_modality.name
-            logger.error(f"Error computing attention between {source_name} and {target_name}: {e}")
+            #  Multimodal error - add observability event
             return CrossModalAttention(
                 source_modality=source_modality,
                 target_modality=target_modality,
@@ -745,7 +745,7 @@ Provide only the numerical score:
                 return 0.5
 
         except Exception as e:
-            logger.error(f"Error calculating semantic similarity: {e}")
+            #  Multimodal error - add observability event
             return 0.5
 
     def _extract_semantic_description(self, result: Dict[str, Any]) -> str:
@@ -841,7 +841,7 @@ Create a comprehensive fusion analysis as JSON:
             return fusion_result
 
         except Exception as e:
-            logger.error(f"Error in fusion processing: {e}")
+            #  Multimodal error - add observability event
             return {
                 'unified_summary': 'Multi-modal content processed',
                 'modality_count': len(modality_results),
@@ -939,7 +939,7 @@ Create a comprehensive fusion analysis as JSON:
             else:
                 return {}
         except Exception as e:
-            logger.error(f"Error parsing JSON response: {e}")
+            #  Multimodal error - add observability event
             return {}
 
     def _create_fallback_result(
@@ -1006,11 +1006,11 @@ class MultiModalWorkflowIntegrator:
             for task_id, task in workflow.tasks.items():
                 await self._enhance_task_with_modality_info(task, processing_result)
 
-            logger.info(f"Enhanced workflow {workflow.id} with multi-modal processing")
+            #  Multimodal info - add observability event
             return workflow
 
         except Exception as e:
-            logger.error(f"Error enhancing workflow with multi-modal content: {e}")
+            #  Multimodal error - add observability event
             return workflow
 
     async def _enhance_task_with_modality_info(

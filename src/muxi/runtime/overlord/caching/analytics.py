@@ -123,13 +123,13 @@ class CacheHitAnalyzer:
         self.cache_components[name] = cache_component
         if name not in self.layer_stats:
             self.layer_stats[name] = CacheLayerStats(layer_name=name)
-        logger.info(f"Registered cache component for analytics: {name}")
+        #  Info - add observability event
 
     def unregister_cache_component(self, name: str) -> None:
         """Remove a cache component from monitoring."""
         if name in self.cache_components:
             del self.cache_components[name]
-        logger.info(f"Unregistered cache component from analytics: {name}")
+        #  Info - add observability event
 
     async def start_collection(self) -> None:
         """Start automatic metrics collection."""
@@ -138,7 +138,7 @@ class CacheHitAnalyzer:
 
         self.is_collecting = True
         self.collection_task = asyncio.create_task(self._collection_loop())
-        logger.info("Cache analytics collection started")
+        #  Info - add observability event
 
     async def stop_collection(self) -> None:
         """Stop automatic metrics collection."""
@@ -153,7 +153,7 @@ class CacheHitAnalyzer:
             except asyncio.CancelledError:
                 pass
 
-        logger.info("Cache analytics collection stopped")
+        #  Info - add observability event
 
     def record_cache_hit(self,
                         cache_layer: str,
@@ -200,7 +200,7 @@ class CacheHitAnalyzer:
         # Check for anomalies
         self._check_performance_anomalies(cache_layer, response_time_ms, True)
 
-        logger.debug(f"Cache hit recorded: {cache_layer} ({cache_type.value}) - {response_time_ms:.2f}ms")
+        #  Debug - add observability event
 
     def record_cache_miss(self,
                          cache_layer: str,
@@ -245,7 +245,7 @@ class CacheHitAnalyzer:
         # Check for anomalies
         self._check_performance_anomalies(cache_layer, response_time_ms, False)
 
-        logger.debug(f"Cache miss recorded: {cache_layer} - {response_time_ms:.2f}ms")
+        #  Debug - add observability event
 
     def record_cache_operation(self,
                               operation: str,
@@ -283,7 +283,7 @@ class CacheHitAnalyzer:
         # Cleanup old history
         self._cleanup_old_history()
 
-        logger.debug(f"Cache operation recorded: {operation} on {cache_component} - {duration_ms:.2f}ms")
+        #  Debug - add observability event
 
     def get_hit_rate_summary(self, hours: int = 1) -> Dict[str, Any]:
         """
@@ -489,7 +489,7 @@ class CacheHitAnalyzer:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in analytics collection loop: {e}")
+                #  Error - add observability event
                 await asyncio.sleep(self.metric_collection_interval)
 
     async def _collect_current_metrics(self) -> None:
@@ -575,7 +575,7 @@ class CacheHitAnalyzer:
                 'severity': 'high'
             }
             self.performance_alerts.append(alert)
-            logger.warning(f"Performance anomaly detected: {alert['issue']}")
+            #  Warning - add observability event
 
         # Check for extremely high response times
         if response_time_ms > 1000:  # > 1 second
@@ -587,7 +587,7 @@ class CacheHitAnalyzer:
                 'severity': 'medium'
             }
             self.performance_alerts.append(alert)
-            logger.warning(f"Performance anomaly detected: {alert['issue']}")
+            #  Warning - add observability event
 
         # Update baseline periodically
         if time.time() % 3600 < 60:  # Every hour

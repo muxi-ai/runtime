@@ -82,7 +82,7 @@ class TimeEstimator:
             # Cap at 1 hour maximum
             estimated_seconds = min(estimated_seconds, 3600)
 
-            logger.debug(
+            #  Debug - add observability event
                 f"Time estimation for request: {estimated_seconds:.1f}s "
                 f"(complexity: {analysis.complexity_score}, "
                 f"capabilities: {len(required_capabilities)}, "
@@ -93,7 +93,7 @@ class TimeEstimator:
             return estimated_seconds
 
         except Exception as e:
-            logger.error(f"Time estimation failed: {e}")
+            #  Error - add observability event
             return None
 
     async def estimate_with_historical_data(
@@ -136,7 +136,7 @@ class TimeEstimator:
                     0.3 * base_estimate
                 )
 
-                logger.debug(
+                #  Debug - add observability event
                     f"Adjusted time estimate using history: {adjusted_estimate:.1f}s "
                     f"(base: {base_estimate:.1f}s, historical: {historical_average:.1f}s)"
                 )
@@ -146,7 +146,7 @@ class TimeEstimator:
                 return base_estimate
 
         except Exception as e:
-            logger.error(f"Historical time estimation failed: {e}")
+            #  Error - add observability event
             return base_estimate
 
     async def _classify_request_type(self, request: str) -> str:

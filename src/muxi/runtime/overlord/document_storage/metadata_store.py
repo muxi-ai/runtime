@@ -16,7 +16,7 @@ import json
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from loguru import logger
+# Loguru import removed - add observability import
 
 
 @dataclass
@@ -133,7 +133,7 @@ class DocumentMetadataStore:
         # Persist to storage
         await self._persist_metadata()
 
-        logger.info(f"Stored metadata for document {document_id} ({filename})")
+        #  Info - add observability event
         return metadata
 
     async def get_document_metadata(self, document_id: str) -> Optional[DocumentMetadata]:
@@ -284,7 +284,7 @@ class DocumentMetadataStore:
         # Persist changes
         await self._persist_metadata()
 
-        logger.info(f"Updated metadata for document {document_id}")
+        #  Info - add observability event
         return True
 
     async def delete_document_metadata(self, document_id: str) -> bool:
@@ -310,7 +310,7 @@ class DocumentMetadataStore:
         # Persist changes
         await self._persist_metadata()
 
-        logger.info(f"Deleted metadata for document {document_id}")
+        #  Info - add observability event
         return True
 
     def get_storage_stats(self) -> Dict[str, Any]:
@@ -431,9 +431,9 @@ class DocumentMetadataStore:
                     self._metadata_cache[doc_id] = metadata
                     self._update_indexes(metadata)
 
-                logger.info(f"Loaded {len(self._metadata_cache)} document metadata entries")
+                #  Info - add observability event
         except Exception as e:
-            logger.warning(f"Failed to load metadata from {self.storage_path}: {e}")
+            #  Warning - add observability event
 
     async def _persist_metadata(self) -> None:
         """Persist metadata to storage file"""
@@ -460,5 +460,5 @@ class DocumentMetadataStore:
             Path(temp_path).rename(self.storage_path)
 
         except Exception as e:
-            logger.error(f"Failed to persist metadata to {self.storage_path}: {e}")
+            #  Error - add observability event
             raise

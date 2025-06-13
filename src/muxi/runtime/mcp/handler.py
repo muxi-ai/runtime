@@ -75,7 +75,7 @@ except ImportError:
             self.params = params
             self.id = id or str(uuid.uuid4())
 
-from loguru import logger
+from ..observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 
 class MCPError(Exception):
@@ -307,7 +307,7 @@ class HTTPSSETransport(BaseTransport):
             }
 
             start_time = time.time()
-            logger.info(f"Connecting to SSE endpoint: {self.sse_url}")
+            #  Info - add observability event
 
             # Use the stream context manager properly
             async with self.client.stream(
@@ -324,20 +324,20 @@ class HTTPSSETransport(BaseTransport):
                         "connection_time_s": connection_time,
                         "timestamp": datetime.now().isoformat()
                     }
-                    logger.error(f"Failed to connect to SSE endpoint: {response.status_code}")
+                    #  Error - add observability event
                     raise MCPConnectionError(
                         f"Failed to connect to SSE endpoint (status {response.status_code})",
                         error_details
                     )
 
-                logger.info(
+                #  Info - add observability event
                     f"SSE connection established: {response.status_code} in {connection_time:.2f}s"
                 )
 
                 # Process SSE events to get endpoint info
                 found_endpoint = False
                 async for line in response.aiter_lines():
-                    logger.debug(f"SSE event: {line}")
+                    #  Debug - add observability event
 
                     if line.startswith("event: endpoint"):
                         # Next line should contain the data
@@ -345,7 +345,7 @@ class HTTPSSETransport(BaseTransport):
 
                     if line.startswith("data:") and self.message_url is None:
                         message_path = line[5:].strip()
-                        logger.info(f"Found endpoint data: {message_path}")
+                        #  Info - add observability event
 
                         # Make sure it's a full URL
                         if message_path.startswith('http'):
@@ -372,8 +372,8 @@ class HTTPSSETransport(BaseTransport):
                             elif "session_id" in params:
                                 self.session_id = params["session_id"]
 
-                            logger.info(f"Connected to MCP server: {self.message_url}")
-                            logger.info(f"Session ID: {self.session_id}")
+                            #  MCP info - add observability event
+                            #  Info - add observability event
                             self.connected = True
                             self.connect_time = datetime.now()
                             self.last_activity = self.connect_time
@@ -391,7 +391,7 @@ class HTTPSSETransport(BaseTransport):
                     "connection_time_s": connection_time,
                     "timestamp": datetime.now().isoformat()
                 }
-                logger.error("Failed to extract endpoint information from SSE")
+                #  Error - add observability event
                 raise MCPConnectionError(
                     "Failed to extract endpoint information from SSE stream",
                     error_details
@@ -405,11 +405,11 @@ class HTTPSSETransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Timeout connecting to MCP server: {str(e)}")
+            #  MCP error - add observability event
             raise MCPTimeoutError("Connection to SSE endpoint timed out", error_details) from e
 
         except asyncio.CancelledError:
-            logger.info("SSE connection attempt was cancelled")
+            #  Info - add observability event
             raise MCPCancelledError("SSE connection attempt was cancelled", {
                 "url": self.sse_url,
                 "timestamp": datetime.now().isoformat()
@@ -422,7 +422,7 @@ class HTTPSSETransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error connecting to MCP server: {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError("Error connecting to MCP server", error_details) from e
 
     async def listen_for_events(
@@ -449,7 +449,7 @@ class HTTPSSETransport(BaseTransport):
             MCPCancelledError: If the operation is cancelled
         """
         if not self.sse_connection:
-            logger.error("Cannot listen for events: No SSE connection")
+            #  Error - add observability event
             return
 
         try:
@@ -462,7 +462,7 @@ class HTTPSSETransport(BaseTransport):
                     await callback(line)
                 yield line
         except asyncio.CancelledError:
-            logger.info("SSE event listener was cancelled")
+            #  Info - add observability event
             raise MCPCancelledError("SSE event listener was cancelled", {
                 "url": self.sse_url,
                 "timestamp": datetime.now().isoformat()
@@ -474,7 +474,7 @@ class HTTPSSETransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error listening for SSE events: {str(e)}")
+            #  Error - add observability event
             raise MCPConnectionError("Error listening for SSE events", error_details) from e
 
     async def send_request(
@@ -524,7 +524,7 @@ class HTTPSSETransport(BaseTransport):
 
         method_name = request_data.get('method', 'unknown')
         request_id = request_data.get('id', str(uuid.uuid4()))
-        logger.info(f"Sending request to {url}: {method_name} (id: {request_id})")
+        #  Info - add observability event
 
         try:
             if cancellation_token:
@@ -542,11 +542,11 @@ class HTTPSSETransport(BaseTransport):
             request_time = time.time() - start_time
             self.last_activity = datetime.now()
 
-            logger.info(f"Response status: {response.status_code} in {request_time:.2f}s")
+            #  Info - add observability event
 
             if response.status_code == 202:
                 # Server accepted the request asynchronously
-                logger.info(f"Request accepted asynchronously: {method_name} (id: {request_id})")
+                #  Info - add observability event
                 return {
                     "status": "accepted",
                     "request_id": request_id,
@@ -563,7 +563,7 @@ class HTTPSSETransport(BaseTransport):
                         response.text[:100] + "..." if len(response.text) > 100
                         else response.text
                     )
-                    logger.warning(
+                    #  Warning - add observability event
                         f"Non-JSON response with status {response.status_code}: {resp_text}"
                     )
                     return {
@@ -583,7 +583,7 @@ class HTTPSSETransport(BaseTransport):
                     "request_time_s": request_time,
                     "timestamp": datetime.now().isoformat()
                 }
-                logger.error(f"Request failed: {response.status_code}")
+                #  Error - add observability event
                 raise MCPRequestError(
                     f"Request failed with status {response.status_code}",
                     error_details
@@ -599,11 +599,11 @@ class HTTPSSETransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Request timed out: {str(e)}")
+            #  Error - add observability event
             raise MCPTimeoutError("Request timed out", error_details) from e
 
         except asyncio.CancelledError:
-            logger.info(f"Request was cancelled: {method_name} (id: {request_id})")
+            #  Info - add observability event
             raise MCPCancelledError("Request was cancelled", {
                 "url": url,
                 "method": method_name,
@@ -623,7 +623,7 @@ class HTTPSSETransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error sending request: {str(e)}")
+            #  Error - add observability event
             raise MCPRequestError("Error sending request", error_details) from e
 
     async def disconnect(self) -> bool:
@@ -645,7 +645,7 @@ class HTTPSSETransport(BaseTransport):
 
             await self.client.aclose()
             self.connected = False
-            logger.info("Disconnected from MCP server")
+            #  MCP info - add observability event
             return True
         except Exception as e:
             error_details = {
@@ -653,7 +653,7 @@ class HTTPSSETransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error disconnecting: {str(e)}")
+            #  Error - add observability event
             raise MCPConnectionError("Error disconnecting from MCP server", error_details) from e
 
     def get_connection_stats(self) -> Dict[str, Any]:
@@ -728,7 +728,7 @@ class CommandLineTransport(BaseTransport):
             MCPCancelledError: If the operation is cancelled
         """
         try:
-            logger.info(f"Starting MCP server process: {self.command}")
+            #  MCP info - add observability event
             start_time = time.time()
 
             # Start the process
@@ -748,7 +748,7 @@ class CommandLineTransport(BaseTransport):
                 self.connect_time = datetime.now()
                 self.last_activity = self.connect_time
 
-                logger.info(
+                #  Info - add observability event
                     f"MCP server process started with PID {self.process.pid} "
                     f"in {connection_time:.2f}s"
                 )
@@ -759,11 +759,11 @@ class CommandLineTransport(BaseTransport):
                     "connection_time_s": connection_time,
                     "timestamp": datetime.now().isoformat()
                 }
-                logger.error("Failed to start MCP server process")
+                #  MCP error - add observability event
                 raise MCPConnectionError("Failed to start MCP server process", error_details)
 
         except asyncio.CancelledError:
-            logger.info("Process start was cancelled")
+            #  Info - add observability event
             raise MCPCancelledError("Process start was cancelled", {
                 "command": self.command,
                 "timestamp": datetime.now().isoformat()
@@ -776,7 +776,7 @@ class CommandLineTransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error starting MCP server process: {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError("Error starting MCP server process", error_details) from e
 
     async def send_request(
@@ -819,7 +819,7 @@ class CommandLineTransport(BaseTransport):
 
         method_name = request_data.get('method', 'unknown')
         request_id = request_data.get('id', str(uuid.uuid4()))
-        logger.info(f"Sending request to process: {method_name} (id: {request_id})")
+        #  Info - add observability event
 
         try:
             if cancellation_token:
@@ -838,7 +838,7 @@ class CommandLineTransport(BaseTransport):
             request_time = time.time() - start_time
             self.last_activity = datetime.now()
 
-            logger.info(f"Received response in {request_time:.2f}s")
+            #  Info - add observability event
 
             if not response_line:
                 error_details = {
@@ -847,7 +847,7 @@ class CommandLineTransport(BaseTransport):
                     "request_time_s": request_time,
                     "timestamp": datetime.now().isoformat()
                 }
-                logger.error("Empty response from MCP server process")
+                #  MCP error - add observability event
                 raise MCPRequestError("Empty response from MCP server process", error_details)
 
             try:
@@ -867,14 +867,14 @@ class CommandLineTransport(BaseTransport):
                     "error_message": str(e),
                     "timestamp": datetime.now().isoformat()
                 }
-                logger.error(f"Invalid JSON response: {str(e)}")
+                #  Error - add observability event
                 raise MCPRequestError(
                     "Invalid JSON response from MCP server process",
                     error_details
                 ) from e
 
         except asyncio.CancelledError:
-            logger.info(f"Request was cancelled: {method_name} (id: {request_id})")
+            #  Info - add observability event
             raise MCPCancelledError("Request was cancelled", {
                 "method": method_name,
                 "request_id": request_id,
@@ -892,7 +892,7 @@ class CommandLineTransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error sending request: {str(e)}")
+            #  Error - add observability event
             raise MCPRequestError(
                 "Error sending request to MCP server process",
                 error_details
@@ -919,14 +919,14 @@ class CommandLineTransport(BaseTransport):
 
                 # Terminate process if it's still running
                 if self.process.returncode is None:
-                    logger.info(f"Terminating MCP server process (PID {self.process.pid})")
+                    #  MCP info - add observability event
                     self.process.terminate()
 
                     # Wait for process to terminate
                     try:
                         await asyncio.wait_for(self.process.wait(), timeout=5.0)
                     except asyncio.TimeoutError:
-                        logger.warning(
+                        #  Warning - add observability event
                             f"Process didn't terminate, killing it (PID {self.process.pid})"
                         )
                         self.process.kill()
@@ -937,7 +937,7 @@ class CommandLineTransport(BaseTransport):
                 self.stdout = None
                 self.connected = False
 
-                logger.info("Disconnected from MCP server process")
+                #  MCP info - add observability event
                 return True
 
             return True  # Already disconnected
@@ -948,7 +948,7 @@ class CommandLineTransport(BaseTransport):
                 "error_message": str(e),
                 "timestamp": datetime.now().isoformat()
             }
-            logger.error(f"Error disconnecting from MCP server process: {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError(
                 "Error disconnecting from MCP server process",
                 error_details
@@ -1010,7 +1010,7 @@ class MCPTransportFactory:
         Raises:
             ValueError: If neither url nor command is provided, or if both are provided
         """
-        logger.info("Creating transport based on provided parameters")
+        #  Info - add observability event
 
         if url is not None and command is not None:
             raise ValueError(
@@ -1108,7 +1108,7 @@ class MCPServerClient:
             self.connected = True
 
             transport_type = "http" if self.url else "command"
-            logger.info(
+            #  Info - add observability event
                 f"Successfully connected to MCP server '{self.name}' "
                 f"using {transport_type} transport"
             )
@@ -1129,7 +1129,7 @@ class MCPServerClient:
                 e.details.update({"server_name": self.name})
                 raise
 
-            logger.error(f"Failed to connect to MCP server '{self.name}': {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError(
                 f"Failed to connect to MCP server '{self.name}'",
                 error_details
@@ -1145,7 +1145,7 @@ class MCPServerClient:
         try:
             # Cancel any active requests
             for request_id, token in self.active_requests.items():
-                logger.info(f"Cancelling request {request_id} during disconnect")
+                #  Info - add observability event
                 token.cancel()
 
             self.active_requests.clear()
@@ -1155,7 +1155,7 @@ class MCPServerClient:
 
             self.connected = False
             self.transport = None
-            logger.info(f"Disconnected from MCP server '{self.name}'")
+            #  MCP info - add observability event
 
             return True
 
@@ -1173,7 +1173,7 @@ class MCPServerClient:
                 e.details.update({"server_name": self.name})
                 raise
 
-            logger.error(f"Error disconnecting from MCP server '{self.name}': {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError(
                 f"Error disconnecting from MCP server '{self.name}'",
                 error_details
@@ -1237,7 +1237,7 @@ class MCPServerClient:
                         request.params[key] = value
 
             # Send the request
-            logger.info(f"Sending message to MCP server '{self.name}': {method} (id: {request_id})")
+            #  MCP info - add observability event
             # Convert the request to a dict for the transport
             request_dict = request.model_dump()
             response = await self.transport.send_request(request_dict, cancellation_token)
@@ -1258,7 +1258,7 @@ class MCPServerClient:
                 e.details.update({"server_name": self.name})
                 raise
 
-            logger.error(f"Error sending message to MCP server '{self.name}': {str(e)}")
+            #  MCP error - add observability event
             raise MCPRequestError(
                 f"Error sending message to MCP server '{self.name}'",
                 error_details
@@ -1315,7 +1315,7 @@ class MCPServerClient:
         count = len(self.active_requests)
 
         for request_id, token in self.active_requests.items():
-            logger.info(f"Cancelling request {request_id}")
+            #  Info - add observability event
             token.cancel()
 
         self.active_requests.clear()
@@ -1368,7 +1368,7 @@ class MCPHandler:
         """
         # Check if we're already connected to this server
         if name in self.active_connections:
-            logger.warning(f"Already connected to MCP server '{name}', disconnecting first")
+            #  MCP warning - add observability event
             await self.disconnect_server(name)
 
         # Check if parameters are supported
@@ -1397,7 +1397,7 @@ class MCPHandler:
             # Store the client
             self.active_connections[name] = client
 
-            logger.info(f"Connected to MCP server '{name}'")
+            #  MCP info - add observability event
             return True
 
         except Exception as e:
@@ -1413,7 +1413,7 @@ class MCPHandler:
                 # Just propagate MCP errors
                 raise
 
-            logger.error(f"Failed to connect to MCP server '{name}': {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError(
                 f"Failed to connect to MCP server '{name}'",
                 error_details
@@ -1430,7 +1430,7 @@ class MCPHandler:
             bool: True if disconnection was successful
         """
         if name not in self.active_connections:
-            logger.warning(f"Not connected to MCP server '{name}'")
+            #  MCP warning - add observability event
             return False
 
         try:
@@ -1443,7 +1443,7 @@ class MCPHandler:
             # Remove from active connections
             del self.active_connections[name]
 
-            logger.info(f"Disconnected from MCP server '{name}'")
+            #  MCP info - add observability event
             return True
 
         except Exception as e:
@@ -1457,7 +1457,7 @@ class MCPHandler:
                 # Just propagate MCP errors
                 raise
 
-            logger.error(f"Error disconnecting from MCP server '{name}': {str(e)}")
+            #  MCP error - add observability event
             raise MCPConnectionError(
                 f"Error disconnecting from MCP server '{name}'",
                 error_details
@@ -1506,14 +1506,14 @@ class MCPHandler:
                     # Find the server for this tool
                     server_name = self._get_server_for_tool(tool_name)
                     if not server_name:
-                        logger.warning(f"No server registered for tool '{tool_name}'")
+                        #  Warning - add observability event
                         tool_call["output"] = {
                             "error": f"No server registered for tool '{tool_name}'"
                         }
                         continue
 
                     # Execute the tool
-                    logger.info(f"Executing tool '{tool_name}' on server '{server_name}'")
+                    #  Info - add observability event
                     result = await self.execute_tool(
                         server_name,
                         tool_name,
@@ -1531,7 +1531,7 @@ class MCPHandler:
                         "error_message": str(e)
                     }
 
-                    logger.error(f"Error executing tool call: {str(e)}")
+                    #  Error - add observability event
                     tool_call["output"] = {"error": str(e), "details": error_details}
 
             return message
@@ -1589,7 +1589,7 @@ class MCPHandler:
             result = await client.send_message("list_tools", {})
             return result.get("result", [])
         except Exception as e:
-            logger.error(f"Error listing tools from server '{server_name}': {str(e)}")
+            #  Error - add observability event
             raise
 
     def _get_server_for_tool(self, tool_name: str) -> Optional[str]:
@@ -1645,7 +1645,7 @@ class MCPHandler:
         count = len(self.cancellation_tokens)
 
         for operation_id, token in self.cancellation_tokens.items():
-            logger.info(f"Cancelling operation {operation_id}")
+            #  Info - add observability event
             token.cancel()
 
         self.cancellation_tokens.clear()
@@ -1654,7 +1654,7 @@ class MCPHandler:
         for name, client in self.active_connections.items():
             if hasattr(client, "cancel_all_requests"):
                 client_count = client.cancel_all_requests()
-                logger.info(f"Cancelled {client_count} requests in client '{name}'")
+                #  Info - add observability event
                 count += client_count
 
         return count

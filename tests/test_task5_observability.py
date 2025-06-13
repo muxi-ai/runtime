@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
 try:
     from src.muxi.runtime.observability import (
         EventLogger, ObservabilityManager, RequestContextManager,
-        RequestContext, EventType, EventLevel
+        RequestContext, ConversationEventType, EventLevel
     )
 except ImportError as e:
     pytest.skip(f"Observability system not available: {e}", allow_module_level=True)
@@ -45,7 +45,7 @@ class TestEventLogger:
 
         with patch('builtins.print') as mock_print:
             event_id = await logger.emit_event(
-                event_type=EventType.OVERLORD_ROUTING_STARTED,
+                event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"test": "data"},
@@ -68,14 +68,14 @@ class TestEventLogger:
         with patch('builtins.print') as mock_print:
             # This should not be emitted (INFO < WARNING)
             await logger.emit_event(
-                event_type=EventType.AGENT_MESSAGE_PROCESSING,
+                event_type=ConversationEventType.AGENT_MESSAGE_PROCESSING,
                 level=EventLevel.INFO,
                 request_context=request_context
             )
 
             # This should be emitted (WARNING >= WARNING)
             await logger.emit_event(
-                event_type=EventType.AGENT_MESSAGE_FAILED,
+                event_type=ConversationEventType.AGENT_MESSAGE_FAILED,
                 level=EventLevel.WARNING,
                 request_context=request_context
             )
@@ -254,7 +254,7 @@ class TestPerformance:
         with patch('builtins.print'):  # Suppress actual output
             for _ in range(10):  # Emit 10 events for basic test
                 await logger.emit_event(
-                    event_type=EventType.AGENT_MESSAGE_PROCESSING,
+                    event_type=ConversationEventType.AGENT_MESSAGE_PROCESSING,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"test": "performance"},
@@ -288,14 +288,14 @@ class TestIntegration:
                 # Simulate overlord routing
                 with patch('builtins.print'):
                     await manager.event_logger.emit_event(
-                        event_type=EventType.OVERLORD_ROUTING_STARTED,
+                        event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                         level=EventLevel.INFO,
                         request_context=context,
                         description="Starting routing"
                     )
 
                     await manager.event_logger.emit_event(
-                        event_type=EventType.OVERLORD_AGENT_SELECTED,
+                        event_type=ConversationEventType.OVERLORD_AGENT_SELECTED,
                         level=EventLevel.INFO,
                         request_context=context,
                         data={"agent_id": "test-agent"},
@@ -303,14 +303,14 @@ class TestIntegration:
                     )
 
                     await manager.event_logger.emit_event(
-                        event_type=EventType.AGENT_MESSAGE_PROCESSING,
+                        event_type=ConversationEventType.AGENT_MESSAGE_PROCESSING,
                         level=EventLevel.INFO,
                         request_context=context,
                         description="Processing message"
                     )
 
                     await manager.event_logger.emit_event(
-                        event_type=EventType.AGENT_MESSAGE_COMPLETED,
+                        event_type=ConversationEventType.AGENT_MESSAGE_COMPLETED,
                         level=EventLevel.INFO,
                         request_context=context,
                         description="Message completed"
@@ -335,7 +335,7 @@ class TestIntegration:
         with patch('builtins.print'):
             # Tool call started
             await manager.event_logger.emit_event(
-                event_type=EventType.MCP_TOOL_CALLED,
+                event_type=ConversationEventType.MCP_TOOL_CALLED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"tool_name": "test_tool", "server_id": "test-server"},
@@ -344,7 +344,7 @@ class TestIntegration:
 
             # Tool call completed
             await manager.event_logger.emit_event(
-                event_type=EventType.MCP_TOOL_COMPLETED,
+                event_type=ConversationEventType.MCP_TOOL_COMPLETED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"tool_name": "test_tool", "duration_ms": 150},

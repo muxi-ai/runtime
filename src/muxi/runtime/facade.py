@@ -51,7 +51,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from loguru import logger
+from .observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from .agent import Agent
 from .overlord import Overlord
@@ -209,11 +209,11 @@ class Muxi:
 
                     # Wrap with Memobase for multi-user support
                     memobase = Memobase(long_term_memory=memory)
-                    logger.info("Created Postgres long-term memory with connection string")
+                    #  Facade info - add observability event
                     return memobase
                 except Exception as e:
                     # Log the error but continue without long-term memory
-                    logger.error(f"Error creating Postgres long-term memory: {e}")
+                    #  Facade error - add observability event
                     return None
 
             # SQLite connection string format (sqlite:///path/to/db)
@@ -222,22 +222,22 @@ class Muxi:
                     # Extract the path: remove 'sqlite:///' prefix
                     db_path = long_term_config[10:]
                     memory = SQLiteMemory(db_path=db_path)
-                    logger.info(f"Created SQLite long-term memory at {db_path}")
+                    #  Facade info - add observability event
                     return memory
                 except Exception as e:
                     # Log the error but continue without long-term memory
-                    logger.error(f"Error creating SQLite long-term memory: {e}")
+                    #  Facade error - add observability event
                     return None
 
             # Plain SQLite path
             else:
                 try:
                     memory = SQLiteMemory(db_path=long_term_config)
-                    logger.info(f"Created SQLite long-term memory at {long_term_config}")
+                    #  Facade info - add observability event
                     return memory
                 except Exception as e:
                     # Log the error but continue without long-term memory
-                    logger.error(f"Error creating SQLite long-term memory: {e}")
+                    #  Facade error - add observability event
                     return None
 
         # Boolean true - use connection string or default SQLite database
@@ -253,11 +253,11 @@ class Muxi:
 
                     # Wrap with Memobase for multi-user support
                     memobase = Memobase(long_term_memory=memory)
-                    logger.info("Created Postgres long-term memory with provided connection string")
+                    #  Facade info - add observability event
                     return memobase
                 except Exception as e:
                     # Log the error but fall back to SQLite
-                    logger.error(
+                    #  Facade error - add observability event
                         f"Error creating Postgres long-term memory, falling back to SQLite: {e}"
                     )
 
@@ -265,15 +265,15 @@ class Muxi:
             try:
                 db_path = os.path.join(os.getcwd(), "muxi.db")
                 memory = SQLiteMemory(db_path=db_path)
-                logger.info(f"Created default SQLite long-term memory at {db_path}")
+                #  Facade info - add observability event
                 return memory
             except Exception as e:
                 # Log the error but continue without long-term memory
-                logger.error(f"Error creating default SQLite long-term memory: {e}")
+                #  Facade error - add observability event
                 return None
 
         # If we get here, we don't know how to handle the configuration
-        logger.warning(f"Unrecognized long-term memory configuration: {long_term_config}")
+        #  Facade warning - add observability event
         return None
 
     @property
@@ -390,7 +390,7 @@ class Muxi:
             and self.overlord.buffer_memory.model is None
         ):
             self.overlord.buffer_memory.model = model
-            logger.info(f"Enabled vector search in buffer memory using {model.model_name}")
+            #  Facade info - add observability event
 
         # Connect MCP servers if specified
         mcp_servers = config.get("mcp_servers", [])
@@ -526,7 +526,7 @@ class Muxi:
 
                     # Missing required credential
                     if required:
-                        logger.warning(
+                        #  Facade warning - add observability event
                             f"Required credential {cred_id} for MCP server " f"{name} not found"
                         )
                         continue
@@ -537,16 +537,16 @@ class Muxi:
                     # Replace with actual method if different
                     if hasattr(agent, "connect_mcp_server"):
                         await agent.connect_mcp_server(name, url, processed_credentials)
-                        logger.info(f"Connected to MCP server: {name}")
+                        #  Facade info - add observability event
                     else:
-                        logger.warning(
+                        #  Facade warning - add observability event
                             f"Agent {agent.name} does not have connect_mcp_server method."
                         )
 
                 except Exception as e:
-                    logger.error(f"Error connecting to MCP server {name}: {e}")
+                    #  Facade error - add observability event
             else:
-                logger.warning(f"Invalid MCP server configuration: {server}")
+                #  Facade warning - add observability event
 
     async def chat(
         self,

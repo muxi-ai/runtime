@@ -92,7 +92,7 @@ class IntelligentCacheManager:
         self.statistics = CacheStatistics()
         self.request_count = 0
 
-        logger.info("Intelligent Cache Manager initialized")
+        #  Cache manager info - add observability event
 
     async def start(self) -> None:
         """Start analytics and memory optimization services."""
@@ -102,7 +102,7 @@ class IntelligentCacheManager:
         if self.memory_optimizer:
             await self.memory_optimizer.start()
 
-        logger.info("Cache manager services started")
+        #  Cache manager info - add observability event
 
     async def stop(self) -> None:
         """Stop analytics and memory optimization services."""
@@ -112,7 +112,7 @@ class IntelligentCacheManager:
         if self.memory_optimizer:
             await self.memory_optimizer.stop()
 
-        logger.info("Cache manager services stopped")
+        #  Cache manager info - add observability event
 
     async def get_cached_response(
         self,
@@ -145,7 +145,7 @@ class IntelligentCacheManager:
         if l1_response and l1_response.is_valid():
             response_time_ms = (time.time() - start_time) * 1000
             self._record_cache_hit('L1', CacheType.EXACT, response_time_ms, cache_key_str)
-            logger.debug(f"L1 cache hit for key: {cache_key_str[:50]}...")
+            #  Cache manager debug - add observability event
             return l1_response
 
         # L2: Semantic similarity cache
@@ -159,17 +159,17 @@ class IntelligentCacheManager:
                         if best_match[2] >= self.similarity_threshold:
                             response_time_ms = (time.time() - start_time) * 1000
                             self._record_cache_hit('L2', CacheType.SIMILAR, response_time_ms, cache_key_str)
-                            logger.debug(f"L2 cache hit with similarity {best_match[2]:.2f}")
+                            #  Cache manager debug - add observability event
                             return best_match[1]
             except Exception as e:
-                logger.error(f"Error in L2 semantic cache lookup: {e}")
+                #  Cache manager error - add observability event
 
         # L3: Partial workflow cache (for workflow-based requests)
         l3_response = await self.l3_cache.get(cache_key_str)
         if l3_response and l3_response.is_valid():
             response_time_ms = (time.time() - start_time) * 1000
             self._record_cache_hit('L3', CacheType.PARTIAL, response_time_ms, cache_key_str)
-            logger.debug(f"L3 cache hit for key: {cache_key_str[:50]}...")
+            #  Cache manager debug - add observability event
             return l3_response
 
         # Persistent cache (last resort)
@@ -179,13 +179,13 @@ class IntelligentCacheManager:
             await self.l1_cache.put(cache_key_str, persistent_response)
             response_time_ms = (time.time() - start_time) * 1000
             self._record_cache_hit('persistent', CacheType.EXACT, response_time_ms, cache_key_str)
-            logger.debug(f"Persistent cache hit, promoted to L1")
+            #  Cache manager debug - add observability event
             return persistent_response
 
         # Cache miss
         response_time_ms = (time.time() - start_time) * 1000
         self._record_cache_miss('overall', response_time_ms, cache_key_str)
-        logger.debug(f"Cache miss for key: {cache_key_str[:50]}...")
+        #  Cache manager debug - add observability event
         return None
 
     async def cache_response(
@@ -248,7 +248,7 @@ class IntelligentCacheManager:
                 if embedding:
                     cached_response.embedding = embedding
             except Exception as e:
-                logger.error(f"Error generating embedding for caching: {e}")
+                #  Cache manager error - add observability event
 
         # Cache in multiple layers
         success_count = 0
@@ -284,7 +284,7 @@ class IntelligentCacheManager:
                 memory_usage_bytes=self._get_total_memory_usage()
             )
 
-        logger.debug(f"Cached response in {success_count} layers - {duration_ms:.2f}ms")
+        #  Cache manager debug - add observability event
         return success_count > 0
 
     async def invalidate_cache(
@@ -320,7 +320,7 @@ class IntelligentCacheManager:
         # TODO: Implement pattern-based and user/agent-based invalidation
         # This would require iterating through cache entries and matching criteria
 
-        logger.info(f"Invalidated {invalidated_count} cache entries")
+        #  Cache manager info - add observability event
         return invalidated_count
 
     async def cleanup_expired(self) -> Dict[str, int]:
@@ -338,9 +338,9 @@ class IntelligentCacheManager:
                     cleaned = await cache.cleanup_expired()
                     cleanup_results[name] = cleaned
                     if cleaned > 0:
-                        logger.info(f"Cleaned {cleaned} expired entries from {name} cache")
+                        #  Cache manager info - add observability event
                 except Exception as e:
-                    logger.error(f"Error cleaning {name} cache: {e}")
+                    #  Cache manager error - add observability event
                     cleanup_results[name] = 0
             else:
                 cleanup_results[name] = 0
@@ -383,10 +383,10 @@ class IntelligentCacheManager:
         """Force immediate memory cleanup across all cache layers."""
         if self.memory_optimizer:
             result_stats = await self.memory_optimizer.force_cleanup()
-            logger.info("Forced memory cleanup completed")
+            #  Cache manager info - add observability event
             return result_stats.get_summary()
         else:
-            logger.warning("Memory optimizer not available for forced cleanup")
+            #  Cache manager warning - add observability event
             return {}
 
     def _generate_cache_key(
@@ -446,10 +446,10 @@ class IntelligentCacheManager:
             elif hasattr(self.embedding_service, 'get_embedding'):
                 return await self.embedding_service.get_embedding(text)
             else:
-                logger.warning("Embedding service doesn't have expected methods")
+                #  Cache manager warning - add observability event
                 return None
         except Exception as e:
-            logger.error(f"Error getting embedding: {e}")
+            #  Cache manager error - add observability event
             return None
 
     def _get_total_memory_usage(self) -> int:

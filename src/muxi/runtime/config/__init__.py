@@ -21,7 +21,6 @@
 #    - Model settings (providers, parameters, API keys)
 #    - Routing rules for agent selection and message handling
 #    - Application settings (server, security, etc.)
-#    - Logging configuration
 #
 # Configuration instances are created from formation YAML data by
 # components like the Overlord, rather than using global instances.
@@ -44,7 +43,7 @@ from .app import AppConfig
 from .database import DatabaseConfig
 from .loader import ConfigLoader
 from .formation_loader import FormationLoader
-from .logging import LoggingConfig
+
 from .memory import MemoryConfig
 from .model import ModelConfig
 from .routing import RoutingConfig
@@ -55,7 +54,6 @@ __all__ = [
     "ConfigLoader",
     "DatabaseConfig",
     "FormationLoader",
-    "LoggingConfig",
     "MemoryConfig",
     "ModelConfig",
     "RoutingConfig",

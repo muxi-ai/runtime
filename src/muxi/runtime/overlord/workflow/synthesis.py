@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from loguru import logger
+# Loguru import removed - add observability import
 
 from ...llm import LLM
 from .types import Workflow, TaskStatus
@@ -123,11 +123,11 @@ class ResponseQualityAssessor:
             # Calculate overall quality
             quality_assessment.overall_quality = self._calculate_overall_quality(quality_assessment)
 
-            logger.debug(f"Quality assessment completed in {time.time() - start_time:.2f}s")
+            #  Debug - add observability event
             return quality_assessment
 
         except Exception as e:
-            logger.error(f"Error in quality assessment: {e}")
+            #  Error - add observability event
             return self._create_fallback_assessment()
 
     def _create_assessment_prompt(
@@ -227,7 +227,7 @@ Format your response as JSON:
             )
 
         except Exception as e:
-            logger.error(f"Error parsing assessment response: {e}")
+            #  Error - add observability event
             return self._create_fallback_assessment()
 
     def _calculate_overall_quality(self, assessment: QualityAssessment) -> ResponseQuality:
@@ -336,7 +336,7 @@ class PersonaConsistencyAnalyzer:
             return analysis
 
         except Exception as e:
-            logger.error(f"Error in persona consistency analysis: {e}")
+            #  Error - add observability event
             return {
                 'consistency_score': 0.7,
                 'persona_match': True,
@@ -404,7 +404,7 @@ Provide analysis as JSON:
             else:
                 raise ValueError("No JSON found in response")
         except Exception as e:
-            logger.error(f"Error parsing persona analysis: {e}")
+            #  Error - add observability event
             return {
                 'consistency_score': 0.7,
                 'persona_match': True,
@@ -490,7 +490,7 @@ class AdvancedResponseSynthesizer:
                 enhancement_applied=self._get_applied_enhancements(mode)
             )
 
-            logger.info(
+            #  Info - add observability event
                 f"Response synthesis completed: {quality_assessment.overall_quality.value} "
                 f"quality in {iterations} iterations"
             )
@@ -498,7 +498,7 @@ class AdvancedResponseSynthesizer:
             return result
 
         except Exception as e:
-            logger.error(f"Error in response synthesis: {e}")
+            #  Error - add observability event
             return self._create_fallback_synthesis_result(workflow, user_context)
 
     def _collect_workflow_outputs(self, workflow: Workflow) -> List[Dict[str, Any]]:
@@ -652,7 +652,7 @@ Provide the synthesized response:
             ) / 6
 
             if average_score >= target_quality:
-                logger.debug(f"Quality threshold met after {iterations} iterations")
+                #  Debug - add observability event
                 return current_content, quality_assessment, iterations
 
             # Generate improvement prompt
@@ -717,7 +717,7 @@ Improved Response:
             )
             return improved_response.strip()
         except Exception as e:
-            logger.error(f"Error improving content: {e}")
+            #  Error - add observability event
             return content  # Return original if improvement fails
 
     def _get_applied_enhancements(self, mode: SynthesisMode) -> List[str]:

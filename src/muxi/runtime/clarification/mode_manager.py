@@ -54,7 +54,7 @@ class ClarificationModeManager:
             ClarificationSession for tracking the proactive conversation
         """
         try:
-            logger.info(f"Entering proactive mode for user {user_id}: {proactive_request.request_type}")
+            #  Info - add observability event
 
             # Cancel any existing session for this user
             await self._cancel_existing_session(user_id)
@@ -82,11 +82,11 @@ class ClarificationModeManager:
             self.active_sessions[session.session_id] = session
             self._user_to_session[user_id] = session.session_id
 
-            logger.info(f"Created proactive session {session.session_id} in mode {mode}")
+            #  Info - add observability event
             return session
 
         except Exception as e:
-            logger.error(f"Error entering proactive mode: {e}")
+            #  Error - add observability event
             raise ClarificationError(f"Failed to enter proactive mode: {e}")
 
     async def enter_plan_analysis_mode(
@@ -107,7 +107,7 @@ class ClarificationModeManager:
             ClarificationSession for tracking the plan analysis conversation
         """
         try:
-            logger.info(f"Entering plan analysis mode for user {user_id}")
+            #  Info - add observability event
 
             # Cancel any existing session for this user
             await self._cancel_existing_session(user_id)
@@ -126,11 +126,11 @@ class ClarificationModeManager:
             self.active_sessions[session.session_id] = session
             self._user_to_session[user_id] = session.session_id
 
-            logger.info(f"Created plan analysis session {session.session_id}")
+            #  Info - add observability event
             return session
 
         except Exception as e:
-            logger.error(f"Error entering plan analysis mode: {e}")
+            #  Error - add observability event
             raise ClarificationError(f"Failed to enter plan analysis mode: {e}")
 
     async def get_active_session(self, user_id: str) -> Optional[ClarificationSession]:
@@ -183,11 +183,11 @@ class ClarificationModeManager:
             # Check completion criteria
             await self._check_completion_criteria(session)
 
-            logger.debug(f"Updated session {session_id} progress")
+            #  Debug - add observability event
             return True
 
         except Exception as e:
-            logger.error(f"Error updating session progress: {e}")
+            #  Error - add observability event
             return False
 
     async def complete_session(self, session_id: str) -> Dict[str, any]:
@@ -226,11 +226,11 @@ class ClarificationModeManager:
             # Clean up the session
             self._cleanup_session(session_id)
 
-            logger.info(f"Completed session {session_id}")
+            #  Info - add observability event
             return complete_info
 
         except Exception as e:
-            logger.error(f"Error completing session: {e}")
+            #  Error - add observability event
             raise ClarificationError(f"Failed to complete session: {e}")
 
     async def cancel_session(self, session_id: str) -> bool:
@@ -246,12 +246,12 @@ class ClarificationModeManager:
         try:
             if session_id in self.active_sessions:
                 self._cleanup_session(session_id)
-                logger.info(f"Cancelled session {session_id}")
+                #  Info - add observability event
                 return True
             return False
 
         except Exception as e:
-            logger.error(f"Error cancelling session: {e}")
+            #  Error - add observability event
             return False
 
     def _determine_mode_from_request(self, proactive_request: ProactiveRequest) -> ClarificationMode:

@@ -48,7 +48,7 @@ class ContextualParameterEnricher:
             Tuple of (enriched_params, confidence_scores)
         """
         try:
-            logger.info("Enriching parameters from user context")
+            #  Info - add observability event
 
             enriched_params = provided_params.copy()
             confidence_scores = {}
@@ -64,12 +64,12 @@ class ContextualParameterEnricher:
                     if context_value is not None and confidence >= self.confidence_threshold:
                         enriched_params[param_name] = context_value
                         confidence_scores[param_name] = confidence
-                        logger.info(f"Enriched {param_name} from context with confidence {confidence}")
+                        #  Info - add observability event
 
             return enriched_params, confidence_scores
 
         except Exception as e:
-            logger.error(f"Error enriching parameters: {e}")
+            #  Error - add observability event
             raise ContextEnrichmentError(f"Failed to enrich parameters: {e}")
 
     async def enrich_reasoning_context(
@@ -90,7 +90,7 @@ class ContextualParameterEnricher:
             Tuple of (enriched_context, confidence_scores)
         """
         try:
-            logger.info(f"Enriching reasoning context for intent: {intent}")
+            #  Info - add observability event
 
             enriched_context = provided_context.copy()
             confidence_scores = {}
@@ -111,7 +111,7 @@ class ContextualParameterEnricher:
             return enriched_context, confidence_scores
 
         except Exception as e:
-            logger.error(f"Error enriching reasoning context: {e}")
+            #  Error - add observability event
             raise ContextEnrichmentError(f"Failed to enrich reasoning context: {e}")
 
     async def learn_parameter_mapping(
@@ -144,10 +144,10 @@ class ContextualParameterEnricher:
             # Add context key if not already present
             if context_key not in mapping.context_keys:
                 mapping.context_keys.append(context_key)
-                logger.info(f"Learned new mapping: {parameter_name} -> {context_key}")
+                #  Info - add observability event
 
         except Exception as e:
-            logger.error(f"Error learning parameter mapping: {e}")
+            #  Error - add observability event
 
     # Private helper methods
 

@@ -55,7 +55,7 @@ class MemoryConfig:
         """Validate and migrate legacy memory configuration."""
         # Handle legacy memory.short_term configuration
         if "short_term" in self.memory_config:
-            logger.warning(
+            #  Warning - add observability event
                 "Legacy memory.short_term configuration detected. "
                 "Please migrate to memory.working and memory.buffer structure."
             )
@@ -76,7 +76,7 @@ class MemoryConfig:
 
         # Handle legacy memory.long_term configuration
         if "long_term" in self.memory_config:
-            logger.warning(
+            #  Warning - add observability event
                 "Legacy memory.long_term configuration detected. "
                 "Please migrate to memory.persistent structure."
             )

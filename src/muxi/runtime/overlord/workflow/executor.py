@@ -2,7 +2,7 @@ import asyncio
 from typing import Optional, Dict, Any, List, Set, Callable
 from datetime import datetime
 import json
-from loguru import logger
+# Loguru import removed - add observability import
 
 from .types import (
     Workflow, SubTask, TaskStatus, WorkflowStatus,
@@ -64,11 +64,11 @@ class WorkflowExecutor:
         try:
             # Build execution phases
             phases = build_execution_phases(workflow)
-            logger.info(f"Executing workflow {workflow.id} in {len(phases)} phases")
+            #  Info - add observability event
 
             # Execute each phase
             for phase_num, task_ids in enumerate(phases, 1):
-                logger.info(f"Executing phase {phase_num} with {len(task_ids)} tasks")
+                #  Info - add observability event
 
                 # Execute tasks in parallel within this phase
                 await self._execute_phase(workflow, task_ids, context)
@@ -84,10 +84,10 @@ class WorkflowExecutor:
             workflow.completed_at = datetime.now()
             workflow.status = self._determine_final_status(workflow)
 
-            logger.info(f"Workflow {workflow.id} completed with status: {workflow.status}")
+            #  Info - add observability event
 
         except Exception as e:
-            logger.error(f"Error executing workflow {workflow.id}: {e}")
+            #  Error - add observability event
             workflow.status = WorkflowStatus.FAILED
             workflow.error_message = str(e)
             workflow.completed_at = datetime.now()
@@ -163,7 +163,7 @@ class WorkflowExecutor:
             if not agent:
                 raise ValueError(f"No suitable agent found for task {task.id}")
 
-            logger.info(f"Executing task {task.id} with agent {agent.agent_id}")
+            #  Info - add observability event
 
             # Execute task
             result = await self._execute_task_with_agent(
@@ -179,11 +179,11 @@ class WorkflowExecutor:
             if result:
                 self.task_results[task.id] = result
 
-            logger.info(f"Task {task.id} completed successfully")
+            #  Info - add observability event
             return result
 
         except Exception as e:
-            logger.error(f"Task {task.id} failed: {e}")
+            #  Error - add observability event
             task.status = TaskStatus.FAILED
             task.error_message = str(e)
             task.completed_at = datetime.now()
@@ -296,7 +296,7 @@ class WorkflowExecutor:
             )
 
         except Exception as e:
-            logger.error(f"Agent execution failed for task {task.id}: {e}")
+            #  Error - add observability event
             return TaskResult(
                 task_id=task.id,
                 agent_id=agent.agent_id,
@@ -423,7 +423,7 @@ class WorkflowExecutor:
             try:
                 callback(workflow_id, workflow)
             except Exception as e:
-                logger.error(f"Error in progress callback: {e}")
+                #  Error - add observability event
 
     # Public methods for workflow management
 
@@ -478,7 +478,7 @@ class WorkflowExecutor:
                     task.status = TaskStatus.CANCELLED
                     task.completed_at = datetime.now()
 
-            logger.info(f"Cancelled workflow {workflow_id}")
+            #  Info - add observability event
             return True
 
         return False
@@ -546,7 +546,7 @@ class ProgressTracker:
 
         self.workflow_progress[workflow_id] = progress_info
 
-        logger.info(
+        #  Info - add observability event
             f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks completed "
             f"({progress_info['progress_percentage']:.1f}%)"
         )

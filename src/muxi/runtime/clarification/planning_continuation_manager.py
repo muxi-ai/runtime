@@ -66,7 +66,7 @@ class PlanningContinuationManager:
         self.active_sessions[session.session_id] = session
         self.session_timeouts[session.session_id] = time.time() + self.default_timeout
 
-        logger.info(f"Created planning session {session.session_id} for workflow {workflow_request.workflow_type}")
+        #  Info - add observability event
 
         return session
 
@@ -91,7 +91,7 @@ class PlanningContinuationManager:
         """
         session = self.get_session(session_id)
         if not session:
-            logger.warning(f"Planning session {session_id} not found")
+            #  Warning - add observability event
             return False
 
         session.executed_tools.append(tool_result)
@@ -104,7 +104,7 @@ class PlanningContinuationManager:
             if len(successful_tools) >= 1:
                 session.current_state = WorkflowState.DATA_SYNTHESIS
 
-        logger.debug(f"Added tool result to session {session_id}, state: {session.current_state}")
+        #  Debug - add observability event
 
         return True
 
@@ -131,7 +131,7 @@ class PlanningContinuationManager:
         session.current_state = WorkflowState.OPTION_PRESENTATION
         session.updated_at = time.time()
 
-        logger.debug(f"Updated synthesis for session {session_id}")
+        #  Debug - add observability event
 
         return True
 
@@ -155,7 +155,7 @@ class PlanningContinuationManager:
         session.current_state = WorkflowState.PLANNING_COMPLETE
         session.updated_at = time.time()
 
-        logger.info(f"Completed planning session {session_id}")
+        #  Info - add observability event
 
         return True
 
@@ -267,7 +267,7 @@ class PlanningContinuationManager:
         if session_id in self.session_timeouts:
             del self.session_timeouts[session_id]
 
-        logger.debug(f"Cleaned up planning session {session_id}")
+        #  Debug - add observability event
 
     def cleanup_expired_sessions(self) -> None:
         """Clean up all expired sessions."""
@@ -281,7 +281,7 @@ class PlanningContinuationManager:
             self.cleanup_session(session_id)
 
         if expired_sessions:
-            logger.info(f"Cleaned up {len(expired_sessions)} expired planning sessions")
+            #  Info - add observability event
 
     def get_session_summary(self, session_id: str) -> Optional[Dict]:
         """Get summary of planning session state."""

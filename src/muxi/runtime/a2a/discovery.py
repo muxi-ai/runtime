@@ -82,7 +82,7 @@ class LocalDiscoveryService:
                 }
             )
         except Exception as e:
-            logger.warning(f"Failed to initialize observability: {e}")
+            #  A2A discovery warning - add observability event
             self.observability = None
 
         # Load persisted registry if enabled
@@ -105,7 +105,7 @@ class LocalDiscoveryService:
             self.discovery_port = port
             self.is_running = True
 
-            logger.info(
+            #  A2A discovery info - add observability event
                 f"Starting A2A Discovery Service for formation '{formation_name}' on port {port}"
             )
 
@@ -165,7 +165,7 @@ class LocalDiscoveryService:
     async def stop(self):
         """Stop the discovery service."""
         try:
-            logger.info("Stopping A2A Discovery Service")
+            #  A2A discovery info - add observability event
 
             if self.observability:
                 self.observability.track_event(
@@ -236,7 +236,7 @@ class LocalDiscoveryService:
             Registration result
         """
         try:
-            logger.info(f"Registering agent {agent_id} at {endpoint}")
+            #  A2A discovery info - add observability event
 
             if self.observability:
                 self.observability.track_event(
@@ -255,7 +255,7 @@ class LocalDiscoveryService:
                 try:
                     agent_card = await self._fetch_agent_card(endpoint)
                 except Exception as e:
-                    logger.error(f"Failed to fetch agent card for {agent_id}: {e}")
+                    #  A2A discovery error - add observability event
                     if self.observability:
                         self.observability.track_event(
                             ConversationEventType.ERROR_RETRY_ATTEMPTED,
@@ -285,7 +285,7 @@ class LocalDiscoveryService:
             if self.config.enable_persistence:
                 self._save_registry()
 
-            logger.info(f"Successfully registered agent {agent_id}")
+            #  A2A discovery info - add observability event
 
             result = {
                 "agent_id": agent_id,
@@ -343,7 +343,7 @@ class LocalDiscoveryService:
 
             if agent_id in self.agents:
                 del self.agents[agent_id]
-                logger.info(f"Unregistered agent {agent_id}")
+                #  A2A discovery info - add observability event
 
                 # Persist if enabled
                 if self.config.enable_persistence:
@@ -705,7 +705,7 @@ class LocalDiscoveryService:
                 return False
 
         except Exception as e:
-            logger.debug(f"Health check failed for agent {agent_id}: {e}")
+            #  A2A discovery debug - add observability event
             registration.status = "unreachable"
             registration.health_score = 0.0
 
@@ -765,7 +765,7 @@ class LocalDiscoveryService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in health check loop: {e}")
+                #  A2A discovery error - add observability event
 
                 if self.observability:
                     self.observability.track_event(
@@ -802,7 +802,7 @@ class LocalDiscoveryService:
                     # Remove agents that haven't been seen for too long
                     if current_time - registration.last_seen > self.config.agent_timeout:
                         if registration.status != "unreachable":
-                            logger.info(f"Agent {agent_id} timed out, marking as unreachable")
+                            #  A2A discovery info - add observability event
                             registration.status = "unreachable"
                             registration.health_score = 0.0
                             cleaned_up_agents += 1
@@ -837,7 +837,7 @@ class LocalDiscoveryService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Error in cleanup loop: {e}")
+                #  A2A discovery error - add observability event
 
                 if self.observability:
                     self.observability.track_event(
@@ -913,10 +913,10 @@ class LocalDiscoveryService:
                     self.agents[agent_data['agent_id']] = registration
                     loaded_agents += 1
                 except Exception as e:
-                    logger.error(f"Failed to restore agent {agent_data.get('agent_id')}: {e}")
+                    #  A2A discovery error - add observability event
                     failed_agents += 1
 
-            logger.info(f"Loaded {len(self.agents)} agents from registry")
+            #  A2A discovery info - add observability event
 
             if self.observability:
                 self.observability.track_event(
@@ -932,7 +932,7 @@ class LocalDiscoveryService:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to load registry: {e}")
+            #  A2A discovery error - add observability event
 
             if self.observability:
                 self.observability.track_event(
@@ -998,7 +998,7 @@ class LocalDiscoveryService:
             with open(registry_path, 'w') as f:
                 json.dump(data, f, indent=2)
 
-            logger.debug(f"Saved registry with {len(self.agents)} agents")
+            #  A2A discovery debug - add observability event
 
             if self.observability:
                 self.observability.track_event(
@@ -1012,7 +1012,7 @@ class LocalDiscoveryService:
                 )
 
         except Exception as e:
-            logger.error(f"Failed to save registry: {e}")
+            #  A2A discovery error - add observability event
 
             if self.observability:
                 self.observability.track_event(
