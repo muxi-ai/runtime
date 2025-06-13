@@ -186,6 +186,7 @@ class Agent:
                 asyncio.create_task(emit_init_event())
             except Exception as e:
                 #  Agent init event error - add observability event
+                pass
 
     def _initialize_clarification_system(self):
         """
@@ -219,8 +220,7 @@ class Agent:
 
         except Exception as e:
             #  Warning - add observability event
-                f"Failed to initialize clarification system for agent {self.agent_id}: {e}"
-            )
+            pass
             # Set components to None so we can check if clarification is available
             self._clarification_analyzer = None
             self._clarification_manager = None
@@ -324,6 +324,7 @@ class Agent:
                 return response
         except Exception as e:
             #  Clarification handling error - add observability event
+            pass
 
         # Phase 4: Check for proactive clarification requests (with error handling)
         try:
@@ -348,6 +349,7 @@ class Agent:
                 return response
         except Exception as e:
             #  Debug - add observability event
+            _ = None  # remove this line when adding observability event
 
         # Check if the request needs clarification before processing (with error handling)
         try:
@@ -372,6 +374,7 @@ class Agent:
                 return response
         except Exception as e:
             #  Debug - add observability event
+            _ = None  # remove this line when adding observability event
 
         # Process the message with the model directly (existing logic)
         raw_response = await self.model.chat(self._messages)
@@ -797,6 +800,7 @@ class Agent:
                     available_tools = await self._mcp_service.list_available_tools()
                 except Exception as e:
                     #  Tools availability debug - add observability event
+                    _ = None  # remove this line when adding observability event
 
             # Analyze the request for missing information
             analysis = await self._clarification_analyzer.analyze_request(
@@ -841,8 +845,10 @@ class Agent:
 
         except ClarificationError as e:
             #  Clarification error - add observability event
+            _ = None  # remove this line when adding observability event
         except Exception as e:
             #  Unexpected error - add observability event
+            _ = None  # remove this line when adding observability event
 
         return None
 
@@ -1260,9 +1266,9 @@ class Agent:
 
         # Log the A2A communication
         #  Info - add observability event
-            f"A2A Message (local): {self.agent_id} -> {target_agent_id} "
-            f"({message_type}, id: {message_id})"
-        )
+        #     f"A2A Message (local): {self.agent_id} -> {target_agent_id} "
+        #     f"({message_type}, id: {message_id})"
+        # )
 
         try:
             # Send message directly to target agent with timeout
@@ -1285,9 +1291,9 @@ class Agent:
 
         except asyncio.TimeoutError:
             #  Error - add observability event
-                f"Local A2A message timed out after {timeout}s: "
-                f"{self.agent_id} -> {target_agent_id}"
-            )
+            #     f"Local A2A message timed out after {timeout}s: "
+            #     f"{self.agent_id} -> {target_agent_id}"
+            # )
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
@@ -1331,9 +1337,9 @@ class Agent:
 
         # Log the external A2A communication
         #  Info - add observability event
-            f"A2A Message (external): {self.agent_id} -> {target_agent_id} "
-            f"({message_type}, id: {message_id})"
-        )
+        #     f"A2A Message (external): {self.agent_id} -> {target_agent_id} "
+        #     f"({message_type}, id: {message_id})"
+        # )
 
         try:
             # 1. Discover the target agent via registry
@@ -1354,8 +1360,8 @@ class Agent:
                         ):
                             all_matches.append(agent_card)
                             #  Debug - add observability event
-                                f"Found potential agent {target_agent_id} at {agent_card.url}"
-                            )
+                            #     f"Found potential agent {target_agent_id} at {agent_card.url}"
+                            # )
             else:
                 # Single registry
                 for agent_card in discovered_agents:
@@ -1393,9 +1399,9 @@ class Agent:
                     target_agent_url = (preferred_match or all_matches[-1]).url
 
                     #  Info - add observability event
-                        f"Multiple agents found for {target_agent_id}, "
-                        f"selected: {target_agent_url}"
-                    )
+                    #     f"Multiple agents found for {target_agent_id}, "
+                    #     f"selected: {target_agent_url}"
+                    # )
 
                 #  Agent selection - add observability event
 
@@ -1473,11 +1479,12 @@ class Agent:
                 auth_type = AuthType(auth_type_value)
                 auth_required = auth_info.required
                 #  Debug - add observability event
-                    f"Agent {target_agent_id} requires {auth_type} authentication "
-                    f"(required: {auth_required})"
-                )
+                #     f"Agent {target_agent_id} requires {auth_type} authentication "
+                #     f"(required: {auth_required})"
+                # )
             else:
                 #  Authentication debug - add observability event
+                _ = None  # remove this line when adding observability event
 
             # Prepare headers with authentication
             headers = {"Content-Type": "application/json"}
@@ -1534,6 +1541,7 @@ class Agent:
             #  HTTP request debug - add observability event
             if auth_type != AuthType.NONE:
                 #  Authentication method debug - add observability event
+                _ = None  # remove this line when adding observability event
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(endpoint_url, json=message_payload, headers=headers)
@@ -1542,9 +1550,9 @@ class Agent:
                 if response.status_code == 200:
                     response_data = response.json()
                     #  Info - add observability event
-                        f"External A2A message successful: {self.agent_id} -> {target_agent_id} "
-                        f"(status: {response_data.get('status', 'unknown')})"
-                    )
+                    #     f"External A2A message successful: {self.agent_id} -> {target_agent_id} "
+                    #     f"(status: {response_data.get('status', 'unknown')})"
+                    # )
 
                     if message_type == "request" and wait_for_response:
                         return response_data
@@ -1764,9 +1772,9 @@ class Agent:
         #  Debug - add observability event
 
         #  Info - add observability event
-            f"Agent {self.agent_id} provided consultation to {source_agent_id} "
-            f"on topic: {topic}"
-        )
+        #     f"Agent {self.agent_id} provided consultation to {source_agent_id} "
+        #     f"on topic: {topic}"
+        # )
 
         response_dict = {
             "status": "success",
@@ -1816,6 +1824,7 @@ class Agent:
                 )
             except Exception as e:
                 #  Storage warning - add observability event
+                _ = None  # remove this line when adding observability event
 
         return None  # Notifications don't return responses
 
@@ -1841,8 +1850,8 @@ class Agent:
             response_content = f"Acknowledged coordination request: {coordination_type}"
 
         #  Info - add observability event
-            f"Agent {self.agent_id} coordinated with {source_agent_id} " f"({coordination_type})"
-        )
+        #     f"Agent {self.agent_id} coordinated with {source_agent_id} " f"({coordination_type})"
+        # )
 
         return {
             "status": "success",
@@ -1930,8 +1939,8 @@ class Agent:
         elif message_type == "notification":
             # For notifications, just acknowledge receipt
             #  Info - add observability event
-                f"Agent {self.agent_id} received notification from {source_agent_id}: {message}"
-            )
+            #     f"Agent {self.agent_id} received notification from {source_agent_id}: {message}"
+            # )
             return None
 
         elif message_type == "response":
@@ -1991,15 +2000,15 @@ class Agent:
 
             if response and response.get("status") == "success":
                 #  Info - add observability event
-                    f"Agent {self.agent_id} received consultation from {target_agent_id} "
-                    f"on topic: {topic}"
-                )
+                #     f"Agent {self.agent_id} received consultation from {target_agent_id} "
+                #     f"on topic: {topic}"
+                # )
                 return response
             else:
                 #  Warning - add observability event
-                    f"Consultation failed: {self.agent_id} -> {target_agent_id} "
-                    f"on topic: {topic}"
-                )
+                #     f"Consultation failed: {self.agent_id} -> {target_agent_id} "
+                #     f"on topic: {topic}"
+                # )
                 return None
 
         except Exception as e:
@@ -2054,9 +2063,9 @@ class Agent:
             )
 
             #  Info - add observability event
-                f"Agent {self.agent_id} shared information with {target_agent_id} "
-                f"on topic: {topic}"
-            )
+            #     f"Agent {self.agent_id} shared information with {target_agent_id} "
+            #     f"on topic: {topic}"
+            # )
             return True
 
         except Exception as e:
@@ -2192,15 +2201,15 @@ class Agent:
 
             if response and response.get("status") == "success":
                 #  Info - add observability event
-                    f"Agent {self.agent_id} coordinated with {peer_agent_id} "
-                    f"({coordination_type})"
-                )
+                #     f"Agent {self.agent_id} coordinated with {peer_agent_id} "
+                #     f"({coordination_type})"
+                # )
                 return response
             else:
                 #  Warning - add observability event
-                    f"Coordination failed: {self.agent_id} -> {peer_agent_id} "
-                    f"({coordination_type})"
-                )
+                #     f"Coordination failed: {self.agent_id} -> {peer_agent_id} "
+                #     f"({coordination_type})"
+                # )
                 return None
 
         except Exception as e:

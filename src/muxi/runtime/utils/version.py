@@ -26,7 +26,7 @@ def get_version() -> str:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_STARTED,
+                event_type=SystemEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting version retrieval",
                 data={
@@ -47,7 +47,7 @@ def get_version() -> str:
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.FILE_READ_STARTED,
+                    event_type=ConversationEventType.REQUEST_PROCESSING,
                     level=EventLevel.DEBUG,
                     message="Checking for version file",
                     data={
@@ -67,7 +67,7 @@ def get_version() -> str:
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.FILE_READ_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Version file read successfully",
                         data={
@@ -83,7 +83,7 @@ def get_version() -> str:
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.UTILITY_COMPLETED,
+                        event_type=SystemEventType.UTILITY_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Version retrieval completed successfully",
                         data={
@@ -101,7 +101,7 @@ def get_version() -> str:
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.UTILITY_COMPLETED,
+                        event_type=SystemEventType.UTILITY_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Version retrieval completed using default version",
                         data={

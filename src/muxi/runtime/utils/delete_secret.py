@@ -38,7 +38,7 @@ async def delete_secret_from_formation(secret_name: str):
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.SECRET_DELETION_STARTED,
+                event_type=SystemEventType.SECRET_DELETION_STARTED,
                 level=EventLevel.INFO,
                 message="Starting secret deletion from formation",
                 data={
@@ -64,7 +64,7 @@ async def delete_secret_from_formation(secret_name: str):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.SECRET_DELETION_COMPLETED,
+                        event_type=SystemEventType.SECRET_DELETION_COMPLETED,
                         level=EventLevel.WARNING,
                         message="Secret deletion failed - secret not found",
                         data={
@@ -103,7 +103,7 @@ async def delete_secret_from_formation(secret_name: str):
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.SECRET_DELETION_COMPLETED,
+                    event_type=SystemEventType.SECRET_DELETION_COMPLETED,
                     level=EventLevel.INFO,
                     message="Secret deletion completed successfully",
                     data={
@@ -146,7 +146,7 @@ async def list_secrets_in_formation():
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.SECRET_LISTING_STARTED,
+                event_type=SystemEventType.SECRET_LISTING_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting secret listing for formation",
                 data={
@@ -177,7 +177,7 @@ async def list_secrets_in_formation():
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.SECRET_LISTING_COMPLETED,
+                    event_type=SystemEventType.SECRET_LISTING_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Secret listing completed successfully",
                     data={
@@ -215,7 +215,7 @@ def main():
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_STARTED,
+                event_type=SystemEventType.UTILITY_STARTED,
                 level=EventLevel.INFO,
                 message="Delete secret utility started",
                 data={
@@ -262,7 +262,7 @@ Examples:
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.UTILITY_COMPLETED,
+                        event_type=SystemEventType.UTILITY_COMPLETED,
                         level=EventLevel.INFO,
                         message="Delete secret utility completed successfully",
                         data={
@@ -279,7 +279,7 @@ Examples:
                 if ObservabilityManager and ConversationEventType:
                     try:
                         ObservabilityManager.get_instance().log_event(
-                            event_type=ConversationEventType.UTILITY_COMPLETED,
+                            event_type=SystemEventType.UTILITY_COMPLETED,
                             level=EventLevel.WARNING,
                             message="Delete secret utility completed with failure",
                             data={
@@ -296,7 +296,7 @@ Examples:
                 if ObservabilityManager and ConversationEventType:
                     try:
                         ObservabilityManager.get_instance().log_event(
-                            event_type=ConversationEventType.UTILITY_COMPLETED,
+                            event_type=SystemEventType.UTILITY_COMPLETED,
                             level=EventLevel.INFO,
                             message="Delete secret utility completed successfully",
                             data={

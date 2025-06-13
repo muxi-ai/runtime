@@ -14,7 +14,11 @@ from cryptography.fernet import Fernet
 
 # Import observability components with graceful fallback
 try:
-    from .observability import ObservabilityManager, ConversationEventType, EventLevel
+    from .observability import (
+        ObservabilityManager,
+        SystemEventType,
+        EventLevel
+    )
     OBSERVABILITY_AVAILABLE = True
 except ImportError:
     OBSERVABILITY_AVAILABLE = False
@@ -62,7 +66,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.ENCRYPTION_STARTED,
+                    event_type=SystemEventType.ENCRYPTION_STARTED,
                     level=EventLevel.INFO,
                     message="Starting secrets manager encryption initialization",
                     data={
@@ -82,7 +86,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.ENCRYPTION_COMPLETED,
+                        event_type=SystemEventType.ENCRYPTION_COMPLETED,
                         level=EventLevel.INFO,
                         message="Secrets manager encryption initialization completed",
                         data={
@@ -99,7 +103,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.ENCRYPTION_COMPLETED,
+                        event_type=SystemEventType.ENCRYPTION_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secrets manager encryption initialization failed: {str(e)}",
                         data={
@@ -195,7 +199,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_STORAGE_STARTED,
+                    event_type=SystemEventType.SECRET_STORAGE_STARTED,
                     level=EventLevel.INFO,
                     message=f"Starting secret storage for: {name}",
                     data={
@@ -225,7 +229,7 @@ class SecretsManager:
                     if OBSERVABILITY_AVAILABLE:
                         try:
                             obs_manager.log_event(
-                                event_type=ConversationEventType.SECRET_STORAGE_COMPLETED,
+                                event_type=SystemEventType.SECRET_STORAGE_COMPLETED,
                                 level=EventLevel.ERROR,
                                 message=f"Secret storage failed for {name}: {error_msg}",
                                 data={
@@ -249,7 +253,7 @@ class SecretsManager:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=ConversationEventType.SECRET_STORAGE_COMPLETED,
+                            event_type=SystemEventType.SECRET_STORAGE_COMPLETED,
                             level=EventLevel.INFO,
                             message=f"Secret storage completed for: {name}",
                             data={
@@ -268,7 +272,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_STORAGE_COMPLETED,
+                        event_type=SystemEventType.SECRET_STORAGE_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret storage failed for {name}: {str(e)}",
                         data={
@@ -297,7 +301,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_RETRIEVAL_STARTED,
+                    event_type=SystemEventType.SECRET_RETRIEVAL_STARTED,
                     level=EventLevel.DEBUG,
                     message=f"Starting secret retrieval for: {name}",
                     data={
@@ -323,7 +327,7 @@ class SecretsManager:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=ConversationEventType.SECRET_RETRIEVAL_COMPLETED,
+                            event_type=SystemEventType.SECRET_RETRIEVAL_COMPLETED,
                             level=EventLevel.DEBUG,
                             message=(f"Secret retrieval completed for {name}, "
                                      f"found: {found}"),
@@ -345,7 +349,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_RETRIEVAL_COMPLETED,
+                        event_type=SystemEventType.SECRET_RETRIEVAL_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret retrieval failed for {name}: {str(e)}",
                         data={
@@ -374,7 +378,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_DELETION_STARTED,
+                    event_type=SystemEventType.SECRET_DELETION_STARTED,
                     level=EventLevel.INFO,
                     message=f"Starting secret deletion for: {name}",
                     data={
@@ -399,7 +403,7 @@ class SecretsManager:
                     if OBSERVABILITY_AVAILABLE:
                         try:
                             obs_manager.log_event(
-                                event_type=ConversationEventType.SECRET_DELETION_COMPLETED,
+                                event_type=SystemEventType.SECRET_DELETION_COMPLETED,
                                 level=EventLevel.DEBUG,
                                 message=f"Secret deletion completed for {name}: not found",
                                 data={
@@ -422,7 +426,7 @@ class SecretsManager:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=ConversationEventType.SECRET_DELETION_COMPLETED,
+                            event_type=SystemEventType.SECRET_DELETION_COMPLETED,
                             level=EventLevel.INFO,
                             message=f"Secret deletion completed for: {name}",
                             data={
@@ -444,7 +448,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_DELETION_COMPLETED,
+                        event_type=SystemEventType.SECRET_DELETION_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret deletion failed for {name}: {str(e)}",
                         data={
@@ -470,7 +474,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_LISTING_STARTED,
+                    event_type=SystemEventType.SECRET_LISTING_STARTED,
                     level=EventLevel.DEBUG,
                     message="Starting secret listing",
                     data={}
@@ -490,7 +494,7 @@ class SecretsManager:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=ConversationEventType.SECRET_LISTING_COMPLETED,
+                            event_type=SystemEventType.SECRET_LISTING_COMPLETED,
                             level=EventLevel.DEBUG,
                             message=f"Secret listing completed, found {len(secret_names)} secrets",
                             data={
@@ -509,7 +513,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_LISTING_COMPLETED,
+                        event_type=SystemEventType.SECRET_LISTING_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret listing failed: {str(e)}",
                         data={
@@ -546,7 +550,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_INTERPOLATION_STARTED,
+                    event_type=SystemEventType.SECRET_INTERPOLATION_STARTED,
                     level=EventLevel.DEBUG,
                     message="Starting secret interpolation",
                     data={
@@ -569,7 +573,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_INTERPOLATION_COMPLETED,
+                        event_type=SystemEventType.SECRET_INTERPOLATION_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Secret interpolation completed successfully",
                         data={
@@ -588,7 +592,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_INTERPOLATION_COMPLETED,
+                        event_type=SystemEventType.SECRET_INTERPOLATION_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret interpolation failed: {str(e)}",
                         data={
@@ -639,7 +643,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_CLEARING_STARTED,
+                    event_type=SystemEventType.SECRET_CLEARING_STARTED,
                     level=EventLevel.WARNING,
                     message="Starting to clear all secrets",
                     data={}
@@ -660,7 +664,7 @@ class SecretsManager:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=ConversationEventType.SECRET_CLEARING_COMPLETED,
+                            event_type=SystemEventType.SECRET_CLEARING_COMPLETED,
                             level=EventLevel.WARNING,
                             message="All secrets cleared successfully",
                             data={
@@ -676,7 +680,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_CLEARING_COMPLETED,
+                        event_type=SystemEventType.SECRET_CLEARING_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret clearing failed: {str(e)}",
                         data={
@@ -706,7 +710,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_IMPORT_STARTED,
+                    event_type=SystemEventType.SECRET_IMPORT_STARTED,
                     level=EventLevel.INFO,
                     message=f"Starting secret import of {len(secrets)} secrets",
                     data={
@@ -735,7 +739,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_IMPORT_COMPLETED,
+                        event_type=SystemEventType.SECRET_IMPORT_COMPLETED,
                         level=EventLevel.INFO if failed_count == 0 else EventLevel.WARNING,
                         message=(f"Secret import completed: {imported_count} imported, "
                                  f"{failed_count} failed"),
@@ -758,7 +762,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_IMPORT_COMPLETED,
+                        event_type=SystemEventType.SECRET_IMPORT_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret import failed: {str(e)}",
                         data={
@@ -784,7 +788,7 @@ class SecretsManager:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=ConversationEventType.SECRET_EXPORT_STARTED,
+                    event_type=SystemEventType.SECRET_EXPORT_STARTED,
                     level=EventLevel.INFO,
                     message="Starting secret export",
                     data={}
@@ -803,7 +807,7 @@ class SecretsManager:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=ConversationEventType.SECRET_EXPORT_COMPLETED,
+                            event_type=SystemEventType.SECRET_EXPORT_COMPLETED,
                             level=EventLevel.INFO,
                             message=f"Secret export completed, exported {len(secrets)} secrets",
                             data={
@@ -822,7 +826,7 @@ class SecretsManager:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=ConversationEventType.SECRET_EXPORT_COMPLETED,
+                        event_type=SystemEventType.SECRET_EXPORT_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Secret export failed: {str(e)}",
                         data={

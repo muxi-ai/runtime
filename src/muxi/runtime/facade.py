@@ -258,8 +258,7 @@ class Muxi:
                 except Exception as e:
                     # Log the error but fall back to SQLite
                     #  Facade error - add observability event
-                        f"Error creating Postgres long-term memory, falling back to SQLite: {e}"
-                    )
+                    pass
 
             # Fall back to SQLite
             try:
@@ -527,8 +526,6 @@ class Muxi:
                     # Missing required credential
                     if required:
                         #  Facade warning - add observability event
-                            f"Required credential {cred_id} for MCP server " f"{name} not found"
-                        )
                         continue
 
                 # Connect to the MCP server
@@ -540,13 +537,14 @@ class Muxi:
                         #  Facade info - add observability event
                     else:
                         #  Facade warning - add observability event
-                            f"Agent {agent.name} does not have connect_mcp_server method."
-                        )
+                        pass
 
                 except Exception as e:
                     #  Facade error - add observability event
+                    pass
             else:
                 #  Facade warning - add observability event
+                pass
 
     async def chat(
         self,

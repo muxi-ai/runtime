@@ -200,7 +200,7 @@ class LongTermMemory:
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_STORAGE_LONG_TERM,
+                    ConversationEventType.MEMORY_LONG_TERM_STORED,
                     level=EventLevel.INFO,
                     data={
                         "content_length": len(content),
@@ -227,7 +227,7 @@ class LongTermMemory:
         try:
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_STORE,
+                    ConversationEventType.REQUEST_PROCESSING,
                     level=EventLevel.INFO,
                     data={
                         "memory_id": memory_id,
@@ -352,7 +352,7 @@ class LongTermMemory:
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_RETRIEVAL_STARTED,
+                    ConversationEventType.REQUEST_PROCESSING,
                     level=EventLevel.INFO,
                     data={
                         "query_length": len(query),
@@ -401,7 +401,7 @@ class LongTermMemory:
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                    ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
                     level=EventLevel.INFO,
                     data={
                         "query_length": len(query),
@@ -548,7 +548,7 @@ class LongTermMemory:
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 observability_manager.event_logger.emit_event_sync(
-                    ConversationEventType.MEMORY_UPDATE_STARTED,
+                    ConversationEventType.REQUEST_PROCESSING,
                     level=EventLevel.INFO,
                     data={
                         "memory_id": memory_id,
@@ -577,7 +577,7 @@ class LongTermMemory:
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         observability_manager.event_logger.emit_event_sync(
-                            ConversationEventType.MEMORY_UPDATE_FAILED,
+                            ConversationEventType.MEMORY_LONG_TERM_UPDATE_FAILED,
                             level=EventLevel.WARNING,
                             data={
                                 "memory_id": memory_id,
@@ -617,7 +617,7 @@ class LongTermMemory:
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     observability_manager.event_logger.emit_event_sync(
-                        ConversationEventType.MEMORY_UPDATE_COMPLETED,
+                        ConversationEventType.MEMORY_LONG_TERM_UPDATED,
                         level=EventLevel.INFO,
                         data={
                             "memory_id": memory_id,
@@ -656,7 +656,7 @@ class LongTermMemory:
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 observability_manager.event_logger.emit_event_sync(
-                    ConversationEventType.MEMORY_DELETION_STARTED,
+                    ConversationEventType.REQUEST_PROCESSING,
                     level=EventLevel.INFO,
                     data={"memory_id": memory_id},
                     description="Long-term memory deletion started",
@@ -680,7 +680,7 @@ class LongTermMemory:
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         observability_manager.event_logger.emit_event_sync(
-                            ConversationEventType.MEMORY_DELETION_FAILED,
+                            ConversationEventType.MEMORY_LONG_TERM_DELETION_FAILED,
                             level=EventLevel.WARNING,
                             data={
                                 "memory_id": memory_id,
@@ -707,7 +707,7 @@ class LongTermMemory:
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     observability_manager.event_logger.emit_event_sync(
-                        ConversationEventType.MEMORY_DELETION_COMPLETED,
+                        SystemEventType.MEMORY_DELETION_COMPLETED,
                         level=EventLevel.INFO,
                         data={"memory_id": memory_id},
                         description="Long-term memory deletion completed",

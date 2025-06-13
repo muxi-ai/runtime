@@ -287,7 +287,7 @@ class OneLLMService:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.emit_event(
-                    event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
+                    event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
                     level=EventLevel.DEBUG,
                     message="Cache hit for LLM request",
                     data={
@@ -308,7 +308,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
+                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.DEBUG,
                 message="Cache miss for LLM request",
                 data={
@@ -338,7 +338,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
+                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.DEBUG,
                 message="Response cached for LLM request",
                 data={
@@ -703,7 +703,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
+                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.DEBUG,
                 message="Service statistics accessed",
                 data={
@@ -728,7 +728,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
+                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.INFO,
                 message="Service statistics reset",
                 data={
@@ -752,7 +752,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
+                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.INFO,
                 message="Response cache cleared",
                 data={

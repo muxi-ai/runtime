@@ -30,7 +30,7 @@ def generate_nanoid(size: int = 21) -> str:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.ID_GENERATION_STARTED,
+                event_type=SystemEventType.ID_GENERATION_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting Nano ID generation",
                 data={
@@ -49,7 +49,7 @@ def generate_nanoid(size: int = 21) -> str:
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.ID_GENERATION_COMPLETED,
+                    event_type=SystemEventType.ID_GENERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Nano ID generation completed successfully",
                     data={
@@ -94,7 +94,7 @@ def get_default_nanoid() -> str:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.ID_GENERATION_STARTED,
+                event_type=SystemEventType.ID_GENERATION_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting default Nano ID generation",
                 data={
@@ -112,7 +112,7 @@ def get_default_nanoid() -> str:
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.ID_GENERATION_COMPLETED,
+                    event_type=SystemEventType.ID_GENERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Default Nano ID generation completed successfully",
                     data={

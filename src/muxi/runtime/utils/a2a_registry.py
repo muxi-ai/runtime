@@ -811,9 +811,9 @@ async def register_agent(agent_card: AgentCard):
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.API_REQUEST_STARTED,
+                event_type=ConversationEventType.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
-                message="Agent registration API request started",
+                message="Agent registration request received",
                 data={
                     "endpoint": "/register",
                     "method": "POST",
@@ -833,7 +833,7 @@ async def register_agent(agent_card: AgentCard):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.WARNING,
                         message="Agent registration rejected - registry at capacity",
                         data={
@@ -862,7 +862,7 @@ async def register_agent(agent_card: AgentCard):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         message="Agent registration API request completed successfully",
                         data={
@@ -881,7 +881,7 @@ async def register_agent(agent_card: AgentCard):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.ERROR,
                         message="Agent registration failed - storage error",
                         data={
@@ -900,7 +900,7 @@ async def register_agent(agent_card: AgentCard):
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                    event_type=ConversationEventType.REQUEST_COMPLETED,
                     level=EventLevel.ERROR,
                     message="Agent registration failed - validation error",
                     data={
@@ -943,7 +943,7 @@ async def deregister_agent(request: dict):
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.API_REQUEST_STARTED,
+                event_type=ConversationEventType.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
                 message="Agent deregistration API request started",
                 data={
@@ -961,7 +961,7 @@ async def deregister_agent(request: dict):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.ERROR,
                         message="Agent deregistration failed - missing agent_url",
                         data={
@@ -985,7 +985,7 @@ async def deregister_agent(request: dict):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         message="Agent deregistration API request completed successfully",
                         data={
@@ -1002,7 +1002,7 @@ async def deregister_agent(request: dict):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.WARNING,
                         message="Agent deregistration failed - agent not found",
                         data={
@@ -1048,7 +1048,7 @@ async def deregister_agent_legacy(agent_url_encoded: str):
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.API_REQUEST_STARTED,
+                event_type=ConversationEventType.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
                 message="Legacy agent deregistration API request started",
                 data={
@@ -1075,7 +1075,7 @@ async def deregister_agent_legacy(agent_url_encoded: str):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         message="Legacy agent deregistration API request completed successfully",
                         data={
@@ -1093,7 +1093,7 @@ async def deregister_agent_legacy(agent_url_encoded: str):
             if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.WARNING,
                         message="Legacy agent deregistration failed - agent not found",
                         data={
@@ -1209,10 +1209,7 @@ async def discover_agents(
                     provider_filter in agent.metadata.get("organization", "").lower())
             ]
 
-        #  Info - add observability event
-            f"Discovery query returned {len(filtered_agents)} agents "
-            f"(capabilities={capabilities}, tags={tags}, provider={provider})"
-        )
+        # Log discovery query completion
 
         response_data = DiscoveryResponse(
             agents=filtered_agents,
@@ -1279,7 +1276,7 @@ async def health_check():
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.API_REQUEST_STARTED,
+                event_type=ConversationEventType.REQUEST_RECEIVED,
                 level=EventLevel.DEBUG,
                 message="Health check API request started",
                 data={
@@ -1304,7 +1301,7 @@ async def health_check():
         if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=ConversationEventType.API_REQUEST_COMPLETED,
+                    event_type=ConversationEventType.REQUEST_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Health check API request completed successfully",
                     data={

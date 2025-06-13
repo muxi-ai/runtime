@@ -250,7 +250,7 @@ def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_STARTED,
+                event_type=SystemEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting error info lookup",
                 data={
@@ -267,7 +267,7 @@ def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_COMPLETED,
+                event_type=SystemEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="Error info lookup completed",
                 data={
@@ -290,7 +290,7 @@ def get_error_message(code: str, default: str = "An error occurred") -> str:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_STARTED,
+                event_type=SystemEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting error message lookup",
                 data={
@@ -309,7 +309,7 @@ def get_error_message(code: str, default: str = "An error occurred") -> str:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_COMPLETED,
+                event_type=SystemEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="Error message lookup completed",
                 data={
@@ -331,7 +331,7 @@ def get_http_status(code: str, default: int = 500) -> int:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_STARTED,
+                event_type=SystemEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting HTTP status lookup",
                 data={
@@ -350,7 +350,7 @@ def get_http_status(code: str, default: int = 500) -> int:
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_COMPLETED,
+                event_type=SystemEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="HTTP status lookup completed",
                 data={
@@ -376,7 +376,7 @@ def create_error_details(
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_STARTED,
+                event_type=SystemEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting error details creation",
                 data={
@@ -408,7 +408,7 @@ def create_error_details(
     if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=ConversationEventType.UTILITY_COMPLETED,
+                event_type=SystemEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="Error details creation completed",
                 data={

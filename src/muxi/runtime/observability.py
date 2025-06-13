@@ -3,7 +3,7 @@ MUXI Observability System - Phase 1 Implementation
 
 This module provides the dual logging architecture for MUXI runtime:
 1. SystemEventType: Infrastructure events, startup, MCP/A2A operations (always stdout)
-2. ConversationEventType (ConversationEventType): User request lifecycle tracking (configurable output)
+2. ConversationEventType: User request lifecycle tracking (configurable output)
 
 Key Components:
 - EventLogger: Central component for event emission with intelligent routing
@@ -114,6 +114,69 @@ class SystemEventType(Enum):
     ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
     OVERLORD_INITIALIZED = "overlord.initialized"
 
+    # ===================================================================
+    # ENCRYPTION & SECURITY OPERATIONS
+    # ===================================================================
+    ENCRYPTION_STARTED = "encryption.started"
+    ENCRYPTION_COMPLETED = "encryption.completed"
+
+    # ===================================================================
+    # EXTENSION MANAGEMENT
+    # ===================================================================
+    EXTENSION_INITIALIZATION_STARTED = "extension.initialization.started"
+    EXTENSION_INITIALIZATION_COMPLETED = "extension.initialization.completed"
+    EXTENSION_LISTING_STARTED = "extension.listing.started"
+    EXTENSION_LISTING_COMPLETED = "extension.listing.completed"
+    EXTENSION_LOOKUP_STARTED = "extension.lookup.started"
+    EXTENSION_LOOKUP_COMPLETED = "extension.lookup.completed"
+    EXTENSION_REGISTRATION_STARTED = "extension.registration.started"
+    EXTENSION_REGISTRATION_COMPLETED = "extension.registration.completed"
+
+    # ===================================================================
+    # ID GENERATION UTILITIES
+    # ===================================================================
+    ID_GENERATION_STARTED = "id.generation.started"
+    ID_GENERATION_COMPLETED = "id.generation.completed"
+
+    # ===================================================================
+    # MEMORY SYSTEM OPERATIONS
+    # ===================================================================
+    MEMORY_CLEAR = "memory.clear"
+    MEMORY_CONTEXT_CLEARED = "memory.context.cleared"
+    MEMORY_DELETION_COMPLETED = "memory.deletion.completed"
+
+    # ===================================================================
+    # PERFORMANCE MONITORING
+    # ===================================================================
+    PERFORMANCE_DURATION_RECORDED = "performance.duration.recorded"
+    PERFORMANCE_OPTIMIZED = "performance.optimized"
+
+    # ===================================================================
+    # SECRET MANAGEMENT OPERATIONS
+    # ===================================================================
+    SECRET_CLEARING_STARTED = "secret.clearing.started"
+    SECRET_CLEARING_COMPLETED = "secret.clearing.completed"
+    SECRET_DELETION_STARTED = "secret.deletion.started"
+    SECRET_DELETION_COMPLETED = "secret.deletion.completed"
+    SECRET_EXPORT_STARTED = "secret.export.started"
+    SECRET_EXPORT_COMPLETED = "secret.export.completed"
+    SECRET_IMPORT_STARTED = "secret.import.started"
+    SECRET_IMPORT_COMPLETED = "secret.import.completed"
+    SECRET_INTERPOLATION_STARTED = "secret.interpolation.started"
+    SECRET_INTERPOLATION_COMPLETED = "secret.interpolation.completed"
+    SECRET_LISTING_STARTED = "secret.listing.started"
+    SECRET_LISTING_COMPLETED = "secret.listing.completed"
+    SECRET_RETRIEVAL_STARTED = "secret.retrieval.started"
+    SECRET_RETRIEVAL_COMPLETED = "secret.retrieval.completed"
+    SECRET_STORAGE_STARTED = "secret.storage.started"
+    SECRET_STORAGE_COMPLETED = "secret.storage.completed"
+
+    # ===================================================================
+    # UTILITY OPERATIONS
+    # ===================================================================
+    UTILITY_STARTED = "utility.started"
+    UTILITY_COMPLETED = "utility.completed"
+
 
 class ConversationEventType(Enum):
     """Comprehensive event types for MUXI observability covering complete request lifecycle."""
@@ -133,7 +196,13 @@ class ConversationEventType(Enum):
     CONTENT_DOCUMENT_PARSED = "content.document.parsed"
     CONTENT_IMAGE_ANALYZED = "content.image.analyzed"
     CONTENT_AUDIO_TRANSCRIBED = "content.audio.transcribed"
+    CONTENT_EXTRACTION_STARTED = "content.extraction.started"
+    CONTENT_EXTRACTION_COMPLETED = "content.extraction.completed"
     CONTENT_EXTRACTION_FAILED = "content.extraction.failed"
+    CONTENT_PROCESSED = "content.processed"
+    CONTENT_RETRIEVED = "content.retrieved"
+    DOCUMENT_PROCESSING_STARTED = "document.processing.started"
+    DOCUMENT_PROCESSING_COMPLETED = "document.processing.completed"
 
     # ===================================================================
     # OVERLORD ORCHESTRATION
@@ -146,16 +215,28 @@ class ConversationEventType(Enum):
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
-    MEMORY_RETRIEVAL_STARTED = "memory.retrieval.started"
-    MEMORY_RETRIEVAL_SHORT_TERM = "memory.retrieval.short_term"
-    MEMORY_RETRIEVAL_LONG_TERM = "memory.retrieval.long_term"
-    MEMORY_RETRIEVAL_CONTEXT = "memory.retrieval.context"
-    MEMORY_STORAGE_SHORT_TERM = "memory.storage.short_term"
-    MEMORY_STORAGE_LONG_TERM = "memory.storage.long_term"
+    MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
+    MEMORY_LONG_TERM_RETRIEVED = "memory.long_term.retrieved"
+    MEMORY_SHORT_TERM_STORED = "memory.short_term.stored"
+    MEMORY_LONG_TERM_STORED = "memory.long_term.stored"
     MEMORY_EXTRACTION_STARTED = "memory.extraction.started"
-    MEMORY_SEARCH = "memory.search"  # Legacy compatibility
-    MEMORY_STORE = "memory.store"  # Legacy compatibility
     MEMORY_CONTEXT_ENHANCED = "memory.context.enhanced"
+    MEMORY_CONTEXT_RETRIEVED = "memory.context.retrieved"
+    MEMORY_CONTEXT_UPDATED = "memory.context.updated"
+
+    # Memory operation results
+    MEMORY_LONG_TERM_UPDATED = "memory.long_term.updated"
+    MEMORY_SHORT_TERM_UPDATED = "memory.short_term.updated"
+
+    # Memory error events
+    MEMORY_LONG_TERM_STORE_FAILED = "memory.long_term.store_failed"
+    MEMORY_SHORT_TERM_STORE_FAILED = "memory.short_term.store_failed"
+    MEMORY_LONG_TERM_DELETION_FAILED = "memory.long_term.deletion_failed"
+    MEMORY_SHORT_TERM_DELETION_FAILED = "memory.short_term.deletion_failed"
+    MEMORY_LONG_TERM_UPDATE_FAILED = "memory.long_term.update_failed"
+    MEMORY_SHORT_TERM_UPDATE_FAILED = "memory.short_term.update_failed"
+    MEMORY_LONG_TERM_RETRIEVAL_FAILED = "memory.long_term.retrieval_failed"
+    MEMORY_SHORT_TERM_RETRIEVAL_FAILED = "memory.short_term.retrieval_failed"
 
     # ===================================================================
     # AGENT PROCESSING
@@ -174,11 +255,9 @@ class ConversationEventType(Enum):
     # ===================================================================
     # MODEL OPERATIONS
     # ===================================================================
-    MODEL_INFERENCE_STARTED = "model.inference.started"
-    MODEL_INFERENCE_COMPLETED = "model.inference.completed"
+    MODEL_REQUEST_STARTED = "model.request.started"
+    MODEL_REQUEST_COMPLETED = "model.request.completed"
     MODEL_STREAMING_STARTED = "model.streaming.started"
-    AGENT_MODEL_INFERENCE = "agent.model.inference"  # Legacy compatibility
-    AGENT_MODEL_INFERENCE_COMPLETED = "agent.model.inference.completed"  # Legacy compatibility
 
     # ===================================================================
     # TOOL & MCP OPERATIONS
@@ -186,23 +265,33 @@ class ConversationEventType(Enum):
     MCP_CONNECTION_ESTABLISHED = "mcp.connection.established"
     MCP_TOOL_DISCOVERED = "mcp.tool.discovered"
     MCP_TOOL_CALLED = "mcp.tool.called"
-    MCP_TOOL_COMPLETED = "mcp.tool.completed"
-    MCP_TOOL_FAILED = "mcp.tool.failed"
+
+    MCP_TOOL_CALL_STARTED = "mcp.tool.call_started"
+    MCP_TOOL_CALL_COMPLETED = "mcp.tool.call_completed"
+    MCP_TOOL_CALL_FAILED = "mcp.tool.call_failed"
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
-    MCP_TOOL_INVOCATION_STARTED = "mcp.tool.invocation.started"
-    MCP_TOOL_INVOCATION_COMPLETED = "mcp.tool.invocation.completed"
-    MCP_TOOL_INVOCATION_FAILED = "mcp.tool.invocation.failed"
 
     # ===================================================================
     # A2A & COLLABORATION
     # ===================================================================
-    A2A_REQUEST_SENT = "a2a.request.sent"
-    A2A_RESPONSE_RECEIVED = "a2a.response.received"
-    COLLABORATION_INTERNAL_STARTED = "collaboration.internal.started"
-    A2A_MESSAGE_SENT = "a2a.message.sent"  # Legacy compatibility
-    A2A_MESSAGE_RECEIVED = "a2a.message.received"  # Legacy compatibility
-    A2A_DISCOVERY = "a2a.discovery"  # Legacy compatibility
+    # external agent collaboration
+    A2A_DISCOVERY_STARTED = "a2a.discovery.started"
+    A2A_REQUEST_SENT = "a2a.request.sent"  # outbound
+    A2A_REQUEST_RECEIVED = "a2a.request.received"  # inbound
+    A2A_RESPONSE_RECEIVED = "a2a.response.received"  # inbound
+    A2A_RESPONSE_SENT = "a2a.response.sent"  # outbound
+    A2A_MESSAGE_SENT = "a2a.message.sent"
+    A2A_MESSAGE_RECEIVED = "a2a.message.received"
+
+    # internal agent collaboration
+    COLAB_DISCOVERY_STARTED = "colab.discovery.started"
+    COLAB_REQUEST_SENT = "colab.request.sent"  # outbound
+    COLAB_REQUEST_RECEIVED = "colab.request.received"  # inbound
+    COLAB_RESPONSE_RECEIVED = "colab.response.received"  # inbound
+    COLAB_RESPONSE_SENT = "colab.response.sent"  # outbound
+    COLAB_MESSAGE_SENT = "colab.message.sent"
+    COLAB_MESSAGE_RECEIVED = "colab.message.received"
 
     # ===================================================================
     # RESPONSE GENERATION
@@ -211,14 +300,22 @@ class ConversationEventType(Enum):
     RESPONSE_MULTIMODAL_CREATED = "response.multimodal.created"
     RESPONSE_VALIDATION_COMPLETED = "response.validation.completed"
     RESPONSE_FORMATTED = "response.formatted"
+    RESPONSE_CONVERSION_STARTED = "response.conversion.started"
+    RESPONSE_CONVERSION_COMPLETED = "response.conversion.completed"
 
     # ===================================================================
     # ASYNC & DELIVERY
     # ===================================================================
     ASYNC_THRESHOLD_DETECTED = "async.threshold.detected"
     ASYNC_PROCESSING_STARTED = "async.processing.started"
-    WEBHOOK_SENT = "webhook.sent"
+    RESPONSE_WEBHOOK_SENT = "response.webhook.sent"
     RESPONSE_DELIVERED = "response.delivered"
+
+    # ===================================================================
+    # CLARIFICATION HANDLING
+    # ===================================================================
+    CLARIFICATION_REQUEST_SENT = "clarification.request.sent"
+    CLARIFICATION_RESPONSE_RECEIVED = "clarification.response.received"
 
     # ===================================================================
     # ERROR HANDLING & RECOVERY
@@ -228,11 +325,11 @@ class ConversationEventType(Enum):
     ERROR_RECOVERY_COMPLETED = "error.recovery.completed"
     ERROR_CLARIFICATION_FAILED = "error.clarification.failed"
     ERROR_AGENT_PROCESSING = "error.agent.processing"
+    ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
 
     # ===================================================================
-    # PERFORMANCE & MONITORING
+    # SESSION MANAGEMENT
     # ===================================================================
-    PERFORMANCE_DURATION_RECORDED = "performance.duration.recorded"
     SESSION_CREATED = "session.created"
     SESSION_CONTEXT_UPDATED = "session.context.updated"
 

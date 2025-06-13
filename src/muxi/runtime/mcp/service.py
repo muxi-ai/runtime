@@ -379,7 +379,7 @@ class MCPService:
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MCP_TOOL_INVOCATION_STARTED,
+                    ConversationEventType.MCP_TOOL_CALL_STARTED,
                     level=EventLevel.INFO,
                     data={
                         "server_id": server_id,
@@ -434,7 +434,7 @@ class MCPService:
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            ConversationEventType.MCP_TOOL_INVOCATION_COMPLETED,
+                            ConversationEventType.MCP_TOOL_CALL_COMPLETED,
                             level=EventLevel.INFO,
                             data={
                                 "server_id": server_id,
@@ -463,7 +463,7 @@ class MCPService:
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            ConversationEventType.MCP_TOOL_INVOCATION_FAILED,
+                            ConversationEventType.MCP_TOOL_CALL_FAILED,
                             level=EventLevel.ERROR,
                             data={
                                 "server_id": server_id,
