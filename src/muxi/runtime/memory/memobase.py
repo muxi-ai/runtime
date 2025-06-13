@@ -35,6 +35,7 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from .long_term import LongTermMemory
+from ..observability import EventType, EventLevel, ObservabilityManager
 
 
 class Memobase:
@@ -63,6 +64,21 @@ class Memobase:
         """
         self.default_user_id = default_user_id
         self.long_term_memory = long_term_memory
+
+        # Log initialization
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.SESSION_CREATED,
+                level=EventLevel.INFO,
+                message="Memobase initialized",
+                data={
+                    "default_user_id": default_user_id,
+                    "long_term_memory_type": type(long_term_memory).__name__
+                }
+            )
+        except Exception:
+            pass  # Don't let observability failures break initialization
 
     async def add(
         self,
@@ -93,8 +109,37 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log memory store start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_STORE,
+                level=EventLevel.INFO,
+                message="Starting memory store operation",
+                data={
+                    "user_id": user_id,
+                    "content_length": len(content) if content else 0,
+                    "has_embedding": embedding is not None,
+                    "collection": collection,
+                    "metadata_keys": list(metadata.keys()) if metadata else []
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_STORE,
+                    level=EventLevel.DEBUG,
+                    message="Skipping memory store for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return dummy ID for anonymous users
             return 0
 
@@ -111,23 +156,60 @@ class Memobase:
         if collection is None:
             collection = f"user_{user_id}"
 
-        # Ensure the collection exists
         try:
-            self.long_term_memory._ensure_collection_exists(None, collection)
-        except Exception:
-            # If calling with None session fails, create collection properly
-            self.long_term_memory.create_collection(collection, f"Memory for user {user_id}")
+            # Ensure the collection exists
+            try:
+                self.long_term_memory._ensure_collection_exists(None, collection)
+            except Exception:
+                # If calling with None session fails, create collection properly
+                self.long_term_memory.create_collection(collection, f"Memory for user {user_id}")
 
-        # Add to long-term memory
-        memory_id = await asyncio.to_thread(
-            self.long_term_memory.add,
-            text=content,
-            embedding=embedding,
-            metadata=metadata,
-            collection=collection,
-        )
+            # Add to long-term memory
+            memory_id = await asyncio.to_thread(
+                self.long_term_memory.add,
+                text=content,
+                embedding=embedding,
+                metadata=metadata,
+                collection=collection,
+            )
 
-        return memory_id
+            # Log successful memory store
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_STORE,
+                    level=EventLevel.INFO,
+                    message="Memory store completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "memory_id": memory_id,
+                        "collection": collection,
+                        "content_length": len(content) if content else 0
+                    }
+                )
+            except Exception:
+                pass
+
+            return memory_id
+
+        except Exception as e:
+            # Log memory store error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Memory store operation failed",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def search(
         self,
@@ -160,8 +242,42 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log memory retrieval start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                level=EventLevel.INFO,
+                message="Starting memory search operation",
+                data={
+                    "user_id": user_id,
+                    "query_length": len(query) if query else 0,
+                    "limit": limit,
+                    "collection": collection,
+                    "has_query_embedding": query_embedding is not None,
+                    "filter_keys": (
+                        list(additional_filter.keys())
+                        if additional_filter
+                        else []
+                    )
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping memory search for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return empty results for anonymous users
             return []
 
@@ -174,31 +290,69 @@ class Memobase:
         if collection is None:
             collection = f"user_{user_id}"
 
-        # Search long-term memory
-        search_results = await asyncio.to_thread(
-            self.long_term_memory.search,
-            query=query,
-            query_embedding=query_embedding,
-            filter_metadata=additional_filter,
-            k=limit,
-            collection=collection,
-        )
-
-        # Convert results to standard format
-        results = []
-        for distance, memory in search_results:
-            results.append(
-                {
-                    "content": memory.get("text", ""),
-                    "metadata": memory.get("meta_data", {}),
-                    "distance": distance,
-                    "source": "memobase",
-                    "id": memory.get("id"),
-                    "created_at": memory.get("created_at"),
-                }
+        try:
+            # Search long-term memory
+            search_results = await asyncio.to_thread(
+                self.long_term_memory.search,
+                query=query,
+                query_embedding=query_embedding,
+                filter_metadata=additional_filter,
+                k=limit,
+                collection=collection,
             )
 
-        return results
+            # Convert results to standard format
+            results = []
+            for distance, memory in search_results:
+                results.append(
+                    {
+                        "content": memory.get("text", ""),
+                        "metadata": memory.get("meta_data", {}),
+                        "distance": distance,
+                        "source": "memobase",
+                        "id": memory.get("id"),
+                        "created_at": memory.get("created_at"),
+                    }
+                )
+
+            # Log successful memory retrieval
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_RETRIEVAL_LONG_TERM,
+                    level=EventLevel.INFO,
+                    message="Memory search completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection,
+                        "results_count": len(results),
+                        "query_length": len(query) if query else 0
+                    }
+                )
+            except Exception:
+                pass
+
+            return results
+
+        except Exception as e:
+            # Log memory retrieval error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Memory search operation failed",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection,
+                        "query": query,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def delete(
         self,
@@ -221,18 +375,80 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log memory deletion start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_DELETION,
+                level=EventLevel.INFO,
+                message="Starting memory deletion operation",
+                data={
+                    "user_id": user_id,
+                    "memory_id": memory_id
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_DELETION,
+                    level=EventLevel.DEBUG,
+                    message="Skipping memory deletion for anonymous user",
+                    data={"user_id": user_id, "memory_id": memory_id}
+                )
+            except Exception:
+                pass
             # Return success for anonymous users (no-op)
             return True
 
-        # Delete from long-term memory
-        success = await asyncio.to_thread(
-            self.long_term_memory.delete,
-            memory_id=memory_id,
-        )
+        try:
+            # Delete from long-term memory
+            success = await asyncio.to_thread(
+                self.long_term_memory.delete,
+                memory_id=memory_id,
+            )
 
-        return success
+            # Log successful memory deletion
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_DELETION,
+                    level=EventLevel.INFO,
+                    message="Memory deletion completed",
+                    data={
+                        "user_id": user_id,
+                        "memory_id": memory_id,
+                        "success": success
+                    }
+                )
+            except Exception:
+                pass
+
+            return success
+
+        except Exception as e:
+            # Log memory deletion error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Memory deletion operation failed",
+                    data={
+                        "user_id": user_id,
+                        "memory_id": memory_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     def clear_user_memory(self, user_id: Optional[int] = None) -> None:
         """
@@ -247,21 +463,81 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log memory clear start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_CLEAR,
+                level=EventLevel.INFO,
+                message="Starting user memory clear operation",
+                data={"user_id": user_id}
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CLEAR,
+                    level=EventLevel.DEBUG,
+                    message="Skipping memory clear for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # No-op for anonymous users
             return
 
         # Create a collection name based on the user ID
         collection = f"user_{user_id}"
 
-        # Drop and recreate the collection
         try:
-            self.long_term_memory.delete_collection(collection)
-        except Exception:
-            pass  # Collection might not exist
+            # Drop and recreate the collection
+            try:
+                self.long_term_memory.delete_collection(collection)
+            except Exception:
+                pass  # Collection might not exist
 
-        self.long_term_memory.create_collection(collection, f"Memory collection for user {user_id}")
+            self.long_term_memory.create_collection(
+                collection, f"Memory collection for user {user_id}"
+            )
+
+            # Log successful memory clear
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CLEAR,
+                    level=EventLevel.INFO,
+                    message="User memory clear completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection
+                    }
+                )
+            except Exception:
+                pass
+
+        except Exception as e:
+            # Log memory clear error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User memory clear operation failed",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     def get_user_memories(
         self,
@@ -290,27 +566,95 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log memory retrieval start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                level=EventLevel.INFO,
+                message="Starting user memories retrieval",
+                data={
+                    "user_id": user_id,
+                    "limit": limit,
+                    "offset": offset,
+                    "sort_by": sort_by,
+                    "ascending": ascending
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping user memories retrieval for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return empty list for anonymous users
             return []
 
         # Create a collection name based on the user ID
         collection = f"user_{user_id}"
 
-        # Get memories from the collection
-        memories = self.long_term_memory.get_recent_memories(collection=collection, limit=limit)
+        try:
+            # Get memories from the collection
+            memories = self.long_term_memory.get_recent_memories(collection=collection, limit=limit)
 
-        return [
-            {
-                "content": memory.get("text", ""),
-                "metadata": memory.get("meta_data", {}),
-                "id": memory.get("id"),
-                "created_at": memory.get("created_at"),
-                "updated_at": memory.get("updated_at"),
-            }
-            for memory in memories
-        ]
+            results = [
+                {
+                    "content": memory.get("text", ""),
+                    "metadata": memory.get("meta_data", {}),
+                    "id": memory.get("id"),
+                    "created_at": memory.get("created_at"),
+                    "updated_at": memory.get("updated_at"),
+                }
+                for memory in memories
+            ]
+
+            # Log successful memory retrieval
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_RETRIEVAL_LONG_TERM,
+                    level=EventLevel.INFO,
+                    message="User memories retrieval completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection,
+                        "results_count": len(results),
+                        "limit": limit
+                    }
+                )
+            except Exception:
+                pass
+
+            return results
+
+        except Exception as e:
+            # Log memory retrieval error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User memories retrieval operation failed",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def add_user_context_memory(
         self,
@@ -339,54 +683,119 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log context memory addition start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                level=EventLevel.INFO,
+                message="Starting user context memory addition",
+                data={
+                    "user_id": user_id,
+                    "knowledge_keys": list(knowledge.keys()) if knowledge else [],
+                    "source": source,
+                    "importance": importance
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping context memory addition for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return empty list for anonymous users
             return []
 
         knowledge = knowledge or {}
         memory_ids = []
 
-        # Ensure context memory collection exists
-        collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
         try:
-            self.long_term_memory._ensure_collection_exists(None, collection_name)
-        except Exception:
-            self.long_term_memory.create_collection(
-                collection_name, f"Context memory for user {user_id}"
-            )
+            # Ensure context memory collection exists
+            collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
+            try:
+                self.long_term_memory._ensure_collection_exists(None, collection_name)
+            except Exception:
+                self.long_term_memory.create_collection(
+                    collection_name, f"Context memory for user {user_id}"
+                )
 
-        # Process each knowledge item
-        for key, value in knowledge.items():
-            # Format the content as "key: value"
-            if isinstance(value, (dict, list)):
-                # Convert complex objects to JSON string
-                value_str = json.dumps(value)
-            else:
-                value_str = str(value)
+            # Process each knowledge item
+            for key, value in knowledge.items():
+                # Format the content as "key: value"
+                if isinstance(value, (dict, list)):
+                    # Convert complex objects to JSON string
+                    value_str = json.dumps(value)
+                else:
+                    value_str = str(value)
 
-            content = f"{key}: {value_str}"
+                content = f"{key}: {value_str}"
 
-            # Add metadata
-            metadata = {
-                "type": self.CONTEXT_MEMORY_TYPE,
-                "key": key,
-                "source": source,
-                "importance": importance,
-                "user_id": user_id,
-            }
+                # Add metadata
+                metadata = {
+                    "type": self.CONTEXT_MEMORY_TYPE,
+                    "key": key,
+                    "source": source,
+                    "importance": importance,
+                    "user_id": user_id,
+                }
 
-            # Add to memory
-            memory_id = await self.add(
-                content=content,
-                metadata=metadata,
-                user_id=user_id,
-                collection=collection_name,
-            )
+                # Add to memory
+                memory_id = await self.add(
+                    content=content,
+                    metadata=metadata,
+                    user_id=user_id,
+                    collection=collection_name,
+                )
 
-            memory_ids.append(memory_id)
+                memory_ids.append(memory_id)
 
-        return memory_ids
+            # Log successful context memory addition
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    level=EventLevel.INFO,
+                    message="User context memory addition completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection_name,
+                        "memory_ids": memory_ids,
+                        "knowledge_count": len(knowledge)
+                    }
+                )
+            except Exception:
+                pass
+
+            return memory_ids
+
+        except Exception as e:
+            # Log context memory addition error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User context memory addition operation failed",
+                    data={
+                        "user_id": user_id,
+                        "source": source,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def get_user_context_memory(
         self,
@@ -412,77 +821,154 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log context memory retrieval start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                level=EventLevel.INFO,
+                message="Starting user context memory retrieval",
+                data={
+                    "user_id": user_id,
+                    "keys": keys,
+                    "limit": limit
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping context memory retrieval for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return empty dictionary for anonymous users
             return {}
 
         collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
 
-        # Check if collection exists
         try:
-            self.long_term_memory._ensure_collection_exists(None, collection_name)
-        except Exception:
-            # Collection doesn't exist, return empty dict
-            return {}
+            # Check if collection exists
+            try:
+                self.long_term_memory._ensure_collection_exists(None, collection_name)
+            except Exception:
+                # Collection doesn't exist, return empty dict
+                try:
+                    observability = ObservabilityManager.get_instance()
+                    observability.log_event(
+                        event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                        level=EventLevel.DEBUG,
+                        message="Context memory collection does not exist",
+                        data={
+                            "user_id": user_id,
+                            "collection": collection_name
+                        }
+                    )
+                except Exception:
+                    pass
+                return {}
 
-        # Prepare filter
-        filter_params = {
-            "type": self.CONTEXT_MEMORY_TYPE,
-            "user_id": user_id,
-        }
+            # Prepare filter
+            filter_params = {
+                "type": self.CONTEXT_MEMORY_TYPE,
+                "user_id": user_id,
+            }
 
-        results = []
+            results = []
 
-        if keys:
-            # Get specific keys
-            for key in keys:
-                key_filter = filter_params.copy()
-                key_filter["key"] = key
+            if keys:
+                # Get specific keys
+                for key in keys:
+                    key_filter = filter_params.copy()
+                    key_filter["key"] = key
 
-                key_results = await self.search(
-                    query=key,  # Use key as query for better matching
+                    key_results = await self.search(
+                        query=key,  # Use key as query for better matching
+                        user_id=user_id,
+                        additional_filter=key_filter,
+                        collection=collection_name,
+                        limit=1,  # Only need the most recent/relevant for each key
+                    )
+
+                    results.extend(key_results)
+            else:
+                # Get all context memory
+                # Use empty query to match all items
+                results = await self.search(
+                    query="",
                     user_id=user_id,
-                    additional_filter=key_filter,
+                    additional_filter=filter_params,
                     collection=collection_name,
-                    limit=1,  # Only need the most recent/relevant for each key
+                    limit=limit,
                 )
 
-                results.extend(key_results)
-        else:
-            # Get all context memory
-            # Use empty query to match all items
-            results = await self.search(
-                query="",
-                user_id=user_id,
-                additional_filter=filter_params,
-                collection=collection_name,
-                limit=limit,
-            )
+            # Format results as a dictionary
+            knowledge = {}
+            for item in results:
+                # Parse content in format "key: value"
+                content = item["content"]
+                if ": " in content:
+                    key, value_str = content.split(": ", 1)
 
-        # Format results as a dictionary
-        knowledge = {}
-        for item in results:
-            # Parse content in format "key: value"
-            content = item["content"]
-            if ": " in content:
-                key, value_str = content.split(": ", 1)
-
-                # Try to parse JSON values
-                try:
-                    # Check if it's a JSON object or array
-                    if (value_str.startswith("{") and value_str.endswith("}")) or (
-                        value_str.startswith("[") and value_str.endswith("]")
-                    ):
-                        value = json.loads(value_str)
-                    else:
+                    # Try to parse JSON values
+                    try:
+                        # Check if it's a JSON object or array
+                        if (value_str.startswith("{") and value_str.endswith("}")) or (
+                            value_str.startswith("[") and value_str.endswith("]")
+                        ):
+                            value = json.loads(value_str)
+                        else:
+                            value = value_str
+                    except json.JSONDecodeError:
                         value = value_str
-                except json.JSONDecodeError:
-                    value = value_str
 
-                knowledge[key.strip()] = value
+                    knowledge[key.strip()] = value
 
-        return knowledge
+            # Log successful context memory retrieval
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                    level=EventLevel.INFO,
+                    message="User context memory retrieval completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection_name,
+                        "knowledge_keys": list(knowledge.keys()),
+                        "results_count": len(results)
+                    }
+                )
+            except Exception:
+                pass
+
+            return knowledge
+
+        except Exception as e:
+            # Log context memory retrieval error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User context memory retrieval operation failed",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection_name,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def import_user_context_memory(
         self,
@@ -513,30 +999,99 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log context memory import start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.CONTENT_PROCESSED,
+                level=EventLevel.INFO,
+                message="Starting user context memory import",
+                data={
+                    "user_id": user_id,
+                    "data_source_type": type(data_source).__name__,
+                    "format": format,
+                    "source": source,
+                    "importance": importance
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.CONTENT_PROCESSED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping context memory import for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return empty list for anonymous users
             return []
 
-        # Load data based on format
-        if format == "json" and isinstance(data_source, str):
-            try:
-                with open(data_source, "r") as f:
-                    data = json.load(f)
-            except (json.JSONDecodeError, FileNotFoundError) as e:
-                raise ValueError(f"Failed to load JSON file: {e}")
-        elif isinstance(data_source, dict):
-            data = data_source
-        else:
-            raise ValueError(f"Unsupported format: {format}")
+        try:
+            # Load data based on format
+            if format == "json" and isinstance(data_source, str):
+                try:
+                    with open(data_source, "r") as f:
+                        data = json.load(f)
+                except (json.JSONDecodeError, FileNotFoundError) as e:
+                    raise ValueError(f"Failed to load JSON file: {e}")
+            elif isinstance(data_source, dict):
+                data = data_source
+            else:
+                raise ValueError(f"Unsupported format: {format}")
 
-        # Add the knowledge
-        return await self.add_user_context_memory(
-            user_id=user_id,
-            knowledge=data,
-            source=source,
-            importance=importance,
-        )
+            # Add the knowledge
+            memory_ids = await self.add_user_context_memory(
+                user_id=user_id,
+                knowledge=data,
+                source=source,
+                importance=importance,
+            )
+
+            # Log successful context memory import
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.CONTENT_PROCESSED,
+                    level=EventLevel.INFO,
+                    message="User context memory import completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "memory_ids": memory_ids,
+                        "knowledge_count": len(data) if isinstance(data, dict) else 0,
+                        "format": format
+                    }
+                )
+            except Exception:
+                pass
+
+            return memory_ids
+
+        except Exception as e:
+            # Log context memory import error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User context memory import operation failed",
+                    data={
+                        "user_id": user_id,
+                        "format": format,
+                        "source": source,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def clear_user_context_memory(
         self,
@@ -559,50 +1114,128 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log context memory clear start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                level=EventLevel.INFO,
+                message="Starting user context memory clear",
+                data={
+                    "user_id": user_id,
+                    "keys": keys,
+                    "clear_all": keys is None
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping context memory clear for anonymous user",
+                    data={"user_id": user_id}
+                )
+            except Exception:
+                pass
             # Return success for anonymous users (no-op)
             return True
 
         collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
 
-        if keys:
-            # Clear specific keys
-            for key in keys:
-                # Find memories with this key
-                filter_params = {
-                    "type": self.CONTEXT_MEMORY_TYPE,
-                    "key": key,
-                    "user_id": user_id,
-                }
+        try:
+            if keys:
+                # Clear specific keys
+                for key in keys:
+                    # Find memories with this key
+                    filter_params = {
+                        "type": self.CONTEXT_MEMORY_TYPE,
+                        "key": key,
+                        "user_id": user_id,
+                    }
 
-                results = await self.search(
-                    query="",
-                    user_id=user_id,
-                    additional_filter=filter_params,
-                    collection=collection_name,
-                    limit=100,  # Set a reasonable limit
-                )
+                    results = await self.search(
+                        query="",
+                        user_id=user_id,
+                        additional_filter=filter_params,
+                        collection=collection_name,
+                        limit=100,  # Set a reasonable limit
+                    )
 
-                # Delete each memory
-                for item in results:
-                    if "id" in item:
-                        await asyncio.to_thread(
-                            self.long_term_memory.delete,
-                            memory_id=item["id"],
+                    # Delete each memory
+                    for item in results:
+                        if "id" in item:
+                            await asyncio.to_thread(
+                                self.long_term_memory.delete,
+                                memory_id=item["id"],
+                            )
+            else:
+                # Clear all context memory by recreating the collection
+                try:
+                    self.long_term_memory.delete_collection(collection_name)
+                    self.long_term_memory.create_collection(
+                        collection_name, f"Context memory for user {user_id}"
+                    )
+                except Exception:
+                    # Log successful context memory clear
+                    try:
+                        observability = ObservabilityManager.get_instance()
+                        observability.log_event(
+                            event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                            level=EventLevel.ERROR,
+                            message="Failed to clear context memory collection",
+                            data={
+                                "user_id": user_id,
+                                "collection": collection_name
+                            }
                         )
-        else:
-            # Clear all context memory by recreating the collection
-            try:
-                self.long_term_memory.delete_collection(collection_name)
-                self.long_term_memory.create_collection(
-                    collection_name, f"Context memory for user {user_id}"
-                )
-                return True
-            except Exception:
-                return False
+                    except Exception:
+                        pass
+                    return False
 
-        return True
+            # Log successful context memory clear
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                    level=EventLevel.INFO,
+                    message="User context memory clear completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection_name,
+                        "keys": keys,
+                        "clear_all": keys is None
+                    }
+                )
+            except Exception:
+                pass
+
+            return True
+
+        except Exception as e:
+            # Log context memory clear error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User context memory clear operation failed",
+                    data={
+                        "user_id": user_id,
+                        "collection": collection_name,
+                        "keys": keys,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise
 
     async def update_user_context_memory(
         self,
@@ -631,23 +1264,91 @@ class Memobase:
         """
         user_id = user_id if user_id is not None else self.default_user_id
 
+        # Log context memory update start
+        try:
+            observability = ObservabilityManager.get_instance()
+            observability.log_event(
+                event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                level=EventLevel.INFO,
+                message="Starting user context memory update",
+                data={
+                    "user_id": user_id,
+                    "key": key,
+                    "source": source,
+                    "importance": importance
+                }
+            )
+        except Exception:
+            pass
+
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
+            # Log anonymous user skip
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    level=EventLevel.DEBUG,
+                    message="Skipping context memory update for anonymous user",
+                    data={"user_id": user_id, "key": key}
+                )
+            except Exception:
+                pass
             # Return 0 for anonymous users
             return 0
 
         if key is None:
             return 0
 
-        # First clear the existing key if it exists
-        await self.clear_user_context_memory(user_id=user_id, keys=[key])
+        try:
+            # First clear the existing key if it exists
+            await self.clear_user_context_memory(user_id=user_id, keys=[key])
 
-        # Then add the new value
-        memory_ids = await self.add_user_context_memory(
-            user_id=user_id,
-            knowledge={key: value},
-            source=source,
-            importance=importance,
-        )
+            # Then add the new value
+            memory_ids = await self.add_user_context_memory(
+                user_id=user_id,
+                knowledge={key: value},
+                source=source,
+                importance=importance,
+            )
 
-        return memory_ids[0] if memory_ids else 0
+            memory_id = memory_ids[0] if memory_ids else 0
+
+            # Log successful context memory update
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    level=EventLevel.INFO,
+                    message="User context memory update completed successfully",
+                    data={
+                        "user_id": user_id,
+                        "key": key,
+                        "memory_id": memory_id,
+                        "source": source
+                    }
+                )
+            except Exception:
+                pass
+
+            return memory_id
+
+        except Exception as e:
+            # Log context memory update error
+            try:
+                observability = ObservabilityManager.get_instance()
+                observability.log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="User context memory update operation failed",
+                    data={
+                        "user_id": user_id,
+                        "key": key,
+                        "source": source,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
+            raise

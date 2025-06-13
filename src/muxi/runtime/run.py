@@ -37,6 +37,16 @@
 import socket
 from loguru import logger
 
+# Observability imports
+try:
+    from muxi.runtime.observability.manager import ObservabilityManager
+    from muxi.runtime.observability.events import EventType, EventLevel
+except ImportError:
+    # Graceful fallback if observability is not available
+    ObservabilityManager = None
+    EventType = None
+    EventLevel = None
+
 
 def is_port_in_use(port):
     """
@@ -52,10 +62,38 @@ def is_port_in_use(port):
     Returns:
         bool: True if the port is in use (unavailable), False if the port is free.
     """
+    # Log port check attempt
+    if ObservabilityManager and EventType:
+        try:
+            obs = ObservabilityManager.get_instance()
+            obs.log_event(
+                EventType.RESOURCE_ALLOCATED,
+                EventLevel.DEBUG,
+                "Port availability check initiated",
+                data={"port": port, "operation": "port_check"}
+            )
+        except Exception:
+            pass  # Don't let observability failures break port checking
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # connect_ex returns 0 if the connection succeeds (port is in use)
         # and a non-zero value if it fails (port is available)
-        return s.connect_ex(("localhost", port)) == 0
+        result = s.connect_ex(("localhost", port)) == 0
+
+        # Log port check result
+        if ObservabilityManager and EventType:
+            try:
+                obs = ObservabilityManager.get_instance()
+                obs.log_event(
+                    EventType.RESOURCE_ALLOCATED if not result else EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.INFO if not result else EventLevel.WARNING,
+                    f"Port {port} {'in use' if result else 'available'}",
+                    data={"port": port, "in_use": result, "operation": "port_check_result"}
+                )
+            except Exception:
+                pass  # Don't let observability failures break port checking
+
+        return result
 
 
 def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
@@ -83,11 +121,49 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         bool: True if server started successfully, False otherwise. Can be used
             to determine if startup succeeded in programmatic contexts.
     """
+    # Log server startup attempt
+    if ObservabilityManager and EventType:
+        try:
+            obs = ObservabilityManager.get_instance()
+            obs.log_event(
+                EventType.SESSION_CREATED,
+                EventLevel.INFO,
+                "Server startup initiated",
+                data={
+                    "host": host,
+                    "port": port,
+                    "reload": reload,
+                    "mcp": mcp,
+                    "operation": "server_startup"
+                }
+            )
+        except Exception:
+            pass  # Don't let observability failures break server startup
+
     try:
         # Check if port is already in use before attempting to start the server
         if is_port_in_use(port):
             # Construct error message for both logs and user output
             msg = f"Port {port} is already in use. MUXI server cannot start."
+
+            # Log port conflict error
+            if ObservabilityManager and EventType:
+                try:
+                    obs = ObservabilityManager.get_instance()
+                    obs.log_event(
+                        EventType.ERROR_RETRY_ATTEMPTED,
+                        EventLevel.ERROR,
+                        "Server startup failed due to port conflict",
+                        data={
+                            "port": port,
+                            "host": host,
+                            "error": "port_in_use",
+                            "operation": "server_startup_failed"
+                        }
+                    )
+                except Exception:
+                    pass  # Don't let observability failures break error handling
+
             # Log the error to the application logs
             logger.error(msg)
             # Print user-friendly error messages to the console
@@ -103,8 +179,47 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         print(f"[PLACEHOLDER] MUXI server would start on {host}:{port}")
         print("This is a placeholder until the MUXI API server is implemented.")
 
+        # Log successful server startup (placeholder)
+        if ObservabilityManager and EventType:
+            try:
+                obs = ObservabilityManager.get_instance()
+                obs.log_event(
+                    EventType.SESSION_CREATED,
+                    EventLevel.INFO,
+                    "Server startup completed (placeholder)",
+                    data={
+                        "host": host,
+                        "port": port,
+                        "reload": reload,
+                        "mcp": mcp,
+                        "operation": "server_startup_success",
+                        "placeholder": True
+                    }
+                )
+            except Exception:
+                pass  # Don't let observability failures break server startup
+
         return True
     except Exception as e:
+        # Log server startup exception
+        if ObservabilityManager and EventType:
+            try:
+                obs = ObservabilityManager.get_instance()
+                obs.log_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "Server startup failed with exception",
+                    data={
+                        "host": host,
+                        "port": port,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "operation": "server_startup_exception"
+                    }
+                )
+            except Exception:
+                pass  # Don't let observability failures break error handling
+
         # Catch any unexpected exceptions during server startup
         # Log the error with detailed information for debugging
         logger.error(f"Failed to start MUXI server: {str(e)}")

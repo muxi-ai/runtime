@@ -191,6 +191,26 @@ class ShortTermMemory:
             namespace: Namespace for organizing items (e.g., "buffer", "doc").
                 Used for namespaced ID generation. Default is "buffer".
         """
+        # Emit memory storage started event
+        try:
+            from ..observability import EventType, EventLevel, ObservabilityManager
+            observability_manager = ObservabilityManager.get_instance()
+            if observability_manager:
+                await observability_manager.event_logger.emit_event(
+                    EventType.MEMORY_STORE,
+                    level=EventLevel.INFO,
+                    data={
+                        "text_length": len(text),
+                        "has_metadata": metadata is not None and len(metadata) > 0,
+                        "namespace": namespace,
+                        "buffer_size": len(self.buffer),
+                        "buffer_capacity": self.buffer_size,
+                    },
+                    description="Short-term memory storage started",
+                )
+        except Exception:
+            pass  # Don't let observability errors break the flow
+
         # Initialize metadata dictionary if None
         if metadata is None:
             metadata = {}
@@ -405,10 +425,53 @@ class ShortTermMemory:
             similarity and recency. Each item includes the original text, metadata,
             and a score field indicating the match quality.
         """
+        # Emit memory retrieval started event
+        try:
+            from ..observability import EventType, EventLevel, ObservabilityManager
+            observability_manager = ObservabilityManager.get_instance()
+            if observability_manager:
+                await observability_manager.event_logger.emit_event(
+                    EventType.MEMORY_RETRIEVAL_STARTED,
+                    level=EventLevel.INFO,
+                    data={
+                        "query_length": len(query),
+                        "limit": limit,
+                        "has_filter": filter_metadata is not None,
+                        "has_query_vector": query_vector is not None,
+                        "recency_bias": recency_bias,
+                        "buffer_size": len(self.buffer),
+                        "has_vector_search": self.model is not None,
+                    },
+                    description="Short-term memory search started",
+                )
+        except Exception:
+            pass  # Don't let observability errors break the flow
+
         # If we don't have a model, return most recent messages
         if not self.model:
             logger.debug("Using recency-only search (no model available)")
-            return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+            recency_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+
+            # Emit memory retrieval completed event for recency-only search
+            try:
+                from ..observability import EventType, EventLevel, ObservabilityManager
+                observability_manager = ObservabilityManager.get_instance()
+                if observability_manager:
+                    await observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_COMPLETED,
+                        level=EventLevel.INFO,
+                        data={
+                            "results_count": len(recency_results),
+                            "search_type": "recency_only",
+                            "query_length": len(query),
+                            "buffer_size": len(self.buffer),
+                        },
+                        description="Short-term memory search completed (recency-only)",
+                    )
+            except Exception:
+                pass  # Don't let observability errors break the flow
+
+            return recency_results
 
         # Rebuild index if needed
         if self.needs_rebuild:
@@ -421,7 +484,34 @@ class ShortTermMemory:
             except Exception as e:
                 logger.error(f"Error generating query embedding: {e}")
                 # Fallback to recency search if embedding generation fails
-                return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+                embedding_fallback_results = self._recency_search(
+                    limit, filter_metadata, use_entire_buffer=True
+                )
+
+                # Emit memory retrieval completed event for embedding failure fallback
+                try:
+                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    observability_manager = ObservabilityManager.get_instance()
+                    if observability_manager:
+                        await observability_manager.event_logger.emit_event(
+                            EventType.MEMORY_RETRIEVAL_COMPLETED,
+                            level=EventLevel.WARNING,
+                            data={
+                                "results_count": len(embedding_fallback_results),
+                                "search_type": "embedding_failure_fallback",
+                                "error": str(e),
+                                "query_length": len(query),
+                                "buffer_size": len(self.buffer),
+                            },
+                            description=(
+                                "Short-term memory search completed "
+                                "(embedding failure fallback)"
+                            ),
+                        )
+                except Exception:
+                    pass  # Don't let observability errors break the flow
+
+                return embedding_fallback_results
 
         # If we have no embeddings in the index, use recency search
         if self.index_count == 0:
@@ -479,12 +569,55 @@ class ShortTermMemory:
 
             # Sort by combined score (descending)
             results.sort(key=lambda x: x["score"], reverse=True)
-            return results[:limit]
+            final_results = results[:limit]
+
+            # Emit memory retrieval completed event
+            try:
+                from ..observability import EventType, EventLevel, ObservabilityManager
+                observability_manager = ObservabilityManager.get_instance()
+                if observability_manager:
+                    await observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_COMPLETED,
+                        level=EventLevel.INFO,
+                        data={
+                            "results_count": len(final_results),
+                            "search_type": "vector_hybrid",
+                            "query_length": len(query),
+                            "buffer_size": len(self.buffer),
+                        },
+                        description="Short-term memory search completed",
+                    )
+            except Exception:
+                pass  # Don't let observability errors break the flow
+
+            return final_results
 
         except Exception as e:
             # Handle FAISS search errors gracefully
             logger.error(f"Error in vector search: {e}")
-            return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+            fallback_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+
+            # Emit memory retrieval completed event for fallback
+            try:
+                from ..observability import EventType, EventLevel, ObservabilityManager
+                observability_manager = ObservabilityManager.get_instance()
+                if observability_manager:
+                    await observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_COMPLETED,
+                        level=EventLevel.WARNING,
+                        data={
+                            "results_count": len(fallback_results),
+                            "search_type": "recency_fallback",
+                            "error": str(e),
+                            "query_length": len(query),
+                            "buffer_size": len(self.buffer),
+                        },
+                        description="Short-term memory search completed with fallback",
+                    )
+            except Exception:
+                pass  # Don't let observability errors break the flow
+
+            return fallback_results
 
     def get_recent_items(
         self, limit: int = 10, filter_metadata: Optional[Dict[str, Any]] = None

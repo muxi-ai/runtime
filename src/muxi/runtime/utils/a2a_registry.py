@@ -30,6 +30,15 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 
+# Observability integration
+try:
+    from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
+except ImportError:
+    # Graceful fallback if observability is not available
+    ObservabilityManager = None
+    EventType = None
+    EventLevel = None
+
 
 # =============================================================================
 # Configuration
@@ -367,101 +376,399 @@ class RegistryStorage:
             with open(self.agents_file, "w") as f:
                 json.dump({}, f)
 
+        # Log storage initialization
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_REGISTRY_INITIALIZED,
+                    level=EventLevel.INFO,
+                    message="A2A registry storage initialized",
+                    data={
+                        "data_dir": str(self.data_dir),
+                        "agents_file": str(self.agents_file),
+                        "file_exists": self.agents_file.exists()
+                    }
+                )
+            except Exception:
+                pass  # Don't let observability failures break functionality
+
     def _load_agents(self) -> Dict[str, Dict]:
         """Load registered agents from storage."""
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_REGISTRY_OPERATION_STARTED,
+                    level=EventLevel.DEBUG,
+                    message="Loading agents from storage",
+                    data={"operation": "load_agents", "file": str(self.agents_file)}
+                )
+            except Exception:
+                pass
+
         try:
             with open(self.agents_file, "r") as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
+                agents = json.load(f)
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.A2A_REGISTRY_OPERATION_COMPLETED,
+                        level=EventLevel.DEBUG,
+                        message="Successfully loaded agents from storage",
+                        data={
+                            "operation": "load_agents",
+                            "agent_count": len(agents),
+                            "file": str(self.agents_file)
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return agents
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.WARNING,
+                        message="Failed to load agents from storage, returning empty dict",
+                        data={
+                            "operation": "load_agents",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "file": str(self.agents_file)
+                        }
+                    )
+                except Exception:
+                    pass
             return {}
 
     def _save_agents(self, agents: Dict[str, Dict]):
         """Save registered agents to storage."""
-        with open(self.agents_file, "w") as f:
-            json.dump(agents, f, indent=2)
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_REGISTRY_OPERATION_STARTED,
+                    level=EventLevel.DEBUG,
+                    message="Saving agents to storage",
+                    data={
+                        "operation": "save_agents",
+                        "agent_count": len(agents),
+                        "file": str(self.agents_file)
+                    }
+                )
+            except Exception:
+                pass
+
+        try:
+            with open(self.agents_file, "w") as f:
+                json.dump(agents, f, indent=2)
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.A2A_REGISTRY_OPERATION_COMPLETED,
+                        level=EventLevel.DEBUG,
+                        message="Successfully saved agents to storage",
+                        data={
+                            "operation": "save_agents",
+                            "agent_count": len(agents),
+                            "file": str(self.agents_file)
+                        }
+                    )
+                except Exception:
+                    pass
+        except Exception as e:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message="Failed to save agents to storage",
+                        data={
+                            "operation": "save_agents",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "file": str(self.agents_file),
+                            "agent_count": len(agents)
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     def register_agent(self, agent_card: AgentCard) -> bool:
         """Register a new agent. Returns True if successful."""
-        agents = self._load_agents()
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_AGENT_REGISTRATION_STARTED,
+                    level=EventLevel.INFO,
+                    message="Starting agent registration",
+                    data={
+                        "agent_name": agent_card.name,
+                        "agent_url": agent_card.url,
+                        "agent_version": agent_card.version,
+                        "capabilities": (
+                            list(agent_card.capabilities.keys())
+                            if agent_card.capabilities else []
+                        )
+                    }
+                )
+            except Exception:
+                pass
 
-        # Use URL as unique key
-        url_key = agent_card.url
+        try:
+            agents = self._load_agents()
 
-        # Debug logging
-        logging.info(f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'")
+            # Use URL as unique key
+            url_key = agent_card.url
 
-        # Add registration metadata
-        agent_data = agent_card.model_dump()
-        agent_data["_registered_at"] = datetime.now(timezone.utc).isoformat()
+            # Debug logging
+            logging.info(
+                f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'"
+            )
 
-        agents[url_key] = agent_data
-        self._save_agents(agents)
+            # Add registration metadata
+            agent_data = agent_card.model_dump()
+            agent_data["_registered_at"] = datetime.now(timezone.utc).isoformat()
 
-        logging.info(f"REGISTER: Successfully stored agent at URL key: '{url_key}'")
-        return True
+            agents[url_key] = agent_data
+            self._save_agents(agents)
+
+            logging.info(f"REGISTER: Successfully stored agent at URL key: '{url_key}'")
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.A2A_AGENT_REGISTRATION_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="Agent registration completed successfully",
+                        data={
+                            "agent_name": agent_card.name,
+                            "agent_url": agent_card.url,
+                            "agent_version": agent_card.version,
+                            "url_key": url_key,
+                            "total_agents": len(agents),
+                            "capabilities": (
+                                list(agent_card.capabilities.keys())
+                                if agent_card.capabilities else []
+                            )
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return True
+        except Exception as e:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message="Agent registration failed",
+                        data={
+                            "agent_name": agent_card.name,
+                            "agent_url": agent_card.url,
+                            "error": str(e),
+                            "error_type": type(e).__name__
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     def deregister_agent(self, agent_url: str) -> bool:
         """Deregister an agent by URL. Returns True if found and removed."""
-        agents = self._load_agents()
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_AGENT_UNREGISTRATION_STARTED,
+                    level=EventLevel.INFO,
+                    message="Starting agent deregistration",
+                    data={"agent_url": agent_url}
+                )
+            except Exception:
+                pass
 
-        # Debug logging
-        logging.info(f"DEREGISTER: Looking for agent with URL: '{agent_url}'")
-        logging.info(f"DEREGISTER: Available URLs in storage: {list(agents.keys())}")
+        try:
+            agents = self._load_agents()
 
-        if agent_url in agents:
-            agent_name = agents[agent_url].get("name", "unknown")
-            del agents[agent_url]
-            self._save_agents(agents)
-            logging.info(f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'")
-            return True
+            # Debug logging
+            logging.info(f"DEREGISTER: Looking for agent with URL: '{agent_url}'")
+            logging.info(f"DEREGISTER: Available URLs in storage: {list(agents.keys())}")
 
-        logging.warning(f"DEREGISTER: Agent URL '{agent_url}' not found in storage")
-        return False
+            if agent_url in agents:
+                agent_name = agents[agent_url].get("name", "unknown")
+                del agents[agent_url]
+                self._save_agents(agents)
+                logging.info(
+                    f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'"
+                )
+
+                if ObservabilityManager and EventType:
+                    try:
+                        ObservabilityManager.get_instance().log_event(
+                            event_type=EventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                            level=EventLevel.INFO,
+                            message="Agent deregistration completed successfully",
+                            data={
+                                "agent_url": agent_url,
+                                "agent_name": agent_name,
+                                "result": "found_and_removed",
+                                "remaining_agents": len(agents)
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                return True
+
+            logging.warning(f"DEREGISTER: Agent URL '{agent_url}' not found in storage")
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                        level=EventLevel.WARNING,
+                        message="Agent deregistration completed - agent not found",
+                        data={
+                            "agent_url": agent_url,
+                            "result": "not_found",
+                            "available_urls": list(agents.keys())
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return False
+        except Exception as e:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message="Agent deregistration failed",
+                        data={
+                            "agent_url": agent_url,
+                            "error": str(e),
+                            "error_type": type(e).__name__
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     def get_registered_agents(self) -> List[AgentCard]:
         """Get all registered agents as AgentCard objects."""
-        agents = self._load_agents()
-        agent_cards = []
-
-        for agent_data in agents.values():
-            # Remove metadata before creating AgentCard
-            clean_data = {k: v for k, v in agent_data.items() if not k.startswith("_")}
-
+        if ObservabilityManager and EventType:
             try:
-                # Convert capabilities from dict to A2ACapability objects
-                if "capabilities" in clean_data and isinstance(clean_data["capabilities"], dict):
-                    converted_capabilities = {}
-                    for cap_name, cap_data in clean_data["capabilities"].items():
-                        if isinstance(cap_data, dict):
-                            # Convert dict to A2ACapability
-                            converted_capabilities[cap_name] = A2ACapability(**cap_data)
-                        else:
-                            # Skip invalid capability data
-                            logging.warning(f"Skipping invalid capability {cap_name}: {cap_data}")
-                    clean_data["capabilities"] = converted_capabilities
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_DISCOVERY_QUERY_STARTED,
+                    level=EventLevel.DEBUG,
+                    message="Retrieving all registered agents",
+                    data={"operation": "get_registered_agents"}
+                )
+            except Exception:
+                pass
 
-                # Convert authentication from dict to A2AAuthentication object
-                auth_data = clean_data.get("authentication")
-                if auth_data and isinstance(auth_data, dict):
-                    clean_data["authentication"] = A2AAuthentication(**auth_data)
+        try:
+            agents = self._load_agents()
+            agent_cards = []
+            parse_errors = 0
 
-                # Convert endpoints from dict to A2AEndpoint objects
-                if "endpoints" in clean_data and isinstance(clean_data["endpoints"], dict):
-                    converted_endpoints = {}
-                    for ep_name, ep_data in clean_data["endpoints"].items():
-                        if isinstance(ep_data, dict):
-                            converted_endpoints[ep_name] = A2AEndpoint(**ep_data)
-                    clean_data["endpoints"] = converted_endpoints
+            for agent_data in agents.values():
+                # Remove metadata before creating AgentCard
+                clean_data = {k: v for k, v in agent_data.items() if not k.startswith("_")}
 
-                agent_cards.append(AgentCard(**clean_data))
-            except Exception as e:
-                logging.warning(f"Failed to parse stored agent: {e}")
+                try:
+                    # Convert capabilities from dict to A2ACapability objects
+                    if ("capabilities" in clean_data and
+                            isinstance(clean_data["capabilities"], dict)):
+                        converted_capabilities = {}
+                        for cap_name, cap_data in clean_data["capabilities"].items():
+                            if isinstance(cap_data, dict):
+                                # Convert dict to A2ACapability
+                                converted_capabilities[cap_name] = A2ACapability(**cap_data)
+                            else:
+                                # Skip invalid capability data
+                                logging.warning(
+                                    f"Skipping invalid capability {cap_name}: {cap_data}"
+                                )
+                        clean_data["capabilities"] = converted_capabilities
 
-        return agent_cards
+                    # Convert authentication from dict to A2AAuthentication object
+                    auth_data = clean_data.get("authentication")
+                    if auth_data and isinstance(auth_data, dict):
+                        clean_data["authentication"] = A2AAuthentication(**auth_data)
+
+                    # Convert endpoints from dict to A2AEndpoint objects
+                    if "endpoints" in clean_data and isinstance(clean_data["endpoints"], dict):
+                        converted_endpoints = {}
+                        for ep_name, ep_data in clean_data["endpoints"].items():
+                            if isinstance(ep_data, dict):
+                                converted_endpoints[ep_name] = A2AEndpoint(**ep_data)
+                        clean_data["endpoints"] = converted_endpoints
+
+                    agent_cards.append(AgentCard(**clean_data))
+                except Exception as e:
+                    logging.warning(f"Failed to parse stored agent: {e}")
+                    parse_errors += 1
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.A2A_DISCOVERY_QUERY_COMPLETED,
+                        level=EventLevel.DEBUG,
+                        message="Successfully retrieved registered agents",
+                        data={
+                            "operation": "get_registered_agents",
+                            "total_stored": len(agents),
+                            "successfully_parsed": len(agent_cards),
+                            "parse_errors": parse_errors
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return agent_cards
+        except Exception as e:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message="Failed to retrieve registered agents",
+                        data={
+                            "operation": "get_registered_agents",
+                            "error": str(e),
+                            "error_type": type(e).__name__
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     def get_uptime(self) -> float:
         """Get server uptime in seconds."""
-        return time.time() - self.start_time
+        uptime = time.time() - self.start_time
+
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_REGISTRY_OPERATION_COMPLETED,
+                    level=EventLevel.DEBUG,
+                    message="Retrieved server uptime",
+                    data={
+                        "operation": "get_uptime",
+                        "uptime_seconds": uptime,
+                        "start_time": self.start_time
+                    }
+                )
+            except Exception:
+                pass
+
+        return uptime
 
 
 # =============================================================================
@@ -501,27 +808,128 @@ async def register_agent(agent_card: AgentCard):
 
     Accepts a standard A2A AgentCard and stores it for discovery.
     """
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.API_REQUEST_STARTED,
+                level=EventLevel.INFO,
+                message="Agent registration API request started",
+                data={
+                    "endpoint": "/register",
+                    "method": "POST",
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url
+                }
+            )
+        except Exception:
+            pass
+
     try:
         # Check if we're at capacity
         current_agents = len(storage.get_registered_agents())
         if current_agents >= REGISTRY_CONFIG["max_agents"]:
             max_agents = REGISTRY_CONFIG["max_agents"]
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.WARNING,
+                        message="Agent registration rejected - registry at capacity",
+                        data={
+                            "endpoint": "/register",
+                            "status_code": 429,
+                            "current_agents": current_agents,
+                            "max_agents": max_agents,
+                            "agent_name": agent_card.name
+                        }
+                    )
+                except Exception:
+                    pass
+
             raise HTTPException(
                 status_code=429, detail=f"Registry at capacity ({max_agents} agents)"
             )
 
         success = storage.register_agent(agent_card)
         if success:
-            return {
+            response_data = {
                 "message": "Agent registered successfully",
                 "agent_url": agent_card.url,
                 "registered_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="Agent registration API request completed successfully",
+                        data={
+                            "endpoint": "/register",
+                            "status_code": 201,
+                            "agent_name": agent_card.name,
+                            "agent_url": agent_card.url,
+                            "total_agents": current_agents + 1
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return response_data
         else:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message="Agent registration failed - storage error",
+                        data={
+                            "endpoint": "/register",
+                            "status_code": 500,
+                            "agent_name": agent_card.name,
+                            "agent_url": agent_card.url
+                        }
+                    )
+                except Exception:
+                    pass
+
             raise HTTPException(status_code=500, detail="Failed to register agent")
 
     except ValueError as e:
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.API_REQUEST_COMPLETED,
+                    level=EventLevel.ERROR,
+                    message="Agent registration failed - validation error",
+                    data={
+                        "endpoint": "/register",
+                        "status_code": 400,
+                        "error": str(e),
+                        "agent_name": agent_card.name if hasattr(agent_card, 'name') else 'unknown'
+                    }
+                )
+            except Exception:
+                pass
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Agent registration failed - unexpected error",
+                    data={
+                        "endpoint": "/register",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "agent_name": agent_card.name if hasattr(agent_card, 'name') else 'unknown'
+                    }
+                )
+            except Exception:
+                pass
+        raise
 
 
 @app.post("/deregister")
@@ -532,24 +940,101 @@ async def deregister_agent(request: dict):
     Accepts a JSON body with the agent URL to deregister.
     Body format: {"agent_url": "http://localhost:8080/agent-name"}
     """
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.API_REQUEST_STARTED,
+                level=EventLevel.INFO,
+                message="Agent deregistration API request started",
+                data={
+                    "endpoint": "/deregister",
+                    "method": "POST",
+                    "request_body": request
+                }
+            )
+        except Exception:
+            pass
+
     try:
         agent_url = request.get("agent_url")
         if not agent_url:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message="Agent deregistration failed - missing agent_url",
+                        data={
+                            "endpoint": "/deregister",
+                            "status_code": 400,
+                            "error": "agent_url is required in request body"
+                        }
+                    )
+                except Exception:
+                    pass
             raise HTTPException(status_code=400, detail="agent_url is required in request body")
 
         success = storage.deregister_agent(agent_url)
         if success:
-            return {
+            response_data = {
                 "message": "Agent deregistered successfully",
                 "agent_url": agent_url,
                 "deregistered_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="Agent deregistration API request completed successfully",
+                        data={
+                            "endpoint": "/deregister",
+                            "status_code": 200,
+                            "agent_url": agent_url
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return response_data
         else:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.WARNING,
+                        message="Agent deregistration failed - agent not found",
+                        data={
+                            "endpoint": "/deregister",
+                            "status_code": 404,
+                            "agent_url": agent_url
+                        }
+                    )
+                except Exception:
+                    pass
             raise HTTPException(status_code=404, detail=f"Agent not found: {agent_url}")
 
     except Exception as e:
-        logger.error(f"Error deregistering agent: {e}")
-        raise HTTPException(status_code=500, detail="Failed to deregister agent")
+        if not isinstance(e, HTTPException):
+            logger.error(f"Error deregistering agent: {e}")
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message="Agent deregistration failed - unexpected error",
+                        data={
+                            "endpoint": "/deregister",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "agent_url": request.get("agent_url", "unknown")
+                        }
+                    )
+                except Exception:
+                    pass
+            raise HTTPException(status_code=500, detail="Failed to deregister agent")
+        raise
 
 
 @app.delete("/register/{agent_url_encoded}")
@@ -560,23 +1045,88 @@ async def deregister_agent_legacy(agent_url_encoded: str):
     The agent URL must be URL-encoded in the path parameter.
     Recommended to use POST /deregister instead.
     """
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.API_REQUEST_STARTED,
+                level=EventLevel.INFO,
+                message="Legacy agent deregistration API request started",
+                data={
+                    "endpoint": "/register/{agent_url_encoded}",
+                    "method": "DELETE",
+                    "agent_url_encoded": agent_url_encoded
+                }
+            )
+        except Exception:
+            pass
+
     try:
         # Decode the URL
         agent_url = urllib.parse.unquote(agent_url_encoded)
 
         success = storage.deregister_agent(agent_url)
         if success:
-            return {
+            response_data = {
                 "message": "Agent deregistered successfully",
                 "agent_url": agent_url,
                 "deregistered_at": datetime.now(timezone.utc).isoformat(),
             }
+
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="Legacy agent deregistration API request completed successfully",
+                        data={
+                            "endpoint": "/register/{agent_url_encoded}",
+                            "status_code": 200,
+                            "agent_url": agent_url,
+                            "agent_url_encoded": agent_url_encoded
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return response_data
         else:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.API_REQUEST_COMPLETED,
+                        level=EventLevel.WARNING,
+                        message="Legacy agent deregistration failed - agent not found",
+                        data={
+                            "endpoint": "/register/{agent_url_encoded}",
+                            "status_code": 404,
+                            "agent_url": agent_url,
+                            "agent_url_encoded": agent_url_encoded
+                        }
+                    )
+                except Exception:
+                    pass
             raise HTTPException(status_code=404, detail=f"Agent not found: {agent_url}")
 
     except Exception as e:
-        logger.error(f"Error deregistering agent: {e}")
-        raise HTTPException(status_code=500, detail="Failed to deregister agent")
+        if not isinstance(e, HTTPException):
+            logger.error(f"Error deregistering agent: {e}")
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message="Legacy agent deregistration failed - unexpected error",
+                        data={
+                            "endpoint": "/register/{agent_url_encoded}",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "agent_url_encoded": agent_url_encoded
+                        }
+                    )
+                except Exception:
+                    pass
+            raise HTTPException(status_code=500, detail="Failed to deregister agent")
+        raise
 
 
 @app.get("/discover", response_model=DiscoveryResponse)
@@ -591,6 +1141,25 @@ async def discover_agents(
     Returns both hardcoded test agents and registered agents.
     Supports filtering by capabilities, tags, and provider organization.
     """
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.A2A_DISCOVERY_QUERY_STARTED,
+                level=EventLevel.INFO,
+                message="Agent discovery API request started",
+                data={
+                    "endpoint": "/discover",
+                    "method": "GET",
+                    "filters": {
+                        "capabilities": capabilities,
+                        "tags": tags,
+                        "provider": provider
+                    }
+                }
+            )
+        except Exception:
+            pass
+
     try:
         # Get all agents (hardcoded + registered)
         all_agents = []
@@ -645,14 +1214,58 @@ async def discover_agents(
             f"(capabilities={capabilities}, tags={tags}, provider={provider})"
         )
 
-        return DiscoveryResponse(
+        response_data = DiscoveryResponse(
             agents=filtered_agents,
             total=len(filtered_agents),
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
 
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.A2A_DISCOVERY_QUERY_COMPLETED,
+                    level=EventLevel.INFO,
+                    message="Agent discovery API request completed successfully",
+                    data={
+                        "endpoint": "/discover",
+                        "status_code": 200,
+                        "total_agents": len(all_agents),
+                        "filtered_agents": len(filtered_agents),
+                        "hardcoded_agents": len(HARDCODED_AGENTS),
+                        "registered_agents": len(all_agents) - len(HARDCODED_AGENTS),
+                        "filters": {
+                            "capabilities": capabilities,
+                            "tags": tags,
+                            "provider": provider
+                        }
+                    }
+                )
+            except Exception:
+                pass
+
+        return response_data
+
     except Exception as e:
         logger.error(f"Error during discovery: {e}")
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Agent discovery failed - unexpected error",
+                    data={
+                        "endpoint": "/discover",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "filters": {
+                            "capabilities": capabilities,
+                            "tags": tags,
+                            "provider": provider
+                        }
+                    }
+                )
+            except Exception:
+                pass
         raise HTTPException(status_code=500, detail="Failed to discover agents")
 
 
@@ -663,19 +1276,69 @@ async def health_check():
 
     Returns server status and basic metrics.
     """
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.API_REQUEST_STARTED,
+                level=EventLevel.DEBUG,
+                message="Health check API request started",
+                data={
+                    "endpoint": "/health",
+                    "method": "GET"
+                }
+            )
+        except Exception:
+            pass
+
     try:
         registered_count = len(storage.get_registered_agents())
         uptime = storage.get_uptime()
 
-        return HealthResponse(
+        response_data = HealthResponse(
             status="healthy",
             version="1.0.0",
             registered_agents=registered_count,
             uptime_seconds=uptime,
         )
 
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.API_REQUEST_COMPLETED,
+                    level=EventLevel.DEBUG,
+                    message="Health check API request completed successfully",
+                    data={
+                        "endpoint": "/health",
+                        "status_code": 200,
+                        "health_status": "healthy",
+                        "registered_agents": registered_count,
+                        "uptime_seconds": uptime
+                    }
+                )
+            except Exception:
+                pass
+
+        return response_data
+
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Health check failed - returning unhealthy status",
+                    data={
+                        "endpoint": "/health",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "health_status": "unhealthy"
+                    }
+                )
+            except Exception:
+                pass
+
         return HealthResponse(
             status="unhealthy", version="1.0.0", registered_agents=0, uptime_seconds=0
         )

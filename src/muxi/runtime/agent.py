@@ -161,6 +161,32 @@ class Agent:
         if self.system_message:
             self._messages.append({"role": "system", "content": self.system_message})
 
+        # Emit agent initialization event
+        if hasattr(overlord, "observability_manager"):
+            try:
+                from .observability import EventType, EventLevel
+                import asyncio
+
+                # Create a task to emit the event asynchronously
+                async def emit_init_event():
+                    await overlord.observability_manager.event_logger.emit_event(
+                        EventType.AGENT_INITIALIZED,
+                        level=EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "agent_name": self.name,
+                            "a2a_internal": self.a2a_internal,
+                            "a2a_external": self.a2a_external,
+                            "has_system_message": bool(self.system_message),
+                        },
+                        description=f"Agent initialized: {self.agent_id}",
+                    )
+
+                # Schedule the event emission
+                asyncio.create_task(emit_init_event())
+            except Exception as e:
+                logger.debug(f"Failed to emit agent initialization event: {e}")
+
     def _initialize_clarification_system(self):
         """
         Initialize the clarification system components.
@@ -245,12 +271,12 @@ class Agent:
             content = message.content
             message_obj = message
 
-        # Emit agent message received event
+        # Emit agent message processing event
         if request_context and hasattr(self.overlord, "observability_manager"):
             from .observability import EventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.AGENT_MESSAGE_RECEIVED,
+                EventType.AGENT_MESSAGE_PROCESSING,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -258,7 +284,7 @@ class Agent:
                     "agent_name": self.name,
                     "message_length": len(content),
                 },
-                description=f"Agent {self.agent_id} received message",
+                description=f"Agent {self.agent_id} processing message",
             )
 
         # Let overlord handle memory management
@@ -402,12 +428,12 @@ class Agent:
         # Add response to conversation context
         self._messages.append({"role": "assistant", "content": response.content})
 
-        # Emit agent response ready event
+        # Emit agent response generated event
         if request_context and hasattr(self.overlord, "observability_manager"):
             from .observability import EventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.AGENT_RESPONSE_READY,
+                EventType.AGENT_RESPONSE_GENERATED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -415,7 +441,7 @@ class Agent:
                     "agent_name": self.name,
                     "response_length": len(content),
                 },
-                description=f"Agent {self.agent_id} response ready",
+                description=f"Agent {self.agent_id} response generated",
             )
 
         # Let overlord handle memory management for the response
@@ -693,11 +719,50 @@ class Agent:
 
         except ClarificationError as e:
             logger.error(f"Clarification processing error: {e}")
+
+            # Emit clarification error event
+            if hasattr(self.overlord, "observability_manager"):
+                try:
+                    from .observability import EventType, EventLevel
+                    await self.overlord.observability_manager.event_logger.emit_event(
+                        EventType.ERROR_CLARIFICATION_FAILED,
+                        level=EventLevel.ERROR,
+                        data={
+                            "agent_id": self.agent_id,
+                            "user_id": str(user_id) if user_id is not None else None,
+                            "error": str(e),
+                            "error_type": "ClarificationError",
+                        },
+                        description=f"Clarification processing failed: {e}",
+                    )
+                except Exception:
+                    pass  # Don't let observability errors break the flow
+
             return (
                 "I'm sorry, I had trouble processing your response. " "Could you please try again?"
             )
         except Exception as e:
             logger.error(f"Unexpected error in clarification handling: {e}")
+
+            # Emit general error event
+            if hasattr(self.overlord, "observability_manager"):
+                try:
+                    from .observability import EventType, EventLevel
+                    await self.overlord.observability_manager.event_logger.emit_event(
+                        EventType.ERROR_AGENT_PROCESSING,
+                        level=EventLevel.ERROR,
+                        data={
+                            "agent_id": self.agent_id,
+                            "user_id": str(user_id) if user_id is not None else None,
+                            "error": str(e),
+                            "error_type": "UnexpectedError",
+                            "context": "clarification_handling",
+                        },
+                        description=f"Unexpected error in clarification handling: {e}",
+                    )
+                except Exception:
+                    pass  # Don't let observability errors break the flow
+
             return None
 
     async def _check_for_clarification_needs(
@@ -1134,6 +1199,23 @@ class Agent:
 
         message_id = str(uuid.uuid4())
 
+        # Emit A2A message started event
+        if hasattr(self.overlord, "observability_manager"):
+            from .observability import EventType, EventLevel
+
+            await self.overlord.observability_manager.event_logger.emit_event(
+                EventType.A2A_MESSAGE_SENT,
+                level=EventLevel.INFO,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "message_type": message_type,
+                    "message_id": message_id,
+                    "wait_for_response": wait_for_response,
+                },
+                description=f"A2A message sent: {self.agent_id} -> {target_agent_id}",
+            )
+
         # First, try to find the target agent locally
         if target_agent_id in self.overlord.agents:
             return await self._send_local_a2a_message(
@@ -1522,6 +1604,23 @@ class Agent:
         Returns:
             Response data if this is a "request" message, otherwise None
         """
+        # Emit A2A message received event
+        if hasattr(self.overlord, "observability_manager"):
+            from .observability import EventType, EventLevel
+
+            await self.overlord.observability_manager.event_logger.emit_event(
+                EventType.A2A_MESSAGE_RECEIVED,
+                level=EventLevel.INFO,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_type": message_type,
+                    "message_id": message_id,
+                    "collaboration_type": context.get("collaboration_type") if context else None,
+                },
+                description=f"A2A message received: {source_agent_id} -> {self.agent_id}",
+            )
+
         # Check if this is a collaboration message with special handling
         collaboration_type = None
         if context and isinstance(context, dict):

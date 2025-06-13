@@ -96,7 +96,7 @@ from ..a2a.registry_client import A2ARegistryClient
 from ..a2a.formation_server import A2AFormationServer
 
 # A2A models imported when needed
-from ..secrets import SecretsManager
+from ..secrets_manager import SecretsManager
 from ..utils.id_generator import generate_nanoid
 
 # Enhanced workflow capabilities
@@ -602,6 +602,15 @@ class Overlord:
             ValueError: If loading fails or validation errors are found
         """
         try:
+            # Emit formation loading started event
+            if hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.OVERLORD_INITIALIZATION_STARTED,
+                    level=EventLevel.INFO,
+                    data={"formation_path": formation_path},
+                    description=f"Starting formation loading from {formation_path}",
+                )
+
             # Import FormationLoader and validation when needed
             from ..config.formation_loader import FormationLoader
             from ..config.validation import validate_formation
@@ -635,10 +644,41 @@ class Overlord:
             # Apply configuration to overlord
             await self._apply_formation_config()
 
+            # Emit formation loading completed event
+            if hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.OVERLORD_INITIALIZATION_COMPLETED,
+                    level=EventLevel.INFO,
+                    data={
+                        "formation_id": formation_config.get("id", "unnamed"),
+                        "formation_path": formation_path,
+                        "agents_count": len(formation_config.get("agents", [])),
+                        "mcp_servers_count": len(
+                            formation_config.get("mcp", {}).get("servers", [])
+                        ),
+                    },
+                    description=(
+                        f"Formation loading completed: {formation_config.get('id', 'unnamed')}"
+                    ),
+                )
+
             return formation_config
 
         except Exception as e:
             logger.error(f"Failed to load formation from {formation_path}: {e}")
+
+            # Emit formation loading failed event
+            if hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.ERROR_TIMEOUT_DETECTED,
+                    level=EventLevel.ERROR,
+                    data={
+                        "formation_path": formation_path,
+                        "error": str(e),
+                    },
+                    description=f"Formation loading failed: {e}",
+                )
+
             raise
 
     async def validate_formation(self, formation_path: str) -> Dict[str, Any]:
@@ -1898,30 +1938,97 @@ class Overlord:
         if agent_id:
             full_metadata["agent_id"] = agent_id
 
+        # Emit memory storage started event
+        if hasattr(self, "observability_manager"):
+            await self.observability_manager.event_logger.emit_event(
+                EventType.MEMORY_STORE,
+                level=EventLevel.DEBUG,
+                data={
+                    "content_length": len(content),
+                    "memory_type": "long_term",
+                    "agent_id": agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "has_embedding": embedding is not None,
+                },
+                description="Starting long-term memory storage",
+            )
+
         # Handle multi-user case with Memobase
         if self.is_multi_user and user_id is not None:
             try:
                 # ENHANCE: Use flexible user ID conversion
                 internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-                return await self.long_term_memory.add(
+                memory_id = await self.long_term_memory.add(
                     content=content,
                     metadata=full_metadata,
                     embedding=embedding,
                     user_id=internal_user_id,
                 )
+
+                # Emit memory storage completed event
+                if hasattr(self, "observability_manager"):
+                    await self.observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_STORAGE_LONG_TERM,
+                        level=EventLevel.DEBUG,
+                        data={
+                            "memory_id": memory_id,
+                            "memory_type": "long_term",
+                            "content_length": len(content),
+                        },
+                        description="Long-term memory storage completed",
+                    )
+
+                return memory_id
             except Exception as e:
                 logger.error(f"Error adding to Memobase: {e}")
+                # Emit memory storage failed event
+                if hasattr(self, "observability_manager"):
+                    await self.observability_manager.event_logger.emit_event(
+                        EventType.ERROR_MEMORY_STORAGE,
+                        level=EventLevel.ERROR,
+                        data={
+                            "memory_type": "long_term",
+                            "error": str(e),
+                        },
+                        description=f"Long-term memory storage failed: {e}",
+                    )
                 return None
 
         # Standard long-term memory case
         try:
-            return await self.long_term_memory.add(
+            memory_id = await self.long_term_memory.add(
                 content=content,
                 metadata=full_metadata,
                 embedding=embedding,
             )
+
+            # Emit memory storage completed event
+            if hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.MEMORY_STORAGE_LONG_TERM,
+                    level=EventLevel.DEBUG,
+                    data={
+                        "memory_id": memory_id,
+                        "memory_type": "long_term",
+                        "content_length": len(content),
+                    },
+                    description="Long-term memory storage completed",
+                )
+
+            return memory_id
         except Exception as e:
             logger.error(f"Error adding to long-term memory: {e}")
+            # Emit memory storage failed event
+            if hasattr(self, "observability_manager"):
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.ERROR_MEMORY_STORAGE,
+                    level=EventLevel.ERROR,
+                    data={
+                        "memory_type": "long_term",
+                        "error": str(e),
+                    },
+                    description=f"Long-term memory storage failed: {e}",
+                )
             return None
 
     async def search_memory(
@@ -1974,10 +2081,39 @@ class Overlord:
         # Search buffer memory if available
         if self.buffer_memory:
             try:
+                # Emit memory search started event
+                if hasattr(self, "observability_manager"):
+                    await self.observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_STARTED,
+                        level=EventLevel.DEBUG,
+                        data={
+                            "query": query[:100],
+                            "memory_type": "buffer",
+                            "k": k,
+                            "agent_id": agent_id,
+                        },
+                        description="Starting buffer memory search",
+                    )
+
                 # Use updated search method (now async)
                 buffer_results = await self.buffer_memory.search(
                     query=query, limit=k, filter_metadata=full_filter
                 )
+
+                # Emit memory search completed event
+                if hasattr(self, "observability_manager"):
+                    await self.observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_SHORT_TERM,
+                        level=EventLevel.DEBUG,
+                        data={
+                            "query": query[:100],
+                            "memory_type": "buffer",
+                            "results_count": len(buffer_results),
+                        },
+                        description=(
+                            f"Buffer memory search completed: {len(buffer_results)} results"
+                        ),
+                    )
 
                 # Convert to standard format
                 for item in buffer_results:
@@ -1995,6 +2131,21 @@ class Overlord:
         # Search long-term memory if available and enabled
         if self.long_term_memory and use_long_term:
             try:
+                # Emit memory search started event
+                if hasattr(self, "observability_manager"):
+                    await self.observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_STARTED,
+                        level=EventLevel.DEBUG,
+                        data={
+                            "query": query[:100],
+                            "memory_type": "long_term",
+                            "k": k,
+                            "agent_id": agent_id,
+                            "user_id": str(user_id) if user_id is not None else None,
+                        },
+                        description="Starting long-term memory search",
+                    )
+
                 # Handle multi-user case with Memobase
                 if self.is_multi_user and user_id is not None:
                     # ENHANCE: Use flexible user ID conversion
@@ -2006,6 +2157,21 @@ class Overlord:
                 else:
                     lt_results = await self.long_term_memory.search(
                         query=query, k=k, filter_metadata=full_filter
+                    )
+
+                # Emit memory search completed event
+                if hasattr(self, "observability_manager"):
+                    await self.observability_manager.event_logger.emit_event(
+                        EventType.MEMORY_RETRIEVAL_LONG_TERM,
+                        level=EventLevel.DEBUG,
+                        data={
+                            "query": query[:100],
+                            "memory_type": "long_term",
+                            "results_count": len(lt_results),
+                        },
+                        description=(
+                            f"Long-term memory search completed: {len(lt_results)} results"
+                        ),
                     )
 
                 # Add to results in standard format
@@ -3554,6 +3720,33 @@ class Overlord:
             formation_id=self.formation_id,
             user_id=str(user_id) if user_id is not None else None,
         ) as request_context:
+            # Emit request received event
+            await self.observability_manager.event_logger.emit_event(
+                EventType.REQUEST_RECEIVED,
+                level=EventLevel.INFO,
+                request_context=request_context,
+                data={
+                    "message_length": len(message),
+                    "agent_name": agent_name,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "use_async": use_async,
+                    "has_webhook": webhook_url is not None,
+                },
+                description=f"Request {request_id} received",
+            )
+
+            # Emit request validation event (basic validation)
+            await self.observability_manager.event_logger.emit_event(
+                EventType.REQUEST_VALIDATED,
+                level=EventLevel.INFO,
+                request_context=request_context,
+                data={
+                    "message_valid": len(message.strip()) > 0,
+                    "agent_exists": agent_name is None or agent_name in self.agents,
+                },
+                description=f"Request {request_id} validated",
+            )
+
             # Emit routing started event
             await self.observability_manager.event_logger.emit_event(
                 EventType.OVERLORD_ROUTING_STARTED,
@@ -3631,10 +3824,39 @@ class Overlord:
             else:
                 # Synchronous processing path
                 start_time = time.time()
+
+                # Emit performance monitoring started event
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.PERFORMANCE_DURATION_RECORDED,
+                    level=EventLevel.DEBUG,
+                    request_context=request_context,
+                    data={
+                        "operation": "sync_chat",
+                        "message_length": len(message),
+                        "phase": "started",
+                    },
+                    description="Starting performance monitoring for sync chat",
+                )
+
                 result = await self._process_sync_chat(
                     message, agent_name, user_id, request_context
                 )
                 processing_time = time.time() - start_time
+
+                # Emit performance monitoring completed event
+                await self.observability_manager.event_logger.emit_event(
+                    EventType.PERFORMANCE_DURATION_RECORDED,
+                    level=EventLevel.DEBUG,
+                    request_context=request_context,
+                    data={
+                        "operation": "sync_chat",
+                        "processing_time": processing_time,
+                        "message_length": len(message),
+                        "performance_score": "good" if processing_time < 5.0 else "slow",
+                        "phase": "completed",
+                    },
+                    description=f"Performance monitoring completed: {processing_time:.2f}s",
+                )
 
                 logger.info(
                     f"Request {request_id}: Completed sync processing in {processing_time:.2f}s"

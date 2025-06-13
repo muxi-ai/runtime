@@ -14,6 +14,7 @@ from pathlib import Path
 import httpx
 import logging
 
+from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
 from .models import AgentCard
 from .card_generator import AgentCardGenerator
 from .cache_manager import A2ACacheManager
@@ -66,6 +67,24 @@ class LocalDiscoveryService:
         # HTTP client for health checks
         self.http_client = httpx.AsyncClient(timeout=5.0)
 
+        # Initialize observability
+        try:
+            self.observability = ObservabilityManager.get_instance()
+            self.observability.track_event(
+                EventType.A2A_DISCOVERY_INITIALIZED,
+                EventLevel.INFO,
+                "A2A Discovery Service initialized",
+                data={
+                    "health_check_interval": self.config.health_check_interval,
+                    "agent_timeout": self.config.agent_timeout,
+                    "enable_persistence": self.config.enable_persistence,
+                    "enable_auto_cleanup": self.config.enable_auto_cleanup
+                }
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize observability: {e}")
+            self.observability = None
+
         # Load persisted registry if enabled
         if self.config.enable_persistence and self.config.registry_file:
             self._load_registry()
@@ -81,49 +100,123 @@ class LocalDiscoveryService:
         Returns:
             Service startup information
         """
-        self.formation_name = formation_name
-        self.discovery_port = port
-        self.is_running = True
+        try:
+            self.formation_name = formation_name
+            self.discovery_port = port
+            self.is_running = True
 
-        logger.info(
-            f"Starting A2A Discovery Service for formation '{formation_name}' on port {port}"
-        )
+            logger.info(
+                f"Starting A2A Discovery Service for formation '{formation_name}' on port {port}"
+            )
 
-        # Start health check task
-        if self.config.health_check_interval > 0:
-            self.health_check_task = asyncio.create_task(self._health_check_loop())
+            # Track service start
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_STARTED,
+                    EventLevel.INFO,
+                    "A2A Discovery Service started",
+                    data={
+                        "formation_name": formation_name,
+                        "port": port,
+                        "agents_count": len(self.agents)
+                    }
+                )
 
-        # Auto-cleanup task
-        if self.config.enable_auto_cleanup:
-            asyncio.create_task(self._cleanup_loop())
+            # Start health check task
+            if self.config.health_check_interval > 0:
+                self.health_check_task = asyncio.create_task(self._health_check_loop())
 
-        return {
-            "status": "started",
-            "formation": formation_name,
-            "port": port,
-            "agents_count": len(self.agents),
-            "health_check_enabled": self.health_check_task is not None
-        }
+            # Auto-cleanup task
+            if self.config.enable_auto_cleanup:
+                asyncio.create_task(self._cleanup_loop())
+
+            result = {
+                "status": "started",
+                "formation": formation_name,
+                "port": port,
+                "agents_count": len(self.agents),
+                "health_check_enabled": self.health_check_task is not None
+            }
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_COMPLETED,
+                    EventLevel.INFO,
+                    "A2A Discovery Service startup completed",
+                    data=result
+                )
+
+            return result
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "Failed to start A2A Discovery Service",
+                    data={
+                        "formation_name": formation_name,
+                        "port": port,
+                        "error": str(e)
+                    }
+                )
+            raise
 
     async def stop(self):
         """Stop the discovery service."""
-        logger.info("Stopping A2A Discovery Service")
-        self.is_running = False
+        try:
+            logger.info("Stopping A2A Discovery Service")
 
-        # Stop health check task
-        if self.health_check_task:
-            self.health_check_task.cancel()
-            try:
-                await self.health_check_task
-            except asyncio.CancelledError:
-                pass
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_STOPPED,
+                    EventLevel.INFO,
+                    "A2A Discovery Service stopping",
+                    data={
+                        "formation_name": self.formation_name,
+                        "agents_count": len(self.agents)
+                    }
+                )
 
-        # Close HTTP client
-        await self.http_client.aclose()
+            self.is_running = False
 
-        # Persist registry if enabled
-        if self.config.enable_persistence:
-            self._save_registry()
+            # Stop health check task
+            if self.health_check_task:
+                self.health_check_task.cancel()
+                try:
+                    await self.health_check_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Close HTTP client
+            await self.http_client.aclose()
+
+            # Persist registry if enabled
+            if self.config.enable_persistence:
+                self._save_registry()
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_STOPPED,
+                    EventLevel.INFO,
+                    "A2A Discovery Service stopped successfully",
+                    data={
+                        "formation_name": self.formation_name
+                    }
+                )
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "Failed to stop A2A Discovery Service",
+                    data={
+                        "formation_name": self.formation_name,
+                        "error": str(e)
+                    }
+                )
+            raise
 
     async def register_agent(
         self,
@@ -142,41 +235,89 @@ class LocalDiscoveryService:
         Returns:
             Registration result
         """
-        logger.info(f"Registering agent {agent_id} at {endpoint}")
+        try:
+            logger.info(f"Registering agent {agent_id} at {endpoint}")
 
-        # Fetch agent card if not provided
-        if agent_card is None:
-            try:
-                agent_card = await self._fetch_agent_card(endpoint)
-            except Exception as e:
-                logger.error(f"Failed to fetch agent card for {agent_id}: {e}")
-                raise ValueError(f"Could not retrieve agent card: {e}")
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_AGENT_REGISTRATION_STARTED,
+                    EventLevel.INFO,
+                    "A2A agent registration started",
+                    data={
+                        "agent_id": agent_id,
+                        "endpoint": endpoint,
+                        "formation_name": self.formation_name
+                    }
+                )
 
-        # Create registration
-        registration = AgentRegistration(
-            agent_id=agent_id,
-            agent_card=agent_card,
-            endpoint=endpoint,
-            registered_at=time.time(),
-            last_seen=time.time(),
-            status="active"
-        )
+            # Fetch agent card if not provided
+            if agent_card is None:
+                try:
+                    agent_card = await self._fetch_agent_card(endpoint)
+                except Exception as e:
+                    logger.error(f"Failed to fetch agent card for {agent_id}: {e}")
+                    if self.observability:
+                        self.observability.track_event(
+                            EventType.ERROR_RETRY_ATTEMPTED,
+                            EventLevel.ERROR,
+                            "Failed to fetch agent card during registration",
+                            data={
+                                "agent_id": agent_id,
+                                "endpoint": endpoint,
+                                "error": str(e)
+                            }
+                        )
+                    raise ValueError(f"Could not retrieve agent card: {e}")
 
-        self.agents[agent_id] = registration
+            # Create registration
+            registration = AgentRegistration(
+                agent_id=agent_id,
+                agent_card=agent_card,
+                endpoint=endpoint,
+                registered_at=time.time(),
+                last_seen=time.time(),
+                status="active"
+            )
 
-        # Persist if enabled
-        if self.config.enable_persistence:
-            self._save_registry()
+            self.agents[agent_id] = registration
 
-        logger.info(f"Successfully registered agent {agent_id}")
+            # Persist if enabled
+            if self.config.enable_persistence:
+                self._save_registry()
 
-        return {
-            "agent_id": agent_id,
-            "status": "registered",
-            "endpoint": endpoint,
-            "capabilities": len(agent_card.capabilities),
-            "registered_at": registration.registered_at
-        }
+            logger.info(f"Successfully registered agent {agent_id}")
+
+            result = {
+                "agent_id": agent_id,
+                "status": "registered",
+                "endpoint": endpoint,
+                "capabilities": len(agent_card.capabilities),
+                "registered_at": registration.registered_at
+            }
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_AGENT_REGISTRATION_COMPLETED,
+                    EventLevel.INFO,
+                    "A2A agent registration completed",
+                    data=result
+                )
+
+            return result
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "Failed to register A2A agent",
+                    data={
+                        "agent_id": agent_id,
+                        "endpoint": endpoint,
+                        "error": str(e)
+                    }
+                )
+            raise
 
     async def unregister_agent(self, agent_id: str) -> bool:
         """
@@ -188,16 +329,64 @@ class LocalDiscoveryService:
         Returns:
             True if agent was unregistered, False if not found
         """
-        if agent_id in self.agents:
-            del self.agents[agent_id]
-            logger.info(f"Unregistered agent {agent_id}")
+        try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_AGENT_UNREGISTRATION_STARTED,
+                    EventLevel.INFO,
+                    "A2A agent unregistration started",
+                    data={
+                        "agent_id": agent_id,
+                        "formation_name": self.formation_name
+                    }
+                )
 
-            # Persist if enabled
-            if self.config.enable_persistence:
-                self._save_registry()
+            if agent_id in self.agents:
+                del self.agents[agent_id]
+                logger.info(f"Unregistered agent {agent_id}")
 
-            return True
-        return False
+                # Persist if enabled
+                if self.config.enable_persistence:
+                    self._save_registry()
+
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                        EventLevel.INFO,
+                        "A2A agent unregistration completed",
+                        data={
+                            "agent_id": agent_id,
+                            "result": "success"
+                        }
+                    )
+
+                return True
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                    EventLevel.WARNING,
+                    "A2A agent unregistration completed - agent not found",
+                    data={
+                        "agent_id": agent_id,
+                        "result": "not_found"
+                    }
+                )
+
+            return False
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "Failed to unregister A2A agent",
+                    data={
+                        "agent_id": agent_id,
+                        "error": str(e)
+                    }
+                )
+            raise
 
     def discover_agents(
         self,
@@ -214,38 +403,77 @@ class LocalDiscoveryService:
         Returns:
             List of discovered agent information
         """
-        status_filter = status_filter or ["active"]
+        try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_QUERY_STARTED,
+                    EventLevel.INFO,
+                    "A2A agent discovery query started",
+                    data={
+                        "capability_filter": capability_filter,
+                        "status_filter": status_filter,
+                        "formation_name": self.formation_name
+                    }
+                )
 
-        discovered = []
+            status_filter = status_filter or ["active"]
 
-        for agent_id, registration in self.agents.items():
-            # Status filter
-            if registration.status not in status_filter:
-                continue
+            discovered = []
 
-            # Capability filter
-            if capability_filter:
-                agent_capabilities = set(registration.agent_card.capabilities.keys())
-                required_capabilities = set(capability_filter)
-                if not required_capabilities.issubset(agent_capabilities):
+            for agent_id, registration in self.agents.items():
+                # Status filter
+                if registration.status not in status_filter:
                     continue
 
-            discovered.append({
-                "agent_id": agent_id,
-                "name": registration.agent_card.name,
-                "description": registration.agent_card.description,
-                "endpoint": registration.endpoint,
-                "capabilities": list(registration.agent_card.capabilities.keys()),
-                "status": registration.status,
-                "health_score": registration.health_score,
-                "response_time_ms": registration.response_time_ms,
-                "last_seen": registration.last_seen
-            })
+                # Capability filter
+                if capability_filter:
+                    agent_capabilities = set(registration.agent_card.capabilities.keys())
+                    required_capabilities = set(capability_filter)
+                    if not required_capabilities.issubset(agent_capabilities):
+                        continue
 
-        # Sort by health score (best first)
-        discovered.sort(key=lambda x: x["health_score"], reverse=True)
+                discovered.append({
+                    "agent_id": agent_id,
+                    "name": registration.agent_card.name,
+                    "description": registration.agent_card.description,
+                    "endpoint": registration.endpoint,
+                    "capabilities": list(registration.agent_card.capabilities.keys()),
+                    "status": registration.status,
+                    "health_score": registration.health_score,
+                    "response_time_ms": registration.response_time_ms,
+                    "last_seen": registration.last_seen
+                })
 
-        return discovered
+            # Sort by health score (best first)
+            discovered.sort(key=lambda x: x["health_score"], reverse=True)
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_QUERY_COMPLETED,
+                    EventLevel.INFO,
+                    "A2A agent discovery query completed",
+                    data={
+                        "agents_found": len(discovered),
+                        "capability_filter": capability_filter,
+                        "status_filter": status_filter
+                    }
+                )
+
+            return discovered
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "Failed to discover A2A agents",
+                    data={
+                        "capability_filter": capability_filter,
+                        "status_filter": status_filter,
+                        "error": str(e)
+                    }
+                )
+            raise
 
     def get_agent_info(self, agent_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -257,21 +485,70 @@ class LocalDiscoveryService:
         Returns:
             Agent information or None if not found
         """
-        if agent_id not in self.agents:
+        try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_QUERY_STARTED,
+                    EventLevel.DEBUG,
+                    "A2A agent info query started",
+                    data={
+                        "agent_id": agent_id,
+                        "formation_name": self.formation_name
+                    }
+                )
+
+            if agent_id not in self.agents:
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_DISCOVERY_QUERY_COMPLETED,
+                        EventLevel.DEBUG,
+                        "A2A agent info query completed - agent not found",
+                        data={
+                            "agent_id": agent_id,
+                            "found": False
+                        }
+                    )
+                return None
+
+            registration = self.agents[agent_id]
+
+            result = {
+                "agent_id": agent_id,
+                "agent_card": registration.agent_card.to_dict(),
+                "endpoint": registration.endpoint,
+                "status": registration.status,
+                "health_score": registration.health_score,
+                "response_time_ms": registration.response_time_ms,
+                "registered_at": registration.registered_at,
+                "last_seen": registration.last_seen
+            }
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_QUERY_COMPLETED,
+                    EventLevel.DEBUG,
+                    "A2A agent info query completed successfully",
+                    data={
+                        "agent_id": agent_id,
+                        "found": True,
+                        "status": registration.status
+                    }
+                )
+
+            return result
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "A2A agent info query failed",
+                    data={
+                        "agent_id": agent_id,
+                        "error": str(e)
+                    }
+                )
             return None
-
-        registration = self.agents[agent_id]
-
-        return {
-            "agent_id": agent_id,
-            "agent_card": registration.agent_card.to_dict(),
-            "endpoint": registration.endpoint,
-            "status": registration.status,
-            "health_score": registration.health_score,
-            "response_time_ms": registration.response_time_ms,
-            "registered_at": registration.registered_at,
-            "last_seen": registration.last_seen
-        }
 
     def get_formation_status(self) -> Dict[str, Any]:
         """
@@ -280,30 +557,69 @@ class LocalDiscoveryService:
         Returns:
             Formation status information
         """
-        total_agents = len(self.agents)
-        active_agents = len([a for a in self.agents.values() if a.status == "active"])
-        inactive_agents = len([a for a in self.agents.values() if a.status == "inactive"])
-        unreachable_agents = len([a for a in self.agents.values() if a.status == "unreachable"])
+        try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_QUERY_STARTED,
+                    EventLevel.DEBUG,
+                    "A2A formation status query started",
+                    data={
+                        "formation_name": self.formation_name
+                    }
+                )
 
-        avg_health_score = 0.0
-        if total_agents > 0:
-            avg_health_score = sum(a.health_score for a in self.agents.values()) / total_agents
+            total_agents = len(self.agents)
+            active_agents = len([a for a in self.agents.values() if a.status == "active"])
+            inactive_agents = len([a for a in self.agents.values() if a.status == "inactive"])
+            unreachable_agents = len([a for a in self.agents.values() if a.status == "unreachable"])
 
-        capabilities = set()
-        for agent in self.agents.values():
-            capabilities.update(agent.agent_card.capabilities.keys())
+            avg_health_score = 0.0
+            if total_agents > 0:
+                avg_health_score = sum(a.health_score for a in self.agents.values()) / total_agents
 
-        return {
-            "formation_name": self.formation_name,
-            "discovery_port": self.discovery_port,
-            "total_agents": total_agents,
-            "active_agents": active_agents,
-            "inactive_agents": inactive_agents,
-            "unreachable_agents": unreachable_agents,
-            "avg_health_score": round(avg_health_score, 2),
-            "available_capabilities": sorted(list(capabilities)),
-            "service_uptime": time.time() - getattr(self, 'start_time', time.time())
-        }
+            capabilities = set()
+            for agent in self.agents.values():
+                capabilities.update(agent.agent_card.capabilities.keys())
+
+            result = {
+                "formation_name": self.formation_name,
+                "discovery_port": self.discovery_port,
+                "total_agents": total_agents,
+                "active_agents": active_agents,
+                "inactive_agents": inactive_agents,
+                "unreachable_agents": unreachable_agents,
+                "avg_health_score": round(avg_health_score, 2),
+                "available_capabilities": sorted(list(capabilities)),
+                "service_uptime": time.time() - getattr(self, 'start_time', time.time())
+            }
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_QUERY_COMPLETED,
+                    EventLevel.DEBUG,
+                    "A2A formation status query completed",
+                    data={
+                        "formation_name": self.formation_name,
+                        "total_agents": total_agents,
+                        "active_agents": active_agents,
+                        "avg_health_score": round(avg_health_score, 2)
+                    }
+                )
+
+            return result
+
+        except Exception as e:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "A2A formation status query failed",
+                    data={
+                        "formation_name": self.formation_name,
+                        "error": str(e)
+                    }
+                )
+            return {}
 
     async def _fetch_agent_card(self, endpoint: str) -> AgentCard:
         """Fetch agent card from agent endpoint."""
@@ -318,6 +634,18 @@ class LocalDiscoveryService:
     async def _health_check_agent(self, agent_id: str, registration: AgentRegistration) -> bool:
         """Perform health check on a single agent."""
         try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_HEALTH_CHECK_STARTED,
+                    EventLevel.DEBUG,
+                    "A2A agent health check started",
+                    data={
+                        "agent_id": agent_id,
+                        "endpoint": registration.endpoint,
+                        "formation_name": self.formation_name
+                    }
+                )
+
             start_time = time.time()
 
             # Try to fetch agent card as health check
@@ -343,22 +671,74 @@ class LocalDiscoveryService:
                 else:
                     registration.health_score = 0.2
 
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_HEALTH_CHECK_COMPLETED,
+                        EventLevel.DEBUG,
+                        "A2A agent health check completed successfully",
+                        data={
+                            "agent_id": agent_id,
+                            "status": "active",
+                            "response_time_ms": response_time_ms,
+                            "health_score": registration.health_score
+                        }
+                    )
+
                 return True
             else:
                 registration.status = "inactive"
                 registration.health_score = 0.1
+
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_HEALTH_CHECK_COMPLETED,
+                        EventLevel.WARNING,
+                        "A2A agent health check completed with non-200 status",
+                        data={
+                            "agent_id": agent_id,
+                            "status": "inactive",
+                            "status_code": response.status_code,
+                            "health_score": registration.health_score
+                        }
+                    )
+
                 return False
 
         except Exception as e:
             logger.debug(f"Health check failed for agent {agent_id}: {e}")
             registration.status = "unreachable"
             registration.health_score = 0.0
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_HEALTH_CHECK_FAILED,
+                    EventLevel.WARNING,
+                    "A2A agent health check failed",
+                    data={
+                        "agent_id": agent_id,
+                        "status": "unreachable",
+                        "error": str(e),
+                        "health_score": 0.0
+                    }
+                )
+
             return False
 
     async def _health_check_loop(self):
         """Background task for health checking agents."""
         while self.is_running:
             try:
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_HEALTH_CHECK_STARTED,
+                        EventLevel.DEBUG,
+                        "A2A health check loop iteration started",
+                        data={
+                            "formation_name": self.formation_name,
+                            "agent_count": len(self.agents)
+                        }
+                    )
+
                 # Health check all agents
                 tasks = []
                 for agent_id, registration in self.agents.items():
@@ -368,6 +748,17 @@ class LocalDiscoveryService:
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
 
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_HEALTH_CHECK_COMPLETED,
+                        EventLevel.DEBUG,
+                        "A2A health check loop iteration completed",
+                        data={
+                            "formation_name": self.formation_name,
+                            "agents_checked": len(tasks)
+                        }
+                    )
+
                 # Wait for next health check
                 await asyncio.sleep(self.config.health_check_interval)
 
@@ -375,13 +766,37 @@ class LocalDiscoveryService:
                 break
             except Exception as e:
                 logger.error(f"Error in health check loop: {e}")
+
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.ERROR_RETRY_ATTEMPTED,
+                        EventLevel.ERROR,
+                        "A2A health check loop error",
+                        data={
+                            "formation_name": self.formation_name,
+                            "error": str(e)
+                        }
+                    )
+
                 await asyncio.sleep(5)  # Short delay on error
 
     async def _cleanup_loop(self):
         """Background task for cleaning up inactive agents."""
         while self.is_running:
             try:
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_DISCOVERY_STARTED,
+                        EventLevel.DEBUG,
+                        "A2A cleanup loop iteration started",
+                        data={
+                            "formation_name": self.formation_name,
+                            "agent_count": len(self.agents)
+                        }
+                    )
+
                 current_time = time.time()
+                cleaned_up_agents = 0
 
                 for agent_id, registration in self.agents.items():
                     # Remove agents that haven't been seen for too long
@@ -390,6 +805,31 @@ class LocalDiscoveryService:
                             logger.info(f"Agent {agent_id} timed out, marking as unreachable")
                             registration.status = "unreachable"
                             registration.health_score = 0.0
+                            cleaned_up_agents += 1
+
+                            if self.observability:
+                                self.observability.track_event(
+                                    EventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                                    EventLevel.INFO,
+                                    "A2A agent marked as unreachable due to timeout",
+                                    data={
+                                        "agent_id": agent_id,
+                                        "formation_name": self.formation_name,
+                                        "timeout_seconds": self.config.agent_timeout,
+                                        "last_seen_ago": current_time - registration.last_seen
+                                    }
+                                )
+
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_DISCOVERY_COMPLETED,
+                        EventLevel.DEBUG,
+                        "A2A cleanup loop iteration completed",
+                        data={
+                            "formation_name": self.formation_name,
+                            "cleaned_up_agents": cleaned_up_agents
+                        }
+                    )
 
                 # Wait before next cleanup check
                 await asyncio.sleep(60)  # Check every minute
@@ -398,22 +838,66 @@ class LocalDiscoveryService:
                 break
             except Exception as e:
                 logger.error(f"Error in cleanup loop: {e}")
+
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.ERROR_RETRY_ATTEMPTED,
+                        EventLevel.ERROR,
+                        "A2A cleanup loop error",
+                        data={
+                            "formation_name": self.formation_name,
+                            "error": str(e)
+                        }
+                    )
+
                 await asyncio.sleep(10)
 
     def _load_registry(self):
         """Load persisted registry from file."""
         if not self.config.registry_file:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_COMPLETED,
+                    EventLevel.DEBUG,
+                    "A2A registry loading skipped - no registry file configured",
+                    data={
+                        "formation_name": self.formation_name
+                    }
+                )
             return
 
         try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_STARTED,
+                    EventLevel.DEBUG,
+                    "A2A registry loading started",
+                    data={
+                        "formation_name": self.formation_name,
+                        "registry_file": self.config.registry_file
+                    }
+                )
+
             registry_path = Path(self.config.registry_file)
             if not registry_path.exists():
+                if self.observability:
+                    self.observability.track_event(
+                        EventType.A2A_DISCOVERY_COMPLETED,
+                        EventLevel.DEBUG,
+                        "A2A registry file not found, starting with empty registry",
+                        data={
+                            "formation_name": self.formation_name,
+                            "registry_file": self.config.registry_file
+                        }
+                    )
                 return
 
             with open(registry_path, 'r') as f:
                 data = json.load(f)
 
             # Restore agents (mark as inactive since we don't know current status)
+            loaded_agents = 0
+            failed_agents = 0
             for agent_data in data.get('agents', []):
                 try:
                     agent_card = AgentCard.from_dict(agent_data['agent_card'])
@@ -427,20 +911,68 @@ class LocalDiscoveryService:
                         health_score=0.0
                     )
                     self.agents[agent_data['agent_id']] = registration
+                    loaded_agents += 1
                 except Exception as e:
                     logger.error(f"Failed to restore agent {agent_data.get('agent_id')}: {e}")
+                    failed_agents += 1
 
             logger.info(f"Loaded {len(self.agents)} agents from registry")
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_COMPLETED,
+                    EventLevel.INFO,
+                    "A2A registry loaded successfully",
+                    data={
+                        "formation_name": self.formation_name,
+                        "loaded_agents": loaded_agents,
+                        "failed_agents": failed_agents,
+                        "total_agents": len(self.agents)
+                    }
+                )
 
         except Exception as e:
             logger.error(f"Failed to load registry: {e}")
 
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "A2A registry loading failed",
+                    data={
+                        "formation_name": self.formation_name,
+                        "registry_file": self.config.registry_file,
+                        "error": str(e)
+                    }
+                )
+
     def _save_registry(self):
         """Save current registry to file."""
         if not self.config.registry_file:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_COMPLETED,
+                    EventLevel.DEBUG,
+                    "A2A registry saving skipped - no registry file configured",
+                    data={
+                        "formation_name": self.formation_name
+                    }
+                )
             return
 
         try:
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_STARTED,
+                    EventLevel.DEBUG,
+                    "A2A registry saving started",
+                    data={
+                        "formation_name": self.formation_name,
+                        "registry_file": self.config.registry_file,
+                        "agent_count": len(self.agents)
+                    }
+                )
+
             registry_path = Path(self.config.registry_file)
             registry_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -468,8 +1000,31 @@ class LocalDiscoveryService:
 
             logger.debug(f"Saved registry with {len(self.agents)} agents")
 
+            if self.observability:
+                self.observability.track_event(
+                    EventType.A2A_DISCOVERY_COMPLETED,
+                    EventLevel.DEBUG,
+                    "A2A registry saved successfully",
+                    data={
+                        "formation_name": self.formation_name,
+                        "saved_agents": len(self.agents)
+                    }
+                )
+
         except Exception as e:
             logger.error(f"Failed to save registry: {e}")
+
+            if self.observability:
+                self.observability.track_event(
+                    EventType.ERROR_RETRY_ATTEMPTED,
+                    EventLevel.ERROR,
+                    "A2A registry saving failed",
+                    data={
+                        "formation_name": self.formation_name,
+                        "registry_file": self.config.registry_file,
+                        "error": str(e)
+                    }
+                )
 
 
 class DiscoveryServiceManager:

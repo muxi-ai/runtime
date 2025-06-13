@@ -82,6 +82,9 @@ from onellm import ChatCompletion, Embedding
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
 
+# Import observability components
+from ..observability import ObservabilityManager, EventType, EventLevel
+
 
 # File processing configuration
 FILE_SIZE_LIMITS = {
@@ -758,6 +761,27 @@ class LLM:
         Raises:
             LLMError: For various error conditions with appropriate classification.
         """
+        start_time = time.time()
+
+        # Emit LLM request started event
+        try:
+            await ObservabilityManager.get_instance().event_logger.emit_event(
+                EventType.LLM_REQUEST_STARTED,
+                level=EventLevel.INFO,
+                data={
+                    "model": self.model_name,
+                    "provider": self._provider,
+                    "message_count": len(messages),
+                    "has_files": files is not None and len(files) > 0,
+                    "file_count": len(files) if files else 0,
+                    "fusion_mode": fusion_mode,
+                    "temperature": temperature or self.temperature,
+                    "max_tokens": max_tokens or self.max_tokens,
+                },
+                description=f"LLM chat request started for {self.model_name}",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to emit LLM request started event: {e}")
 
         # Handle text-only conversations
         if not files:

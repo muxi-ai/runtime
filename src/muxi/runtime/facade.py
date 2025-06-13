@@ -583,6 +583,27 @@ class Muxi:
             For sync responses: The agent's response as a string.
             For async responses: Dict with request_id and status information.
         """
+        # Emit facade request received event
+        try:
+            from .observability import EventType, EventLevel, ObservabilityManager
+            observability_manager = ObservabilityManager.get_instance()
+            if observability_manager:
+                await observability_manager.event_logger.emit_event(
+                    EventType.REQUEST_RECEIVED,
+                    level=EventLevel.INFO,
+                    data={
+                        "message_length": len(message),
+                        "agent_name": agent_name,
+                        "user_id": user_id,
+                        "use_async": use_async,
+                        "has_webhook_url": webhook_url is not None,
+                        "threshold_seconds": threshold_seconds,
+                    },
+                    description=f"Facade chat request received for agent: {agent_name or 'auto'}",
+                )
+        except Exception:
+            pass  # Don't let observability errors break the flow
+
         # Process the message through the overlord with all parameters
         response = await self.overlord.chat(
             message=message,
@@ -592,6 +613,25 @@ class Muxi:
             webhook_url=webhook_url,
             threshold_seconds=threshold_seconds
         )
+
+        # Emit facade response completion event
+        try:
+            if observability_manager:
+                is_async_response = isinstance(response, dict) and "request_id" in response
+                await observability_manager.event_logger.emit_event(
+                    EventType.REQUEST_COMPLETED,
+                    level=EventLevel.INFO,
+                    data={
+                        "is_async_response": is_async_response,
+                        "response_type": type(response).__name__,
+                        "response_length": len(str(response)),
+                        "agent_name": agent_name,
+                        "user_id": user_id,
+                    },
+                    description=f"Facade chat response completed (async: {is_async_response})",
+                )
+        except Exception:
+            pass  # Don't let observability errors break the flow
 
         # Handle async response (dict with request_id)
         if isinstance(response, dict) and "request_id" in response:

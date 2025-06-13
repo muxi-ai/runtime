@@ -54,6 +54,13 @@
 # allowing the framework to be extended without code changes.
 # =============================================================================
 
+# Graceful import for observability
+try:
+    from ..observability import ObservabilityManager, EventType, EventLevel
+    OBSERVABILITY_AVAILABLE = True
+except ImportError:
+    OBSERVABILITY_AVAILABLE = False
+
 
 class Extension:
     """
@@ -91,10 +98,87 @@ class Extension:
         Raises:
             ValueError: If the extension class doesn't define a 'name' attribute.
         """
-        if not extension_cls.name:
-            raise ValueError("Extension must define a 'name' class attribute")
-        cls._registry[extension_cls.name] = extension_cls
-        return extension_cls
+        # Observability: Extension registration started
+        if OBSERVABILITY_AVAILABLE:
+            try:
+                obs_manager = ObservabilityManager.get_instance()
+                obs_manager.log_event(
+                    event_type=EventType.EXTENSION_REGISTRATION_STARTED,
+                    level=EventLevel.INFO,
+                    message=(f"Starting extension registration for "
+                             f"{extension_cls.__name__}"),
+                    data={
+                        "extension_class": extension_cls.__name__,
+                        "extension_name": getattr(extension_cls, 'name', None),
+                        "registry_size_before": len(cls._registry)
+                    }
+                )
+            except Exception:
+                pass  # Don't let observability failures break functionality
+
+        try:
+            if not extension_cls.name:
+                error_msg = "Extension must define a 'name' class attribute"
+
+                # Observability: Extension registration failed
+                if OBSERVABILITY_AVAILABLE:
+                    try:
+                        obs_manager.log_event(
+                            event_type=EventType.EXTENSION_REGISTRATION_COMPLETED,
+                            level=EventLevel.ERROR,
+                            message=(f"Extension registration failed for "
+                                     f"{extension_cls.__name__}: {error_msg}"),
+                            data={
+                                "extension_class": extension_cls.__name__,
+                                "error": error_msg,
+                                "success": False
+                            }
+                        )
+                    except Exception:
+                        pass
+
+                raise ValueError(error_msg)
+
+            cls._registry[extension_cls.name] = extension_cls
+
+            # Observability: Extension registration completed successfully
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_REGISTRATION_COMPLETED,
+                        level=EventLevel.INFO,
+                        message=f"Extension registration completed for {extension_cls.__name__}",
+                        data={
+                            "extension_class": extension_cls.__name__,
+                            "extension_name": extension_cls.name,
+                            "registry_size_after": len(cls._registry),
+                            "success": True
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return extension_cls
+
+        except Exception as e:
+            # Observability: Extension registration failed with exception
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_REGISTRATION_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message=(f"Extension registration failed for "
+                                 f"{extension_cls.__name__}: {str(e)}"),
+                        data={
+                            "extension_class": extension_cls.__name__,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "success": False
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     @classmethod
     def get(cls, name):
@@ -112,7 +196,65 @@ class Extension:
             The extension class if found, or None if no extension with the
             specified name is registered.
         """
-        return cls._registry.get(name)
+        # Observability: Extension retrieval started
+        if OBSERVABILITY_AVAILABLE:
+            try:
+                obs_manager = ObservabilityManager.get_instance()
+                obs_manager.log_event(
+                    event_type=EventType.EXTENSION_LOOKUP_STARTED,
+                    level=EventLevel.DEBUG,
+                    message=f"Starting extension lookup for name: {name}",
+                    data={
+                        "extension_name": name,
+                        "registry_size": len(cls._registry),
+                        "available_extensions": list(cls._registry.keys())
+                    }
+                )
+            except Exception:
+                pass
+
+        try:
+            extension_cls = cls._registry.get(name)
+            found = extension_cls is not None
+
+            # Observability: Extension retrieval completed
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_LOOKUP_COMPLETED,
+                        level=EventLevel.DEBUG,
+                        message=(f"Extension lookup completed for name: {name}, "
+                                 f"found: {found}"),
+                        data={
+                            "extension_name": name,
+                            "found": found,
+                            "extension_class": extension_cls.__name__ if extension_cls else None,
+                            "success": True
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return extension_cls
+
+        except Exception as e:
+            # Observability: Extension retrieval failed
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_LOOKUP_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message=f"Extension lookup failed for name: {name}: {str(e)}",
+                        data={
+                            "extension_name": name,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "success": False
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     @classmethod
     def list(cls):
@@ -127,7 +269,60 @@ class Extension:
             These names can be used with the get() method to retrieve the
             corresponding extension classes.
         """
-        return list(cls._registry.keys())
+        # Observability: Extension listing started
+        if OBSERVABILITY_AVAILABLE:
+            try:
+                obs_manager = ObservabilityManager.get_instance()
+                obs_manager.log_event(
+                    event_type=EventType.EXTENSION_LISTING_STARTED,
+                    level=EventLevel.DEBUG,
+                    message="Starting extension listing",
+                    data={
+                        "registry_size": len(cls._registry)
+                    }
+                )
+            except Exception:
+                pass
+
+        try:
+            extension_names = list(cls._registry.keys())
+
+            # Observability: Extension listing completed
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_LISTING_COMPLETED,
+                        level=EventLevel.DEBUG,
+                        message=(f"Extension listing completed, found "
+                                 f"{len(extension_names)} extensions"),
+                        data={
+                            "extension_count": len(extension_names),
+                            "extension_names": extension_names,
+                            "success": True
+                        }
+                    )
+                except Exception:
+                    pass
+
+            return extension_names
+
+        except Exception as e:
+            # Observability: Extension listing failed
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_LISTING_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message=f"Extension listing failed: {str(e)}",
+                        data={
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "success": False
+                        }
+                    )
+                except Exception:
+                    pass
+            raise
 
     @classmethod
     def init(cls, **kwargs):
@@ -148,4 +343,65 @@ class Extension:
         Raises:
             NotImplementedError: If the extension subclass does not implement this method.
         """
-        raise NotImplementedError(f"Extension {cls.__name__} does not implement the init method")
+        # Observability: Extension initialization started
+        if OBSERVABILITY_AVAILABLE:
+            try:
+                obs_manager = ObservabilityManager.get_instance()
+                obs_manager.log_event(
+                    event_type=EventType.EXTENSION_INITIALIZATION_STARTED,
+                    level=EventLevel.INFO,
+                    message=f"Starting extension initialization for {cls.__name__}",
+                    data={
+                        "extension_class": cls.__name__,
+                        "extension_name": getattr(cls, 'name', None),
+                        "kwargs_keys": list(kwargs.keys()),
+                        "kwargs_count": len(kwargs)
+                    }
+                )
+            except Exception:
+                pass
+
+        try:
+            error_msg = f"Extension {cls.__name__} does not implement the init method"
+
+            # Observability: Extension initialization failed (not implemented)
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_INITIALIZATION_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message=(f"Extension initialization failed for "
+                                 f"{cls.__name__}: {error_msg}"),
+                        data={
+                            "extension_class": cls.__name__,
+                            "extension_name": getattr(cls, 'name', None),
+                            "error": error_msg,
+                            "error_type": "NotImplementedError",
+                            "success": False
+                        }
+                    )
+                except Exception:
+                    pass
+
+            raise NotImplementedError(error_msg)
+
+        except Exception as e:
+            # Observability: Extension initialization failed with exception
+            if OBSERVABILITY_AVAILABLE:
+                try:
+                    obs_manager.log_event(
+                        event_type=EventType.EXTENSION_INITIALIZATION_COMPLETED,
+                        level=EventLevel.ERROR,
+                        message=(f"Extension initialization failed for "
+                                 f"{cls.__name__}: {str(e)}"),
+                        data={
+                            "extension_class": cls.__name__,
+                            "extension_name": getattr(cls, 'name', None),
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "success": False
+                        }
+                    )
+                except Exception:
+                    pass
+            raise

@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import httpx
 import time
 
+from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
 from .models import AgentCard
 
 logger = logging.getLogger(__name__)
@@ -58,42 +59,173 @@ class A2ARegistryClient:
             registries: List of registry URLs from formation config
             config: Client configuration options
         """
-        self.registries = registries or []
-        self.config = config or RegistryConfig()
+        try:
+            self.registries = registries or []
+            self.config = config or RegistryConfig()
 
-        # HTTP client with timeout configuration
-        self.http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(self.config.timeout_seconds),
-            headers={"User-Agent": self.config.user_agent}
-        )
+            # HTTP client with timeout configuration
+            self.http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(self.config.timeout_seconds),
+                headers={"User-Agent": self.config.user_agent}
+            )
 
-        # Track registry health
-        self.registry_status: Dict[str, Dict[str, Any]] = {}
+            # Track registry health
+            self.registry_status: Dict[str, Dict[str, Any]] = {}
 
-        # Track registered agents per registry
-        self.registered_agents: Dict[str, List[str]] = {}
+            # Track registered agents per registry
+            self.registered_agents: Dict[str, List[str]] = {}
 
-        logger.info(f"Initialized A2ARegistryClient with {len(self.registries)} registries")
+            # Initialize registry status tracking
+            for registry_url in self.registries:
+                self.registry_status[registry_url] = {"last_check": None, "healthy": None}
+                self.registered_agents[registry_url] = []
+
+            # Emit initialization event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRY_CONNECTED,
+                level=EventLevel.INFO,
+                message=f"A2A Registry Client initialized with {len(self.registries)} registries",
+                data={
+                    "registries_count": len(self.registries),
+                    "registries": self.registries,
+                    "timeout_seconds": self.config.timeout_seconds,
+                    "max_retries": self.config.max_retries
+                }
+            )
+
+            logger.info(f"Initialized A2ARegistryClient with {len(self.registries)} registries")
+
+        except Exception as e:
+            # Emit error event for initialization failure
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to initialize A2A Registry Client: {str(e)}",
+                data={
+                    "registries_count": len(registries) if registries else 0,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def close(self):
         """Close the HTTP client"""
-        await self.http_client.aclose()
+        try:
+            await self.http_client.aclose()
+
+            # Emit client close event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRY_DISCONNECTED,
+                level=EventLevel.INFO,
+                message="A2A Registry Client closed",
+                data={
+                    "registries_count": len(self.registries),
+                    "total_registered_agents": sum(len(agents) for agents in self.registered_agents.values())
+                }
+            )
+
+        except Exception as e:
+            # Emit error event for close failure
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to close A2A Registry Client: {str(e)}",
+                data={"error": str(e)}
+            )
+            raise
 
     def add_registry(self, registry_url: str) -> None:
         """Add a new registry URL to the client"""
-        if registry_url not in self.registries:
-            self.registries.append(registry_url)
-            self.registry_status[registry_url] = {"last_check": None, "healthy": None}
-            self.registered_agents[registry_url] = []
-            logger.info(f"Added registry: {registry_url}")
+        try:
+            if registry_url not in self.registries:
+                self.registries.append(registry_url)
+                self.registry_status[registry_url] = {"last_check": None, "healthy": None}
+                self.registered_agents[registry_url] = []
+
+                # Emit registry addition event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRY_CONNECTED,
+                    level=EventLevel.INFO,
+                    message=f"Added registry: {registry_url}",
+                    data={
+                        "registry_url": registry_url,
+                        "total_registries": len(self.registries)
+                    }
+                )
+
+                logger.info(f"Added registry: {registry_url}")
+            else:
+                # Emit warning for duplicate registry
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRY_CONNECTED,
+                    level=EventLevel.WARNING,
+                    message=f"Registry already exists: {registry_url}",
+                    data={
+                        "registry_url": registry_url,
+                        "total_registries": len(self.registries)
+                    }
+                )
+
+        except Exception as e:
+            # Emit error event for registry addition failure
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to add registry {registry_url}: {str(e)}",
+                data={
+                    "registry_url": registry_url,
+                    "error": str(e)
+                }
+            )
+            raise
 
     def remove_registry(self, registry_url: str) -> None:
         """Remove a registry URL from the client"""
-        if registry_url in self.registries:
-            self.registries.remove(registry_url)
-            self.registry_status.pop(registry_url, None)
-            self.registered_agents.pop(registry_url, None)
-            logger.info(f"Removed registry: {registry_url}")
+        try:
+            if registry_url in self.registries:
+                agents_count = len(self.registered_agents.get(registry_url, []))
+
+                self.registries.remove(registry_url)
+                self.registry_status.pop(registry_url, None)
+                self.registered_agents.pop(registry_url, None)
+
+                # Emit registry removal event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRY_DISCONNECTED,
+                    level=EventLevel.INFO,
+                    message=f"Removed registry: {registry_url}",
+                    data={
+                        "registry_url": registry_url,
+                        "agents_removed": agents_count,
+                        "remaining_registries": len(self.registries)
+                    }
+                )
+
+                logger.info(f"Removed registry: {registry_url}")
+            else:
+                # Emit warning for non-existent registry
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRY_DISCONNECTED,
+                    level=EventLevel.WARNING,
+                    message=f"Registry not found for removal: {registry_url}",
+                    data={
+                        "registry_url": registry_url,
+                        "total_registries": len(self.registries)
+                    }
+                )
+
+        except Exception as e:
+            # Emit error event for registry removal failure
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to remove registry {registry_url}: {str(e)}",
+                data={
+                    "registry_url": registry_url,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def health_check(self, registry_url: str) -> bool:
         """
@@ -106,6 +238,14 @@ class A2ARegistryClient:
             True if registry is healthy, False otherwise
         """
         try:
+            # Emit health check start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.DEBUG,
+                message=f"Starting health check for registry: {registry_url}",
+                data={"registry_url": registry_url}
+            )
+
             response = await self.http_client.get(f"{registry_url}/health")
             is_healthy = response.status_code == 200
 
@@ -116,6 +256,19 @@ class A2ARegistryClient:
                 "status_code": response.status_code
             }
 
+            # Emit health check result event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.INFO if is_healthy else EventLevel.WARNING,
+                message=f"Registry health check {'passed' if is_healthy else 'failed'}: {registry_url}",
+                data={
+                    "registry_url": registry_url,
+                    "healthy": is_healthy,
+                    "status_code": response.status_code,
+                    "response_time_ms": getattr(response, 'elapsed', None)
+                }
+            )
+
             if is_healthy:
                 logger.debug(f"Registry {registry_url} is healthy")
             else:
@@ -124,6 +277,17 @@ class A2ARegistryClient:
             return is_healthy
 
         except Exception as e:
+            # Emit health check error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.ERROR,
+                message=f"Health check failed for registry: {registry_url}",
+                data={
+                    "registry_url": registry_url,
+                    "error": str(e)
+                }
+            )
+
             logger.error(f"Health check failed for {registry_url}: {e}")
             self.registry_status[registry_url] = {
                 "last_check": time.time(),
@@ -139,16 +303,65 @@ class A2ARegistryClient:
         Returns:
             Dictionary mapping registry URLs to health status
         """
-        if not self.registries:
-            return {}
+        try:
+            if not self.registries:
+                # Emit no registries event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_HEALTH_CHECK,
+                    level=EventLevel.WARNING,
+                    message="No registries configured for health check",
+                    data={"registries_count": 0}
+                )
+                return {}
 
-        tasks = [self.health_check(registry) for registry in self.registries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Emit health check all start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.INFO,
+                message=f"Starting health check for all {len(self.registries)} registries",
+                data={
+                    "registries_count": len(self.registries),
+                    "registries": self.registries
+                }
+            )
 
-        return {
-            registry: (result if isinstance(result, bool) else False)
-            for registry, result in zip(self.registries, results)
-        }
+            tasks = [self.health_check(registry) for registry in self.registries]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            health_status = {
+                registry: (result if isinstance(result, bool) else False)
+                for registry, result in zip(self.registries, results)
+            }
+
+            healthy_count = sum(1 for status in health_status.values() if status)
+
+            # Emit health check all result event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.INFO,
+                message=f"Health check completed for all registries",
+                data={
+                    "registries_count": len(self.registries),
+                    "healthy_count": healthy_count,
+                    "unhealthy_count": len(self.registries) - healthy_count,
+                    "health_status": health_status
+                }
+            )
+
+            return health_status
+
+        except Exception as e:
+            # Emit health check all error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to perform health check on all registries: {str(e)}",
+                data={
+                    "registries_count": len(self.registries),
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def register_agent(
         self,
@@ -165,10 +378,39 @@ class A2ARegistryClient:
         Returns:
             RegistryResponse for single registry, or dict of responses for all registries
         """
-        if registry_url:
-            return await self._register_single(agent_card, registry_url)
-        else:
-            return await self._register_all(agent_card)
+        try:
+            # Emit agent registration start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_STARTED,
+                level=EventLevel.INFO,
+                message=f"Starting agent registration for {agent_card.name}",
+                data={
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url,
+                    "target_registry": registry_url,
+                    "register_all": registry_url is None
+                }
+            )
+
+            if registry_url:
+                return await self._register_single(agent_card, registry_url)
+            else:
+                return await self._register_all(agent_card)
+
+        except Exception as e:
+            # Emit agent registration error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_FAILED,
+                level=EventLevel.ERROR,
+                message=f"Agent registration failed for {agent_card.name}: {str(e)}",
+                data={
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url,
+                    "target_registry": registry_url,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def _register_single(self, agent_card: AgentCard, registry_url: str) -> RegistryResponse:
         """Register agent with a single registry"""
@@ -186,6 +428,20 @@ class A2ARegistryClient:
                 if agent_card.url not in self.registered_agents[registry_url]:
                     self.registered_agents[registry_url].append(agent_card.url)
 
+                # Emit successful registration event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRATION_COMPLETED,
+                    level=EventLevel.INFO,
+                    message=f"Agent {agent_card.name} registered successfully with {registry_url}",
+                    data={
+                        "agent_name": agent_card.name,
+                        "agent_url": agent_card.url,
+                        "registry_url": registry_url,
+                        "status_code": response.status_code,
+                        "total_registered": len(self.registered_agents[registry_url])
+                    }
+                )
+
                 logger.info(f"Registered agent {agent_card.name} with {registry_url}")
 
                 return RegistryResponse(
@@ -196,6 +452,21 @@ class A2ARegistryClient:
                 )
             else:
                 error_msg = f"Registration failed: {response.status_code}"
+
+                # Emit registration failure event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRATION_FAILED,
+                    level=EventLevel.ERROR,
+                    message=f"Agent registration failed for {agent_card.name} on {registry_url}",
+                    data={
+                        "agent_name": agent_card.name,
+                        "agent_url": agent_card.url,
+                        "registry_url": registry_url,
+                        "status_code": response.status_code,
+                        "error": error_msg
+                    }
+                )
+
                 logger.error(f"Failed to register {agent_card.name} on {registry_url}: {error_msg}")
 
                 return RegistryResponse(
@@ -206,8 +477,22 @@ class A2ARegistryClient:
                 )
 
         except Exception as e:
-            error_msg = f"Registration error: {e}"
-            logger.error(f"Failed to register {agent_card.name} on {registry_url}: {error_msg}")
+            error_msg = f"Registration error: {str(e)}"
+
+            # Emit registration error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_FAILED,
+                level=EventLevel.ERROR,
+                message=f"Agent registration error for {agent_card.name} on {registry_url}",
+                data={
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url,
+                    "registry_url": registry_url,
+                    "error": str(e)
+                }
+            )
+
+            logger.error(f"Registration error for {agent_card.name} on {registry_url}: {e}")
 
             return RegistryResponse(
                 success=False,
@@ -217,86 +502,239 @@ class A2ARegistryClient:
 
     async def _register_all(self, agent_card: AgentCard) -> Dict[str, RegistryResponse]:
         """Register agent with all configured registries"""
-        if not self.registries:
-            return {}
-
-        tasks = [self._register_single(agent_card, registry) for registry in self.registries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        response_dict = {}
-        for registry, result in zip(self.registries, results):
-            if isinstance(result, Exception):
-                response_dict[registry] = RegistryResponse(
-                    success=False,
-                    error=str(result),
-                    registry_url=registry
+        try:
+            if not self.registries:
+                # Emit no registries event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRATION_FAILED,
+                    level=EventLevel.WARNING,
+                    message=f"No registries configured for agent {agent_card.name}",
+                    data={
+                        "agent_name": agent_card.name,
+                        "agent_url": agent_card.url,
+                        "registries_count": 0
+                    }
                 )
-            else:
-                response_dict[registry] = result
+                return {}
 
-        return response_dict
+            # Emit register all start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_STARTED,
+                level=EventLevel.INFO,
+                message=f"Registering agent {agent_card.name} with all {len(self.registries)} registries",
+                data={
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url,
+                    "registries_count": len(self.registries),
+                    "registries": self.registries
+                }
+            )
+
+            tasks = [
+                self._register_single(agent_card, registry)
+                for registry in self.registries
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            responses = {}
+            successful_registrations = 0
+
+            for registry, result in zip(self.registries, results):
+                if isinstance(result, RegistryResponse):
+                    responses[registry] = result
+                    if result.success:
+                        successful_registrations += 1
+                else:
+                    # Handle exceptions
+                    responses[registry] = RegistryResponse(
+                        success=False,
+                        error=f"Exception: {str(result)}",
+                        registry_url=registry
+                    )
+
+            # Emit register all result event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_COMPLETED,
+                level=EventLevel.INFO,
+                message=f"Agent registration completed for {agent_card.name}",
+                data={
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url,
+                    "registries_count": len(self.registries),
+                    "successful_registrations": successful_registrations,
+                    "failed_registrations": len(self.registries) - successful_registrations
+                }
+            )
+
+            return responses
+
+        except Exception as e:
+            # Emit register all error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to register agent {agent_card.name} with all registries: {str(e)}",
+                data={
+                    "agent_name": agent_card.name,
+                    "agent_url": agent_card.url,
+                    "registries_count": len(self.registries),
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def deregister_agent(self, agent_url: str) -> Dict[str, RegistryResponse]:
         """
-        Deregister an agent from all configured registries.
+        Deregister an agent from all registries where it's registered.
 
         Args:
-            agent_url: The URL of the agent to deregister
+            agent_url: URL of the agent to deregister
 
         Returns:
-            Dict mapping registry URLs to RegistryResponse objects
+            Dictionary mapping registry URLs to deregistration responses
         """
-        responses = {}
+        try:
+            # Find registries where this agent is registered
+            target_registries = [
+                registry for registry, agents in self.registered_agents.items()
+                if agent_url in agents
+            ]
 
-        for registry_url in self.registries:
-            try:
-                # Use POST /deregister with JSON body instead of DELETE with URL encoding
-                deregister_url = f"{registry_url}/deregister"
-
-                payload = {"agent_url": agent_url}
-
-                response = await self.http_client.post(
-                    deregister_url,
-                    json=payload,
-                    timeout=self.config.timeout_seconds
+            if not target_registries:
+                # Emit no registrations found event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_REGISTRATION_FAILED,
+                    level=EventLevel.WARNING,
+                    message=f"No registrations found for agent: {agent_url}",
+                    data={
+                        "agent_url": agent_url,
+                        "total_registries": len(self.registries)
+                    }
                 )
+                return {}
 
-                if response.status_code == 200:
-                    response_data = response.json()
-                    responses[registry_url] = RegistryResponse(
-                        success=True,
-                        data=response_data,
-                        error=None
+            # Emit deregistration start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_STARTED,
+                level=EventLevel.INFO,
+                message=f"Starting deregistration for agent: {agent_url}",
+                data={
+                    "agent_url": agent_url,
+                    "target_registries": target_registries,
+                    "registrations_count": len(target_registries)
+                }
+            )
+
+            responses = {}
+            successful_deregistrations = 0
+
+            for registry_url in target_registries:
+                try:
+                    response = await self.http_client.delete(
+                        f"{registry_url}/deregister",
+                        params={"agent_url": agent_url}
                     )
-                    logger.info(f"Successfully deregistered agent from {registry_url}")
-                else:
-                    error_detail = "Unknown error"
-                    try:
-                        error_data = response.json()
-                        error_detail = error_data.get("detail", str(response.status_code))
-                    except Exception:
-                        error_detail = f"HTTP {response.status_code}"
 
-                    error_msg = f"Deregistration failed: {error_detail}"
+                    if response.status_code in [200, 204, 404]:  # OK, No Content, or Not Found
+                        # Remove from tracking
+                        if agent_url in self.registered_agents[registry_url]:
+                            self.registered_agents[registry_url].remove(agent_url)
+
+                        # Emit successful deregistration event
+                        ObservabilityManager.get_instance().emit_event(
+                            event_type=EventType.A2A_REGISTRATION_COMPLETED,
+                            level=EventLevel.INFO,
+                            message=f"Agent deregistered successfully from {registry_url}",
+                            data={
+                                "agent_url": agent_url,
+                                "registry_url": registry_url,
+                                "status_code": response.status_code
+                            }
+                        )
+
+                        responses[registry_url] = RegistryResponse(
+                            success=True,
+                            status_code=response.status_code,
+                            registry_url=registry_url
+                        )
+                        successful_deregistrations += 1
+
+                        logger.info(f"Deregistered agent {agent_url} from {registry_url}")
+                    else:
+                        error_msg = f"Deregistration failed: {response.status_code}"
+
+                        # Emit deregistration failure event
+                        ObservabilityManager.get_instance().emit_event(
+                            event_type=EventType.A2A_REGISTRATION_FAILED,
+                            level=EventLevel.ERROR,
+                            message=f"Agent deregistration failed from {registry_url}",
+                            data={
+                                "agent_url": agent_url,
+                                "registry_url": registry_url,
+                                "status_code": response.status_code,
+                                "error": error_msg
+                            }
+                        )
+
+                        responses[registry_url] = RegistryResponse(
+                            success=False,
+                            status_code=response.status_code,
+                            error=error_msg,
+                            registry_url=registry_url
+                        )
+
+                        logger.error(f"Failed to deregister {agent_url} from {registry_url}: {error_msg}")
+
+                except Exception as e:
+                    error_msg = f"Deregistration error: {str(e)}"
+
+                    # Emit deregistration error event
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.A2A_REGISTRATION_FAILED,
+                        level=EventLevel.ERROR,
+                        message=f"Agent deregistration error from {registry_url}",
+                        data={
+                            "agent_url": agent_url,
+                            "registry_url": registry_url,
+                            "error": str(e)
+                        }
+                    )
+
                     responses[registry_url] = RegistryResponse(
                         success=False,
-                        data=None,
-                        error=error_msg
-                    )
-                    logger.warning(
-                        f"Failed to deregister {agent_url} from {registry_url}: {error_msg}"
+                        error=error_msg,
+                        registry_url=registry_url
                     )
 
-            except Exception as e:
-                error_msg = f"Request failed: {str(e)}"
-                responses[registry_url] = RegistryResponse(
-                    success=False,
-                    data=None,
-                    error=error_msg
-                )
-                logger.error(f"Failed to deregister {agent_url} from {registry_url}: {error_msg}")
+                    logger.error(f"Deregistration error for {agent_url} from {registry_url}: {e}")
 
-        return responses
+            # Emit deregistration summary event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_COMPLETED,
+                level=EventLevel.INFO,
+                message=f"Agent deregistration completed for {agent_url}",
+                data={
+                    "agent_url": agent_url,
+                    "target_registries_count": len(target_registries),
+                    "successful_deregistrations": successful_deregistrations,
+                    "failed_deregistrations": len(target_registries) - successful_deregistrations
+                }
+            )
+
+            return responses
+
+        except Exception as e:
+            # Emit deregistration error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to deregister agent {agent_url}: {str(e)}",
+                data={
+                    "agent_url": agent_url,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def discover_agents(
         self,
@@ -307,16 +745,43 @@ class A2ARegistryClient:
         Discover agents from external registry(ies).
 
         Args:
-            capability_filter: List of capabilities to filter by
+            capability_filter: Optional list of required capabilities
             registry_url: Specific registry URL, or None to discover from all
 
         Returns:
-            List of AgentCards for single registry, or dict mapping registry URLs to AgentCard lists
+            List of AgentCards for single registry, or dict for all registries
         """
-        if registry_url:
-            return await self._discover_single(registry_url, capability_filter)
-        else:
-            return await self._discover_all(capability_filter)
+        try:
+            # Emit discovery start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_DISCOVERY_STARTED,
+                level=EventLevel.INFO,
+                message="Starting agent discovery",
+                data={
+                    "capability_filter": capability_filter,
+                    "target_registry": registry_url,
+                    "discover_all": registry_url is None
+                }
+            )
+
+            if registry_url:
+                return await self._discover_single(registry_url, capability_filter)
+            else:
+                return await self._discover_all(capability_filter)
+
+        except Exception as e:
+            # Emit discovery error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_DISCOVERY_FAILED,
+                level=EventLevel.ERROR,
+                message=f"Agent discovery failed: {str(e)}",
+                data={
+                    "capability_filter": capability_filter,
+                    "target_registry": registry_url,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def _discover_single(
         self,
@@ -325,16 +790,18 @@ class A2ARegistryClient:
     ) -> List[AgentCard]:
         """Discover agents from a single registry"""
         try:
-            # Build query parameters
             params = {}
             if capability_filter:
                 params["capabilities"] = ",".join(capability_filter)
 
-            response = await self.http_client.get(f"{registry_url}/discover", params=params)
+            response = await self.http_client.get(
+                f"{registry_url}/discover",
+                params=params
+            )
 
             if response.status_code == 200:
                 data = response.json()
-                agents = data if isinstance(data, list) else data.get("agents", [])
+                agents = data.get("agents", [])
 
                 # Convert to AgentCard objects
                 agent_cards = []
@@ -343,61 +810,227 @@ class A2ARegistryClient:
                         agent_card = AgentCard.from_dict(agent_data)
                         agent_cards.append(agent_card)
                     except Exception as e:
-                        logger.warning(f"Failed to parse agent card from {registry_url}: {e}")
+                        logger.warning(f"Failed to parse agent card: {e}")
+
+                # Emit successful discovery event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_DISCOVERY_COMPLETED,
+                    level=EventLevel.INFO,
+                    message=f"Agent discovery completed from {registry_url}",
+                    data={
+                        "registry_url": registry_url,
+                        "agents_discovered": len(agent_cards),
+                        "capability_filter": capability_filter,
+                        "status_code": response.status_code
+                    }
+                )
 
                 logger.info(f"Discovered {len(agent_cards)} agents from {registry_url}")
                 return agent_cards
             else:
-                logger.error(f"Discovery failed for {registry_url}: {response.status_code}")
+                error_msg = f"Discovery failed: {response.status_code}"
+
+                # Emit discovery failure event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_DISCOVERY_FAILED,
+                    level=EventLevel.ERROR,
+                    message=f"Agent discovery failed from {registry_url}",
+                    data={
+                        "registry_url": registry_url,
+                        "status_code": response.status_code,
+                        "capability_filter": capability_filter,
+                        "error": error_msg
+                    }
+                )
+
+                logger.error(f"Discovery failed from {registry_url}: {error_msg}")
                 return []
 
         except Exception as e:
-            logger.error(f"Discovery error for {registry_url}: {e}")
+            # Emit discovery error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_DISCOVERY_FAILED,
+                level=EventLevel.ERROR,
+                message=f"Agent discovery error from {registry_url}",
+                data={
+                    "registry_url": registry_url,
+                    "capability_filter": capability_filter,
+                    "error": str(e)
+                }
+            )
+
+            logger.error(f"Discovery error from {registry_url}: {e}")
             return []
 
     async def _discover_all(
-            self, capability_filter: Optional[List[str]] = None) -> Dict[str, List[AgentCard]]:
+        self, capability_filter: Optional[List[str]] = None
+    ) -> Dict[str, List[AgentCard]]:
         """Discover agents from all configured registries"""
-        if not self.registries:
-            return {}
+        try:
+            if not self.registries:
+                # Emit no registries event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_DISCOVERY_FAILED,
+                    level=EventLevel.WARNING,
+                    message="No registries configured for discovery",
+                    data={
+                        "registries_count": 0,
+                        "capability_filter": capability_filter
+                    }
+                )
+                return {}
 
-        tasks = [self._discover_single(registry, capability_filter) for registry in self.registries]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+            # Emit discover all start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_DISCOVERY_STARTED,
+                level=EventLevel.INFO,
+                message=f"Discovering agents from all {len(self.registries)} registries",
+                data={
+                    "registries_count": len(self.registries),
+                    "registries": self.registries,
+                    "capability_filter": capability_filter
+                }
+            )
 
-        response_dict = {}
-        for registry, result in zip(self.registries, results):
-            if isinstance(result, Exception):
-                logger.error(f"Discovery failed for {registry}: {result}")
-                response_dict[registry] = []
-            else:
-                response_dict[registry] = result
+            tasks = [
+                self._discover_single(registry, capability_filter)
+                for registry in self.registries
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        return response_dict
+            discoveries = {}
+            total_agents = 0
+
+            for registry, result in zip(self.registries, results):
+                if isinstance(result, list):
+                    discoveries[registry] = result
+                    total_agents += len(result)
+                else:
+                    # Handle exceptions
+                    discoveries[registry] = []
+                    logger.error(f"Discovery exception for {registry}: {result}")
+
+            # Emit discover all result event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_DISCOVERY_COMPLETED,
+                level=EventLevel.INFO,
+                message=f"Agent discovery completed from all registries",
+                data={
+                    "registries_count": len(self.registries),
+                    "total_agents_discovered": total_agents,
+                    "capability_filter": capability_filter,
+                    "discoveries_per_registry": {
+                        registry: len(agents) for registry, agents in discoveries.items()
+                    }
+                }
+            )
+
+            return discoveries
+
+        except Exception as e:
+            # Emit discover all error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to discover agents from all registries: {str(e)}",
+                data={
+                    "registries_count": len(self.registries),
+                    "capability_filter": capability_filter,
+                    "error": str(e)
+                }
+            )
+            raise
 
     def get_registry_status(self) -> Dict[str, Dict[str, Any]]:
-        """Get current status of all registries"""
-        return self.registry_status.copy()
+        """Get the current status of all registries"""
+        try:
+            # Emit status request event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.DEBUG,
+                message="Registry status requested",
+                data={
+                    "registries_count": len(self.registry_status),
+                    "registries": list(self.registry_status.keys())
+                }
+            )
+
+            return self.registry_status.copy()
+
+        except Exception as e:
+            # Emit status request error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to get registry status: {str(e)}",
+                data={"error": str(e)}
+            )
+            raise
 
     def get_registered_agents(self) -> Dict[str, List[str]]:
-        """Get list of agents registered with each registry"""
-        return self.registered_agents.copy()
+        """Get the list of registered agents per registry"""
+        try:
+            # Emit registered agents request event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_REGISTRATION_COMPLETED,
+                level=EventLevel.DEBUG,
+                message="Registered agents list requested",
+                data={
+                    "registries_count": len(self.registered_agents),
+                    "total_agents": sum(len(agents) for agents in self.registered_agents.values())
+                }
+            )
+
+            return self.registered_agents.copy()
+
+        except Exception as e:
+            # Emit registered agents request error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to get registered agents: {str(e)}",
+                data={"error": str(e)}
+            )
+            raise
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get client statistics"""
-        healthy_registries = sum(
-            1 for status in self.registry_status.values()
-            if status.get("healthy", False)
-        )
-
-        total_registered = sum(len(agents) for agents in self.registered_agents.values())
-
-        return {
-            "total_registries": len(self.registries),
-            "healthy_registries": healthy_registries,
-            "total_registered_agents": total_registered,
-            "registries": list(self.registries),
-            "last_health_check": max(
-                (status.get("last_check", 0) for status in self.registry_status.values()),
-                default=None
+        """Get comprehensive statistics about the registry client"""
+        try:
+            healthy_registries = sum(
+                1 for status in self.registry_status.values()
+                if status.get("healthy", False)
             )
-        }
+
+            stats = {
+                "total_registries": len(self.registries),
+                "healthy_registries": healthy_registries,
+                "unhealthy_registries": len(self.registries) - healthy_registries,
+                "total_registered_agents": sum(len(agents) for agents in self.registered_agents.values()),
+                "registrations_per_registry": {
+                    registry: len(agents) for registry, agents in self.registered_agents.items()
+                },
+                "registry_health": {
+                    registry: status.get("healthy", False)
+                    for registry, status in self.registry_status.items()
+                }
+            }
+
+            # Emit stats request event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.DEBUG,
+                message="Registry client stats requested",
+                data=stats
+            )
+
+            return stats
+
+        except Exception as e:
+            # Emit stats request error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to get registry client stats: {str(e)}",
+                data={"error": str(e)}
+            )
+            raise

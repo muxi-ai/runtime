@@ -65,7 +65,15 @@ import asyncio
 import httpx
 import time
 from datetime import datetime
-from mcp import JSONRPCRequest
+try:
+    from mcp import JSONRPCRequest
+except ImportError:
+    # Fallback if mcp package is not available
+    class JSONRPCRequest:
+        def __init__(self, method: str, params: dict, id: str = None):
+            self.method = method
+            self.params = params
+            self.id = id or str(uuid.uuid4())
 
 from loguru import logger
 

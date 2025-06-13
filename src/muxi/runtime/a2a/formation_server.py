@@ -24,6 +24,7 @@ import uvicorn
 from pydantic import BaseModel
 
 from loguru import logger
+from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
 
 
 class A2AMessageRequest(BaseModel):
@@ -73,109 +74,225 @@ class A2AFormationServer:
             auth_mode: Authentication mode ("none", "api_key", "bearer", etc.)
             formation_name: Name of the formation this server serves
         """
-        self.overlord = overlord
-        self.port = port
-        self.host = host
-        self.trusted_endpoints = trusted_endpoints or []
-        self.auth_mode = auth_mode
-        self.formation_name = formation_name
+        try:
+            self.overlord = overlord
+            self.port = port
+            self.host = host
+            self.trusted_endpoints = trusted_endpoints or []
+            self.auth_mode = auth_mode
+            self.formation_name = formation_name
 
-        # Server state
-        self.app: Optional[FastAPI] = None
-        self.server_task: Optional[asyncio.Task] = None
-        self.is_running = False
+            # Server state
+            self.app: Optional[FastAPI] = None
+            self.server_task: Optional[asyncio.Task] = None
+            self.is_running = False
 
-        # Initialize authentication
-        from .inbound_auth import A2AInboundAuthenticator
+            # Initialize authentication
+            from .inbound_auth import A2AInboundAuthenticator
 
-        # Pass SecretsManager from overlord if available
-        secrets_manager = getattr(overlord, 'secrets_manager', None)
-        self.authenticator = A2AInboundAuthenticator(auth_mode, secrets_manager)
+            # Pass SecretsManager from overlord if available
+            secrets_manager = getattr(overlord, 'secrets_manager', None)
+            self.authenticator = A2AInboundAuthenticator(auth_mode, secrets_manager)
 
-        # Initialize FastAPI app
-        self._create_app()
+            # Initialize FastAPI app
+            self._create_app()
 
-        logger.info(f"Initialized A2A Formation Server for '{formation_name}' on port {port}")
+            # Emit observability event for server initialization
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STARTED,
+                level=EventLevel.INFO,
+                message=(f"A2A Formation Server initialized for "
+                         f"'{formation_name}' on port {port}"),
+                data={
+                    "formation_name": formation_name,
+                    "port": port,
+                    "host": host,
+                    "auth_mode": auth_mode,
+                    "trusted_endpoints_count": len(self.trusted_endpoints)
+                }
+            )
+
+            logger.info(f"Initialized A2A Formation Server for '{formation_name}' on port {port}")
+
+        except Exception as e:
+            # Emit error event for initialization failure
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to initialize A2A Formation Server: {str(e)}",
+                data={
+                    "formation_name": formation_name,
+                    "port": port,
+                    "error": str(e)
+                }
+            )
+            raise
 
     def _create_app(self) -> None:
         """Create the FastAPI application with A2A endpoints"""
-        self.app = FastAPI(
-            title=f"A2A Formation Server - {self.formation_name}",
-            description="Single A2A server for entire formation with agent routing",
-            version="1.0.0",
-            docs_url="/docs" if self.auth_mode == "none" else None,  # Disable docs if authenticated
-        )
+        try:
+            self.app = FastAPI(
+                title=f"A2A Formation Server - {self.formation_name}",
+                description="Single A2A server for entire formation with agent routing",
+                version="1.0.0",
+                docs_url="/docs" if self.auth_mode == "none" else None,  # Disable docs if authenticated
+            )
 
-        # Health check endpoint
-        @self.app.get("/health")
-        async def health_check():
-            """Health check endpoint for the A2A server"""
-            return {
-                "status": "healthy",
-                "formation": self.formation_name,
-                "agents": list(self.overlord.agents.keys()) if self.overlord else [],
-                "timestamp": asyncio.get_event_loop().time(),
-            }
-
-        # Formation info endpoint
-        @self.app.get("/info")
-        async def formation_info():
-            """Get information about the formation and available agents"""
-            agents_info = {}
-            if self.overlord:
-                for agent_id, agent in self.overlord.agents.items():
-                    # Only include agents with external A2A enabled
-                    if getattr(agent, "a2a_external", True):
-                        agents_info[agent_id] = {
-                            "description": self.overlord.agent_descriptions.get(agent_id, ""),
-                            "capabilities": getattr(agent, "capabilities", []),
-                            "endpoint": f"/agents/{agent_id}/message",
+            # Health check endpoint
+            @self.app.get("/health")
+            async def health_check():
+                """Health check endpoint for the A2A server"""
+                try:
+                    # Emit health check event
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.A2A_HEALTH_CHECK,
+                        level=EventLevel.DEBUG,
+                        message="A2A Formation Server health check requested",
+                        data={
+                            "formation": self.formation_name,
+                            "agents_count": (len(self.overlord.agents)
+                                             if self.overlord else 0)
                         }
+                    )
 
-            return {
-                "formation": self.formation_name,
-                "server_mode": self.auth_mode,
-                "agents": agents_info,
-                "total_agents": len(agents_info),
-            }
+                    return {
+                        "status": "healthy",
+                        "formation": self.formation_name,
+                        "agents": (list(self.overlord.agents.keys())
+                                   if self.overlord else []),
+                        "timestamp": asyncio.get_event_loop().time(),
+                    }
+                except Exception as e:
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message=f"A2A health check failed: {str(e)}",
+                        data={"formation": self.formation_name, "error": str(e)}
+                    )
+                    raise
 
-        # Agent discovery endpoint (A2A standard)
-        @self.app.get("/agents")
-        async def list_agents():
-            """List all agents available for A2A communication"""
-            agent_cards = []
-            if self.overlord:
-                for agent_id, agent in self.overlord.agents.items():
-                    # Only include agents with external A2A enabled
-                    if getattr(agent, "a2a_external", True):
-                        agent_cards.append(self._create_agent_card(agent_id, agent))
+            # Formation info endpoint
+            @self.app.get("/info")
+            async def formation_info():
+                """Get information about the formation and available agents"""
+                try:
+                    agents_info = {}
+                    if self.overlord:
+                        for agent_id, agent in self.overlord.agents.items():
+                            # Only include agents with external A2A enabled
+                            if getattr(agent, "a2a_external", True):
+                                agents_info[agent_id] = {
+                                    "description": self.overlord.agent_descriptions.get(agent_id, ""),
+                                    "capabilities": getattr(agent, "capabilities", []),
+                                    "endpoint": f"/agents/{agent_id}/message",
+                                }
 
-            return {"agents": agent_cards, "formation": self.formation_name}
+                    # Emit formation info request event
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.A2A_DISCOVERY_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="A2A Formation info requested",
+                        data={
+                            "formation": self.formation_name,
+                            "agents_count": len(agents_info),
+                            "auth_mode": self.auth_mode
+                        }
+                    )
 
-        # Main A2A message endpoint for specific agents
-        @self.app.post("/agents/{agent_id}/message")
-        async def handle_agent_message(
-            http_request: Request,
-            agent_id: str = Path(..., description="ID of the target agent"),
-            request: A2AMessageRequest = ...,
-        ) -> A2AMessageResponse:
-            """
-            Handle A2A message for a specific agent.
+                    return {
+                        "formation": self.formation_name,
+                        "server_mode": self.auth_mode,
+                        "agents": agents_info,
+                        "total_agents": len(agents_info),
+                    }
+                except Exception as e:
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message=f"A2A formation info request failed: {str(e)}",
+                        data={"formation": self.formation_name, "error": str(e)}
+                    )
+                    raise
 
-            This is the main endpoint that external agents use to communicate
-            with agents in this formation.
-            """
-            return await self._handle_a2a_message(agent_id, request, http_request)
+            # Agent discovery endpoint (A2A standard)
+            @self.app.get("/agents")
+            async def list_agents():
+                """List all agents available for A2A communication"""
+                try:
+                    agent_cards = []
+                    if self.overlord:
+                        for agent_id, agent in self.overlord.agents.items():
+                            # Only include agents with external A2A enabled
+                            if getattr(agent, "a2a_external", True):
+                                agent_cards.append(self._create_agent_card(agent_id, agent))
 
-        # Legacy endpoint support (if needed)
-        @self.app.post("/{agent_id}")
-        async def handle_legacy_message(
-            http_request: Request,
-            agent_id: str = Path(..., description="ID of the target agent"),
-            request: A2AMessageRequest = ...,
-        ) -> A2AMessageResponse:
-            """Legacy endpoint for backward compatibility"""
-            return await self._handle_a2a_message(agent_id, request, http_request)
+                    # Emit agent discovery event
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.A2A_DISCOVERY_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="A2A agent discovery completed",
+                        data={
+                            "formation": self.formation_name,
+                            "agents_discovered": len(agent_cards),
+                            "agent_ids": [card["agent_id"] for card in agent_cards]
+                        }
+                    )
+
+                    return {"agents": agent_cards, "formation": self.formation_name}
+                except Exception as e:
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        level=EventLevel.ERROR,
+                        message=f"A2A agent discovery failed: {str(e)}",
+                        data={"formation": self.formation_name, "error": str(e)}
+                    )
+                    raise
+
+            # Main A2A message endpoint for specific agents
+            @self.app.post("/agents/{agent_id}/message")
+            async def handle_agent_message(
+                http_request: Request,
+                agent_id: str = Path(..., description="ID of the target agent"),
+                request: A2AMessageRequest = ...,
+            ) -> A2AMessageResponse:
+                """
+                Handle A2A message for a specific agent.
+
+                This is the main endpoint that external agents use to communicate
+                with agents in this formation.
+                """
+                return await self._handle_a2a_message(agent_id, request, http_request)
+
+            # Legacy endpoint support (if needed)
+            @self.app.post("/{agent_id}")
+            async def handle_legacy_message(
+                http_request: Request,
+                agent_id: str = Path(..., description="ID of the target agent"),
+                request: A2AMessageRequest = ...,
+            ) -> A2AMessageResponse:
+                """Legacy endpoint for backward compatibility"""
+                return await self._handle_a2a_message(agent_id, request, http_request)
+
+            # Emit app creation event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STARTED,
+                level=EventLevel.INFO,
+                message="A2A Formation Server FastAPI app created",
+                data={
+                    "formation": self.formation_name,
+                    "endpoints_created": 5,  # health, info, agents, main, legacy
+                    "auth_mode": self.auth_mode
+                }
+            )
+
+        except Exception as e:
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to create A2A Formation Server app: {str(e)}",
+                data={"formation": self.formation_name, "error": str(e)}
+            )
+            raise
 
     async def _handle_a2a_message(
         self, agent_id: str, request: A2AMessageRequest, http_request: Optional[Request] = None
@@ -191,6 +308,20 @@ class A2AFormationServer:
         message_id = str(uuid.uuid4())
 
         try:
+            # Emit message received event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_MESSAGE_RECEIVED,
+                level=EventLevel.INFO,
+                message=f"A2A message received for agent {agent_id}",
+                data={
+                    "agent_id": agent_id,
+                    "message_id": message_id,
+                    "message_type": request.message_type,
+                    "formation": self.formation_name,
+                    "has_context": request.context is not None
+                }
+            )
+
             # Authenticate the request if authentication is enabled
             if http_request and self.auth_mode != "none":
                 authenticated, client_id, auth_error = (
@@ -198,6 +329,19 @@ class A2AFormationServer:
                 )
 
                 if not authenticated:
+                    # Emit authentication failure event
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.A2A_AUTH_VALIDATION,
+                        level=EventLevel.WARNING,
+                        message=f"A2A authentication failed for agent {agent_id}",
+                        data={
+                            "agent_id": agent_id,
+                            "message_id": message_id,
+                            "auth_error": auth_error,
+                            "formation": self.formation_name
+                        }
+                    )
+
                     logger.warning(
                         f"Authentication failed for A2A request to {agent_id}: {auth_error}"
                     )
@@ -207,6 +351,19 @@ class A2AFormationServer:
                         "message_id": message_id,
                     }
 
+                # Emit successful authentication event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    level=EventLevel.INFO,
+                    message=f"A2A authentication successful for agent {agent_id}",
+                    data={
+                        "agent_id": agent_id,
+                        "message_id": message_id,
+                        "client_id": client_id,
+                        "formation": self.formation_name
+                    }
+                )
+
                 logger.debug(f"A2A request authenticated for client: {client_id}")
 
             # Get client host for security validation
@@ -215,11 +372,39 @@ class A2AFormationServer:
 
             # Validate trusted endpoints if configured
             if self.trusted_endpoints and client_host not in self.trusted_endpoints:
+                # Emit untrusted client event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    level=EventLevel.WARNING,
+                    message="Untrusted client attempted A2A communication",
+                    data={
+                        "agent_id": agent_id,
+                        "message_id": message_id,
+                        "client_host": client_host,
+                        "trusted_endpoints": self.trusted_endpoints,
+                        "formation": self.formation_name
+                    }
+                )
+
                 logger.warning(f"Untrusted client {client_host} attempted A2A communication")
                 return {"status": "error", "error": "Untrusted client", "message_id": message_id}
 
             # Check if agent exists in the formation
             if not self.overlord or agent_id not in self.overlord.agents:
+                # Emit agent not found event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_MESSAGE_FAILED,
+                    level=EventLevel.WARNING,
+                    message=f"A2A message failed: Agent {agent_id} not found",
+                    data={
+                        "agent_id": agent_id,
+                        "message_id": message_id,
+                        "available_agents": (list(self.overlord.agents.keys())
+                                             if self.overlord else []),
+                        "formation": self.formation_name
+                    }
+                )
+
                 logger.warning(f"Agent {agent_id} not found in formation")
                 return {
                     "status": "error",
@@ -232,6 +417,19 @@ class A2AFormationServer:
 
             # Check if agent accepts external A2A messages
             if not getattr(agent, "a2a_external", True):
+                # Emit agent not configured for external A2A event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_MESSAGE_FAILED,
+                    level=EventLevel.WARNING,
+                    message=(f"A2A message failed: Agent {agent_id} "
+                             "not configured for external A2A"),
+                    data={
+                        "agent_id": agent_id,
+                        "message_id": message_id,
+                        "formation": self.formation_name
+                    }
+                )
+
                 logger.warning(f"Agent {agent_id} not configured for external A2A")
                 return {
                     "status": "error",
@@ -242,6 +440,19 @@ class A2AFormationServer:
             # Log the incoming A2A message
             logger.info(
                 f"A2A Message: external -> {agent_id} ({request.message_type}, id: {message_id})"
+            )
+
+            # Emit message routing event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_MESSAGE_ROUTED,
+                level=EventLevel.INFO,
+                message=f"A2A message routed to agent {agent_id}",
+                data={
+                    "agent_id": agent_id,
+                    "message_id": message_id,
+                    "message_type": request.message_type,
+                    "formation": self.formation_name
+                }
             )
 
             # Route message directly to the agent
@@ -259,6 +470,22 @@ class A2AFormationServer:
                 response_content = (
                     response.get("response") if isinstance(response, dict) else str(response)
                 )
+
+                # Emit successful message processing event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_MESSAGE_SENT,
+                    level=EventLevel.INFO,
+                    message=(f"A2A message successfully processed "
+                             f"by agent {agent_id}"),
+                    data={
+                        "agent_id": agent_id,
+                        "message_id": message_id,
+                        "response_length": (len(response_content)
+                                            if response_content else 0),
+                        "formation": self.formation_name
+                    }
+                )
+
                 return {
                     "status": "success",
                     "response": response_content,  # Extract the actual content string
@@ -267,6 +494,18 @@ class A2AFormationServer:
                 }
             else:
                 # Handle case where agent doesn't return a response (e.g., notifications)
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_MESSAGE_SENT,
+                    level=EventLevel.INFO,
+                    message=(f"A2A message delivered successfully "
+                             f"to agent {agent_id} (no response)"),
+                    data={
+                        "agent_id": agent_id,
+                        "message_id": message_id,
+                        "formation": self.formation_name
+                    }
+                )
+
                 return {
                     "status": "success",
                     "message": "Message delivered successfully",
@@ -275,6 +514,19 @@ class A2AFormationServer:
                 }
 
         except Exception as e:
+            # Emit error event for message handling failure
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_MESSAGE_FAILED,
+                level=EventLevel.ERROR,
+                message=f"A2A message handling failed for agent {agent_id}",
+                data={
+                    "agent_id": agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                    "formation": self.formation_name
+                }
+            )
+
             logger.error(f"Error handling A2A message for agent {agent_id}: {e}")
             return {
                 "status": "error",
@@ -285,35 +537,89 @@ class A2AFormationServer:
 
     def _create_agent_card(self, agent_id: str, agent) -> Dict[str, Any]:
         """Create an A2A agent card for discovery"""
-        agent_description = self.overlord.agent_descriptions.get(agent_id, f"Agent {agent_id}")
+        try:
+            agent_description = self.overlord.agent_descriptions.get(agent_id, f"Agent {agent_id}")
 
-        return {
-            "name": agent_id,
-            "description": agent_description,
-            "version": "1.0.0",
-            "url": f"http://{self.host}:{self.port}/agents/{agent_id}/message",
-            "capabilities": {
-                "messaging": {
-                    "enabled": True,
-                    "description": "Agent can receive and process A2A messages",
+            card = {
+                "name": agent_id,
+                "description": agent_description,
+                "version": "1.0.0",
+                "url": f"http://{self.host}:{self.port}/agents/{agent_id}/message",
+                "capabilities": {
+                    "messaging": {
+                        "enabled": True,
+                        "description": "Agent can receive and process A2A messages",
+                    },
+                    "tools": {
+                        "enabled": hasattr(agent, "get_capabilities"),
+                        "description": "Agent has tool capabilities",
+                    },
                 },
-                "tools": {
-                    "enabled": hasattr(agent, "get_capabilities"),
-                    "description": "Agent has tool capabilities",
-                },
-            },
-            "authentication": {"type": self.auth_mode, "required": self.auth_mode != "none"},
-            "formation": self.formation_name,
-            "agent_id": agent_id,
-        }
+                "authentication": {"type": self.auth_mode, "required": self.auth_mode != "none"},
+                "formation": self.formation_name,
+                "agent_id": agent_id,
+            }
+
+            # Emit agent card creation event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_DISCOVERY_COMPLETED,
+                level=EventLevel.DEBUG,
+                message=f"A2A agent card created for {agent_id}",
+                data={
+                    "agent_id": agent_id,
+                    "formation": self.formation_name,
+                    "has_tools": hasattr(agent, "get_capabilities")
+                }
+            )
+
+            return card
+
+        except Exception as e:
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to create agent card for {agent_id}: {str(e)}",
+                data={
+                    "agent_id": agent_id,
+                    "formation": self.formation_name,
+                    "error": str(e)
+                }
+            )
+            raise
 
     def _find_free_port(self) -> int:
         """Find a free port for the server (fallback if configured port unavailable)"""
-        with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
-            s.bind(("", 0))
-            s.listen(1)
-            port = s.getsockname()[1]
-        return port
+        try:
+            with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+                s.bind(("", 0))
+                s.listen(1)
+                port = s.getsockname()[1]
+
+            # Emit port discovery event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.RESOURCE_ALLOCATED,
+                level=EventLevel.INFO,
+                message=f"Free port found for A2A Formation Server: {port}",
+                data={
+                    "formation": self.formation_name,
+                    "port": port,
+                    "original_port": self.port
+                }
+            )
+
+            return port
+
+        except Exception as e:
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to find free port for A2A Formation Server: {str(e)}",
+                data={
+                    "formation": self.formation_name,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def start(self) -> Dict[str, Any]:
         """
@@ -322,11 +628,36 @@ class A2AFormationServer:
         Returns:
             Server startup information
         """
-        if self.is_running:
-            logger.warning("A2A Formation Server already running")
-            return await self.get_status()
-
         try:
+            if self.is_running:
+                # Emit already running event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_SERVER_STARTED,
+                    level=EventLevel.WARNING,
+                    message="A2A Formation Server already running",
+                    data={
+                        "formation": self.formation_name,
+                        "port": self.port,
+                        "status": "already_running"
+                    }
+                )
+
+                logger.warning("A2A Formation Server already running")
+                return await self.get_status()
+
+            # Emit server starting event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STARTED,
+                level=EventLevel.INFO,
+                message=f"Starting A2A Formation Server for {self.formation_name}",
+                data={
+                    "formation": self.formation_name,
+                    "port": self.port,
+                    "host": self.host,
+                    "auth_mode": self.auth_mode
+                }
+            )
+
             # Initialize authentication credentials from SecretsManager
             await self.authenticator.initialize_credentials()
 
@@ -335,6 +666,17 @@ class A2AFormationServer:
                 try:
                     s.bind((self.host, self.port))
                 except OSError:
+                    # Emit port unavailable event
+                    ObservabilityManager.get_instance().emit_event(
+                        event_type=EventType.RESOURCE_ALLOCATED,
+                        level=EventLevel.WARNING,
+                        message=f"Port {self.port} unavailable, finding alternative",
+                        data={
+                            "formation": self.formation_name,
+                            "original_port": self.port
+                        }
+                    )
+
                     logger.warning(f"Port {self.port} unavailable, finding alternative")
                     self.port = self._find_free_port()
 
@@ -347,6 +689,21 @@ class A2AFormationServer:
             server = uvicorn.Server(config)
             self.server_task = asyncio.create_task(server.serve())
             self.is_running = True
+
+            # Emit successful server start event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STARTED,
+                level=EventLevel.INFO,
+                message="A2A Formation Server started successfully",
+                data={
+                    "formation": self.formation_name,
+                    "host": self.host,
+                    "port": self.port,
+                    "endpoint": f"http://{self.host}:{self.port}",
+                    "agents_count": len(self.overlord.agents) if self.overlord else 0,
+                    "auth_mode": self.auth_mode
+                }
+            )
 
             logger.info(f"A2A Formation Server started on http://{self.host}:{self.port}")
             logger.info(f"Formation: {self.formation_name}")
@@ -365,6 +722,18 @@ class A2AFormationServer:
             }
 
         except Exception as e:
+            # Emit server start failure event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STOPPED,
+                level=EventLevel.ERROR,
+                message=f"Failed to start A2A Formation Server: {str(e)}",
+                data={
+                    "formation": self.formation_name,
+                    "port": self.port,
+                    "error": str(e)
+                }
+            )
+
             logger.error(f"Failed to start A2A Formation Server: {e}")
             self.is_running = False
             raise
@@ -376,11 +745,33 @@ class A2AFormationServer:
         Returns:
             Server shutdown information
         """
-        if not self.is_running:
-            logger.warning("A2A Formation Server not running")
-            return {"status": "not_running"}
-
         try:
+            if not self.is_running:
+                # Emit not running event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_SERVER_STOPPED,
+                    level=EventLevel.WARNING,
+                    message="A2A Formation Server not running",
+                    data={
+                        "formation": self.formation_name,
+                        "status": "not_running"
+                    }
+                )
+
+                logger.warning("A2A Formation Server not running")
+                return {"status": "not_running"}
+
+            # Emit server stopping event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STOPPED,
+                level=EventLevel.INFO,
+                message=f"Stopping A2A Formation Server for {self.formation_name}",
+                data={
+                    "formation": self.formation_name,
+                    "port": self.port
+                }
+            )
+
             if self.server_task and not self.server_task.done():
                 self.server_task.cancel()
                 try:
@@ -389,38 +780,127 @@ class A2AFormationServer:
                     pass
 
             self.is_running = False
+
+            # Emit successful server stop event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_SERVER_STOPPED,
+                level=EventLevel.INFO,
+                message="A2A Formation Server stopped successfully",
+                data={
+                    "formation": self.formation_name,
+                    "port": self.port
+                }
+            )
+
             logger.info(f"A2A Formation Server stopped on port {self.port}")
 
             return {"status": "stopped", "formation": self.formation_name, "port": self.port}
 
         except Exception as e:
+            # Emit server stop failure event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Error stopping A2A Formation Server: {str(e)}",
+                data={
+                    "formation": self.formation_name,
+                    "port": self.port,
+                    "error": str(e)
+                }
+            )
+
             logger.error(f"Error stopping A2A Formation Server: {e}")
             raise
 
     async def get_status(self) -> Dict[str, Any]:
         """Get current server status"""
-        return {
-            "running": self.is_running,
-            "formation": self.formation_name,
-            "host": self.host,
-            "port": self.port,
-            "endpoint": f"http://{self.host}:{self.port}" if self.is_running else None,
-            "agents": list(self.overlord.agents.keys()) if self.overlord else [],
-            "auth_mode": self.auth_mode,
-            "trusted_endpoints": self.trusted_endpoints,
-        }
+        try:
+            status = {
+                "running": self.is_running,
+                "formation": self.formation_name,
+                "host": self.host,
+                "port": self.port,
+                "endpoint": f"http://{self.host}:{self.port}" if self.is_running else None,
+                "agents": list(self.overlord.agents.keys()) if self.overlord else [],
+                "auth_mode": self.auth_mode,
+                "trusted_endpoints": self.trusted_endpoints,
+            }
+
+            # Emit status check event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.DEBUG,
+                message="A2A Formation Server status checked",
+                data={
+                    "formation": self.formation_name,
+                    "running": self.is_running,
+                    "agents_count": len(status["agents"])
+                }
+            )
+
+            return status
+
+        except Exception as e:
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                level=EventLevel.ERROR,
+                message=f"Failed to get A2A Formation Server status: {str(e)}",
+                data={
+                    "formation": self.formation_name,
+                    "error": str(e)
+                }
+            )
+            raise
 
     async def health_check(self) -> bool:
         """Check if the server is healthy and responding"""
-        if not self.is_running:
-            return False
-
         try:
+            if not self.is_running:
+                # Emit health check failure event
+                ObservabilityManager.get_instance().emit_event(
+                    event_type=EventType.A2A_HEALTH_CHECK,
+                    level=EventLevel.WARNING,
+                    message="A2A Formation Server health check failed: server not running",
+                    data={
+                        "formation": self.formation_name,
+                        "running": False
+                    }
+                )
+                return False
+
             # Try to connect to the server port
             with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
                 s.settimeout(1)
                 result = s.connect_ex((self.host, self.port))
-                return result == 0
+                is_healthy = result == 0
+
+            # Emit health check result event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.INFO if is_healthy else EventLevel.WARNING,
+                message=(f"A2A Formation Server health check "
+                         f"{'passed' if is_healthy else 'failed'}"),
+                data={
+                    "formation": self.formation_name,
+                    "healthy": is_healthy,
+                    "port": self.port,
+                    "connection_result": result
+                }
+            )
+
+            return is_healthy
+
         except Exception as e:
+            # Emit health check error event
+            ObservabilityManager.get_instance().emit_event(
+                event_type=EventType.A2A_HEALTH_CHECK,
+                level=EventLevel.ERROR,
+                message=f"A2A Formation Server health check error: {str(e)}",
+                data={
+                    "formation": self.formation_name,
+                    "error": str(e)
+                }
+            )
+
             logger.error(f"A2A server health check failed: {e}")
             return False

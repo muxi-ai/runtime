@@ -15,6 +15,15 @@ import os
 
 from ..secrets import SecretsManager
 
+# Observability integration
+try:
+    from ..observability import ObservabilityManager, EventType, EventLevel
+except ImportError:
+    # Graceful fallback if observability is not available
+    ObservabilityManager = None
+    EventType = None
+    EventLevel = None
+
 # Suppress common warnings that clutter the output
 warnings.filterwarnings("ignore", category=UserWarning, module="pydantic")
 warnings.filterwarnings("ignore", message="python-magic not available")
@@ -26,53 +35,173 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
     """Add a secret to the formation's secrets store in current directory."""
     formation_dir = Path(".")
 
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.SECRET_STORAGE_STARTED,
+                level=EventLevel.INFO,
+                message="Starting secret addition to formation",
+                data={
+                    "secret_name": secret_name,
+                    "formation_dir": str(formation_dir.absolute()),
+                    "operation": "add_secret_to_formation",
+                    "secret_value_length": len(secret_value) if secret_value else 0
+                }
+            )
+        except Exception:
+            pass
+
     print(f"🔐 Adding secret '{secret_name}' to formation...")
     print(f"📁 Formation directory: {formation_dir.absolute()}")
 
-    # Initialize SecretsManager
-    secrets_manager = SecretsManager(formation_dir)
-    await secrets_manager.initialize_encryption()
+    try:
+        # Initialize SecretsManager
+        secrets_manager = SecretsManager(formation_dir)
+        await secrets_manager.initialize_encryption()
 
-    # Store the secret
-    await secrets_manager.store_secret(secret_name, secret_value)
+        # Store the secret
+        await secrets_manager.store_secret(secret_name, secret_value)
 
-    print(f"✅ Secret '{secret_name}' added successfully!")
+        print(f"✅ Secret '{secret_name}' added successfully!")
 
-    # Show file locations
-    key_file = formation_dir / ".key"
-    secrets_file = formation_dir / "secrets.enc"
+        # Show file locations
+        key_file = formation_dir / ".key"
+        secrets_file = formation_dir / "secrets.enc"
 
-    print("\n📂 Files created:")
-    print(f"   🔑 Master key: {key_file.absolute()}")
-    print(f"   🔒 Secrets: {secrets_file.absolute()}")
+        print("\n📂 Files created:")
+        print(f"   🔑 Master key: {key_file.absolute()}")
+        print(f"   🔒 Secrets: {secrets_file.absolute()}")
 
-    return secrets_manager
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.SECRET_STORAGE_COMPLETED,
+                    level=EventLevel.INFO,
+                    message="Secret addition completed successfully",
+                    data={
+                        "secret_name": secret_name,
+                        "formation_dir": str(formation_dir.absolute()),
+                        "operation": "add_secret_to_formation",
+                        "key_file": str(key_file.absolute()),
+                        "secrets_file": str(secrets_file.absolute()),
+                        "key_file_exists": key_file.exists(),
+                        "secrets_file_exists": secrets_file.exists(),
+                        "secret_value_length": len(secret_value) if secret_value else 0
+                    }
+                )
+            except Exception:
+                pass
+
+        return secrets_manager
+
+    except Exception as e:
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Secret addition failed with error",
+                    data={
+                        "secret_name": secret_name,
+                        "formation_dir": str(formation_dir.absolute()),
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "operation": "add_secret_to_formation"
+                    }
+                )
+            except Exception:
+                pass
+        raise
 
 
 async def list_secrets_in_formation():
     """List all secrets in the formation in current directory."""
     formation_dir = Path(".")
 
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.SECRET_LISTING_STARTED,
+                level=EventLevel.DEBUG,
+                message="Starting secret listing for formation",
+                data={
+                    "formation_dir": str(formation_dir.absolute()),
+                    "operation": "list_secrets_in_formation"
+                }
+            )
+        except Exception:
+            pass
+
     print(f"📁 Formation directory: {formation_dir.absolute()}")
 
-    # Initialize SecretsManager
-    secrets_manager = SecretsManager(formation_dir)
-    await secrets_manager.initialize_encryption()
+    try:
+        # Initialize SecretsManager
+        secrets_manager = SecretsManager(formation_dir)
+        await secrets_manager.initialize_encryption()
 
-    # List secrets
-    secrets = await secrets_manager.list_secrets()
+        # List secrets
+        secrets = await secrets_manager.list_secrets()
 
-    print("📋 Secrets in formation:")
-    if secrets:
-        for secret in secrets:
-            print(f"   • {secret}")
-    else:
-        print("   (no secrets found)")
+        print("📋 Secrets in formation:")
+        if secrets:
+            for secret in secrets:
+                print(f"   • {secret}")
+        else:
+            print("   (no secrets found)")
 
-    return secrets
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.SECRET_LISTING_COMPLETED,
+                    level=EventLevel.DEBUG,
+                    message="Secret listing completed successfully",
+                    data={
+                        "formation_dir": str(formation_dir.absolute()),
+                        "secrets_count": len(secrets),
+                        "secrets": list(secrets),
+                        "operation": "list_secrets_in_formation"
+                    }
+                )
+            except Exception:
+                pass
+
+        return secrets
+
+    except Exception as e:
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Secret listing failed with error",
+                    data={
+                        "formation_dir": str(formation_dir.absolute()),
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "operation": "list_secrets_in_formation"
+                    }
+                )
+            except Exception:
+                pass
+        raise
 
 
 def main():
+    if ObservabilityManager and EventType:
+        try:
+            ObservabilityManager.get_instance().log_event(
+                event_type=EventType.UTILITY_STARTED,
+                level=EventLevel.INFO,
+                message="Add secret utility started",
+                data={
+                    "utility": "add_secret",
+                    "args": sys.argv[1:] if len(sys.argv) > 1 else [],
+                    "working_dir": str(Path(".").absolute())
+                }
+            )
+        except Exception:
+            pass
+
     # Check if no arguments provided and show custom help
     if len(sys.argv) == 1:
         print("🔐 MUXI Secrets Management - Add Secret")
@@ -106,9 +235,52 @@ Examples:
     try:
         if args.command == "list":
             asyncio.run(list_secrets_in_formation())
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.UTILITY_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="Add secret utility completed successfully",
+                        data={
+                            "utility": "add_secret",
+                            "command": "list",
+                            "result": "success"
+                        }
+                    )
+                except Exception:
+                    pass
         elif args.command and args.value:
             asyncio.run(add_secret_to_formation(args.command, args.value))
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.UTILITY_COMPLETED,
+                        level=EventLevel.INFO,
+                        message="Add secret utility completed successfully",
+                        data={
+                            "utility": "add_secret",
+                            "command": args.command,
+                            "result": "success"
+                        }
+                    )
+                except Exception:
+                    pass
         elif args.command and not args.value:
+            if ObservabilityManager and EventType:
+                try:
+                    ObservabilityManager.get_instance().log_event(
+                        event_type=EventType.UTILITY_COMPLETED,
+                        level=EventLevel.WARNING,
+                        message="Add secret utility completed with failure",
+                        data={
+                            "utility": "add_secret",
+                            "command": args.command,
+                            "result": "failure",
+                            "reason": "missing_secret_value"
+                        }
+                    )
+                except Exception:
+                    pass
             print(f"❌ Error: Secret value required for '{args.command}'")
             print(f"\nUsage: {sys.argv[0]} <SECRET_NAME> <secret_value>")
             print(f"Example: {sys.argv[0]} OPENAI_API_KEY 'sk-your-key-here'")
@@ -126,6 +298,21 @@ Examples:
             sys.exit(1)
 
     except Exception as e:
+        if ObservabilityManager and EventType:
+            try:
+                ObservabilityManager.get_instance().log_event(
+                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    level=EventLevel.ERROR,
+                    message="Add secret utility failed with error",
+                    data={
+                        "utility": "add_secret",
+                        "command": args.command if 'args' in locals() else None,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    }
+                )
+            except Exception:
+                pass
         print(f"❌ Error: {e}")
         sys.exit(1)
 

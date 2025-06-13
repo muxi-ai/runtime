@@ -33,44 +33,133 @@ class EventLevel(Enum):
 
 
 class EventType(Enum):
-    """Core event types for MUXI observability."""
+    """Comprehensive event types for MUXI observability covering complete request lifecycle."""
 
-    # Request lifecycle events
+    # ===================================================================
+    # REQUEST INGESTION & VALIDATION
+    # ===================================================================
     REQUEST_RECEIVED = "request.received"
-    REQUEST_PROCESSING = "request.processing"
-    REQUEST_COMPLETED = "request.completed"
-    REQUEST_FAILED = "request.failed"
+    REQUEST_DENIED_AUTH = "request.denied.auth"
+    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"
+    REQUEST_DENIED_VALIDATION = "request.denied.validation"
+    REQUEST_VALIDATED = "request.validated"
 
-    # Overlord routing events
+    # ===================================================================
+    # MULTI-MODAL CONTENT PROCESSING
+    # ===================================================================
+    CONTENT_DOCUMENT_PARSED = "content.document.parsed"
+    CONTENT_IMAGE_ANALYZED = "content.image.analyzed"
+    CONTENT_AUDIO_TRANSCRIBED = "content.audio.transcribed"
+    CONTENT_EXTRACTION_FAILED = "content.extraction.failed"
+
+    # ===================================================================
+    # OVERLORD ORCHESTRATION
+    # ===================================================================
+    OVERLORD_INITIALIZED = "overlord.initialized"
     OVERLORD_ROUTING_STARTED = "overlord.routing.started"
     OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
     OVERLORD_ROUTING_FAILED = "overlord.routing.failed"
+    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection.started"
+    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection.completed"
     OVERLORD_AGENT_SELECTED = "overlord.agent.selected"
     OVERLORD_AGENT_NOTFOUND = "overlord.agent.not_found"
+    OVERLORD_TASK_DECOMPOSED = "overlord.task.decomposed"
 
-    # Agent processing events
+    # ===================================================================
+    # MEMORY & CONTEXT OPERATIONS
+    # ===================================================================
+    MEMORY_RETRIEVAL_STARTED = "memory.retrieval.started"
+    MEMORY_RETRIEVAL_SHORT_TERM = "memory.retrieval.short_term"
+    MEMORY_RETRIEVAL_LONG_TERM = "memory.retrieval.long_term"
+    MEMORY_RETRIEVAL_CONTEXT = "memory.retrieval.context"
+    MEMORY_STORAGE_SHORT_TERM = "memory.storage.short_term"
+    MEMORY_STORAGE_LONG_TERM = "memory.storage.long_term"
+    MEMORY_EXTRACTION_STARTED = "memory.extraction.started"
+    MEMORY_SEARCH = "memory.search"  # Legacy compatibility
+    MEMORY_STORE = "memory.store"  # Legacy compatibility
+    MEMORY_CONTEXT_ENHANCED = "memory.context.enhanced"
+
+    # ===================================================================
+    # AGENT PROCESSING
+    # ===================================================================
+    AGENT_SELECTED = "agent.selected"
+    AGENT_THINKING_STARTED = "agent.thinking.started"
+    AGENT_THINKING_COMPLETED = "agent.thinking.completed"
+    AGENT_PLANNING_CREATED = "agent.planning.created"
+    AGENT_CONTEXT_APPLIED = "agent.context.applied"
     AGENT_MESSAGE_PROCESSING = "agent.message.processing"
     AGENT_MESSAGE_COMPLETED = "agent.message.completed"
     AGENT_MESSAGE_FAILED = "agent.message.failed"
-    AGENT_MODEL_INFERENCE = "agent.model.inference"
-    AGENT_MODEL_INFERENCE_COMPLETED = "agent.model.inference.completed"
 
-    # MCP tool events
+    # ===================================================================
+    # MODEL OPERATIONS
+    # ===================================================================
+    MODEL_INFERENCE_STARTED = "model.inference.started"
+    MODEL_INFERENCE_COMPLETED = "model.inference.completed"
+    MODEL_STREAMING_STARTED = "model.streaming.started"
+    AGENT_MODEL_INFERENCE = "agent.model.inference"  # Legacy compatibility
+    AGENT_MODEL_INFERENCE_COMPLETED = "agent.model.inference.completed"  # Legacy compatibility
+
+    # ===================================================================
+    # TOOL & MCP OPERATIONS
+    # ===================================================================
+    MCP_CONNECTION_ESTABLISHED = "mcp.connection.established"
+    MCP_TOOL_DISCOVERED = "mcp.tool.discovered"
     MCP_TOOL_CALLED = "mcp.tool.called"
     MCP_TOOL_COMPLETED = "mcp.tool.completed"
     MCP_TOOL_FAILED = "mcp.tool.failed"
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
 
-    # Memory operation events
-    MEMORY_SEARCH = "memory.search"
-    MEMORY_STORE = "memory.store"
-    MEMORY_CONTEXT_ENHANCED = "memory.context.enhanced"
+    # ===================================================================
+    # A2A & COLLABORATION
+    # ===================================================================
+    A2A_DISCOVERY_STARTED = "a2a.discovery.started"
+    A2A_REQUEST_SENT = "a2a.request.sent"
+    A2A_RESPONSE_RECEIVED = "a2a.response.received"
+    COLLABORATION_INTERNAL_STARTED = "collaboration.internal.started"
+    A2A_MESSAGE_SENT = "a2a.message.sent"  # Legacy compatibility
+    A2A_MESSAGE_RECEIVED = "a2a.message.received"  # Legacy compatibility
+    A2A_DISCOVERY = "a2a.discovery"  # Legacy compatibility
 
-    # A2A communication events
-    A2A_MESSAGE_SENT = "a2a.message.sent"
-    A2A_MESSAGE_RECEIVED = "a2a.message.received"
-    A2A_DISCOVERY = "a2a.discovery"
+    # ===================================================================
+    # RESPONSE GENERATION
+    # ===================================================================
+    RESPONSE_GENERATION_STARTED = "response.generation.started"
+    RESPONSE_MULTIMODAL_CREATED = "response.multimodal.created"
+    RESPONSE_VALIDATION_COMPLETED = "response.validation.completed"
+    RESPONSE_FORMATTED = "response.formatted"
+
+    # ===================================================================
+    # ASYNC & DELIVERY
+    # ===================================================================
+    ASYNC_THRESHOLD_DETECTED = "async.threshold.detected"
+    ASYNC_PROCESSING_STARTED = "async.processing.started"
+    WEBHOOK_SENT = "webhook.sent"
+    RESPONSE_DELIVERED = "response.delivered"
+
+    # ===================================================================
+    # ERROR HANDLING & RECOVERY
+    # ===================================================================
+    ERROR_TIMEOUT_DETECTED = "error.timeout.detected"
+    ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
+    ERROR_FALLBACK_ACTIVATED = "error.fallback.activated"
+    ERROR_RECOVERY_COMPLETED = "error.recovery.completed"
+
+    # ===================================================================
+    # PERFORMANCE & MONITORING
+    # ===================================================================
+    PERFORMANCE_DURATION_RECORDED = "performance.duration.recorded"
+    RESOURCE_USAGE_MEASURED = "resource.usage.measured"
+    SESSION_CREATED = "session.created"
+    SESSION_CONTEXT_UPDATED = "session.context.updated"
+
+    # ===================================================================
+    # REQUEST LIFECYCLE (LEGACY COMPATIBILITY)
+    # ===================================================================
+    REQUEST_PROCESSING = "request.processing"
+    REQUEST_COMPLETED = "request.completed"
+    REQUEST_FAILED = "request.failed"
 
 
 @dataclass
