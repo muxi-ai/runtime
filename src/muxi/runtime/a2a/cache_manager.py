@@ -12,7 +12,7 @@ from typing import Dict, Optional, Any
 from datetime import datetime, timezone
 
 from .models import AgentCard
-from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, EventLevel
 
 
 class A2ACacheManager:
@@ -45,7 +45,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_INITIALIZED,
+                event_type=ConversationEventType.A2A_CACHE_INITIALIZED,
                 level=EventLevel.INFO,
                 data={
                     "cache_directory": str(self.cache_dir),
@@ -61,7 +61,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "load_metadata",
@@ -80,7 +80,7 @@ class A2ACacheManager:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                        event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                         level=EventLevel.DEBUG,
                         data={
                             "operation": "load_metadata",
@@ -96,7 +96,7 @@ class A2ACacheManager:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         level=EventLevel.WARNING,
                         data={
                             "operation": "load_metadata",
@@ -111,7 +111,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     data={
                         "operation": "load_metadata",
@@ -127,7 +127,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "save_metadata",
@@ -145,7 +145,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     data={
                         "operation": "save_metadata",
@@ -161,7 +161,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     data={
                         "operation": "save_metadata",
@@ -187,7 +187,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "compute_config_hash",
@@ -211,7 +211,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "compute_config_hash",
@@ -242,7 +242,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "is_cached",
@@ -257,7 +257,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     data={
                         "operation": "is_cached",
@@ -277,7 +277,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     data={
                         "operation": "is_cached",
@@ -299,7 +299,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "is_cached",
@@ -327,7 +327,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "get_cached_card",
@@ -343,7 +343,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     data={
                         "operation": "get_cached_card",
@@ -364,7 +364,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     data={
                         "operation": "get_cached_card",
@@ -387,7 +387,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.WARNING,
                     data={
                         "operation": "get_cached_card",
@@ -413,7 +413,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "cache_card",
@@ -445,7 +445,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.INFO,
                     data={
                         "operation": "cache_card",
@@ -463,7 +463,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     data={
                         "operation": "cache_card",
@@ -480,7 +480,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "remove_cache_entry",
@@ -511,7 +511,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "remove_cache_entry",
@@ -533,7 +533,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.INFO,
                 data={
                     "operation": "invalidate_cache",
@@ -548,7 +548,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                 level=EventLevel.INFO,
                 data={
                     "operation": "invalidate_cache",
@@ -564,7 +564,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.INFO,
                 data={
                     "operation": "invalidate_all",
@@ -589,7 +589,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.INFO,
                     data={
                         "operation": "invalidate_all",
@@ -605,7 +605,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     data={
                         "operation": "invalidate_all",
@@ -626,7 +626,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "get_cache_stats"
@@ -654,7 +654,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                 level=EventLevel.DEBUG,
                 data={
                     "operation": "get_cache_stats",
@@ -678,7 +678,7 @@ class A2ACacheManager:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.A2A_CACHE_OPERATION_STARTED,
+                event_type=ConversationEventType.A2A_CACHE_OPERATION_STARTED,
                 level=EventLevel.INFO,
                 data={
                     "operation": "cleanup_orphaned_cache",
@@ -705,7 +705,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.A2A_CACHE_OPERATION_COMPLETED,
+                    event_type=ConversationEventType.A2A_CACHE_OPERATION_COMPLETED,
                     level=EventLevel.INFO,
                     data={
                         "operation": "cleanup_orphaned_cache",
@@ -721,7 +721,7 @@ class A2ACacheManager:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     data={
                         "operation": "cleanup_orphaned_cache",

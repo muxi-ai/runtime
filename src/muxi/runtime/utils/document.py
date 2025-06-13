@@ -9,11 +9,11 @@ from typing import List
 
 # Observability integration
 try:
-    from ..observability import ObservabilityManager, EventType, EventLevel
+    from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 
@@ -27,10 +27,10 @@ def load_document(file_path: str) -> str:
     Returns:
         The document content as a string
     """
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.DOCUMENT_PROCESSING_STARTED,
+                event_type=ConversationEventType.DOCUMENT_PROCESSING_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting document loading",
                 data={
@@ -44,10 +44,10 @@ def load_document(file_path: str) -> str:
 
     try:
         if not os.path.exists(file_path):
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         level=EventLevel.ERROR,
                         message="Document loading failed - file not found",
                         data={
@@ -64,10 +64,10 @@ def load_document(file_path: str) -> str:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.DOCUMENT_PROCESSING_COMPLETED,
+                    event_type=ConversationEventType.DOCUMENT_PROCESSING_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Document loading completed successfully",
                     data={
@@ -83,10 +83,10 @@ def load_document(file_path: str) -> str:
         return content
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Document loading failed with error",
                     data={
@@ -113,10 +113,10 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
     Returns:
         List of text chunks
     """
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.DOCUMENT_PROCESSING_STARTED,
+                event_type=ConversationEventType.DOCUMENT_PROCESSING_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting text chunking",
                 data={
@@ -132,10 +132,10 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
     try:
         if not text:
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.DOCUMENT_PROCESSING_COMPLETED,
+                        event_type=ConversationEventType.DOCUMENT_PROCESSING_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Text chunking completed - empty text",
                         data={
@@ -175,10 +175,10 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
             chunks.append(text[start:end])
             start = max(start, end - overlap)  # Ensure we move forward
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.DOCUMENT_PROCESSING_COMPLETED,
+                    event_type=ConversationEventType.DOCUMENT_PROCESSING_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Text chunking completed successfully",
                     data={
@@ -201,10 +201,10 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
         return chunks
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Text chunking failed with error",
                     data={

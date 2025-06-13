@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import Request, Header
 
-from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, EventLevel
 
 if TYPE_CHECKING:
     from ..secrets import SecretsManager
@@ -69,7 +69,7 @@ class A2AInboundAuthenticator:
 
             # Emit initialization event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_INITIALIZED,
+                event_type=ConversationEventType.A2A_AUTH_INITIALIZED,
                 level=EventLevel.INFO,
                 message=f"A2A inbound authenticator initialized with mode: {self.auth_mode}",
                 data={
@@ -83,7 +83,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for initialization failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to initialize A2A inbound authenticator: {str(e)}",
                 data={
@@ -98,7 +98,7 @@ class A2AInboundAuthenticator:
         try:
             # Emit credential initialization start event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_CREDENTIAL_LOADED,
+                event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                 level=EventLevel.INFO,
                 message="Starting A2A inbound credential initialization",
                 data={
@@ -112,7 +112,7 @@ class A2AInboundAuthenticator:
             else:
                 # Emit warning for missing secrets manager
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_CREDENTIAL_LOADED,
+                    event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                     level=EventLevel.WARNING,
                     message="No SecretsManager provided - no credentials will be available",
                     data={"auth_mode": self.auth_mode.value}
@@ -121,7 +121,7 @@ class A2AInboundAuthenticator:
 
             # Emit successful initialization event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_CREDENTIAL_LOADED,
+                event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                 level=EventLevel.INFO,
                 message="A2A inbound credential initialization completed",
                 data={
@@ -136,7 +136,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for credential initialization failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to initialize A2A inbound credentials: {str(e)}",
                 data={
@@ -152,7 +152,7 @@ class A2AInboundAuthenticator:
             if not self.secrets_manager:
                 # Emit warning for missing secrets manager
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_CREDENTIAL_LOADED,
+                    event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                     level=EventLevel.WARNING,
                     message="SecretsManager not available for credential loading",
                     data={"auth_mode": self.auth_mode.value}
@@ -213,7 +213,7 @@ class A2AInboundAuthenticator:
 
                         # Emit successful credential load event
                         ObservabilityManager.get_instance().emit_event(
-                            event_type=EventType.A2A_CREDENTIAL_LOADED,
+                            event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                             level=EventLevel.INFO,
                             message=f"Loaded inbound credential for {client_id}",
                             data={
@@ -228,7 +228,7 @@ class A2AInboundAuthenticator:
                     else:
                         # Emit warning for missing credentials
                         ObservabilityManager.get_instance().emit_event(
-                            event_type=EventType.A2A_CREDENTIAL_LOADED,
+                            event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                             level=EventLevel.WARNING,
                             message=f"No credentials found for {client_id}",
                             data={
@@ -242,7 +242,7 @@ class A2AInboundAuthenticator:
                 except Exception as e:
                     # Emit error event for individual credential load failure
                     ObservabilityManager.get_instance().emit_event(
-                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         level=EventLevel.ERROR,
                         message=f"Failed to load credentials for {client_id}: {str(e)}",
                         data={
@@ -255,7 +255,7 @@ class A2AInboundAuthenticator:
 
             # Emit summary event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_CREDENTIAL_LOADED,
+                event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                 level=EventLevel.INFO,
                 message="A2A inbound credential loading completed",
                 data={
@@ -268,7 +268,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for credential loading failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to load credentials from secrets: {str(e)}",
                 data={
@@ -297,7 +297,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for secret retrieval failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to get secret {secret_name}: {str(e)}",
                 data={
@@ -323,7 +323,7 @@ class A2AInboundAuthenticator:
                 else:
                     # Emit warning for missing secret
                     ObservabilityManager.get_instance().emit_event(
-                        event_type=EventType.A2A_CREDENTIAL_LOADED,
+                        event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                         level=EventLevel.WARNING,
                         message=f"Secret {secret_name} not found for Basic auth {key}",
                         data={
@@ -337,7 +337,7 @@ class A2AInboundAuthenticator:
             except Exception as e:
                 # Emit error event for secret retrieval failure
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message=f"Failed to get secret {secret_name}: {str(e)}",
                     data={
@@ -403,7 +403,7 @@ class A2AInboundAuthenticator:
 
             # Emit credential addition event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_CREDENTIAL_LOADED,
+                event_type=ConversationEventType.A2A_CREDENTIAL_LOADED,
                 level=EventLevel.INFO,
                 message=f"Added client credential for {client_id}",
                 data={
@@ -419,7 +419,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for credential addition failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to add client credential for {client_id}: {str(e)}",
                 data={
@@ -447,7 +447,7 @@ class A2AInboundAuthenticator:
         try:
             # Emit authentication start event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_VALIDATION,
+                event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                 level=EventLevel.DEBUG,
                 message=f"Starting A2A inbound authentication with mode: {self.auth_mode}",
                 data={
@@ -462,7 +462,7 @@ class A2AInboundAuthenticator:
             if self.auth_mode == InboundAuthType.NONE:
                 # Emit no authentication event
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.DEBUG,
                     message="A2A authentication bypassed (mode: none)",
                     data={"auth_mode": "none"}
@@ -481,7 +481,7 @@ class A2AInboundAuthenticator:
                 error_msg = f"Unsupported authentication mode: {self.auth_mode}"
                 # Emit unsupported auth mode event
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.ERROR,
                     message=error_msg,
                     data={"auth_mode": self.auth_mode.value}
@@ -491,7 +491,7 @@ class A2AInboundAuthenticator:
             # Emit authentication result event
             authenticated, client_id, error_message = result
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_VALIDATION,
+                event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                 level=EventLevel.INFO if authenticated else EventLevel.WARNING,
                 message=f"A2A inbound authentication {'successful' if authenticated else 'failed'}",
                 data={
@@ -507,7 +507,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for authentication failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"A2A inbound authentication error: {str(e)}",
                 data={
@@ -530,7 +530,7 @@ class A2AInboundAuthenticator:
             if client_id:
                 # Emit successful API key authentication
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.INFO,
                     message=f"API key authentication successful for client {client_id}",
                     data={
@@ -542,7 +542,7 @@ class A2AInboundAuthenticator:
             else:
                 # Emit failed API key authentication
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.WARNING,
                     message="API key authentication failed: invalid key",
                     data={
@@ -555,7 +555,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for API key authentication failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"API key authentication error: {str(e)}",
                 data={
@@ -582,7 +582,7 @@ class A2AInboundAuthenticator:
             if client_id:
                 # Emit successful Bearer authentication
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.INFO,
                     message=f"Bearer token authentication successful for client {client_id}",
                     data={
@@ -594,7 +594,7 @@ class A2AInboundAuthenticator:
             else:
                 # Emit failed Bearer authentication
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.WARNING,
                     message="Bearer token authentication failed: invalid token",
                     data={
@@ -607,7 +607,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for Bearer authentication failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Bearer token authentication error: {str(e)}",
                 data={
@@ -639,7 +639,7 @@ class A2AInboundAuthenticator:
             if stored_password and stored_password == password:
                 # Emit successful Basic authentication
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.INFO,
                     message=f"Basic authentication successful for user {username}",
                     data={
@@ -651,7 +651,7 @@ class A2AInboundAuthenticator:
             else:
                 # Emit failed Basic authentication
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.WARNING,
                     message=f"Basic authentication failed for user {username}",
                     data={
@@ -665,7 +665,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for Basic authentication failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Basic authentication error: {str(e)}",
                 data={
@@ -690,7 +690,7 @@ class A2AInboundAuthenticator:
                 if abs(current_time - request_time) > 300:  # 5 minutes
                     # Emit timestamp validation failure
                     ObservabilityManager.get_instance().emit_event(
-                        event_type=EventType.A2A_AUTH_VALIDATION,
+                        event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                         level=EventLevel.WARNING,
                         message="HMAC authentication failed: timestamp too old",
                         data={
@@ -717,7 +717,7 @@ class A2AInboundAuthenticator:
                 if hmac.compare_digest(signature, expected_signature):
                     # Emit successful HMAC authentication
                     ObservabilityManager.get_instance().emit_event(
-                        event_type=EventType.A2A_AUTH_VALIDATION,
+                        event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                         level=EventLevel.INFO,
                         message=f"HMAC authentication successful for client {client_id}",
                         data={
@@ -730,7 +730,7 @@ class A2AInboundAuthenticator:
 
             # Emit failed HMAC authentication
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_VALIDATION,
+                event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                 level=EventLevel.WARNING,
                 message="HMAC authentication failed: invalid signature",
                 data={
@@ -745,7 +745,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for HMAC authentication failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"HMAC authentication error: {str(e)}",
                 data={
@@ -775,7 +775,7 @@ class A2AInboundAuthenticator:
 
             # Emit auth requirements request event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_VALIDATION,
+                event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                 level=EventLevel.DEBUG,
                 message="A2A authentication requirements requested",
                 data={
@@ -789,7 +789,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for auth requirements failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to get auth requirements: {str(e)}",
                 data={
@@ -823,7 +823,7 @@ class A2AInboundAuthenticator:
 
             # Emit client list request event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_VALIDATION,
+                event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                 level=EventLevel.DEBUG,
                 message="A2A client list requested",
                 data={
@@ -837,7 +837,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for client list failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to list clients: {str(e)}",
                 data={
@@ -853,7 +853,7 @@ class A2AInboundAuthenticator:
             if client_id not in self.credentials:
                 # Emit client not found event
                 ObservabilityManager.get_instance().emit_event(
-                    event_type=EventType.A2A_AUTH_VALIDATION,
+                    event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                     level=EventLevel.WARNING,
                     message=f"Attempted to remove non-existent client: {client_id}",
                     data={
@@ -888,7 +888,7 @@ class A2AInboundAuthenticator:
 
             # Emit successful client removal event
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.A2A_AUTH_VALIDATION,
+                event_type=ConversationEventType.A2A_AUTH_VALIDATION,
                 level=EventLevel.INFO,
                 message=f"Client {client_id} removed successfully",
                 data={
@@ -903,7 +903,7 @@ class A2AInboundAuthenticator:
         except Exception as e:
             # Emit error event for client removal failure
             ObservabilityManager.get_instance().emit_event(
-                event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=EventLevel.ERROR,
                 message=f"Failed to remove client {client_id}: {str(e)}",
                 data={

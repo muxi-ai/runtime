@@ -86,7 +86,7 @@ from loguru import logger
 
 from ..utils import load_document, chunk_text
 from .base import FileKnowledge
-from ..observability import EventType, EventLevel, ObservabilityManager
+from ..observability import ConversationEventType, EventLevel, ObservabilityManager
 
 
 class KnowledgeHandler:
@@ -136,7 +136,7 @@ class KnowledgeHandler:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.INFO,
                 message="KnowledgeHandler initialized",
                 data={
@@ -146,8 +146,8 @@ class KnowledgeHandler:
                     "cache_dir": cache_dir,
                     "max_files_per_source": max_files_per_source,
                     "max_total_files": max_total_files,
-                    "documents_loaded": len(self.documents)
-                }
+                    "documents_loaded": len(self.documents),
+                },
             )
         except Exception:
             pass  # Don't let observability failures break initialization
@@ -171,15 +171,15 @@ class KnowledgeHandler:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.CONTENT_PROCESSED,
+                        event_type=ConversationEventType.CONTENT_PROCESSED,
                         level=EventLevel.INFO,
                         message="Knowledge cache loaded successfully",
                         data={
                             "documents_count": len(self.documents),
                             "metadata_count": len(self.metadata_list),
                             "embedding_file": self.embedding_file,
-                            "metadata_file": self.metadata_file
-                        }
+                            "metadata_file": self.metadata_file,
+                        },
                     )
                 except Exception:
                     pass
@@ -193,15 +193,15 @@ class KnowledgeHandler:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         level=EventLevel.ERROR,
                         message="Failed to load knowledge cache",
                         data={
                             "error": str(e),
                             "error_type": type(e).__name__,
                             "embedding_file": self.embedding_file,
-                            "metadata_file": self.metadata_file
-                        }
+                            "metadata_file": self.metadata_file,
+                        },
                     )
                 except Exception:
                     pass
@@ -219,14 +219,14 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.INFO,
                     message="Knowledge cache saved successfully",
                     data={
                         "embeddings_count": len(embeddings),
                         "metadata_count": len(self.metadata_list),
-                        "metadata_file": self.metadata_file
-                    }
+                        "metadata_file": self.metadata_file,
+                    },
                 )
             except Exception:
                 pass
@@ -238,15 +238,15 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Failed to save knowledge cache",
                     data={
                         "error": str(e),
                         "error_type": type(e).__name__,
                         "embeddings_count": len(embeddings),
-                        "metadata_file": self.metadata_file
-                    }
+                        "metadata_file": self.metadata_file,
+                    },
                 )
             except Exception:
                 pass
@@ -269,15 +269,13 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.RESOURCE_ALLOCATED,
+                    event_type=ConversationEventType.RESOURCE_ALLOCATED,
                     level=EventLevel.INFO,
                     message="FAISSx setup completed",
-                                        data={
+                    data={
                         "mode": self.mode,
-                        "remote_config": (
-                            self.remote if self.mode == "remote" else None
-                        )
-                    }
+                        "remote_config": (self.remote if self.mode == "remote" else None),
+                    },
                 )
             except Exception:
                 pass
@@ -290,14 +288,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Failed to setup FAISSx",
-                    data={
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "mode": self.mode
-                    }
+                    data={"error": str(e), "error_type": type(e).__name__, "mode": self.mode},
                 )
             except Exception:
                 pass
@@ -309,15 +303,15 @@ class KnowledgeHandler:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.CONTENT_PROCESSED,
+                event_type=ConversationEventType.CONTENT_PROCESSED,
                 level=EventLevel.INFO,
                 message="Starting knowledge source addition",
                 data={
-                    "source_path": getattr(source, 'path', str(source)),
+                    "source_path": getattr(source, "path", str(source)),
                     "source_type": type(source).__name__,
                     "current_sources_count": len(self.sources),
-                    "has_embedding_function": generate_embeddings_fn is not None
-                }
+                    "has_embedding_function": generate_embeddings_fn is not None,
+                },
             )
         except Exception:
             pass
@@ -329,14 +323,14 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.RESOURCE_ALLOCATED,
+                    event_type=ConversationEventType.RESOURCE_ALLOCATED,
                     level=EventLevel.WARNING,
                     message="Knowledge source limit reached",
                     data={
                         "current_sources_count": len(self.sources),
                         "max_sources": 10,
-                        "skipped_source": getattr(source, 'path', str(source))
-                    }
+                        "skipped_source": getattr(source, "path", str(source)),
+                    },
                 )
             except Exception:
                 pass
@@ -351,13 +345,13 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.DEBUG,
                     message="No embedding function provided for knowledge source",
                     data={
-                        "source_path": getattr(source, 'path', str(source)),
-                        "sources_count": len(self.sources)
-                    }
+                        "source_path": getattr(source, "path", str(source)),
+                        "sources_count": len(self.sources),
+                    },
                 )
             except Exception:
                 pass
@@ -368,20 +362,20 @@ class KnowledgeHandler:
             files_processed = 0
 
             # Get all files from the source with limits
-            files = source.get_files()[:self.max_files_per_source]  # Limit files per source
+            files = source.get_files()[: self.max_files_per_source]  # Limit files per source
 
             # Log files discovery
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.INFO,
                     message="Files discovered for knowledge source",
                     data={
-                        "source_path": getattr(source, 'path', str(source)),
+                        "source_path": getattr(source, "path", str(source)),
                         "files_count": len(files),
-                        "max_files_per_source": self.max_files_per_source
-                    }
+                        "max_files_per_source": self.max_files_per_source,
+                    },
                 )
             except Exception:
                 pass
@@ -442,15 +436,15 @@ class KnowledgeHandler:
                         try:
                             observability = ObservabilityManager.get_instance()
                             observability.log_event(
-                                event_type=EventType.CONTENT_PROCESSED,
+                                event_type=ConversationEventType.CONTENT_PROCESSED,
                                 level=EventLevel.INFO,
                                 message="Knowledge source embeddings generated successfully",
                                 data={
-                                    "source_path": getattr(source, 'path', str(source)),
+                                    "source_path": getattr(source, "path", str(source)),
                                     "embeddings_count": len(embeddings),
                                     "documents_count": len(self.documents),
-                                    "files_processed": files_processed
-                                }
+                                    "files_processed": files_processed,
+                                },
                             )
                         except Exception:
                             pass
@@ -462,15 +456,15 @@ class KnowledgeHandler:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.log_event(
-                            event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                            event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                             level=EventLevel.ERROR,
                             message="Failed to generate embeddings for knowledge source",
                             data={
-                                "source_path": getattr(source, 'path', str(source)),
+                                "source_path": getattr(source, "path", str(source)),
                                 "error": str(e),
                                 "error_type": type(e).__name__,
-                                "documents_count": len(self.documents)
-                            }
+                                "documents_count": len(self.documents),
+                            },
                         )
                     except Exception:
                         pass
@@ -479,15 +473,15 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.INFO,
                     message="Knowledge source addition completed",
                     data={
-                        "source_path": getattr(source, 'path', str(source)),
+                        "source_path": getattr(source, "path", str(source)),
                         "files_processed": files_processed,
                         "total_documents": len(self.documents),
-                        "total_sources": len(self.sources)
-                    }
+                        "total_sources": len(self.sources),
+                    },
                 )
             except Exception:
                 pass
@@ -499,14 +493,14 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Failed to add knowledge source",
                     data={
-                        "source_path": getattr(source, 'path', str(source)),
+                        "source_path": getattr(source, "path", str(source)),
                         "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 )
             except Exception:
                 pass
@@ -519,15 +513,15 @@ class KnowledgeHandler:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.CONTENT_RETRIEVED,
+                event_type=ConversationEventType.CONTENT_RETRIEVED,
                 level=EventLevel.INFO,
                 message="Starting knowledge search",
                 data={
                     "query_length": len(query),
                     "top_k": top_k,
                     "documents_count": len(self.documents),
-                    "has_embedding_function": generate_embeddings_fn is not None
-                }
+                    "has_embedding_function": generate_embeddings_fn is not None,
+                },
             )
         except Exception:
             pass
@@ -537,10 +531,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_RETRIEVED,
+                    event_type=ConversationEventType.CONTENT_RETRIEVED,
                     level=EventLevel.DEBUG,
                     message="No documents available for knowledge search",
-                    data={"query": query, "top_k": top_k}
+                    data={"query": query, "top_k": top_k},
                 )
             except Exception:
                 pass
@@ -566,14 +560,14 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_RETRIEVED,
+                    event_type=ConversationEventType.CONTENT_RETRIEVED,
                     level=EventLevel.INFO,
                     message="Knowledge text search completed",
                     data={
                         "query": query,
                         "results_count": len(results),
-                        "search_type": "text_search"
-                    }
+                        "search_type": "text_search",
+                    },
                 )
             except Exception:
                 pass
@@ -598,15 +592,15 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_RETRIEVED,
+                    event_type=ConversationEventType.CONTENT_RETRIEVED,
                     level=EventLevel.INFO,
                     message="Knowledge semantic search completed successfully",
                     data={
                         "query": query,
                         "results_count": len(results),
                         "search_type": "semantic_search",
-                        "top_k": top_k
-                    }
+                        "top_k": top_k,
+                    },
                 )
             except Exception:
                 pass
@@ -620,15 +614,15 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Knowledge search operation failed",
                     data={
                         "query": query,
                         "top_k": top_k,
                         "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 )
             except Exception:
                 pass
@@ -647,15 +641,15 @@ class KnowledgeHandler:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.INFO,
                 message="Starting KnowledgeHandler creation from agent config",
                 data={
                     "agent_id": agent_id,
                     "knowledge_enabled": knowledge_config.get("enabled", False),
                     "sources_count": len(knowledge_config.get("sources", [])),
-                    "config_keys": list(knowledge_config.keys())
-                }
+                    "config_keys": list(knowledge_config.keys()),
+                },
             )
         except Exception:
             pass
@@ -668,10 +662,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.SESSION_CREATED,
+                    event_type=ConversationEventType.SESSION_CREATED,
                     level=EventLevel.DEBUG,
                     message="Knowledge disabled for agent",
-                    data={"agent_id": agent_id}
+                    data={"agent_id": agent_id},
                 )
             except Exception:
                 pass
@@ -685,10 +679,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.SESSION_CREATED,
+                    event_type=ConversationEventType.SESSION_CREATED,
                     level=EventLevel.WARNING,
                     message="No knowledge sources configured for agent",
-                    data={"agent_id": agent_id}
+                    data={"agent_id": agent_id},
                 )
             except Exception:
                 pass
@@ -718,15 +712,15 @@ class KnowledgeHandler:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.log_event(
-                            event_type=EventType.RESOURCE_ALLOCATED,
+                            event_type=ConversationEventType.RESOURCE_ALLOCATED,
                             level=EventLevel.WARNING,
                             message="Knowledge sources limited for performance",
                             data={
                                 "agent_id": agent_id,
                                 "total_sources": len(sources_config),
                                 "processed_sources": 3,
-                                "skipped_sources": skipped
-                            }
+                                "skipped_sources": skipped,
+                            },
                         )
                     except Exception:
                         pass
@@ -753,15 +747,15 @@ class KnowledgeHandler:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.log_event(
-                            event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                            event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                             level=EventLevel.ERROR,
                             message="Failed to load knowledge source from config",
                             data={
                                 "agent_id": agent_id,
                                 "source_path": source_path,
                                 "error": str(e),
-                                "error_type": type(e).__name__
-                            }
+                                "error_type": type(e).__name__,
+                            },
                         )
                     except Exception:
                         pass
@@ -769,21 +763,23 @@ class KnowledgeHandler:
 
             source_count = len(handler.sources)
             doc_count = len(handler.documents)
-            print(f"✓ KnowledgeHandler created with {source_count} sources and {doc_count} documents")
+            print(
+                f"✓ KnowledgeHandler created with {source_count} sources and {doc_count} documents"
+            )
 
             # Log successful handler creation
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.SESSION_CREATED,
+                    event_type=ConversationEventType.SESSION_CREATED,
                     level=EventLevel.INFO,
                     message="KnowledgeHandler created successfully from agent config",
                     data={
                         "agent_id": agent_id,
                         "sources_count": source_count,
                         "documents_count": doc_count,
-                        "embedding_dimension": kwargs.get("embedding_dimension", 128)
-                    }
+                        "embedding_dimension": kwargs.get("embedding_dimension", 128),
+                    },
                 )
             except Exception:
                 pass
@@ -795,14 +791,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Failed to create KnowledgeHandler from agent config",
-                    data={
-                        "agent_id": agent_id,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                    data={"agent_id": agent_id, "error": str(e), "error_type": type(e).__name__},
                 )
             except Exception:
                 pass
@@ -834,14 +826,14 @@ class KnowledgeHandler:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.CONTENT_PROCESSED,
+                event_type=ConversationEventType.CONTENT_PROCESSED,
                 level=EventLevel.INFO,
                 message="Starting knowledge file addition",
                 data={
                     "file_path": file_path,
                     "description": description,
-                    "current_documents": len(self.documents)
-                }
+                    "current_documents": len(self.documents),
+                },
             )
         except Exception:
             pass
@@ -856,13 +848,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Knowledge file not found",
-                    data={
-                        "file_path": file_path,
-                        "error": "FileNotFoundError"
-                    }
+                    data={"file_path": file_path, "error": "FileNotFoundError"},
                 )
             except Exception:
                 pass
@@ -878,13 +867,10 @@ class KnowledgeHandler:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.CONTENT_PROCESSED,
+                        event_type=ConversationEventType.CONTENT_PROCESSED,
                         level=EventLevel.DEBUG,
                         message="Knowledge file already processed and unchanged",
-                        data={
-                            "file_path": file_path,
-                            "file_mtime": file_mtime
-                        }
+                        data={"file_path": file_path, "file_mtime": file_mtime},
                     )
                 except Exception:
                     pass
@@ -902,13 +888,13 @@ class KnowledgeHandler:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.CONTENT_PROCESSED,
+                        event_type=ConversationEventType.CONTENT_PROCESSED,
                         level=EventLevel.WARNING,
                         message="No content found in knowledge file",
                         data={
                             "file_path": file_path,
-                            "content_length": len(content) if content else 0
-                        }
+                            "content_length": len(content) if content else 0,
+                        },
                     )
                 except Exception:
                     pass
@@ -945,15 +931,15 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.INFO,
                     message="Knowledge file added successfully",
                     data={
                         "file_path": file_path,
                         "chunks_added": len(chunks),
                         "embeddings_generated": len(embeddings),
-                        "total_documents": len(self.documents)
-                    }
+                        "total_documents": len(self.documents),
+                    },
                 )
             except Exception:
                 pass
@@ -967,14 +953,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Failed to add knowledge file",
-                    data={
-                        "file_path": file_path,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                    data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
                 )
             except Exception:
                 pass
@@ -999,13 +981,10 @@ class KnowledgeHandler:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.CONTENT_PROCESSED,
+                event_type=ConversationEventType.CONTENT_PROCESSED,
                 level=EventLevel.INFO,
                 message="Starting knowledge file removal",
-                data={
-                    "file_path": file_path,
-                    "current_documents": len(self.documents)
-                }
+                data={"file_path": file_path, "current_documents": len(self.documents)},
             )
         except Exception:
             pass
@@ -1014,7 +993,9 @@ class KnowledgeHandler:
             # Find and remove documents associated with this file
             original_count = len(self.documents)
             self.documents = [doc for doc in self.documents if doc.get("source") != file_path]
-            self.metadata_list = [meta for meta in self.metadata_list if meta.get("source") != file_path]
+            self.metadata_list = [
+                meta for meta in self.metadata_list if meta.get("source") != file_path
+            ]
 
             removed_count = original_count - len(self.documents)
 
@@ -1028,14 +1009,14 @@ class KnowledgeHandler:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.CONTENT_PROCESSED,
+                        event_type=ConversationEventType.CONTENT_PROCESSED,
                         level=EventLevel.INFO,
                         message="Knowledge file removed successfully",
                         data={
                             "file_path": file_path,
                             "documents_removed": removed_count,
-                            "remaining_documents": len(self.documents)
-                        }
+                            "remaining_documents": len(self.documents),
+                        },
                     )
                 except Exception:
                     pass
@@ -1046,13 +1027,10 @@ class KnowledgeHandler:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.CONTENT_PROCESSED,
+                        event_type=ConversationEventType.CONTENT_PROCESSED,
                         level=EventLevel.WARNING,
                         message="Knowledge file not found for removal",
-                        data={
-                            "file_path": file_path,
-                            "current_documents": len(self.documents)
-                        }
+                        data={"file_path": file_path, "current_documents": len(self.documents)},
                     )
                 except Exception:
                     pass
@@ -1064,14 +1042,10 @@ class KnowledgeHandler:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Failed to remove knowledge file",
-                    data={
-                        "file_path": file_path,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                    data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
                 )
             except Exception:
                 pass

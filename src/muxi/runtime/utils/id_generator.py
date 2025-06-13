@@ -9,11 +9,11 @@ from nanoid import generate
 
 # Observability integration
 try:
-    from ..observability import ObservabilityManager, EventType, EventLevel
+    from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 
@@ -27,10 +27,10 @@ def generate_nanoid(size: int = 21) -> str:
     Returns:
         A new Nano ID string.
     """
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.ID_GENERATION_STARTED,
+                event_type=ConversationEventType.ID_GENERATION_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting Nano ID generation",
                 data={
@@ -46,10 +46,10 @@ def generate_nanoid(size: int = 21) -> str:
         alphabet = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
         nano_id = generate(alphabet, size)
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ID_GENERATION_COMPLETED,
+                    event_type=ConversationEventType.ID_GENERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Nano ID generation completed successfully",
                     data={
@@ -65,10 +65,10 @@ def generate_nanoid(size: int = 21) -> str:
         return nano_id
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Nano ID generation failed with error",
                     data={
@@ -91,10 +91,10 @@ def get_default_nanoid() -> str:
     Returns:
         A new Nano ID string of standard length.
     """
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.ID_GENERATION_STARTED,
+                event_type=ConversationEventType.ID_GENERATION_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting default Nano ID generation",
                 data={
@@ -109,10 +109,10 @@ def get_default_nanoid() -> str:
     try:
         nano_id = generate_nanoid()
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ID_GENERATION_COMPLETED,
+                    event_type=ConversationEventType.ID_GENERATION_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Default Nano ID generation completed successfully",
                     data={
@@ -128,10 +128,10 @@ def get_default_nanoid() -> str:
         return nano_id
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Default Nano ID generation failed with error",
                     data={

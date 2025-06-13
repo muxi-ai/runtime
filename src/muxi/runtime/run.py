@@ -40,11 +40,11 @@ from loguru import logger
 # Observability imports
 try:
     from muxi.runtime.observability.manager import ObservabilityManager
-    from muxi.runtime.observability.events import EventType, EventLevel
+    from muxi.runtime.observability.events import ConversationEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 
@@ -63,11 +63,11 @@ def is_port_in_use(port):
         bool: True if the port is in use (unavailable), False if the port is free.
     """
     # Log port check attempt
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             obs = ObservabilityManager.get_instance()
             obs.log_event(
-                EventType.RESOURCE_ALLOCATED,
+                ConversationEventType.RESOURCE_ALLOCATED,
                 EventLevel.DEBUG,
                 "Port availability check initiated",
                 data={"port": port, "operation": "port_check"}
@@ -81,11 +81,11 @@ def is_port_in_use(port):
         result = s.connect_ex(("localhost", port)) == 0
 
         # Log port check result
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 obs = ObservabilityManager.get_instance()
                 obs.log_event(
-                    EventType.RESOURCE_ALLOCATED if not result else EventType.ERROR_RETRY_ATTEMPTED,
+                    ConversationEventType.RESOURCE_ALLOCATED if not result else ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     EventLevel.INFO if not result else EventLevel.WARNING,
                     f"Port {port} {'in use' if result else 'available'}",
                     data={"port": port, "in_use": result, "operation": "port_check_result"}
@@ -122,11 +122,11 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             to determine if startup succeeded in programmatic contexts.
     """
     # Log server startup attempt
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             obs = ObservabilityManager.get_instance()
             obs.log_event(
-                EventType.SESSION_CREATED,
+                ConversationEventType.SESSION_CREATED,
                 EventLevel.INFO,
                 "Server startup initiated",
                 data={
@@ -147,11 +147,11 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             msg = f"Port {port} is already in use. MUXI server cannot start."
 
             # Log port conflict error
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     obs = ObservabilityManager.get_instance()
                     obs.log_event(
-                        EventType.ERROR_RETRY_ATTEMPTED,
+                        ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         EventLevel.ERROR,
                         "Server startup failed due to port conflict",
                         data={
@@ -180,11 +180,11 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         print("This is a placeholder until the MUXI API server is implemented.")
 
         # Log successful server startup (placeholder)
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 obs = ObservabilityManager.get_instance()
                 obs.log_event(
-                    EventType.SESSION_CREATED,
+                    ConversationEventType.SESSION_CREATED,
                     EventLevel.INFO,
                     "Server startup completed (placeholder)",
                     data={
@@ -202,11 +202,11 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         return True
     except Exception as e:
         # Log server startup exception
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 obs = ObservabilityManager.get_instance()
                 obs.log_event(
-                    EventType.ERROR_RETRY_ATTEMPTED,
+                    ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     EventLevel.ERROR,
                     "Server startup failed with exception",
                     data={

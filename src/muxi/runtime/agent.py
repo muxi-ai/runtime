@@ -164,13 +164,13 @@ class Agent:
         # Emit agent initialization event
         if hasattr(overlord, "observability_manager"):
             try:
-                from .observability import EventType, EventLevel
+                from .observability import ConversationEventType, EventLevel
                 import asyncio
 
                 # Create a task to emit the event asynchronously
                 async def emit_init_event():
                     await overlord.observability_manager.event_logger.emit_event(
-                        EventType.AGENT_INITIALIZED,
+                        ConversationEventType.AGENT_INITIALIZED,
                         level=EventLevel.INFO,
                         data={
                             "agent_id": self.agent_id,
@@ -273,10 +273,10 @@ class Agent:
 
         # Emit agent message processing event
         if request_context and hasattr(self.overlord, "observability_manager"):
-            from .observability import EventType, EventLevel
+            from .observability import ConversationEventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.AGENT_MESSAGE_PROCESSING,
+                ConversationEventType.AGENT_MESSAGE_PROCESSING,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -430,10 +430,10 @@ class Agent:
 
         # Emit agent response generated event
         if request_context and hasattr(self.overlord, "observability_manager"):
-            from .observability import EventType, EventLevel
+            from .observability import ConversationEventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.AGENT_RESPONSE_GENERATED,
+                ConversationEventType.AGENT_RESPONSE_GENERATED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -597,10 +597,10 @@ class Agent:
         """
         # Emit MCP tool call started event
         if request_context and hasattr(self.overlord, "observability_manager"):
-            from .observability import EventType, EventLevel
+            from .observability import ConversationEventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.MCP_TOOL_CALL_STARTED,
+                ConversationEventType.MCP_TOOL_CALL_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -624,7 +624,7 @@ class Agent:
             # Emit MCP tool call completed event
             if request_context and hasattr(self.overlord, "observability_manager"):
                 await self.overlord.observability_manager.event_logger.emit_event(
-                    EventType.MCP_TOOL_CALL_COMPLETED,
+                    ConversationEventType.MCP_TOOL_CALL_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={
@@ -642,7 +642,7 @@ class Agent:
             # Emit MCP tool call failed event
             if request_context and hasattr(self.overlord, "observability_manager"):
                 await self.overlord.observability_manager.event_logger.emit_event(
-                    EventType.MCP_TOOL_CALL_FAILED,
+                    ConversationEventType.MCP_TOOL_CALL_FAILED,
                     level=EventLevel.ERROR,
                     request_context=request_context,
                     data={
@@ -723,9 +723,9 @@ class Agent:
             # Emit clarification error event
             if hasattr(self.overlord, "observability_manager"):
                 try:
-                    from .observability import EventType, EventLevel
+                    from .observability import ConversationEventType, EventLevel
                     await self.overlord.observability_manager.event_logger.emit_event(
-                        EventType.ERROR_CLARIFICATION_FAILED,
+                        ConversationEventType.ERROR_CLARIFICATION_FAILED,
                         level=EventLevel.ERROR,
                         data={
                             "agent_id": self.agent_id,
@@ -747,9 +747,9 @@ class Agent:
             # Emit general error event
             if hasattr(self.overlord, "observability_manager"):
                 try:
-                    from .observability import EventType, EventLevel
+                    from .observability import ConversationEventType, EventLevel
                     await self.overlord.observability_manager.event_logger.emit_event(
-                        EventType.ERROR_AGENT_PROCESSING,
+                        ConversationEventType.ERROR_AGENT_PROCESSING,
                         level=EventLevel.ERROR,
                         data={
                             "agent_id": self.agent_id,
@@ -1201,10 +1201,10 @@ class Agent:
 
         # Emit A2A message started event
         if hasattr(self.overlord, "observability_manager"):
-            from .observability import EventType, EventLevel
+            from .observability import ConversationEventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.A2A_MESSAGE_SENT,
+                ConversationEventType.A2A_MESSAGE_SENT,
                 level=EventLevel.INFO,
                 data={
                     "source_agent_id": self.agent_id,
@@ -1606,10 +1606,10 @@ class Agent:
         """
         # Emit A2A message received event
         if hasattr(self.overlord, "observability_manager"):
-            from .observability import EventType, EventLevel
+            from .observability import ConversationEventType, EventLevel
 
             await self.overlord.observability_manager.event_logger.emit_event(
-                EventType.A2A_MESSAGE_RECEIVED,
+                ConversationEventType.A2A_MESSAGE_RECEIVED,
                 level=EventLevel.INFO,
                 data={
                     "source_agent_id": source_agent_id,

@@ -155,7 +155,7 @@ class ShortTermMemory:
             faiss.configure(
                 server=self.remote.get("url"),
                 api_key=self.remote.get("api_key"),
-                tenant_id=self.remote.get("tenant")
+                tenant_id=self.remote.get("tenant"),
             )
         elif mode != "local" and mode != "remote":
             raise ValueError(f"Invalid mode: {mode}. Must be 'local' or 'remote'")
@@ -170,10 +170,7 @@ class ShortTermMemory:
         fifo_cleanup_task(self)
 
     async def add(
-        self,
-        text: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        namespace: str = "buffer"
+        self, text: str, metadata: Optional[Dict[str, Any]] = None, namespace: str = "buffer"
     ) -> None:
         """
         Add an item to the buffer memory.
@@ -193,11 +190,17 @@ class ShortTermMemory:
         """
         # Emit memory storage started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_STORE,
+                    ConversationEventType.MEMORY_STORE,
                     level=EventLevel.INFO,
                     data={
                         "text_length": len(text),
@@ -220,7 +223,7 @@ class ShortTermMemory:
             "text": text,
             "metadata": metadata,
             "timestamp": time.time(),
-            "namespace": namespace
+            "namespace": namespace,
         }
 
         # Generate embedding if model is available
@@ -309,8 +312,8 @@ class ShortTermMemory:
             estimated_usage_mb = 0
             for item in self.buffer:
                 # Rough estimate: text size + metadata size + embedding size
-                text_size = len(item["text"].encode('utf-8'))
-                metadata_size = len(str(item["metadata"]).encode('utf-8'))
+                text_size = len(item["text"].encode("utf-8"))
+                metadata_size = len(str(item["metadata"]).encode("utf-8"))
                 embedding_size = 0
                 if item.get("embedding"):
                     embedding_size = len(item["embedding"]) * 4  # 4 bytes per float32
@@ -372,7 +375,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size:]
+            recent_items = list(self.buffer)[-self.max_size :]
 
         # Apply metadata filtering if specified
         if filter_metadata:
@@ -427,11 +430,17 @@ class ShortTermMemory:
         """
         # Emit memory retrieval started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_RETRIEVAL_STARTED,
+                    ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                     level=EventLevel.INFO,
                     data={
                         "query_length": len(query),
@@ -454,11 +463,17 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event for recency-only search
             try:
-                from ..observability import EventType, EventLevel, ObservabilityManager
+                from ..observability import (
+                    ConversationEventType,
+                    SystemEventType,
+                    EventLevel,
+                    ObservabilityManager,
+                )
+
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     await observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_COMPLETED,
+                        ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
                         level=EventLevel.INFO,
                         data={
                             "results_count": len(recency_results),
@@ -490,11 +505,17 @@ class ShortTermMemory:
 
                 # Emit memory retrieval completed event for embedding failure fallback
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            EventType.MEMORY_RETRIEVAL_COMPLETED,
+                            ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
                             level=EventLevel.WARNING,
                             data={
                                 "results_count": len(embedding_fallback_results),
@@ -504,8 +525,7 @@ class ShortTermMemory:
                                 "buffer_size": len(self.buffer),
                             },
                             description=(
-                                "Short-term memory search completed "
-                                "(embedding failure fallback)"
+                                "Short-term memory search completed " "(embedding failure fallback)"
                             ),
                         )
                 except Exception:
@@ -573,11 +593,17 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event
             try:
-                from ..observability import EventType, EventLevel, ObservabilityManager
+                from ..observability import (
+                    ConversationEventType,
+                    SystemEventType,
+                    EventLevel,
+                    ObservabilityManager,
+                )
+
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     await observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_COMPLETED,
+                        ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
                         level=EventLevel.INFO,
                         data={
                             "results_count": len(final_results),
@@ -599,11 +625,17 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event for fallback
             try:
-                from ..observability import EventType, EventLevel, ObservabilityManager
+                from ..observability import (
+                    ConversationEventType,
+                    SystemEventType,
+                    EventLevel,
+                    ObservabilityManager,
+                )
+
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     await observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_COMPLETED,
+                        ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
                         level=EventLevel.WARNING,
                         data={
                             "results_count": len(fallback_results),

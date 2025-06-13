@@ -84,7 +84,7 @@ import os
 
 from loguru import logger
 
-from ..observability import ObservabilityManager, EventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 from ..agent import Agent
 from ..mcp.message import MCPMessage
 from ..mcp.service import MCPService
@@ -605,7 +605,7 @@ class Overlord:
             # Emit formation loading started event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.OVERLORD_INITIALIZATION_STARTED,
+                    ConversationEventType.OVERLORD_INITIALIZATION_STARTED,
                     level=EventLevel.INFO,
                     data={"formation_path": formation_path},
                     description=f"Starting formation loading from {formation_path}",
@@ -647,7 +647,7 @@ class Overlord:
             # Emit formation loading completed event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.OVERLORD_INITIALIZATION_COMPLETED,
+                    ConversationEventType.OVERLORD_INITIALIZATION_COMPLETED,
                     level=EventLevel.INFO,
                     data={
                         "formation_id": formation_config.get("id", "unnamed"),
@@ -670,7 +670,7 @@ class Overlord:
             # Emit formation loading failed event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.ERROR_TIMEOUT_DETECTED,
+                    ConversationEventType.ERROR_TIMEOUT_DETECTED,
                     level=EventLevel.ERROR,
                     data={
                         "formation_path": formation_path,
@@ -1941,7 +1941,7 @@ class Overlord:
         # Emit memory storage started event
         if hasattr(self, "observability_manager"):
             await self.observability_manager.event_logger.emit_event(
-                EventType.MEMORY_STORE,
+                ConversationEventType.MEMORY_STORE,
                 level=EventLevel.DEBUG,
                 data={
                     "content_length": len(content),
@@ -1968,7 +1968,7 @@ class Overlord:
                 # Emit memory storage completed event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_STORAGE_LONG_TERM,
+                        ConversationEventType.MEMORY_STORAGE_LONG_TERM,
                         level=EventLevel.DEBUG,
                         data={
                             "memory_id": memory_id,
@@ -1984,7 +1984,7 @@ class Overlord:
                 # Emit memory storage failed event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
-                        EventType.ERROR_MEMORY_STORAGE,
+                        ConversationEventType.ERROR_MEMORY_STORAGE,
                         level=EventLevel.ERROR,
                         data={
                             "memory_type": "long_term",
@@ -2005,7 +2005,7 @@ class Overlord:
             # Emit memory storage completed event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_STORAGE_LONG_TERM,
+                    ConversationEventType.MEMORY_STORAGE_LONG_TERM,
                     level=EventLevel.DEBUG,
                     data={
                         "memory_id": memory_id,
@@ -2021,7 +2021,7 @@ class Overlord:
             # Emit memory storage failed event
             if hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.ERROR_MEMORY_STORAGE,
+                    ConversationEventType.ERROR_MEMORY_STORAGE,
                     level=EventLevel.ERROR,
                     data={
                         "memory_type": "long_term",
@@ -2084,7 +2084,7 @@ class Overlord:
                 # Emit memory search started event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_STARTED,
+                        ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                         level=EventLevel.DEBUG,
                         data={
                             "query": query[:100],
@@ -2103,7 +2103,7 @@ class Overlord:
                 # Emit memory search completed event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_SHORT_TERM,
+                        ConversationEventType.MEMORY_RETRIEVAL_SHORT_TERM,
                         level=EventLevel.DEBUG,
                         data={
                             "query": query[:100],
@@ -2134,7 +2134,7 @@ class Overlord:
                 # Emit memory search started event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_STARTED,
+                        ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                         level=EventLevel.DEBUG,
                         data={
                             "query": query[:100],
@@ -2162,7 +2162,7 @@ class Overlord:
                 # Emit memory search completed event
                 if hasattr(self, "observability_manager"):
                     await self.observability_manager.event_logger.emit_event(
-                        EventType.MEMORY_RETRIEVAL_LONG_TERM,
+                        ConversationEventType.MEMORY_RETRIEVAL_LONG_TERM,
                         level=EventLevel.DEBUG,
                         data={
                             "query": query[:100],
@@ -3722,7 +3722,7 @@ class Overlord:
         ) as request_context:
             # Emit request received event
             await self.observability_manager.event_logger.emit_event(
-                EventType.REQUEST_RECEIVED,
+                ConversationEventType.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -3737,7 +3737,7 @@ class Overlord:
 
             # Emit request validation event (basic validation)
             await self.observability_manager.event_logger.emit_event(
-                EventType.REQUEST_VALIDATED,
+                ConversationEventType.REQUEST_VALIDATED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -3749,7 +3749,7 @@ class Overlord:
 
             # Emit routing started event
             await self.observability_manager.event_logger.emit_event(
-                EventType.OVERLORD_ROUTING_STARTED,
+                ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
                 data={"message": message[:200], "agent_name": agent_name},
@@ -3827,7 +3827,7 @@ class Overlord:
 
                 # Emit performance monitoring started event
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.PERFORMANCE_DURATION_RECORDED,
+                    ConversationEventType.PERFORMANCE_DURATION_RECORDED,
                     level=EventLevel.DEBUG,
                     request_context=request_context,
                     data={
@@ -3845,7 +3845,7 @@ class Overlord:
 
                 # Emit performance monitoring completed event
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.PERFORMANCE_DURATION_RECORDED,
+                    ConversationEventType.PERFORMANCE_DURATION_RECORDED,
                     level=EventLevel.DEBUG,
                     request_context=request_context,
                     data={
@@ -3864,7 +3864,7 @@ class Overlord:
 
                 # Emit routing completed event
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.OVERLORD_ROUTING_COMPLETED,
+                    ConversationEventType.OVERLORD_ROUTING_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"processing_time": processing_time, "mode": "sync"},
@@ -4031,7 +4031,7 @@ class Overlord:
             # Emit agent selection started event
             if request_context and hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.OVERLORD_AGENT_SELECTION_STARTED,
+                    ConversationEventType.OVERLORD_AGENT_SELECTION_STARTED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"message": message[:200]},
@@ -4043,7 +4043,7 @@ class Overlord:
             # Emit agent selection completed event
             if request_context and hasattr(self, "observability_manager"):
                 await self.observability_manager.event_logger.emit_event(
-                    EventType.OVERLORD_AGENT_SELECTION_COMPLETED,
+                    ConversationEventType.OVERLORD_AGENT_SELECTION_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=request_context,
                     data={"selected_agent": agent_name},

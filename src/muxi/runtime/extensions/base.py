@@ -56,7 +56,7 @@
 
 # Graceful import for observability
 try:
-    from ..observability import ObservabilityManager, EventType, EventLevel
+    from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
     OBSERVABILITY_AVAILABLE = True
 except ImportError:
     OBSERVABILITY_AVAILABLE = False
@@ -103,7 +103,7 @@ class Extension:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=EventType.EXTENSION_REGISTRATION_STARTED,
+                    event_type=ConversationEventType.EXTENSION_REGISTRATION_STARTED,
                     level=EventLevel.INFO,
                     message=(f"Starting extension registration for "
                              f"{extension_cls.__name__}"),
@@ -124,7 +124,7 @@ class Extension:
                 if OBSERVABILITY_AVAILABLE:
                     try:
                         obs_manager.log_event(
-                            event_type=EventType.EXTENSION_REGISTRATION_COMPLETED,
+                            event_type=ConversationEventType.EXTENSION_REGISTRATION_COMPLETED,
                             level=EventLevel.ERROR,
                             message=(f"Extension registration failed for "
                                      f"{extension_cls.__name__}: {error_msg}"),
@@ -145,7 +145,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_REGISTRATION_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_REGISTRATION_COMPLETED,
                         level=EventLevel.INFO,
                         message=f"Extension registration completed for {extension_cls.__name__}",
                         data={
@@ -165,7 +165,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_REGISTRATION_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_REGISTRATION_COMPLETED,
                         level=EventLevel.ERROR,
                         message=(f"Extension registration failed for "
                                  f"{extension_cls.__name__}: {str(e)}"),
@@ -201,7 +201,7 @@ class Extension:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=EventType.EXTENSION_LOOKUP_STARTED,
+                    event_type=ConversationEventType.EXTENSION_LOOKUP_STARTED,
                     level=EventLevel.DEBUG,
                     message=f"Starting extension lookup for name: {name}",
                     data={
@@ -221,7 +221,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_LOOKUP_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_LOOKUP_COMPLETED,
                         level=EventLevel.DEBUG,
                         message=(f"Extension lookup completed for name: {name}, "
                                  f"found: {found}"),
@@ -242,7 +242,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_LOOKUP_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_LOOKUP_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Extension lookup failed for name: {name}: {str(e)}",
                         data={
@@ -274,7 +274,7 @@ class Extension:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=EventType.EXTENSION_LISTING_STARTED,
+                    event_type=ConversationEventType.EXTENSION_LISTING_STARTED,
                     level=EventLevel.DEBUG,
                     message="Starting extension listing",
                     data={
@@ -291,7 +291,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_LISTING_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_LISTING_COMPLETED,
                         level=EventLevel.DEBUG,
                         message=(f"Extension listing completed, found "
                                  f"{len(extension_names)} extensions"),
@@ -311,7 +311,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_LISTING_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_LISTING_COMPLETED,
                         level=EventLevel.ERROR,
                         message=f"Extension listing failed: {str(e)}",
                         data={
@@ -348,7 +348,7 @@ class Extension:
             try:
                 obs_manager = ObservabilityManager.get_instance()
                 obs_manager.log_event(
-                    event_type=EventType.EXTENSION_INITIALIZATION_STARTED,
+                    event_type=ConversationEventType.EXTENSION_INITIALIZATION_STARTED,
                     level=EventLevel.INFO,
                     message=f"Starting extension initialization for {cls.__name__}",
                     data={
@@ -368,7 +368,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_INITIALIZATION_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_INITIALIZATION_COMPLETED,
                         level=EventLevel.ERROR,
                         message=(f"Extension initialization failed for "
                                  f"{cls.__name__}: {error_msg}"),
@@ -390,7 +390,7 @@ class Extension:
             if OBSERVABILITY_AVAILABLE:
                 try:
                     obs_manager.log_event(
-                        event_type=EventType.EXTENSION_INITIALIZATION_COMPLETED,
+                        event_type=ConversationEventType.EXTENSION_INITIALIZATION_COMPLETED,
                         level=EventLevel.ERROR,
                         message=(f"Extension initialization failed for "
                                  f"{cls.__name__}: {str(e)}"),

@@ -191,11 +191,17 @@ class LongTermMemory:
         """
         # Emit memory storage started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_STORAGE_LONG_TERM,
+                    ConversationEventType.MEMORY_STORAGE_LONG_TERM,
                     level=EventLevel.INFO,
                     data={
                         "content_length": len(content),
@@ -222,7 +228,7 @@ class LongTermMemory:
         try:
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_STORE,
+                    ConversationEventType.MEMORY_STORE,
                     level=EventLevel.INFO,
                     data={
                         "memory_id": memory_id,
@@ -337,11 +343,17 @@ class LongTermMemory:
         """
         # Emit memory search started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_RETRIEVAL_STARTED,
+                    ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                     level=EventLevel.INFO,
                     data={
                         "query_length": len(query),
@@ -380,11 +392,17 @@ class LongTermMemory:
 
         # Emit memory search completed event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MEMORY_RETRIEVAL_COMPLETED,
+                    ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
                     level=EventLevel.INFO,
                     data={
                         "query_length": len(query),
@@ -521,11 +539,17 @@ class LongTermMemory:
         """
         # Emit memory update started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 observability_manager.event_logger.emit_event_sync(
-                    EventType.MEMORY_UPDATE_STARTED,
+                    ConversationEventType.MEMORY_UPDATE_STARTED,
                     level=EventLevel.INFO,
                     data={
                         "memory_id": memory_id,
@@ -544,11 +568,17 @@ class LongTermMemory:
             if not memory:
                 # Emit memory update failed event
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         observability_manager.event_logger.emit_event_sync(
-                            EventType.MEMORY_UPDATE_FAILED,
+                            ConversationEventType.MEMORY_UPDATE_FAILED,
                             level=EventLevel.WARNING,
                             data={
                                 "memory_id": memory_id,
@@ -578,11 +608,17 @@ class LongTermMemory:
 
             # Emit memory update completed event
             try:
-                from ..observability import EventType, EventLevel, ObservabilityManager
+                from ..observability import (
+                    ConversationEventType,
+                    SystemEventType,
+                    EventLevel,
+                    ObservabilityManager,
+                )
+
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     observability_manager.event_logger.emit_event_sync(
-                        EventType.MEMORY_UPDATE_COMPLETED,
+                        ConversationEventType.MEMORY_UPDATE_COMPLETED,
                         level=EventLevel.INFO,
                         data={
                             "memory_id": memory_id,
@@ -611,11 +647,17 @@ class LongTermMemory:
         """
         # Emit memory deletion started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 observability_manager.event_logger.emit_event_sync(
-                    EventType.MEMORY_DELETION_STARTED,
+                    ConversationEventType.MEMORY_DELETION_STARTED,
                     level=EventLevel.INFO,
                     data={"memory_id": memory_id},
                     description="Long-term memory deletion started",
@@ -629,11 +671,17 @@ class LongTermMemory:
             if not memory:
                 # Emit memory deletion failed event
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         observability_manager.event_logger.emit_event_sync(
-                            EventType.MEMORY_DELETION_FAILED,
+                            ConversationEventType.MEMORY_DELETION_FAILED,
                             level=EventLevel.WARNING,
                             data={
                                 "memory_id": memory_id,
@@ -650,11 +698,17 @@ class LongTermMemory:
 
             # Emit memory deletion completed event
             try:
-                from ..observability import EventType, EventLevel, ObservabilityManager
+                from ..observability import (
+                    ConversationEventType,
+                    SystemEventType,
+                    EventLevel,
+                    ObservabilityManager,
+                )
+
                 observability_manager = ObservabilityManager.get_instance()
                 if observability_manager:
                     observability_manager.event_logger.emit_event_sync(
-                        EventType.MEMORY_DELETION_COMPLETED,
+                        ConversationEventType.MEMORY_DELETION_COMPLETED,
                         level=EventLevel.INFO,
                         data={"memory_id": memory_id},
                         description="Long-term memory deletion completed",

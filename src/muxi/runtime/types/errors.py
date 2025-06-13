@@ -11,11 +11,11 @@ from dataclasses import dataclass
 
 # Observability integration
 try:
-    from ..observability import ObservabilityManager, EventType, EventLevel
+    from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 
@@ -247,10 +247,10 @@ ERROR_CODE_REGISTRY: Dict[str, ErrorCodeInfo] = {
 
 def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     """Get error information for a given error code."""
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_STARTED,
+                event_type=ConversationEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting error info lookup",
                 data={
@@ -264,10 +264,10 @@ def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
 
     error_info = ERROR_CODE_REGISTRY.get(code)
 
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_COMPLETED,
+                event_type=ConversationEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="Error info lookup completed",
                 data={
@@ -287,10 +287,10 @@ def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
 
 def get_error_message(code: str, default: str = "An error occurred") -> str:
     """Get the standard message for an error code."""
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_STARTED,
+                event_type=ConversationEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting error message lookup",
                 data={
@@ -306,10 +306,10 @@ def get_error_message(code: str, default: str = "An error occurred") -> str:
     error_info = get_error_info(code)
     message = error_info.message if error_info else default
 
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_COMPLETED,
+                event_type=ConversationEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="Error message lookup completed",
                 data={
@@ -328,10 +328,10 @@ def get_error_message(code: str, default: str = "An error occurred") -> str:
 
 def get_http_status(code: str, default: int = 500) -> int:
     """Get the HTTP status code for an error code."""
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_STARTED,
+                event_type=ConversationEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting HTTP status lookup",
                 data={
@@ -347,10 +347,10 @@ def get_http_status(code: str, default: int = 500) -> int:
     error_info = get_error_info(code)
     status = error_info.http_status if error_info else default
 
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_COMPLETED,
+                event_type=ConversationEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="HTTP status lookup completed",
                 data={
@@ -373,10 +373,10 @@ def create_error_details(
     trace: Optional[str] = None
 ) -> Dict[str, str]:
     """Create standardized error details."""
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_STARTED,
+                event_type=ConversationEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting error details creation",
                 data={
@@ -405,10 +405,10 @@ def create_error_details(
             "trace": trace
         }
 
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_COMPLETED,
+                event_type=ConversationEventType.UTILITY_COMPLETED,
                 level=EventLevel.DEBUG,
                 message="Error details creation completed",
                 data={

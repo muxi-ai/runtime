@@ -58,11 +58,11 @@ from .errors import (
 # Observability imports
 try:
     from muxi.runtime.observability.manager import ObservabilityManager
-    from muxi.runtime.observability.events import EventType, EventLevel
+    from muxi.runtime.observability.events import ConversationEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 logger = logging.getLogger(__name__)
@@ -114,7 +114,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.INFO,
                 message="OneLLMService singleton initialized",
                 data={
@@ -146,7 +146,7 @@ class OneLLMService:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.emit_event(
-                            event_type=EventType.RESOURCE_ALLOCATED,
+                            event_type=ConversationEventType.RESOURCE_ALLOCATED,
                             level=EventLevel.INFO,
                             message="OneLLMService singleton instance created",
                             data={
@@ -176,7 +176,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.INFO,
                 message=f"API key configured for provider: {provider}",
                 data={
@@ -205,7 +205,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.DEBUG,
                 message=f"API key accessed for provider: {provider}",
                 data={
@@ -287,7 +287,7 @@ class OneLLMService:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.emit_event(
-                    event_type=EventType.PERFORMANCE_OPTIMIZED,
+                    event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
                     level=EventLevel.DEBUG,
                     message="Cache hit for LLM request",
                     data={
@@ -308,7 +308,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.PERFORMANCE_OPTIMIZED,
+                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.DEBUG,
                 message="Cache miss for LLM request",
                 data={
@@ -338,7 +338,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.PERFORMANCE_OPTIMIZED,
+                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.DEBUG,
                 message="Response cached for LLM request",
                 data={
@@ -386,7 +386,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.MODEL_REQUEST_STARTED,
+                event_type=ConversationEventType.MODEL_REQUEST_STARTED,
                 level=EventLevel.INFO,
                 message=f"Chat completion request started for {model}",
                 data={
@@ -418,7 +418,7 @@ class OneLLMService:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.emit_event(
-                        event_type=EventType.MODEL_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         message=f"Chat completion served from cache for {model}",
                         data={
@@ -462,7 +462,7 @@ class OneLLMService:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.emit_event(
-                    event_type=EventType.MODEL_REQUEST_COMPLETED,
+                    event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
                     level=EventLevel.INFO,
                     message=f"Chat completion successful for {model}",
                     data={
@@ -489,7 +489,7 @@ class OneLLMService:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.emit_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message=f"Chat completion failed for {model}: {str(e)}",
                     data={
@@ -559,7 +559,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.MODEL_REQUEST_STARTED,
+                event_type=ConversationEventType.MODEL_REQUEST_STARTED,
                 level=EventLevel.INFO,
                 message=f"Embedding request started for {model}",
                 data={
@@ -588,7 +588,7 @@ class OneLLMService:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.emit_event(
-                        event_type=EventType.MODEL_REQUEST_COMPLETED,
+                        event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         message=f"Embedding served from cache for {model}",
                         data={
@@ -628,7 +628,7 @@ class OneLLMService:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.emit_event(
-                    event_type=EventType.MODEL_REQUEST_COMPLETED,
+                    event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
                     level=EventLevel.INFO,
                     message=f"Embedding successful for {model}",
                     data={
@@ -655,7 +655,7 @@ class OneLLMService:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.emit_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message=f"Embedding failed for {model}: {str(e)}",
                     data={
@@ -703,7 +703,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.PERFORMANCE_OPTIMIZED,
+                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.DEBUG,
                 message="Service statistics accessed",
                 data={
@@ -728,7 +728,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.PERFORMANCE_OPTIMIZED,
+                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.INFO,
                 message="Service statistics reset",
                 data={
@@ -752,7 +752,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.PERFORMANCE_OPTIMIZED,
+                event_type=ConversationEventType.PERFORMANCE_OPTIMIZED,
                 level=EventLevel.INFO,
                 message="Response cache cleared",
                 data={
@@ -802,7 +802,7 @@ class OneLLMService:
         try:
             observability = ObservabilityManager.get_instance()
             observability.emit_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.INFO,
                 message="Service configuration updated",
                 data={

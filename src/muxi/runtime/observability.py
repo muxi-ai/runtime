@@ -2,15 +2,21 @@
 MUXI Observability System - Phase 1 Implementation
 
 This module provides the dual logging architecture for MUXI runtime:
-1. Runtime Logging: Infrastructure events, startup, errors (always stdout)
-2. Observability Events: User request lifecycle tracking (configurable output)
+1. SystemEventType: Infrastructure events, startup, MCP/A2A operations (always stdout)
+2. ConversationEventType (ConversationEventType): User request lifecycle tracking (configurable output)
 
 Key Components:
-- EventLogger: Central component for event emission with configurable outputs
+- EventLogger: Central component for event emission with intelligent routing
+- SystemEventType: Enum for system infrastructure events (routed to stdout)
+- ConversationEventType: Enum for conversation lifecycle events (routed to configured output)
 - RequestContextManager: In-memory request tracking with automatic cleanup
 - Event structures with JSON-L formatting for external tool consumption
 
-Note: This implementation follows Task 5 Phase 1 specification with no backward compatibility.
+Event Routing:
+- SystemEventType events → Always stdout (for server monitoring)
+- ConversationEventType events → Configured output (stdout/file/stream/trail for observability)
+
+Note: This implementation follows Task 5 Phase 1 specification with dual event architecture.
 """
 
 import asyncio
@@ -32,7 +38,67 @@ class EventLevel(Enum):
     ERROR = "error"
 
 
-class EventType(Enum):
+class SystemEventType(Enum):
+    """System infrastructure events for server monitoring and operations (routed to stdout)."""
+
+    # ===================================================================
+    # MCP SYSTEM EVENTS
+    # ===================================================================
+    MCP_SERVER_CONNECTING = "mcp.server.connecting"
+    MCP_SERVER_CONNECTED = "mcp.server.connected"
+    MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
+    MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
+    MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
+    MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
+    MCP_SERVER_PROCESS_STARTED = "mcp.server.process.started"
+    MCP_SERVER_PROCESS_FAILED = "mcp.server.process.failed"
+
+    # ===================================================================
+    # A2A SYSTEM EVENTS
+    # ===================================================================
+    A2A_REGISTRY_CLIENT_INITIALIZED = "a2a.registry.client.initialized"
+    A2A_AGENT_REGISTERED = "a2a.agent.registered"
+    A2A_AGENT_DEREGISTERED = "a2a.agent.deregistered"
+    A2A_DISCOVERY_COMPLETED = "a2a.discovery.completed"
+    A2A_FORMATION_SERVER_STARTED = "a2a.formation.server.started"
+    A2A_FORMATION_SERVER_STOPPED = "a2a.formation.server.stopped"
+    A2A_REGISTRY_HEALTH_CHECK_COMPLETED = "a2a.registry.health_check.completed"
+
+    # ===================================================================
+    # CONFIGURATION & STARTUP EVENTS
+    # ===================================================================
+    FORMATION_CONFIG_LOADED = "formation.config.loaded"
+    AGENT_CONFIG_LOADED = "agent.config.loaded"
+    MCP_CONFIG_LOADED = "mcp.config.loaded"
+    A2A_CONFIG_LOADED = "a2a.config.loaded"
+    OVERLORD_SERVICES_STARTED = "overlord.services.started"
+    CACHE_MANAGER_STARTED = "cache.manager.started"
+    MEMORY_OPTIMIZER_STARTED = "memory.optimizer.started"
+
+    # ===================================================================
+    # AUTHENTICATION & SECURITY EVENTS
+    # ===================================================================
+    CREDENTIALS_LOADED = "credentials.loaded"
+    AUTH_MANAGER_INITIALIZED = "auth.manager.initialized"
+    INBOUND_AUTH_INITIALIZED = "inbound.auth.initialized"
+    SECRET_LOADING_COMPLETED = "secret.loading.completed"
+    SECRET_LOADING_FAILED = "secret.loading.failed"
+
+    # ===================================================================
+    # EXTENSION & KNOWLEDGE SYSTEM EVENTS
+    # ===================================================================
+    SQLITE_EXTENSION_INITIALIZED = "sqlite.extension.initialized"
+    KNOWLEDGE_SOURCE_LOADED = "knowledge.source.loaded"
+    KNOWLEDGE_SOURCE_FAILED = "knowledge.source.failed"
+
+    # ===================================================================
+    # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTTYPE)
+    # ===================================================================
+    RESOURCE_USAGE_MEASURED = "resource.usage.measured"
+    OVERLORD_INITIALIZED = "overlord.initialized"
+
+
+class ConversationEventType(Enum):
     """Comprehensive event types for MUXI observability covering complete request lifecycle."""
 
     # ===================================================================
@@ -55,7 +121,6 @@ class EventType(Enum):
     # ===================================================================
     # OVERLORD ORCHESTRATION
     # ===================================================================
-    OVERLORD_INITIALIZED = "overlord.initialized"
     OVERLORD_ROUTING_STARTED = "overlord.routing.started"
     OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
     OVERLORD_ROUTING_FAILED = "overlord.routing.failed"
@@ -150,7 +215,6 @@ class EventType(Enum):
     # PERFORMANCE & MONITORING
     # ===================================================================
     PERFORMANCE_DURATION_RECORDED = "performance.duration.recorded"
-    RESOURCE_USAGE_MEASURED = "resource.usage.measured"
     SESSION_CREATED = "session.created"
     SESSION_CONTEXT_UPDATED = "session.context.updated"
 
@@ -345,7 +409,7 @@ class EventLogger:
 
     async def emit_event(
         self,
-        event_type: Union[EventType, str],
+        event_type: Union[ConversationEventType, SystemEventType, str],
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
@@ -353,7 +417,11 @@ class EventLogger:
         description: Optional[str] = None
     ) -> str:
         """Emit an observability event with structured data."""
-        event_type_str = event_type.value if isinstance(event_type, EventType) else event_type
+        # Handle different event types
+        if isinstance(event_type, (ConversationEventType, SystemEventType)):
+            event_type_str = event_type.value
+        else:
+            event_type_str = event_type
 
         if not self._should_emit_event(event_type_str, level):
             return ""
@@ -400,16 +468,26 @@ class EventLogger:
                 event["data"]["description"] = description
 
         # Emit to configured output
-        await self._emit_to_output(event)
+        await self._emit_to_output(event, event_type)
 
         return event_id
 
-    async def _emit_to_output(self, event: Dict[str, Any]) -> None:
+    async def _emit_to_output(
+        self,
+        event: Dict[str, Any],
+        event_type: Union[ConversationEventType, SystemEventType, str]
+    ) -> None:
         """Emit event to the configured output destination."""
         try:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(',', ':'))
 
+            # Route SystemEventType to stdout only, regardless of configuration
+            if isinstance(event_type, SystemEventType):
+                print(event_line, flush=True)
+                return
+
+            # Route ConversationEventType to configured output
             if self.output == "stdout":
                 print(event_line, flush=True)
             elif self.output == "file":
@@ -549,7 +627,7 @@ class ObservabilityManager:
         ) as context:
             # Emit request received event
             await self.event_logger.emit_event(
-                EventType.REQUEST_RECEIVED,
+                ConversationEventType.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=context,
                 description=f"Request {context.id} received"
@@ -560,7 +638,7 @@ class ObservabilityManager:
 
                 # Emit request completed event
                 await self.event_logger.emit_event(
-                    EventType.REQUEST_COMPLETED,
+                    ConversationEventType.REQUEST_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=context,
                     description=f"Request {context.id} completed in {context.duration_ms}ms"
@@ -569,10 +647,46 @@ class ObservabilityManager:
             except Exception as e:
                 # Emit request failed event
                 await self.event_logger.emit_event(
-                    EventType.REQUEST_FAILED,
+                    ConversationEventType.REQUEST_FAILED,
                     level=EventLevel.ERROR,
                     request_context=context,
                     data={"error": str(e)},
                     description=f"Request {context.id} failed: {str(e)}"
                 )
                 raise
+
+    async def emit_conversation_event(
+        self,
+        event_type: ConversationEventType,
+        level: EventLevel = EventLevel.INFO,
+        data: Optional[Dict[str, Any]] = None,
+        request_context: Optional[RequestContext] = None,
+        parent_event_id: Optional[str] = None,
+        description: Optional[str] = None
+    ) -> str:
+        """Emit a conversation lifecycle event (routed to configured output)."""
+        return await self.event_logger.emit_event(
+            event_type=event_type,
+            level=level,
+            data=data,
+            request_context=request_context,
+            parent_event_id=parent_event_id,
+            description=description
+        )
+
+    async def emit_system_event(
+        self,
+        event_type: SystemEventType,
+        level: EventLevel = EventLevel.INFO,
+        data: Optional[Dict[str, Any]] = None,
+        description: Optional[str] = None
+    ) -> str:
+        """Emit a system infrastructure event (always routed to stdout)."""
+        return await self.event_logger.emit_event(
+            event_type=event_type,
+            level=level,
+            data=data,
+            request_context=None,  # System events don't have request context
+            parent_event_id=None,
+            description=description
+        )

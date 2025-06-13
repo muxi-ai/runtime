@@ -35,7 +35,7 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from .long_term import LongTermMemory
-from ..observability import EventType, EventLevel, ObservabilityManager
+from ..observability import ConversationEventType, EventLevel, ObservabilityManager
 
 
 class Memobase:
@@ -69,7 +69,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.SESSION_CREATED,
+                event_type=ConversationEventType.SESSION_CREATED,
                 level=EventLevel.INFO,
                 message="Memobase initialized",
                 data={
@@ -113,7 +113,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_STORE,
+                event_type=ConversationEventType.MEMORY_STORE,
                 level=EventLevel.INFO,
                 message="Starting memory store operation",
                 data={
@@ -133,7 +133,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_STORE,
+                    event_type=ConversationEventType.MEMORY_STORE,
                     level=EventLevel.DEBUG,
                     message="Skipping memory store for anonymous user",
                     data={"user_id": user_id}
@@ -177,7 +177,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_STORE,
+                    event_type=ConversationEventType.MEMORY_STORE,
                     level=EventLevel.INFO,
                     message="Memory store completed successfully",
                     data={
@@ -197,7 +197,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Memory store operation failed",
                     data={
@@ -246,7 +246,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                event_type=ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                 level=EventLevel.INFO,
                 message="Starting memory search operation",
                 data={
@@ -271,7 +271,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                    event_type=ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                     level=EventLevel.DEBUG,
                     message="Skipping memory search for anonymous user",
                     data={"user_id": user_id}
@@ -319,7 +319,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_RETRIEVAL_LONG_TERM,
+                    event_type=ConversationEventType.MEMORY_RETRIEVAL_LONG_TERM,
                     level=EventLevel.INFO,
                     message="Memory search completed successfully",
                     data={
@@ -339,7 +339,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Memory search operation failed",
                     data={
@@ -379,7 +379,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_DELETION,
+                event_type=ConversationEventType.MEMORY_DELETION,
                 level=EventLevel.INFO,
                 message="Starting memory deletion operation",
                 data={
@@ -396,7 +396,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_DELETION,
+                    event_type=ConversationEventType.MEMORY_DELETION,
                     level=EventLevel.DEBUG,
                     message="Skipping memory deletion for anonymous user",
                     data={"user_id": user_id, "memory_id": memory_id}
@@ -417,7 +417,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_DELETION,
+                    event_type=ConversationEventType.MEMORY_DELETION,
                     level=EventLevel.INFO,
                     message="Memory deletion completed",
                     data={
@@ -436,7 +436,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Memory deletion operation failed",
                     data={
@@ -467,7 +467,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_CLEAR,
+                event_type=ConversationEventType.MEMORY_CLEAR,
                 level=EventLevel.INFO,
                 message="Starting user memory clear operation",
                 data={"user_id": user_id}
@@ -481,7 +481,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CLEAR,
+                    event_type=ConversationEventType.MEMORY_CLEAR,
                     level=EventLevel.DEBUG,
                     message="Skipping memory clear for anonymous user",
                     data={"user_id": user_id}
@@ -509,7 +509,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CLEAR,
+                    event_type=ConversationEventType.MEMORY_CLEAR,
                     level=EventLevel.INFO,
                     message="User memory clear completed successfully",
                     data={
@@ -525,7 +525,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User memory clear operation failed",
                     data={
@@ -570,7 +570,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                event_type=ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                 level=EventLevel.INFO,
                 message="Starting user memories retrieval",
                 data={
@@ -590,7 +590,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_RETRIEVAL_STARTED,
+                    event_type=ConversationEventType.MEMORY_RETRIEVAL_STARTED,
                     level=EventLevel.DEBUG,
                     message="Skipping user memories retrieval for anonymous user",
                     data={"user_id": user_id}
@@ -622,7 +622,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_RETRIEVAL_LONG_TERM,
+                    event_type=ConversationEventType.MEMORY_RETRIEVAL_LONG_TERM,
                     level=EventLevel.INFO,
                     message="User memories retrieval completed successfully",
                     data={
@@ -642,7 +642,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User memories retrieval operation failed",
                     data={
@@ -687,7 +687,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
                 level=EventLevel.INFO,
                 message="Starting user context memory addition",
                 data={
@@ -706,7 +706,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
                     level=EventLevel.DEBUG,
                     message="Skipping context memory addition for anonymous user",
                     data={"user_id": user_id}
@@ -763,7 +763,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
                     level=EventLevel.INFO,
                     message="User context memory addition completed successfully",
                     data={
@@ -783,7 +783,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User context memory addition operation failed",
                     data={
@@ -825,7 +825,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
                 level=EventLevel.INFO,
                 message="Starting user context memory retrieval",
                 data={
@@ -843,7 +843,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
                     level=EventLevel.DEBUG,
                     message="Skipping context memory retrieval for anonymous user",
                     data={"user_id": user_id}
@@ -864,7 +864,7 @@ class Memobase:
                 try:
                     observability = ObservabilityManager.get_instance()
                     observability.log_event(
-                        event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                        event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
                         level=EventLevel.DEBUG,
                         message="Context memory collection does not exist",
                         data={
@@ -936,7 +936,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_RETRIEVED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
                     level=EventLevel.INFO,
                     message="User context memory retrieval completed successfully",
                     data={
@@ -956,7 +956,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User context memory retrieval operation failed",
                     data={
@@ -1003,7 +1003,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.CONTENT_PROCESSED,
+                event_type=ConversationEventType.CONTENT_PROCESSED,
                 level=EventLevel.INFO,
                 message="Starting user context memory import",
                 data={
@@ -1023,7 +1023,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.DEBUG,
                     message="Skipping context memory import for anonymous user",
                     data={"user_id": user_id}
@@ -1058,7 +1058,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.CONTENT_PROCESSED,
+                    event_type=ConversationEventType.CONTENT_PROCESSED,
                     level=EventLevel.INFO,
                     message="User context memory import completed successfully",
                     data={
@@ -1078,7 +1078,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User context memory import operation failed",
                     data={
@@ -1118,7 +1118,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                event_type=ConversationEventType.MEMORY_CONTEXT_CLEARED,
                 level=EventLevel.INFO,
                 message="Starting user context memory clear",
                 data={
@@ -1136,7 +1136,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_CLEARED,
                     level=EventLevel.DEBUG,
                     message="Skipping context memory clear for anonymous user",
                     data={"user_id": user_id}
@@ -1186,7 +1186,7 @@ class Memobase:
                     try:
                         observability = ObservabilityManager.get_instance()
                         observability.log_event(
-                            event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                            event_type=ConversationEventType.MEMORY_CONTEXT_CLEARED,
                             level=EventLevel.ERROR,
                             message="Failed to clear context memory collection",
                             data={
@@ -1202,7 +1202,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_CLEARED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_CLEARED,
                     level=EventLevel.INFO,
                     message="User context memory clear completed successfully",
                     data={
@@ -1222,7 +1222,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User context memory clear operation failed",
                     data={
@@ -1268,7 +1268,7 @@ class Memobase:
         try:
             observability = ObservabilityManager.get_instance()
             observability.log_event(
-                event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
                 level=EventLevel.INFO,
                 message="Starting user context memory update",
                 data={
@@ -1287,7 +1287,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
                     level=EventLevel.DEBUG,
                     message="Skipping context memory update for anonymous user",
                     data={"user_id": user_id, "key": key}
@@ -1318,7 +1318,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.MEMORY_CONTEXT_UPDATED,
+                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
                     level=EventLevel.INFO,
                     message="User context memory update completed successfully",
                     data={
@@ -1338,7 +1338,7 @@ class Memobase:
             try:
                 observability = ObservabilityManager.get_instance()
                 observability.log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="User context memory update operation failed",
                     data={

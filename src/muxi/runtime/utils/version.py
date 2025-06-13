@@ -8,11 +8,11 @@ import os
 
 # Observability integration
 try:
-    from ..observability import ObservabilityManager, EventType, EventLevel
+    from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 
@@ -23,10 +23,10 @@ def get_version() -> str:
     Returns:
         The version string
     """
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_STARTED,
+                event_type=ConversationEventType.UTILITY_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting version retrieval",
                 data={
@@ -44,10 +44,10 @@ def get_version() -> str:
         # Try to read from package.json if it exists
         version_file = os.path.join(os.path.dirname(__file__), "..", "..", ".version")
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.FILE_READ_STARTED,
+                    event_type=ConversationEventType.FILE_READ_STARTED,
                     level=EventLevel.DEBUG,
                     message="Checking for version file",
                     data={
@@ -64,10 +64,10 @@ def get_version() -> str:
             with open(version_file, "r", encoding="utf-8") as f:
                 version = f.read().strip()
 
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.FILE_READ_COMPLETED,
+                        event_type=ConversationEventType.FILE_READ_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Version file read successfully",
                         data={
@@ -80,10 +80,10 @@ def get_version() -> str:
                 except Exception:
                     pass
 
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.UTILITY_COMPLETED,
+                        event_type=ConversationEventType.UTILITY_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Version retrieval completed successfully",
                         data={
@@ -98,10 +98,10 @@ def get_version() -> str:
 
             return version
         else:
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.UTILITY_COMPLETED,
+                        event_type=ConversationEventType.UTILITY_COMPLETED,
                         level=EventLevel.DEBUG,
                         message="Version retrieval completed using default version",
                         data={
@@ -118,10 +118,10 @@ def get_version() -> str:
             return default_version
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Version retrieval failed, using default version",
                     data={

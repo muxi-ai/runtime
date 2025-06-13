@@ -24,7 +24,7 @@
 from typing import Any, Dict, List, Optional
 
 # Import observability components
-from .observability import ObservabilityManager, EventType, EventLevel
+from .observability import ObservabilityManager, ConversationEventType, EventLevel
 
 
 class CredentialManager:
@@ -63,7 +63,7 @@ class CredentialManager:
         try:
             observability_manager = ObservabilityManager.get_instance()
             observability_manager.event_logger.emit_event(
-                event_type=EventType.REQUEST_PROCESSING,
+                event_type=ConversationEventType.REQUEST_PROCESSING,
                 level=EventLevel.INFO,
                 data={
                     'component': 'credential_manager',
@@ -100,7 +100,7 @@ class CredentialManager:
         try:
             observability_manager = ObservabilityManager.get_instance()
             event_id = observability_manager.event_logger.emit_event(
-                event_type=EventType.REQUEST_PROCESSING,
+                event_type=ConversationEventType.REQUEST_PROCESSING,
                 level=EventLevel.INFO,
                 data={
                     'component': 'credential_manager',
@@ -122,7 +122,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_DENIED_VALIDATION,
+                        event_type=ConversationEventType.REQUEST_DENIED_VALIDATION,
                         level=EventLevel.WARNING,
                         data={
                             'component': 'credential_manager',
@@ -172,7 +172,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         data={
                             'component': 'credential_manager',
@@ -196,7 +196,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_FAILED,
+                        event_type=ConversationEventType.REQUEST_FAILED,
                         level=EventLevel.ERROR,
                         data={
                             'component': 'credential_manager',
@@ -233,7 +233,7 @@ class CredentialManager:
         try:
             observability_manager = ObservabilityManager.get_instance()
             event_id = observability_manager.event_logger.emit_event(
-                event_type=EventType.REQUEST_PROCESSING,
+                event_type=ConversationEventType.REQUEST_PROCESSING,
                 level=EventLevel.DEBUG,
                 data={
                     'component': 'credential_manager',
@@ -261,7 +261,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.DEBUG,
                         data={
                             'component': 'credential_manager',
@@ -285,7 +285,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_FAILED,
+                        event_type=ConversationEventType.REQUEST_FAILED,
                         level=EventLevel.ERROR,
                         data={
                             'component': 'credential_manager',
@@ -321,7 +321,7 @@ class CredentialManager:
         try:
             observability_manager = ObservabilityManager.get_instance()
             event_id = observability_manager.event_logger.emit_event(
-                event_type=EventType.REQUEST_PROCESSING,
+                event_type=ConversationEventType.REQUEST_PROCESSING,
                 level=EventLevel.DEBUG,
                 data={
                     'component': 'credential_manager',
@@ -347,7 +347,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.DEBUG,
                         data={
                             'component': 'credential_manager',
@@ -370,7 +370,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_FAILED,
+                        event_type=ConversationEventType.REQUEST_FAILED,
                         level=EventLevel.ERROR,
                         data={
                             'component': 'credential_manager',
@@ -413,7 +413,7 @@ class CredentialManager:
         try:
             observability_manager = ObservabilityManager.get_instance()
             event_id = observability_manager.event_logger.emit_event(
-                event_type=EventType.MCP_CONNECTION_ESTABLISHED,
+                event_type=ConversationEventType.MCP_CONNECTION_ESTABLISHED,
                 level=EventLevel.INFO,
                 data={
                     'component': 'credential_manager',
@@ -435,7 +435,7 @@ class CredentialManager:
                 try:
                     if observability_manager:
                         observability_manager.event_logger.emit_event(
-                            event_type=EventType.REQUEST_COMPLETED,
+                            event_type=ConversationEventType.REQUEST_COMPLETED,
                             level=EventLevel.DEBUG,
                             data={
                                 'component': 'credential_manager',
@@ -480,7 +480,7 @@ class CredentialManager:
                         try:
                             if observability_manager:
                                 observability_manager.event_logger.emit_event(
-                                    event_type=EventType.REQUEST_FAILED,
+                                    event_type=ConversationEventType.REQUEST_FAILED,
                                     level=EventLevel.ERROR,
                                     data={
                                         'component': 'credential_manager',
@@ -514,7 +514,7 @@ class CredentialManager:
                     completion_desc = (f'MCP credential resolution completed: '
                                        f'{credentials_resolved} credentials resolved')
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         data={
                             'component': 'credential_manager',
@@ -538,7 +538,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_FAILED,
+                        event_type=ConversationEventType.REQUEST_FAILED,
                         level=EventLevel.ERROR,
                         data={
                             'component': 'credential_manager',
@@ -577,7 +577,7 @@ class CredentialManager:
             batch_desc = (f'Starting batch MCP credential resolution for '
                           f'{len(mcp_configs)} configurations')
             event_id = observability_manager.event_logger.emit_event(
-                event_type=EventType.MCP_CONNECTION_ESTABLISHED,
+                event_type=ConversationEventType.MCP_CONNECTION_ESTABLISHED,
                 level=EventLevel.INFO,
                 data={
                     'component': 'credential_manager',
@@ -609,7 +609,7 @@ class CredentialManager:
                             failure_desc = (f'Individual MCP config resolution failed '
                                             f'at index {i}: {str(e)}')
                             observability_manager.event_logger.emit_event(
-                                event_type=EventType.REQUEST_FAILED,
+                                event_type=ConversationEventType.REQUEST_FAILED,
                                 level=EventLevel.WARNING,
                                 data={
                                     'component': 'credential_manager',
@@ -635,7 +635,7 @@ class CredentialManager:
                                        f'{successful_resolutions}/{len(mcp_configs)} '
                                        f'successful')
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_COMPLETED,
+                        event_type=ConversationEventType.REQUEST_COMPLETED,
                         level=EventLevel.INFO,
                         data={
                             'component': 'credential_manager',
@@ -659,7 +659,7 @@ class CredentialManager:
             try:
                 if observability_manager:
                     observability_manager.event_logger.emit_event(
-                        event_type=EventType.REQUEST_FAILED,
+                        event_type=ConversationEventType.REQUEST_FAILED,
                         level=EventLevel.ERROR,
                         data={
                             'component': 'credential_manager',

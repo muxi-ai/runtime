@@ -83,7 +83,7 @@ from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
 
 # Import observability components
-from ..observability import ObservabilityManager, EventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 
 
 # File processing configuration
@@ -766,7 +766,7 @@ class LLM:
         # Emit LLM request started event
         try:
             await ObservabilityManager.get_instance().event_logger.emit_event(
-                EventType.LLM_REQUEST_STARTED,
+                ConversationEventType.LLM_REQUEST_STARTED,
                 level=EventLevel.INFO,
                 data={
                     "model": self.model_name,

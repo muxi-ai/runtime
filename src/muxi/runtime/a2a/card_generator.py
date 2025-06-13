@@ -20,7 +20,7 @@ from .models import (
     CapabilityType,
 )
 from .cache_manager import A2ACacheManager
-from muxi.runtime.observability import ObservabilityManager, EventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, EventLevel
 
 
 class AgentCardGenerator:
@@ -45,7 +45,7 @@ class AgentCardGenerator:
         try:
             self.observability = ObservabilityManager.get_instance()
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATOR_INITIALIZED,
+                ConversationEventType.A2A_CARD_GENERATOR_INITIALIZED,
                 EventLevel.INFO,
                 "A2A agent card generator initialized",
                 data={
@@ -69,7 +69,7 @@ class AgentCardGenerator:
         """
         try:
             self.observability.log_event(
-                EventType.A2A_CONFIG_LOAD_STARTED,
+                ConversationEventType.A2A_CONFIG_LOAD_STARTED,
                 EventLevel.INFO,
                 f"Loading agent configuration from {config_path}",
                 data={
@@ -86,7 +86,7 @@ class AgentCardGenerator:
 
             try:
                 self.observability.log_event(
-                    EventType.A2A_CONFIG_LOAD_COMPLETED,
+                    ConversationEventType.A2A_CONFIG_LOAD_COMPLETED,
                     EventLevel.INFO,
                     f"Successfully loaded agent configuration from {config_path}",
                     data={
@@ -105,7 +105,7 @@ class AgentCardGenerator:
         except Exception as e:
             try:
                 self.observability.log_event(
-                    EventType.ERROR_RETRY_ATTEMPTED,
+                    ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     EventLevel.ERROR,
                     f"Failed to load agent config from {config_path}: {e}",
                     data={
@@ -140,7 +140,7 @@ class AgentCardGenerator:
         """
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_STARTED,
+                ConversationEventType.A2A_CARD_GENERATION_STARTED,
                 EventLevel.INFO,
                 f"Starting agent card generation for {config_path}",
                 data={
@@ -167,7 +167,7 @@ class AgentCardGenerator:
             if cached_card:
                 try:
                     self.observability.log_event(
-                        EventType.A2A_CARD_GENERATION_COMPLETED,
+                        ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                         EventLevel.INFO,
                         f"Using cached agent card for {agent_id}",
                         data={
@@ -185,7 +185,7 @@ class AgentCardGenerator:
         # Generate new card
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_STARTED,
+                ConversationEventType.A2A_CARD_GENERATION_STARTED,
                 EventLevel.INFO,
                 f"Generating new agent card for {agent_id}",
                 data={
@@ -209,7 +209,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_COMPLETED,
+                ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                 EventLevel.INFO,
                 f"Successfully generated agent card for {agent_id}",
                 data={
@@ -239,7 +239,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CONFIG_LOAD_COMPLETED,
+                ConversationEventType.A2A_CONFIG_LOAD_COMPLETED,
                 EventLevel.DEBUG,
                 f"Extracted agent ID: {agent_id}",
                 data={
@@ -295,7 +295,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_COMPLETED,
+                ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                 EventLevel.DEBUG,
                 f"Generated base agent card structure for {agent_id}",
                 data={
@@ -409,7 +409,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_COMPLETED,
+                ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                 EventLevel.DEBUG,
                 f"Added capabilities to agent card",
                 data={
@@ -442,7 +442,7 @@ class AgentCardGenerator:
 
             try:
                 self.observability.log_event(
-                    EventType.A2A_CARD_GENERATION_COMPLETED,
+                    ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                     EventLevel.DEBUG,
                     f"Added MCP capabilities to agent card",
                     data={
@@ -493,7 +493,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_COMPLETED,
+                ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                 EventLevel.DEBUG,
                 f"Added standard endpoints to agent card",
                 data={
@@ -528,7 +528,7 @@ class AgentCardGenerator:
 
             try:
                 self.observability.log_event(
-                    EventType.A2A_CARD_GENERATION_COMPLETED,
+                    ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                     EventLevel.DEBUG,
                     f"Added authentication to agent card",
                     data={
@@ -573,7 +573,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_COMPLETED,
+                ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                 EventLevel.DEBUG,
                 f"Added metadata to agent card",
                 data={
@@ -604,7 +604,7 @@ class AgentCardGenerator:
         """
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_STARTED,
+                ConversationEventType.A2A_CARD_GENERATION_STARTED,
                 EventLevel.INFO,
                 f"Starting formation card generation for {formation_name}",
                 data={
@@ -624,7 +624,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CONFIG_LOAD_STARTED,
+                ConversationEventType.A2A_CONFIG_LOAD_STARTED,
                 EventLevel.INFO,
                 f"Found {len(config_files)} configuration files",
                 data={
@@ -659,7 +659,7 @@ class AgentCardGenerator:
                 failed_cards += 1
                 try:
                     self.observability.log_event(
-                        EventType.ERROR_RETRY_ATTEMPTED,
+                        ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         EventLevel.ERROR,
                         f"Failed to generate card for {config_file}: {e}",
                         data={
@@ -675,7 +675,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_GENERATION_COMPLETED,
+                ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
                 EventLevel.INFO,
                 f"Completed formation card generation for {formation_name}",
                 data={
@@ -702,7 +702,7 @@ class AgentCardGenerator:
         """
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_EXPORT_STARTED,
+                ConversationEventType.A2A_CARD_EXPORT_STARTED,
                 EventLevel.INFO,
                 f"Starting export of {len(cards)} agent cards to {output_dir}",
                 data={
@@ -730,7 +730,7 @@ class AgentCardGenerator:
                 failed_exports += 1
                 try:
                     self.observability.log_event(
-                        EventType.ERROR_RETRY_ATTEMPTED,
+                        ConversationEventType.ERROR_RETRY_ATTEMPTED,
                         EventLevel.ERROR,
                         f"Failed to export card for {agent_id}: {e}",
                         data={
@@ -746,7 +746,7 @@ class AgentCardGenerator:
 
         try:
             self.observability.log_event(
-                EventType.A2A_CARD_EXPORT_COMPLETED,
+                ConversationEventType.A2A_CARD_EXPORT_COMPLETED,
                 EventLevel.INFO,
                 f"Completed export of agent cards to {output_dir}",
                 data={

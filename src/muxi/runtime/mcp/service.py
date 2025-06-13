@@ -164,11 +164,17 @@ class MCPService:
 
         # Emit MCP server registration started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MCP_SERVER_REGISTRATION_STARTED,
+                    ConversationEventType.MCP_SERVER_REGISTRATION_STARTED,
                     level=EventLevel.INFO,
                     data={
                         "server_id": server_id,
@@ -227,11 +233,17 @@ class MCPService:
 
                 # Emit MCP server registration completed event
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            EventType.MCP_SERVER_REGISTRATION_COMPLETED,
+                            ConversationEventType.MCP_SERVER_REGISTRATION_COMPLETED,
                             level=EventLevel.INFO,
                             data={
                                 "server_id": server_id,
@@ -249,11 +261,17 @@ class MCPService:
             except Exception as e:
                 # Emit MCP server registration failed event
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            EventType.MCP_SERVER_REGISTRATION_FAILED,
+                            ConversationEventType.MCP_SERVER_REGISTRATION_FAILED,
                             level=EventLevel.ERROR,
                             data={
                                 "server_id": server_id,
@@ -303,11 +321,17 @@ class MCPService:
 
         # Emit MCP tool invocation started event
         try:
-            from ..observability import EventType, EventLevel, ObservabilityManager
+            from ..observability import (
+                ConversationEventType,
+                SystemEventType,
+                EventLevel,
+                ObservabilityManager,
+            )
+
             observability_manager = ObservabilityManager.get_instance()
             if observability_manager:
                 await observability_manager.event_logger.emit_event(
-                    EventType.MCP_TOOL_INVOCATION_STARTED,
+                    ConversationEventType.MCP_TOOL_INVOCATION_STARTED,
                     level=EventLevel.INFO,
                     data={
                         "server_id": server_id,
@@ -353,11 +377,17 @@ class MCPService:
 
                 # Emit MCP tool invocation completed event
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            EventType.MCP_TOOL_INVOCATION_COMPLETED,
+                            ConversationEventType.MCP_TOOL_INVOCATION_COMPLETED,
                             level=EventLevel.INFO,
                             data={
                                 "server_id": server_id,
@@ -377,11 +407,17 @@ class MCPService:
             except Exception as e:
                 # Emit MCP tool invocation failed event
                 try:
-                    from ..observability import EventType, EventLevel, ObservabilityManager
+                    from ..observability import (
+                        ConversationEventType,
+                        SystemEventType,
+                        EventLevel,
+                        ObservabilityManager,
+                    )
+
                     observability_manager = ObservabilityManager.get_instance()
                     if observability_manager:
                         await observability_manager.event_logger.emit_event(
-                            EventType.MCP_TOOL_INVOCATION_FAILED,
+                            ConversationEventType.MCP_TOOL_INVOCATION_FAILED,
                             level=EventLevel.ERROR,
                             data={
                                 "server_id": server_id,

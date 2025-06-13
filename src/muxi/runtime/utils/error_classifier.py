@@ -9,7 +9,7 @@ import asyncio
 from typing import Type, Dict
 
 from ..types.errors import ERROR_CODE_REGISTRY
-from ..observability import ObservabilityManager, EventType, EventLevel
+from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 
 
 # Exception type to error code mapping
@@ -46,7 +46,7 @@ def classify_error_code(exception: Exception) -> str:
     try:
         observability = ObservabilityManager.get_instance()
         observability.emit_event(
-            event_type=EventType.ERROR_RETRY_ATTEMPTED,
+            event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
             level=EventLevel.WARNING,
             message=f"Error classified: {type(exception).__name__}",
             data={

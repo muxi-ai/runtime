@@ -17,11 +17,11 @@ from ..secrets import SecretsManager
 
 # Observability integration
 try:
-    from ..observability import ObservabilityManager, EventType, EventLevel
+    from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 except ImportError:
     # Graceful fallback if observability is not available
     ObservabilityManager = None
-    EventType = None
+    ConversationEventType = None
     EventLevel = None
 
 # Suppress common warnings that clutter the output
@@ -35,10 +35,10 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
     """Add a secret to the formation's secrets store in current directory."""
     formation_dir = Path(".")
 
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.SECRET_STORAGE_STARTED,
+                event_type=ConversationEventType.SECRET_STORAGE_STARTED,
                 level=EventLevel.INFO,
                 message="Starting secret addition to formation",
                 data={
@@ -72,10 +72,10 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
         print(f"   🔑 Master key: {key_file.absolute()}")
         print(f"   🔒 Secrets: {secrets_file.absolute()}")
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.SECRET_STORAGE_COMPLETED,
+                    event_type=ConversationEventType.SECRET_STORAGE_COMPLETED,
                     level=EventLevel.INFO,
                     message="Secret addition completed successfully",
                     data={
@@ -95,10 +95,10 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
         return secrets_manager
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Secret addition failed with error",
                     data={
@@ -118,10 +118,10 @@ async def list_secrets_in_formation():
     """List all secrets in the formation in current directory."""
     formation_dir = Path(".")
 
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.SECRET_LISTING_STARTED,
+                event_type=ConversationEventType.SECRET_LISTING_STARTED,
                 level=EventLevel.DEBUG,
                 message="Starting secret listing for formation",
                 data={
@@ -149,10 +149,10 @@ async def list_secrets_in_formation():
         else:
             print("   (no secrets found)")
 
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.SECRET_LISTING_COMPLETED,
+                    event_type=ConversationEventType.SECRET_LISTING_COMPLETED,
                     level=EventLevel.DEBUG,
                     message="Secret listing completed successfully",
                     data={
@@ -168,10 +168,10 @@ async def list_secrets_in_formation():
         return secrets
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Secret listing failed with error",
                     data={
@@ -187,10 +187,10 @@ async def list_secrets_in_formation():
 
 
 def main():
-    if ObservabilityManager and EventType:
+    if ObservabilityManager and ConversationEventType:
         try:
             ObservabilityManager.get_instance().log_event(
-                event_type=EventType.UTILITY_STARTED,
+                event_type=ConversationEventType.UTILITY_STARTED,
                 level=EventLevel.INFO,
                 message="Add secret utility started",
                 data={
@@ -235,10 +235,10 @@ Examples:
     try:
         if args.command == "list":
             asyncio.run(list_secrets_in_formation())
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.UTILITY_COMPLETED,
+                        event_type=ConversationEventType.UTILITY_COMPLETED,
                         level=EventLevel.INFO,
                         message="Add secret utility completed successfully",
                         data={
@@ -251,10 +251,10 @@ Examples:
                     pass
         elif args.command and args.value:
             asyncio.run(add_secret_to_formation(args.command, args.value))
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.UTILITY_COMPLETED,
+                        event_type=ConversationEventType.UTILITY_COMPLETED,
                         level=EventLevel.INFO,
                         message="Add secret utility completed successfully",
                         data={
@@ -266,10 +266,10 @@ Examples:
                 except Exception:
                     pass
         elif args.command and not args.value:
-            if ObservabilityManager and EventType:
+            if ObservabilityManager and ConversationEventType:
                 try:
                     ObservabilityManager.get_instance().log_event(
-                        event_type=EventType.UTILITY_COMPLETED,
+                        event_type=ConversationEventType.UTILITY_COMPLETED,
                         level=EventLevel.WARNING,
                         message="Add secret utility completed with failure",
                         data={
@@ -298,10 +298,10 @@ Examples:
             sys.exit(1)
 
     except Exception as e:
-        if ObservabilityManager and EventType:
+        if ObservabilityManager and ConversationEventType:
             try:
                 ObservabilityManager.get_instance().log_event(
-                    event_type=EventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=EventLevel.ERROR,
                     message="Add secret utility failed with error",
                     data={
