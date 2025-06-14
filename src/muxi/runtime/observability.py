@@ -805,3 +805,53 @@ class ObservabilityManager:
             parent_event_id=None,
             description=description
         )
+
+
+# ===================================================================
+# SIMPLE HELPER FUNCTION FOR PLACEHOLDER REPLACEMENT
+# ===================================================================
+
+async def emit_observability_event(
+    event_type: str,
+    level: str = "INFO",
+    request_context=None,
+    data: dict = None,
+    description: str = ""
+):
+    """
+    Emit an observability event with direct access to observability system.
+
+    Simple helper function to replace 943 observability placeholders throughout the codebase.
+    Uses direct access to ObservabilityManager singleton instead of requiring overlord reference.
+
+    Args:
+        event_type: ConversationEventType enum name (e.g., "AGENT_MESSAGE_PROCESSING")
+        level: EventLevel name (e.g., "INFO", "ERROR", "DEBUG")
+        request_context: Request context for event correlation
+        data: Additional event data dictionary
+        description: Human-readable event description
+    """
+    if not request_context:
+        return
+
+    try:
+        # Get observability manager directly (singleton pattern)
+        observability_manager = ObservabilityManager.get_instance()
+        if not observability_manager:
+            return
+
+        # Convert string names to enum values
+        event_enum = getattr(ConversationEventType, event_type)
+        level_enum = getattr(EventLevel, level)
+
+        # Emit event directly through observability manager
+        await observability_manager.event_logger.emit_event(
+            event_enum,
+            level=level_enum,
+            request_context=request_context,
+            data=data or {},
+            description=description
+        )
+    except (ImportError, AttributeError):
+        # Silently fail if observability not available
+        pass
