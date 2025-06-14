@@ -5,22 +5,16 @@ This module provides intelligent recovery strategy selection based on
 error types, context, and historical success rates.
 """
 
-import asyncio
-import random
-import time
-from typing import Any, Dict, List, Optional, Callable
-# Loguru import removed - add observability import
+from typing import Dict, List, Optional
+
+from ... import observability
 
 from .resilience_types import (
     ErrorType,
     ErrorSeverity,
     RecoveryStrategy,
-    RecoveryResult,
     ErrorContext,
     ResilienceConfig,
-    RetryConfig,
-    WorkflowException,
-    RecoveryException,
 )
 
 
@@ -59,7 +53,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.LINEAR_BACKOFF,
                 RecoveryStrategy.CACHED_RESPONSE,
             ],
-
             # Agent errors - fallback and retry
             ErrorType.AGENT_UNAVAILABLE: [
                 RecoveryStrategy.FALLBACK_AGENT,
@@ -81,7 +74,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
                 RecoveryStrategy.ABORT_WORKFLOW,
             ],
-
             # LLM errors - model fallback and retry
             ErrorType.LLM_RATE_LIMITED: [
                 RecoveryStrategy.EXPONENTIAL_BACKOFF,
@@ -103,7 +95,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.CACHED_RESPONSE,
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
             ],
-
             # Memory errors - cleanup and fallback
             ErrorType.MEMORY_FULL: [
                 RecoveryStrategy.SIMPLIFIED_WORKFLOW,
@@ -114,7 +105,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
                 RecoveryStrategy.ABORT_WORKFLOW,
             ],
-
             # Auth errors - re-auth and escalation
             ErrorType.AUTH_FAILED: [
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
@@ -128,7 +118,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
                 RecoveryStrategy.ABORT_WORKFLOW,
             ],
-
             # Data errors - validation and retry
             ErrorType.DATA_VALIDATION: [
                 RecoveryStrategy.IMMEDIATE_RETRY,
@@ -143,7 +132,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.IMMEDIATE_RETRY,
                 RecoveryStrategy.FALLBACK_WORKFLOW,
             ],
-
             # System errors - circuit breaker and escalation
             ErrorType.SYSTEM_OVERLOAD: [
                 RecoveryStrategy.CIRCUIT_BREAKER,
@@ -158,7 +146,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
                 RecoveryStrategy.ABORT_WORKFLOW,
             ],
-
             # Workflow errors - retry and simplify
             ErrorType.WORKFLOW_VALIDATION: [
                 RecoveryStrategy.SIMPLIFIED_WORKFLOW,
@@ -175,7 +162,6 @@ class RecoveryStrategist:
                 RecoveryStrategy.FALLBACK_AGENT,
                 RecoveryStrategy.SIMPLIFIED_WORKFLOW,
             ],
-
             # Unknown/Critical errors - conservative approach
             ErrorType.UNKNOWN: [
                 RecoveryStrategy.IMMEDIATE_RETRY,
@@ -191,7 +177,7 @@ class RecoveryStrategist:
     async def select_strategy(
         self,
         error_context: ErrorContext,
-        available_strategies: Optional[List[RecoveryStrategy]] = None
+        available_strategies: Optional[List[RecoveryStrategy]] = None,
     ) -> RecoveryStrategy:
         """
         Select the optimal recovery strategy for the given error context.
@@ -225,20 +211,18 @@ class RecoveryStrategist:
                 return candidates[0]
 
             # Select best strategy based on performance and context
-            selected_strategy = await self._select_best_strategy(
-                filtered_candidates,
-                error_context
-            )
+            selected_strategy = await self._select_best_strategy(filtered_candidates, error_context)
 
             #  Debug - add observability event
-                f"Selected strategy {selected_strategy.value} for error {error_context.error_type.value} "
-                f"(severity: {error_context.severity.value}, attempt: {error_context.attempt_count})"
-            )
+            #  f"Selected {selected_strategy.value} for error {error_context.error_type.value} "
+            #  f"(severity: {error_context.severity.value}, attempt: {error_context.attempt_count})"
+            # )
 
             return selected_strategy
 
         except Exception as selection_error:
             #  Error - add observability event
+            _ = selection_error  # remove this after implementing observability
             return RecoveryStrategy.ABORT_WORKFLOW
 
     def _get_candidate_strategies(self, error_context: ErrorContext) -> List[RecoveryStrategy]:
@@ -275,25 +259,35 @@ class RecoveryStrategist:
         return unique_candidates
 
     def _filter_strategies_by_config(
-        self,
-        candidates: List[RecoveryStrategy]
+        self, candidates: List[RecoveryStrategy]
     ) -> List[RecoveryStrategy]:
         """Filter strategies based on configuration settings."""
         filtered = []
 
         for strategy in candidates:
             # Check if strategy type is enabled
-            if strategy in [RecoveryStrategy.IMMEDIATE_RETRY, RecoveryStrategy.EXPONENTIAL_BACKOFF,
-                           RecoveryStrategy.LINEAR_BACKOFF, RecoveryStrategy.JITTERED_RETRY]:
+            if strategy in [
+                RecoveryStrategy.IMMEDIATE_RETRY,
+                RecoveryStrategy.EXPONENTIAL_BACKOFF,
+                RecoveryStrategy.LINEAR_BACKOFF,
+                RecoveryStrategy.JITTERED_RETRY,
+            ]:
                 if not self.config.enable_retries:
                     continue
 
-            elif strategy in [RecoveryStrategy.FALLBACK_AGENT, RecoveryStrategy.FALLBACK_MODEL,
-                             RecoveryStrategy.FALLBACK_WORKFLOW, RecoveryStrategy.CACHED_RESPONSE]:
+            elif strategy in [
+                RecoveryStrategy.FALLBACK_AGENT,
+                RecoveryStrategy.FALLBACK_MODEL,
+                RecoveryStrategy.FALLBACK_WORKFLOW,
+                RecoveryStrategy.CACHED_RESPONSE,
+            ]:
                 if not self.config.enable_fallbacks:
                     continue
 
-            elif strategy in [RecoveryStrategy.SIMPLIFIED_WORKFLOW, RecoveryStrategy.PARTIAL_RESPONSE]:
+            elif strategy in [
+                RecoveryStrategy.SIMPLIFIED_WORKFLOW,
+                RecoveryStrategy.PARTIAL_RESPONSE,
+            ]:
                 if not self.config.enable_graceful_degradation:
                     continue
 
@@ -306,9 +300,7 @@ class RecoveryStrategist:
         return filtered
 
     async def _select_best_strategy(
-        self,
-        candidates: List[RecoveryStrategy],
-        error_context: ErrorContext
+        self, candidates: List[RecoveryStrategy], error_context: ErrorContext
     ) -> RecoveryStrategy:
         """Select the best strategy from candidates based on performance and context."""
 
@@ -330,9 +322,7 @@ class RecoveryStrategist:
         return best_strategy
 
     async def _calculate_strategy_score(
-        self,
-        strategy: RecoveryStrategy,
-        error_context: ErrorContext
+        self, strategy: RecoveryStrategy, error_context: ErrorContext
     ) -> float:
         """Calculate a score for a strategy based on various factors."""
         score = 0.0
@@ -362,16 +352,16 @@ class RecoveryStrategist:
         performance_key = f"{error_context.error_type.value}:{strategy.value}"
         if performance_key in self._strategy_performance:
             historical_success = self._strategy_performance[performance_key]
-            score *= (0.5 + historical_success)  # 0.5 to 1.5 multiplier
+            score *= 0.5 + historical_success  # 0.5 to 1.5 multiplier
 
         # Adjust based on attempt count
         if error_context.attempt_count > 1:
             # Penalize retry strategies for repeated attempts
             if strategy in [RecoveryStrategy.IMMEDIATE_RETRY, RecoveryStrategy.LINEAR_BACKOFF]:
-                score *= (0.8 ** (error_context.attempt_count - 1))
+                score *= 0.8 ** (error_context.attempt_count - 1)
             # Favor escalation for repeated failures
             elif strategy in [RecoveryStrategy.ESCALATE_TO_ADMIN, RecoveryStrategy.ABORT_WORKFLOW]:
-                score *= (1.2 ** (error_context.attempt_count - 1))
+                score *= 1.2 ** (error_context.attempt_count - 1)
 
         # Adjust based on severity
         if error_context.severity == ErrorSeverity.CRITICAL:
@@ -389,10 +379,7 @@ class RecoveryStrategist:
         return score
 
     async def record_strategy_result(
-        self,
-        error_type: ErrorType,
-        strategy: RecoveryStrategy,
-        success: bool
+        self, error_type: ErrorType, strategy: RecoveryStrategy, success: bool
     ) -> None:
         """Record the result of a recovery strategy for future selection."""
         performance_key = f"{error_type.value}:{strategy.value}"
@@ -406,13 +393,13 @@ class RecoveryStrategist:
         alpha = 0.1  # Learning rate
 
         self._strategy_performance[performance_key] = (
-            (1 - alpha) * current_performance + alpha * new_result
-        )
+            1 - alpha
+        ) * current_performance + alpha * new_result
 
         #  Debug - add observability event
-            f"Updated strategy performance: {performance_key} = "
-            f"{self._strategy_performance[performance_key]:.3f} (success: {success})"
-        )
+        #     f"Updated strategy performance: {performance_key} = "
+        #     f"{self._strategy_performance[performance_key]:.3f} (success: {success})"
+        # )
 
     def get_strategy_performance(self) -> Dict[str, float]:
         """Get current strategy performance metrics."""
@@ -424,9 +411,7 @@ class RecoveryStrategist:
         #  Info - add observability event
 
     def add_custom_strategy_mapping(
-        self,
-        error_type: ErrorType,
-        strategies: List[RecoveryStrategy]
+        self, error_type: ErrorType, strategies: List[RecoveryStrategy]
     ) -> None:
         """Add or update custom strategy mapping for an error type."""
         self.default_strategies[error_type] = strategies

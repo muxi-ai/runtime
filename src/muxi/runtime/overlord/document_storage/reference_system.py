@@ -17,12 +17,13 @@ import uuid
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
-# Loguru import removed - add observability import
+from ... import observability
 
 
 @dataclass
 class DocumentReference:
     """Represents a reference to a document chunk"""
+
     reference_id: str
     source_document_id: str
     source_chunk_id: str
@@ -36,6 +37,7 @@ class DocumentReference:
 @dataclass
 class ReferenceLineage:
     """Tracks the lineage of references through processing steps"""
+
     lineage_id: str
     root_references: List[str]  # Original document reference IDs
     derived_references: List[str]  # References created from processing
@@ -67,8 +69,8 @@ class DocumentReferenceSystem:
 
         # Indexing for fast lookups
         self._document_to_references: Dict[str, Set[str]] = {}  # doc_id -> ref_ids
-        self._chunk_to_references: Dict[str, Set[str]] = {}    # chunk_id -> ref_ids
-        self._output_to_lineage: Dict[str, str] = {}           # output_hash -> lineage_id
+        self._chunk_to_references: Dict[str, Set[str]] = {}  # chunk_id -> ref_ids
+        self._output_to_lineage: Dict[str, str] = {}  # output_hash -> lineage_id
 
         # Ensure storage directory exists
         Path(self.storage_path).parent.mkdir(parents=True, exist_ok=True)
@@ -85,7 +87,7 @@ class DocumentReferenceSystem:
         referenced_content: str,
         context: str,
         confidence: float = 1.0,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Create a new document reference.
@@ -112,7 +114,7 @@ class DocumentReferenceSystem:
             context=context,
             confidence=confidence,
             timestamp=current_time,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Store reference
@@ -131,7 +133,7 @@ class DocumentReferenceSystem:
         self,
         root_reference_ids: List[str],
         processing_steps: List[Dict[str, Any]],
-        final_output: Optional[str] = None
+        final_output: Optional[str] = None,
     ) -> str:
         """
         Create a new reference lineage tracking processing steps.
@@ -153,7 +155,7 @@ class DocumentReferenceSystem:
             derived_references=[],
             processing_steps=processing_steps,
             final_output=final_output,
-            timestamp=current_time
+            timestamp=current_time,
         )
 
         # Store lineage
@@ -170,11 +172,7 @@ class DocumentReferenceSystem:
         #  Info - add observability event
         return lineage_id
 
-    async def add_derived_reference(
-        self,
-        lineage_id: str,
-        derived_reference_id: str
-    ) -> bool:
+    async def add_derived_reference(self, lineage_id: str, derived_reference_id: str) -> bool:
         """
         Add a derived reference to an existing lineage.
 
@@ -195,9 +193,7 @@ class DocumentReferenceSystem:
         #  Info - add observability event
         return True
 
-    async def get_references_for_document(
-        self, document_id: str
-    ) -> List[DocumentReference]:
+    async def get_references_for_document(self, document_id: str) -> List[DocumentReference]:
         """
         Get all references for a specific document.
 
@@ -208,15 +204,9 @@ class DocumentReferenceSystem:
             List of DocumentReference objects
         """
         reference_ids = self._document_to_references.get(document_id, set())
-        return [
-            self._references[ref_id]
-            for ref_id in reference_ids
-            if ref_id in self._references
-        ]
+        return [self._references[ref_id] for ref_id in reference_ids if ref_id in self._references]
 
-    async def get_references_for_chunk(
-        self, chunk_id: str
-    ) -> List[DocumentReference]:
+    async def get_references_for_chunk(self, chunk_id: str) -> List[DocumentReference]:
         """
         Get all references for a specific chunk.
 
@@ -227,15 +217,9 @@ class DocumentReferenceSystem:
             List of DocumentReference objects
         """
         reference_ids = self._chunk_to_references.get(chunk_id, set())
-        return [
-            self._references[ref_id]
-            for ref_id in reference_ids
-            if ref_id in self._references
-        ]
+        return [self._references[ref_id] for ref_id in reference_ids if ref_id in self._references]
 
-    async def get_lineage_for_output(
-        self, output_content: str
-    ) -> Optional[ReferenceLineage]:
+    async def get_lineage_for_output(self, output_content: str) -> Optional[ReferenceLineage]:
         """
         Get the lineage for a specific output.
 
@@ -252,11 +236,7 @@ class DocumentReferenceSystem:
             return self._lineages.get(lineage_id)
         return None
 
-    async def generate_citation(
-        self,
-        reference_id: str,
-        style: str = "academic"
-    ) -> Optional[str]:
+    async def generate_citation(self, reference_id: str, style: str = "academic") -> Optional[str]:
         """
         Generate a citation for a reference.
 
@@ -318,9 +298,7 @@ class DocumentReferenceSystem:
 
         return citation
 
-    async def trace_lineage(
-        self, reference_id: str
-    ) -> List[Dict[str, Any]]:
+    async def trace_lineage(self, reference_id: str) -> List[Dict[str, Any]]:
         """
         Trace the complete lineage of a reference.
 
@@ -334,22 +312,24 @@ class DocumentReferenceSystem:
 
         # Find lineages containing this reference
         for lineage in self._lineages.values():
-            if (reference_id in lineage.root_references or
-                reference_id in lineage.derived_references):
+            if (
+                reference_id in lineage.root_references
+                or reference_id in lineage.derived_references
+            ):
 
-                lineage_trace.append({
-                    "lineage_id": lineage.lineage_id,
-                    "type": "root" if reference_id in lineage.root_references else "derived",
-                    "processing_steps": lineage.processing_steps,
-                    "final_output": lineage.final_output,
-                    "timestamp": lineage.timestamp
-                })
+                lineage_trace.append(
+                    {
+                        "lineage_id": lineage.lineage_id,
+                        "type": "root" if reference_id in lineage.root_references else "derived",
+                        "processing_steps": lineage.processing_steps,
+                        "final_output": lineage.final_output,
+                        "timestamp": lineage.timestamp,
+                    }
+                )
 
         return sorted(lineage_trace, key=lambda x: x["timestamp"])
 
-    async def get_source_attribution(
-        self, output_content: str
-    ) -> Dict[str, Any]:
+    async def get_source_attribution(self, output_content: str) -> Dict[str, Any]:
         """
         Get source attribution for output content.
 
@@ -371,14 +351,16 @@ class DocumentReferenceSystem:
         for ref_id in all_references:
             reference = self._references.get(ref_id)
             if reference:
-                sources.append({
-                    "reference_id": ref_id,
-                    "document_id": reference.source_document_id,
-                    "chunk_id": reference.source_chunk_id,
-                    "filename": reference.metadata.get("filename", "Unknown"),
-                    "confidence": reference.confidence,
-                    "content_preview": reference.referenced_content[:200] + "..."
-                })
+                sources.append(
+                    {
+                        "reference_id": ref_id,
+                        "document_id": reference.source_document_id,
+                        "chunk_id": reference.source_chunk_id,
+                        "filename": reference.metadata.get("filename", "Unknown"),
+                        "confidence": reference.confidence,
+                        "content_preview": reference.referenced_content[:200] + "...",
+                    }
+                )
                 total_confidence += reference.confidence
 
         avg_confidence = total_confidence / len(sources) if sources else 0.0
@@ -388,17 +370,13 @@ class DocumentReferenceSystem:
             "lineage_id": lineage.lineage_id,
             "processing_steps": len(lineage.processing_steps),
             "confidence": avg_confidence,
-            "timestamp": lineage.timestamp
+            "timestamp": lineage.timestamp,
         }
 
     def get_reference_stats(self) -> Dict[str, Any]:
         """Get statistics about the reference system"""
         if not self._references:
-            return {
-                "total_references": 0,
-                "total_lineages": 0,
-                "total_documents": 0
-            }
+            return {"total_references": 0, "total_lineages": 0, "total_documents": 0}
 
         # Count unique documents
         unique_documents = set()
@@ -417,7 +395,7 @@ class DocumentReferenceSystem:
             "avg_confidence": avg_confidence,
             "min_confidence": min(confidence_scores),
             "max_confidence": max(confidence_scores),
-            "references_per_document": len(self._references) / max(len(unique_documents), 1)
+            "references_per_document": len(self._references) / max(len(unique_documents), 1),
         }
 
     def _update_reference_indexes(self, reference: DocumentReference) -> None:
@@ -435,11 +413,13 @@ class DocumentReferenceSystem:
     def _hash_content(self, content: str) -> str:
         """Generate hash for content"""
         import hashlib
+
         return hashlib.md5(content.encode()).hexdigest()
 
     def _format_timestamp(self, timestamp: float) -> str:
         """Format timestamp for display"""
         import datetime
+
         dt = datetime.datetime.fromtimestamp(timestamp)
         return dt.strftime("%Y-%m-%d %H:%M")
 
@@ -447,7 +427,7 @@ class DocumentReferenceSystem:
         """Load references from storage"""
         try:
             if Path(self.storage_path).exists():
-                with open(self.storage_path, 'r') as f:
+                with open(self.storage_path, "r") as f:
                     data = json.load(f)
 
                 # Load references
@@ -460,7 +440,7 @@ class DocumentReferenceSystem:
                         context=ref_data["context"],
                         confidence=ref_data["confidence"],
                         timestamp=ref_data["timestamp"],
-                        metadata=ref_data["metadata"]
+                        metadata=ref_data["metadata"],
                     )
                     self._references[ref_id] = reference
                     self._update_reference_indexes(reference)
@@ -473,7 +453,7 @@ class DocumentReferenceSystem:
                         derived_references=lineage_data["derived_references"],
                         processing_steps=lineage_data["processing_steps"],
                         final_output=lineage_data.get("final_output"),
-                        timestamp=lineage_data["timestamp"]
+                        timestamp=lineage_data["timestamp"],
                     )
                     self._lineages[lineage_id] = lineage
 
@@ -486,6 +466,7 @@ class DocumentReferenceSystem:
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
 
     async def _persist_references(self) -> None:
         """Persist references to storage"""
@@ -501,7 +482,7 @@ class DocumentReferenceSystem:
                         "context": ref.context,
                         "confidence": ref.confidence,
                         "timestamp": ref.timestamp,
-                        "metadata": ref.metadata
+                        "metadata": ref.metadata,
                     }
                     for ref_id, ref in self._references.items()
                 },
@@ -512,15 +493,15 @@ class DocumentReferenceSystem:
                         "derived_references": lineage.derived_references,
                         "processing_steps": lineage.processing_steps,
                         "final_output": lineage.final_output,
-                        "timestamp": lineage.timestamp
+                        "timestamp": lineage.timestamp,
                     }
                     for lineage_id, lineage in self._lineages.items()
-                }
+                },
             }
 
             # Write to temporary file first, then rename for atomic operation
             temp_path = f"{self.storage_path}.tmp"
-            with open(temp_path, 'w') as f:
+            with open(temp_path, "w") as f:
                 json.dump(data, f, indent=2)
 
             # Atomic rename
@@ -528,4 +509,5 @@ class DocumentReferenceSystem:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             raise

@@ -14,7 +14,7 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-# Loguru import removed - add observability import
+from ... import observability
 
 
 @dataclass
@@ -137,14 +137,14 @@ class DocumentAcknowledgmentGenerator:
                     "'{filename}' processing: Content structure mapped, indexing vectors.",
                 ],
                 "complete": [
-                    "'{filename}' processing complete. Vector index updated with {chunk_count} chunks.",
+                    "'{filename}' processing complete. Vector index updated with {chunk_count} chunks.",  # noqa: E501
                     "Document analysis finished for '{filename}'. Semantic search ready.",
                     "'{filename}' successfully processed and integrated into knowledge base.",
                 ],
                 "error": [
-                    "Processing error in '{filename}': {error_reason}. Check format specifications.",
+                    "Processing error in '{filename}': {error_reason}. Check format specifications.",  # noqa: E501
                     "'{filename}' failed processing pipeline. Error code: {error_code}",
-                    "Unable to parse '{filename}': {error_reason}. Diagnostic information available.",
+                    "Unable to parse '{filename}': {error_reason}. Diagnostic information available.",  # noqa: E501
                 ],
             },
         }
@@ -508,7 +508,7 @@ class DocumentAcknowledgmentGenerator:
         mime_mapping = {
             "application/pdf": "PDF",
             "application/msword": "Word Document",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word Document",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word Document",  # noqa: E501
             "text/plain": "Text File",
             "text/markdown": "Markdown",
             "application/rtf": "Rich Text Document",

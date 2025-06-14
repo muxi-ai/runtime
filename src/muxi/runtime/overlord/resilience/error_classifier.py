@@ -7,8 +7,8 @@ the appropriate recovery strategy based on error type and context.
 
 import re
 import asyncio
-from typing import Dict, List, Optional, Pattern, Tuple
-# Loguru import removed - add observability import
+from typing import Dict, List, Optional, Pattern
+from ... import observability
 
 from .resilience_types import (
     ErrorType,
@@ -234,13 +234,14 @@ class ErrorClassifier:
                 error_context.context_data.update(error.context)
 
             #  Debug - add observability event
-                f"Classified error: {error_type.value} (severity: {severity.value}) - {str(error)}"
-            )
+            #   f"Classified error: {error_type.value} (severity: {severity.value}) - {str(error)}"
+            # )
 
             return error_context
 
         except Exception as classification_error:
             #  Error - add observability event
+            _ = classification_error  # remove this after implementing observability
 
             # Fallback classification
             return ErrorContext(

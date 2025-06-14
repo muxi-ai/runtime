@@ -12,20 +12,21 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
 from dataclasses import dataclass
 
+from ... import observability
+
 from .types import (
     TaskStatus,
     ExecutionPlan,
     OptimizedWorkflow,
     ParallelExecutionResult,
-    ParallelGroup
+    ParallelGroup,
 )
-
-
 
 
 @dataclass
 class TaskExecution:
     """Runtime tracking for individual task execution."""
+
     task_id: str
     agent_id: str
     status: TaskStatus = TaskStatus.PENDING
@@ -56,7 +57,7 @@ class ParallelExecutor:
         self,
         optimized_workflow: OptimizedWorkflow,
         task_executor: Callable[[str, str, Dict[str, Any]], Any],
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
     ) -> ParallelExecutionResult:
         """
         Execute an optimized workflow with parallel task execution.
@@ -79,7 +80,7 @@ class ParallelExecutor:
             execution_id=execution_id,
             workflow_id=optimized_workflow.workflow_id,
             execution_plan=optimized_workflow.execution_plan,
-            start_time=datetime.now()
+            start_time=datetime.now(),
         )
 
         # Track active execution
@@ -91,7 +92,7 @@ class ParallelExecutor:
                 optimized_workflow.execution_plan,
                 task_executor,
                 execution_result,
-                progress_callback
+                progress_callback,
             )
 
             # Calculate final results
@@ -108,8 +109,8 @@ class ParallelExecutor:
             execution_result.success = True
 
             #  Info - add observability event
-                       f"Duration: {execution_result.actual_duration:.1f}s, "
-                       f"Speedup: {execution_result.actual_speedup:.1f}x")
+            # f"Duration: {execution_result.actual_duration:.1f}s, "
+            # f"Speedup: {execution_result.actual_speedup:.1f}x")
 
         except Exception as e:
             # Handle execution failure
@@ -141,7 +142,7 @@ class ParallelExecutor:
         execution_plan: ExecutionPlan,
         task_executor: Callable,
         execution_result: ParallelExecutionResult,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
     ) -> None:
         """Execute workflow groups in parallel according to the plan."""
 
@@ -155,19 +156,21 @@ class ParallelExecutor:
                 execution_plan.resource_allocation,
                 task_executor,
                 execution_result,
-                progress_callback
+                progress_callback,
             )
 
             # Update progress
             if progress_callback:
                 progress = (group_index + 1) / len(execution_plan.parallel_groups)
-                progress_callback({
-                    "execution_id": execution_result.execution_id,
-                    "progress": progress,
-                    "current_group": group.group_id,
-                    "completed_groups": group_index + 1,
-                    "total_groups": len(execution_plan.parallel_groups)
-                })
+                progress_callback(
+                    {
+                        "execution_id": execution_result.execution_id,
+                        "progress": progress,
+                        "current_group": group.group_id,
+                        "completed_groups": group_index + 1,
+                        "total_groups": len(execution_plan.parallel_groups),
+                    }
+                )
 
     async def _execute_group_tasks(
         self,
@@ -175,7 +178,7 @@ class ParallelExecutor:
         resource_allocation: Any,
         task_executor: Callable,
         execution_result: ParallelExecutionResult,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
     ) -> None:
         """Execute all tasks in a parallel group concurrently."""
 
@@ -188,9 +191,7 @@ class ParallelExecutor:
                 continue
 
             task_execution = TaskExecution(
-                task_id=task_id,
-                agent_id=agent_id,
-                execution_context={"group_id": group.group_id}
+                task_id=task_id, agent_id=agent_id, execution_context={"group_id": group.group_id}
             )
             task_executions.append(task_execution)
             self.task_executions[f"{execution_result.execution_id}_{task_id}"] = task_execution
@@ -218,7 +219,7 @@ class ParallelExecutor:
         self,
         task_execution: TaskExecution,
         task_executor: Callable,
-        execution_result: ParallelExecutionResult
+        execution_result: ParallelExecutionResult,
     ) -> None:
         """Execute a single task and track its progress."""
 
@@ -232,7 +233,7 @@ class ParallelExecutor:
             result = await task_executor(
                 task_execution.task_id,
                 task_execution.agent_id,
-                task_execution.execution_context or {}
+                task_execution.execution_context or {},
             )
 
             # Task completed successfully
@@ -251,16 +252,18 @@ class ParallelExecutor:
             #  Error - add observability event
 
     async def _calculate_actual_speedup(
-        self,
-        execution_result: ParallelExecutionResult,
-        optimized_workflow: OptimizedWorkflow
+        self, execution_result: ParallelExecutionResult, optimized_workflow: OptimizedWorkflow
     ) -> None:
         """Calculate the actual speedup achieved during execution."""
 
         # Calculate sequential time (sum of all task times)
         total_task_time = 0.0
         for task_key, task_execution in self.task_executions.items():
-            if task_key.startswith(execution_result.execution_id) and task_execution.start_time and task_execution.end_time:
+            if (
+                task_key.startswith(execution_result.execution_id)
+                and task_execution.start_time
+                and task_execution.end_time
+            ):
                 task_duration = task_execution.end_time - task_execution.start_time
                 total_task_time += task_duration
 
@@ -280,8 +283,7 @@ class ParallelExecutor:
 
         # Remove task executions for this execution
         keys_to_remove = [
-            key for key in self.task_executions.keys()
-            if key.startswith(execution_id)
+            key for key in self.task_executions.keys() if key.startswith(execution_id)
         ]
 
         for key in keys_to_remove:
@@ -295,7 +297,9 @@ class ParallelExecutor:
 
             # Calculate progress
             total_tasks = len(execution.completed_tasks) + len(execution.failed_tasks)
-            total_expected = sum(len(group.task_ids) for group in execution.execution_plan.parallel_groups)
+            total_expected = sum(
+                len(group.task_ids) for group in execution.execution_plan.parallel_groups
+            )
             progress = total_tasks / max(total_expected, 1)
 
             # Get current task statuses
@@ -307,8 +311,9 @@ class ParallelExecutor:
                         "agent_id": task_execution.agent_id,
                         "duration": (
                             time.time() - task_execution.start_time
-                            if task_execution.start_time else 0
-                        )
+                            if task_execution.start_time
+                            else 0
+                        ),
                     }
 
             return {
@@ -318,7 +323,7 @@ class ParallelExecutor:
                 "completed_tasks": len(execution.completed_tasks),
                 "failed_tasks": len(execution.failed_tasks),
                 "current_tasks": current_tasks,
-                "elapsed_time": (datetime.now() - execution.start_time).total_seconds()
+                "elapsed_time": (datetime.now() - execution.start_time).total_seconds(),
             }
 
         # Check history
@@ -331,7 +336,7 @@ class ParallelExecutor:
                     "duration": execution.actual_duration,
                     "speedup": execution.actual_speedup,
                     "completed_tasks": len(execution.completed_tasks),
-                    "failed_tasks": len(execution.failed_tasks)
+                    "failed_tasks": len(execution.failed_tasks),
                 }
 
         return None
@@ -361,9 +366,7 @@ class ParallelExecutor:
     def get_execution_statistics(self) -> Dict[str, Any]:
         """Get overall execution statistics."""
 
-        success_rate = (
-            self.successful_executions / max(self.total_executions, 1) * 100
-        )
+        success_rate = self.successful_executions / max(self.total_executions, 1) * 100
 
         # Calculate average metrics from recent executions
         recent_executions = self.execution_history[-10:]  # Last 10
@@ -373,8 +376,12 @@ class ParallelExecutor:
         if recent_executions:
             valid_executions = [e for e in recent_executions if e.success and e.actual_duration]
             if valid_executions:
-                avg_duration = sum(e.actual_duration for e in valid_executions) / len(valid_executions)
-                avg_speedup = sum(e.actual_speedup for e in valid_executions) / len(valid_executions)
+                avg_duration = sum(e.actual_duration for e in valid_executions) / len(
+                    valid_executions
+                )
+                avg_speedup = sum(e.actual_speedup for e in valid_executions) / len(
+                    valid_executions
+                )
 
         return {
             "total_executions": self.total_executions,
@@ -384,7 +391,7 @@ class ParallelExecutor:
             "active_executions": len(self.active_executions),
             "average_duration_seconds": avg_duration,
             "average_speedup": avg_speedup,
-            "recent_executions": len(recent_executions)
+            "recent_executions": len(recent_executions),
         }
 
     async def get_detailed_execution_report(self, execution_id: str) -> Optional[Dict[str, Any]]:
@@ -410,9 +417,10 @@ class ParallelExecutor:
                     "status": task_execution.status.value,
                     "duration": (
                         task_execution.end_time - task_execution.start_time
-                        if task_execution.start_time and task_execution.end_time else 0
+                        if task_execution.start_time and task_execution.end_time
+                        else 0
                     ),
-                    "error": task_execution.error
+                    "error": task_execution.error,
                 }
                 task_details.append(task_detail)
 
@@ -429,6 +437,6 @@ class ParallelExecutor:
             "execution_plan": {
                 "total_groups": len(execution.execution_plan.parallel_groups),
                 "max_parallelism": execution.execution_plan.get_max_group_size(),
-                "estimated_duration": execution.execution_plan.estimated_total_time
-            }
+                "estimated_duration": execution.execution_plan.estimated_total_time,
+            },
         }

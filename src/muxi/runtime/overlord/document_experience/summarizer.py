@@ -14,12 +14,13 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-# Loguru import removed - add observability import
+from ... import observability
 
 
 @dataclass
 class SummaryConfig:
     """Configuration for document summarization"""
+
     summary_type: str = "overview"  # "overview", "key_points", "actionable", "technical"
     max_length: int = 500
     include_citations: bool = True
@@ -30,6 +31,7 @@ class SummaryConfig:
 @dataclass
 class DocumentSummary:
     """Represents a generated document summary"""
+
     summary_id: str
     document_id: str
     summary_type: str
@@ -58,10 +60,7 @@ class DocumentSummarizer:
         #  Info - add observability event
 
     async def summarize_document(
-        self,
-        document_id: str,
-        document_content: str,
-        config: Optional[SummaryConfig] = None
+        self, document_id: str, document_content: str, config: Optional[SummaryConfig] = None
     ) -> DocumentSummary:
         """Generate a summary for a document."""
         config = config or SummaryConfig()
@@ -85,7 +84,7 @@ class DocumentSummarizer:
                 key_points=self._extract_key_points(response),
                 confidence_score=0.8,  # Default confidence
                 processing_time=0.0,  # Default processing time
-                timestamp=time.time()
+                timestamp=time.time(),
             )
 
             self._summary_cache[summary.summary_id] = summary
@@ -93,24 +92,23 @@ class DocumentSummarizer:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             raise
 
     def _extract_key_points(self, content: str) -> List[str]:
         """Extract key points from content"""
-        lines = content.strip().split('\n')
+        lines = content.strip().split("\n")
         key_points = []
 
         for line in lines:
             line = line.strip()
-            if line.startswith('- ') or line.startswith('• '):
+            if line.startswith("- ") or line.startswith("• "):
                 key_points.append(line[2:])
 
         return key_points
 
     async def summarize_multiple_documents(
-        self,
-        documents: List[Dict[str, Any]],
-        cross_document_insights: bool = True
+        self, documents: List[Dict[str, Any]], cross_document_insights: bool = True
     ) -> Dict[str, Any]:
         """
         Generate summaries for multiple documents with cross-document insights.
@@ -131,11 +129,12 @@ class DocumentSummarizer:
                 summary = await self.summarize_document(
                     document_id=doc["id"],
                     document_content=doc["content"],
-                    config=SummaryConfig(summary_type=doc["summary_type"])
+                    config=SummaryConfig(summary_type=doc["summary_type"]),
                 )
                 summaries[doc["id"]] = summary
             except Exception as e:
                 #  Error - add observability event
+                _ = e  # remove this after implementing observability
                 continue
 
         result = {"individual_summaries": summaries}
@@ -148,9 +147,7 @@ class DocumentSummarizer:
         return result
 
     async def generate_progressive_summary(
-        self,
-        document_chunks: List[Dict[str, Any]],
-        final_summary_type: str = "overview"
+        self, document_chunks: List[Dict[str, Any]], final_summary_type: str = "overview"
     ) -> DocumentSummary:
         """
         Generate progressive summary for large documents by chunk.
@@ -169,7 +166,7 @@ class DocumentSummarizer:
         batch_size = 5  # Process 5 chunks at a time
 
         for i in range(0, len(document_chunks), batch_size):
-            batch = document_chunks[i:i + batch_size]
+            batch = document_chunks[i:i+batch_size]
             batch_content = "\n\n".join([chunk["content"] for chunk in batch])
 
             # Generate summary for this batch
@@ -185,17 +182,14 @@ class DocumentSummarizer:
         final_summary = await self.summarize_document(
             document_id=f"progressive_{int(time.time())}",
             document_content=combined_content,
-            config=SummaryConfig(summary_type=final_summary_type)
+            config=SummaryConfig(summary_type=final_summary_type),
         )
 
         #  Info - add observability event
         return final_summary
 
     def _build_summarization_prompt(
-        self,
-        content: str,
-        config: SummaryConfig,
-        metadata: Optional[Dict[str, Any]] = None
+        self, content: str, config: SummaryConfig, metadata: Optional[Dict[str, Any]] = None
     ) -> str:
         """Build the summarization prompt based on configuration"""
         # Get base prompt for summary type
@@ -207,7 +201,9 @@ class DocumentSummarizer:
         persona_instruction = self._get_persona_instruction(config.persona_style)
 
         # Add length constraint
-        length_instruction = f"\n\nPlease limit the summary to approximately {config.max_length} words."
+        length_instruction = (
+            f"\n\nPlease limit the summary to approximately {config.max_length} words."
+        )
 
         # Add citation instruction if needed
         citation_instruction = ""
@@ -223,12 +219,12 @@ class DocumentSummarizer:
 
         # Combine all components
         full_prompt = (
-            base_prompt +
-            persona_instruction +
-            length_instruction +
-            citation_instruction +
-            metadata_context +
-            f"\n\nDocument content:\n{content}"
+            base_prompt
+            + persona_instruction
+            + length_instruction
+            + citation_instruction
+            + metadata_context
+            + f"\n\nDocument content:\n{content}"
         )
 
         return full_prompt
@@ -236,18 +232,16 @@ class DocumentSummarizer:
     def _get_persona_instruction(self, persona_style: str) -> str:
         """Get persona-specific instruction for summary formatting"""
         persona_instructions = {
-            "professional": "\n\nUse a professional, formal tone appropriate for business documentation.",
-            "casual": "\n\nUse a conversational, accessible tone that's easy to understand.",
-            "technical": "\n\nUse precise technical language appropriate for technical documentation."
+            "professional": "\n\nUse a professional, formal tone appropriate for business documentation.",  # noqa: E501
+            "casual": "\n\nUse a conversational, accessible tone that's easy to understand.",  # noqa: E501
+            "technical": "\n\nUse precise technical language appropriate for technical documentation.",  # noqa: E501
         }
         return persona_instructions.get(persona_style, "")
 
-    def _parse_summary_response(
-        self, response: str, summary_type: str
-    ) -> Dict[str, Any]:
+    def _parse_summary_response(self, response: str, summary_type: str) -> Dict[str, Any]:
         """Parse and structure the LLM response"""
         # Basic parsing - in production, this would be more sophisticated
-        lines = response.strip().split('\n')
+        lines = response.strip().split("\n")
 
         content = response.strip()
         key_points = []
@@ -256,22 +250,19 @@ class DocumentSummarizer:
         # Extract key points if bullet format is used
         for line in lines:
             line = line.strip()
-            if line.startswith('- ') or line.startswith('• '):
+            if line.startswith("- ") or line.startswith("• "):
                 key_points.append(line[2:])
-            elif line.startswith('* '):
+            elif line.startswith("* "):
                 key_points.append(line[2:])
 
         # Extract citations (basic pattern matching)
         import re
-        citation_pattern = r'\[(.*?)\]|\((.*?)\)'
+
+        citation_pattern = r"\[(.*?)\]|\((.*?)\)"
         citations = re.findall(citation_pattern, response)
         citations = [cite[0] or cite[1] for cite in citations if cite[0] or cite[1]]
 
-        return {
-            "content": content,
-            "key_points": key_points,
-            "citations": citations
-        }
+        return {"content": content, "key_points": key_points, "citations": citations}
 
     def _calculate_confidence_score(self, structured_summary: Dict[str, Any]) -> float:
         """Calculate confidence score for the generated summary"""
@@ -291,7 +282,7 @@ class DocumentSummarizer:
             confidence += 0.1
 
         # Simple quality indicators
-        sentences = content.split('.')
+        sentences = content.split(".")
         if len(sentences) >= 3:  # Multiple sentences
             confidence += 0.1
 
@@ -304,10 +295,9 @@ class DocumentSummarizer:
         #  Info - add observability event
 
         # Combine all summary content
-        combined_content = "\n\n".join([
-            f"Document {doc_id}: {summary.content}"
-            for doc_id, summary in summaries.items()
-        ])
+        combined_content = "\n\n".join(
+            [f"Document {doc_id}: {summary.content}" for doc_id, summary in summaries.items()]
+        )
 
         # Identify common themes
         themes_prompt = f"""
@@ -331,7 +321,7 @@ class DocumentSummarizer:
                 "gaps": self._extract_gaps(insights_response),
                 "synthesis": insights_response,
                 "document_count": len(summaries),
-                "generated_at": time.time()
+                "generated_at": time.time(),
             }
 
         except Exception as e:
@@ -354,18 +344,23 @@ class DocumentSummarizer:
             return response.strip()
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return f"[Error summarizing batch {batch_id}]"
 
     def _extract_themes(self, insights_text: str) -> List[str]:
         """Extract common themes from insights text"""
         # Basic extraction - look for numbered or bulleted lists
-        lines = insights_text.split('\n')
+        lines = insights_text.split("\n")
         themes = []
 
         for line in lines:
             line = line.strip()
-            if (line.startswith('1.') or line.startswith('2.') or
-                line.startswith('- ') or line.startswith('• ')):
+            if (
+                line.startswith("1.")
+                or line.startswith("2.")
+                or line.startswith("- ")
+                or line.startswith("• ")
+            ):
                 themes.append(line[2:].strip())
 
         return themes[:5]  # Limit to top 5 themes
@@ -374,7 +369,7 @@ class DocumentSummarizer:
         """Extract contradictions from insights text"""
         # Look for contradiction keywords
         contradiction_keywords = ["contradict", "conflict", "disagree", "opposite"]
-        lines = insights_text.split('\n')
+        lines = insights_text.split("\n")
         contradictions = []
 
         for line in lines:
@@ -387,7 +382,7 @@ class DocumentSummarizer:
         """Extract complementary information from insights text"""
         # Look for complementary keywords
         complementary_keywords = ["complement", "build", "support", "enhance"]
-        lines = insights_text.split('\n')
+        lines = insights_text.split("\n")
         complementary = []
 
         for line in lines:
@@ -400,7 +395,7 @@ class DocumentSummarizer:
         """Extract information gaps from insights text"""
         # Look for gap keywords
         gap_keywords = ["missing", "gap", "lack", "absent", "not covered"]
-        lines = insights_text.split('\n')
+        lines = insights_text.split("\n")
         gaps = []
 
         for line in lines:
@@ -425,7 +420,7 @@ class DocumentSummarizer:
             "total_summaries": len(self._summary_cache),
             "summary_types": summary_types,
             "avg_processing_time": total_processing_time / len(self._summary_cache),
-            "cache_size_mb": self._estimate_cache_size()
+            "cache_size_mb": self._estimate_cache_size(),
         }
 
     def _estimate_cache_size(self) -> float:
@@ -449,7 +444,8 @@ class DocumentSummarizer:
         cutoff_time = current_time - (older_than_hours * 3600)
 
         to_remove = [
-            summary_id for summary_id, summary in self._summary_cache.items()
+            summary_id
+            for summary_id, summary in self._summary_cache.items()
             if summary.timestamp < cutoff_time
         ]
 

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-# Loguru import removed - add observability import
+from ... import observability
 
 from ...llm import LLM
 from .types import Workflow, TaskStatus
@@ -128,6 +128,7 @@ class ResponseQualityAssessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return self._create_fallback_assessment()
 
     def _create_assessment_prompt(
@@ -228,6 +229,7 @@ Format your response as JSON:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return self._create_fallback_assessment()
 
     def _calculate_overall_quality(self, assessment: QualityAssessment) -> ResponseQuality:
@@ -337,6 +339,7 @@ class PersonaConsistencyAnalyzer:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return {
                 'consistency_score': 0.7,
                 'persona_match': True,
@@ -405,6 +408,7 @@ Provide analysis as JSON:
                 raise ValueError("No JSON found in response")
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return {
                 'consistency_score': 0.7,
                 'persona_match': True,
@@ -491,14 +495,15 @@ class AdvancedResponseSynthesizer:
             )
 
             #  Info - add observability event
-                f"Response synthesis completed: {quality_assessment.overall_quality.value} "
-                f"quality in {iterations} iterations"
-            )
+            #     f"Response synthesis completed: {quality_assessment.overall_quality.value} "
+            #     f"quality in {iterations} iterations"
+            # )
 
             return result
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return self._create_fallback_synthesis_result(workflow, user_context)
 
     def _collect_workflow_outputs(self, workflow: Workflow) -> List[Dict[str, Any]]:
@@ -718,6 +723,7 @@ Improved Response:
             return improved_response.strip()
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return content  # Return original if improvement fails
 
     def _get_applied_enhancements(self, mode: SynthesisMode) -> List[str]:

@@ -9,7 +9,7 @@ when failure thresholds are exceeded.
 import time
 import asyncio
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
-from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
+from ... import observability
 
 from .resilience_types import (
     CircuitState,
@@ -153,8 +153,9 @@ class CircuitBreaker(Generic[T]):
             else:
                 loop = asyncio.get_event_loop()
                 return await loop.run_in_executor(None, lambda: fallback(*args, **kwargs))
-        except Exception as error:
+        except Exception as e:
             #  Circuit breaker error - add observability event
+            _ = e  # remove this after implementing observability
             raise WorkflowException(
                 f"Both primary function and fallback failed for circuit breaker '{self.name}'",
                 ErrorType.SYSTEM_OVERLOAD,
@@ -181,9 +182,9 @@ class CircuitBreaker(Generic[T]):
             self.state.failure_count = max(0, self.state.failure_count - 1)
 
         #  Circuit breaker debug - add observability event
-            f"Circuit breaker '{self.name}' recorded success "
-            f"(execution_time: {execution_time:.2f}s, state: {self.state.state.value})"
-        )
+        #     f"Circuit breaker '{self.name}' recorded success "
+        #     f"(execution_time: {execution_time:.2f}s, state: {self.state.state.value})"
+        # )
 
     async def _record_failure(self, error: Exception, execution_time: float) -> None:
         """Record a failed execution."""
@@ -195,14 +196,16 @@ class CircuitBreaker(Generic[T]):
         self.state.last_failure_time = current_time
 
         # Check if we should open the circuit
-        if (self.state.state in [CircuitState.CLOSED, CircuitState.HALF_OPEN] and
-            self.state.failure_count >= self.config.failure_threshold):
+        if (
+            self.state.state in [CircuitState.CLOSED, CircuitState.HALF_OPEN]
+            and self.state.failure_count >= self.config.failure_threshold
+        ):
             await self._transition_to_open()
 
         #  Circuit breaker warning - add observability event
-            f"Circuit breaker '{self.name}' recorded failure: {error} "
-            f"(execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})"
-        )
+        #     f"Circuit breaker '{self.name}' recorded failure: {error} "
+        #     f"(execution_time: {execution_time:.2f}s, failures: {self.state.failure_count})"
+        # )
 
     async def _transition_to_open(self) -> None:
         """Transition circuit breaker to OPEN state."""
@@ -211,9 +214,9 @@ class CircuitBreaker(Generic[T]):
         self.state.success_count = 0
 
         #  Circuit breaker warning - add observability event
-            f"Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. "
-            f"Will attempt recovery at {time.ctime(self.state.next_attempt_time)}"
-        )
+        #     f"Circuit breaker '{self.name}' opened due to {self.state.failure_count} failures. "
+        #     f"Will attempt recovery at {time.ctime(self.state.next_attempt_time)}"
+        # )
 
     async def _transition_to_half_open(self) -> None:
         """Transition circuit breaker to HALF_OPEN state."""

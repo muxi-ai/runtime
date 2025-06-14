@@ -15,13 +15,13 @@ from typing import Dict, List, Optional, Tuple
 
 from .cache_types import MemoryStats
 
-
-
+from ... import observability
 
 
 @dataclass
 class CleanupRule:
     """Configuration for automatic cleanup rules."""
+
     name: str
     trigger_memory_percent: float  # Trigger cleanup when memory usage exceeds this %
     target_reduction_percent: float  # Try to reduce memory by this %
@@ -42,7 +42,7 @@ class MemoryOptimizer:
         target_memory_percent: float = 70.0,
         max_memory_percent: float = 85.0,
         cleanup_interval_seconds: int = 60,
-        aggressive_cleanup_percent: float = 90.0
+        aggressive_cleanup_percent: float = 90.0,
     ):
         """
         Initialize memory optimizer.
@@ -69,7 +69,9 @@ class MemoryOptimizer:
         self.stats = MemoryStats()
 
         # Performance tracking
-        self.cleanup_history: List[Tuple[float, str, int]] = []  # (timestamp, rule_name, bytes_freed)
+        self.cleanup_history: List[Tuple[float, str, int]] = (
+            []
+        )  # (timestamp, rule_name, bytes_freed)
 
         # Initialize default cleanup rules
         self._init_default_rules()
@@ -82,29 +84,29 @@ class MemoryOptimizer:
                 trigger_memory_percent=self.aggressive_cleanup_percent,
                 target_reduction_percent=20.0,
                 min_interval_seconds=10,
-                priority=100
+                priority=100,
             ),
             CleanupRule(
                 name="expired_cleanup",
                 trigger_memory_percent=self.max_memory_percent,
                 target_reduction_percent=10.0,
                 min_interval_seconds=30,
-                priority=80
+                priority=80,
             ),
             CleanupRule(
                 name="lru_cleanup",
                 trigger_memory_percent=self.target_memory_percent,
                 target_reduction_percent=5.0,
                 min_interval_seconds=60,
-                priority=60
+                priority=60,
             ),
             CleanupRule(
                 name="size_optimization",
                 trigger_memory_percent=self.target_memory_percent * 0.8,
                 target_reduction_percent=3.0,
                 min_interval_seconds=300,  # 5 minutes
-                priority=40
-            )
+                priority=40,
+            ),
         ]
 
     def register_cache_component(self, name: str, cache_component: any) -> None:
@@ -172,7 +174,8 @@ class MemoryOptimizer:
 
             # Apply all applicable rules
             applicable_rules = [
-                rule for rule in sorted(self.cleanup_rules, key=lambda r: r.priority, reverse=True)
+                rule
+                for rule in sorted(self.cleanup_rules, key=lambda r: r.priority, reverse=True)
                 if current_percent >= rule.trigger_memory_percent
             ]
 
@@ -191,7 +194,7 @@ class MemoryOptimizer:
         total_cache_bytes = 0
 
         for name, component in self.cache_components.items():
-            if hasattr(component, 'get_memory_usage'):
+            if hasattr(component, "get_memory_usage"):
                 usage = component.get_memory_usage()
                 cache_usage[name] = usage
                 total_cache_bytes += usage
@@ -199,10 +202,10 @@ class MemoryOptimizer:
                 cache_usage[name] = 0
 
         self.stats.update_memory_usage(
-            l1_bytes=cache_usage.get('L1', 0),
-            l2_bytes=cache_usage.get('L2', 0),
-            l3_bytes=cache_usage.get('L3', 0),
-            embeddings_bytes=cache_usage.get('embeddings', 0)
+            l1_bytes=cache_usage.get("L1", 0),
+            l2_bytes=cache_usage.get("L2", 0),
+            l3_bytes=cache_usage.get("L3", 0),
+            embeddings_bytes=cache_usage.get("embeddings", 0),
         )
         self.stats.memory_limit_bytes = memory.total
 
@@ -218,6 +221,7 @@ class MemoryOptimizer:
                 break
             except Exception as e:
                 #  Memory optimizer error - add observability event
+                _ = e  # remove this after implementing observability
                 await asyncio.sleep(self.cleanup_interval_seconds)
 
     async def _perform_cleanup_check(self) -> None:
@@ -230,8 +234,11 @@ class MemoryOptimizer:
         current_time = time.time()
 
         for rule in self.cleanup_rules:
-            if (current_percent >= rule.trigger_memory_percent and
-                current_time - self.last_cleanup_times.get(rule.name, 0) >= rule.min_interval_seconds):
+            if (
+                current_percent >= rule.trigger_memory_percent
+                and current_time - self.last_cleanup_times.get(rule.name, 0)
+                >= rule.min_interval_seconds
+            ):
                 applicable_rules.append(rule)
 
         if not applicable_rules:
@@ -241,9 +248,9 @@ class MemoryOptimizer:
         applicable_rules.sort(key=lambda r: r.priority, reverse=True)
 
         #  Memory optimizer info - add observability event
-            f"Memory cleanup triggered: {current_percent:.1f}% usage, "
-            f"applying {len(applicable_rules)} rules"
-        )
+        #     f"Memory cleanup triggered: {current_percent:.1f}% usage, "
+        #     f"applying {len(applicable_rules)} rules"
+        # )
 
         for rule in applicable_rules:
             await self._apply_cleanup_rule(rule)
@@ -287,17 +294,17 @@ class MemoryOptimizer:
             # Keep only recent history
             cutoff_time = start_time - 3600  # 1 hour
             self.cleanup_history = [
-                entry for entry in self.cleanup_history
-                if entry[0] > cutoff_time
+                entry for entry in self.cleanup_history if entry[0] > cutoff_time
             ]
 
             #  Memory optimizer info - add observability event
-                f"Cleanup rule '{rule.name}' freed {bytes_freed:,} bytes "
-                f"in {(time.time() - start_time):.2f}s"
-            )
+            #     f"Cleanup rule '{rule.name}' freed {bytes_freed:,} bytes "
+            #     f"in {(time.time() - start_time):.2f}s"
+            # )
 
         except Exception as e:
             #  Memory optimizer error - add observability event
+            _ = e  # remove this after implementing observability
 
         return bytes_freed
 
@@ -310,7 +317,7 @@ class MemoryOptimizer:
 
         # Clear caches aggressively, starting with largest
         cache_sizes = [
-            (name, component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0)
+            (name, component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0)
             for name, component in self.cache_components.items()
         ]
         cache_sizes.sort(key=lambda x: x[1], reverse=True)
@@ -322,10 +329,14 @@ class MemoryOptimizer:
                 break
 
             component = self.cache_components[name]
-            if hasattr(component, 'clear'):
-                before_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
+            if hasattr(component, "clear"):
+                before_size = (
+                    component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0
+                )
                 await component.clear()
-                after_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
+                after_size = (
+                    component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0
+                )
                 bytes_freed += before_size - after_size
                 #  Memory optimizer warning - add observability event
 
@@ -336,15 +347,20 @@ class MemoryOptimizer:
         bytes_freed = 0
 
         for name, component in self.cache_components.items():
-            if hasattr(component, 'cleanup_expired'):
-                before_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
+            if hasattr(component, "cleanup_expired"):
+                before_size = (
+                    component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0
+                )
                 expired_count = await component.cleanup_expired()
-                after_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
+                after_size = (
+                    component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0
+                )
                 component_freed = before_size - after_size
                 bytes_freed += component_freed
 
                 if expired_count > 0:
                     #  Memory optimizer info - add observability event
+                    _ = None  # remove this after implementing observability
 
         return bytes_freed
 
@@ -353,18 +369,19 @@ class MemoryOptimizer:
         bytes_freed = 0
 
         for name, component in self.cache_components.items():
-            if not hasattr(component, 'get_memory_usage'):
+            if not hasattr(component, "get_memory_usage"):
                 continue
 
             current_size = component.get_memory_usage()
             target_reduction = current_size * (target_reduction_percent / 100)
 
             # For LRU caches, remove items until target is reached
-            if hasattr(component, '_lru_cleanup'):
+            if hasattr(component, "_lru_cleanup"):
                 freed = await component._lru_cleanup(target_reduction)
                 bytes_freed += freed
                 if freed > 0:
                     #  Memory optimizer info - add observability event
+                    _ = None  # remove this after implementing observability
 
         return bytes_freed
 
@@ -376,18 +393,24 @@ class MemoryOptimizer:
         collected = gc.collect()
         if collected > 0:
             #  Memory optimizer info - add observability event
+            _ = None  # remove this after implementing observability
 
         # Optimize individual cache components
         for name, component in self.cache_components.items():
-            if hasattr(component, '_optimize_storage'):
-                before_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
+            if hasattr(component, "_optimize_storage"):
+                before_size = (
+                    component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0
+                )
                 await component._optimize_storage()
-                after_size = component.get_memory_usage() if hasattr(component, 'get_memory_usage') else 0
+                after_size = (
+                    component.get_memory_usage() if hasattr(component, "get_memory_usage") else 0
+                )
                 component_freed = before_size - after_size
                 bytes_freed += component_freed
 
                 if component_freed > 0:
                     #  Memory optimizer info - add observability event
+                    _ = None  # remove this after implementing observability
 
         return bytes_freed
 
@@ -402,10 +425,7 @@ class MemoryOptimizer:
             List of (timestamp, rule_name, bytes_freed) tuples
         """
         cutoff_time = time.time() - (hours * 3600)
-        return [
-            entry for entry in self.cleanup_history
-            if entry[0] > cutoff_time
-        ]
+        return [entry for entry in self.cleanup_history if entry[0] > cutoff_time]
 
     def get_performance_summary(self) -> Dict[str, any]:
         """Get a summary of memory optimization performance."""
@@ -419,30 +439,36 @@ class MemoryOptimizer:
         for rule_name in set(entry[1] for entry in recent_history):
             rule_entries = [entry for entry in recent_history if entry[1] == rule_name]
             rule_performance[rule_name] = {
-                'count': len(rule_entries),
-                'total_bytes_freed': sum(entry[2] for entry in rule_entries),
-                'avg_bytes_freed': sum(entry[2] for entry in rule_entries) / len(rule_entries) if rule_entries else 0
+                "count": len(rule_entries),
+                "total_bytes_freed": sum(entry[2] for entry in rule_entries),
+                "avg_bytes_freed": (
+                    sum(entry[2] for entry in rule_entries) / len(rule_entries)
+                    if rule_entries
+                    else 0
+                ),
             }
 
         return {
-            'current_memory_usage': {
-                'system_percent': current_stats.memory_utilization * 100,
-                'total_bytes': current_stats.total_memory_bytes,
-                'cache_bytes': current_stats.total_memory_bytes
+            "current_memory_usage": {
+                "system_percent": current_stats.memory_utilization * 100,
+                "total_bytes": current_stats.total_memory_bytes,
+                "cache_bytes": current_stats.total_memory_bytes,
             },
-            'cleanup_performance': {
-                'total_cleanups_24h': cleanup_count,
-                'total_bytes_freed_24h': total_bytes_freed,
-                'avg_bytes_per_cleanup': total_bytes_freed / cleanup_count if cleanup_count > 0 else 0
+            "cleanup_performance": {
+                "total_cleanups_24h": cleanup_count,
+                "total_bytes_freed_24h": total_bytes_freed,
+                "avg_bytes_per_cleanup": (
+                    total_bytes_freed / cleanup_count if cleanup_count > 0 else 0
+                ),
             },
-            'rule_performance': rule_performance,
-            'cache_components': {
+            "rule_performance": rule_performance,
+            "cache_components": {
                 name: {
-                    'size': getattr(component, 'get_memory_usage', lambda: 0)(),
-                    'component_type': type(component).__name__
+                    "size": getattr(component, "get_memory_usage", lambda: 0)(),
+                    "component_type": type(component).__name__,
                 }
                 for name, component in self.cache_components.items()
-            }
+            },
         }
 
     async def optimize_for_workload(self, workload_type: str = "balanced") -> None:
@@ -498,7 +524,9 @@ class ResourceMonitor:
         # Resource history
         self.cpu_history: List[Tuple[float, float]] = []  # (timestamp, cpu_percent)
         self.memory_history: List[Tuple[float, float]] = []  # (timestamp, memory_percent)
-        self.disk_history: List[Tuple[float, float, float]] = []  # (timestamp, read_mbps, write_mbps)
+        self.disk_history: List[Tuple[float, float, float]] = (
+            []
+        )  # (timestamp, read_mbps, write_mbps)
 
     async def start_monitoring(self) -> None:
         """Start resource monitoring."""
@@ -563,6 +591,7 @@ class ResourceMonitor:
                 break
             except Exception as e:
                 #  Memory optimizer error - add observability event
+                _ = e  # remove this after implementing observability
                 await asyncio.sleep(self.monitoring_interval)
 
     def get_resource_summary(self, hours: int = 1) -> Dict[str, any]:
@@ -583,30 +612,36 @@ class ResourceMonitor:
         recent_disk = [(t, r, w) for t, r, w in self.disk_history if t > cutoff_time]
 
         summary = {
-            'cpu': {
-                'current': recent_cpu[-1][1] if recent_cpu else 0,
-                'avg': sum(v for _, v in recent_cpu) / len(recent_cpu) if recent_cpu else 0,
-                'max': max(v for _, v in recent_cpu) if recent_cpu else 0,
-                'min': min(v for _, v in recent_cpu) if recent_cpu else 0
+            "cpu": {
+                "current": recent_cpu[-1][1] if recent_cpu else 0,
+                "avg": sum(v for _, v in recent_cpu) / len(recent_cpu) if recent_cpu else 0,
+                "max": max(v for _, v in recent_cpu) if recent_cpu else 0,
+                "min": min(v for _, v in recent_cpu) if recent_cpu else 0,
             },
-            'memory': {
-                'current': recent_memory[-1][1] if recent_memory else 0,
-                'avg': sum(v for _, v in recent_memory) / len(recent_memory) if recent_memory else 0,
-                'max': max(v for _, v in recent_memory) if recent_memory else 0,
-                'min': min(v for _, v in recent_memory) if recent_memory else 0
+            "memory": {
+                "current": recent_memory[-1][1] if recent_memory else 0,
+                "avg": (
+                    sum(v for _, v in recent_memory) / len(recent_memory) if recent_memory else 0
+                ),
+                "max": max(v for _, v in recent_memory) if recent_memory else 0,
+                "min": min(v for _, v in recent_memory) if recent_memory else 0,
             },
-            'disk_io': {
-                'read_mbps': {
-                    'current': recent_disk[-1][1] if recent_disk else 0,
-                    'avg': sum(r for _, r, w in recent_disk) / len(recent_disk) if recent_disk else 0,
-                    'max': max(r for _, r, w in recent_disk) if recent_disk else 0
+            "disk_io": {
+                "read_mbps": {
+                    "current": recent_disk[-1][1] if recent_disk else 0,
+                    "avg": (
+                        sum(r for _, r, w in recent_disk) / len(recent_disk) if recent_disk else 0
+                    ),
+                    "max": max(r for _, r, w in recent_disk) if recent_disk else 0,
                 },
-                'write_mbps': {
-                    'current': recent_disk[-1][2] if recent_disk else 0,
-                    'avg': sum(w for _, r, w in recent_disk) / len(recent_disk) if recent_disk else 0,
-                    'max': max(w for _, r, w in recent_disk) if recent_disk else 0
-                }
-            }
+                "write_mbps": {
+                    "current": recent_disk[-1][2] if recent_disk else 0,
+                    "avg": (
+                        sum(w for _, r, w in recent_disk) / len(recent_disk) if recent_disk else 0
+                    ),
+                    "max": max(w for _, r, w in recent_disk) if recent_disk else 0,
+                },
+            },
         }
 
         return summary

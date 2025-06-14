@@ -10,9 +10,14 @@ import statistics
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict, Counter
 from .types import (
-    Message, FeedbackEvent, ImplicitPreference, PreferenceType,
-    ConfidenceScore, BehaviorAnalysisResult
+    Message,
+    FeedbackEvent,
+    ImplicitPreference,
+    PreferenceType,
+    ConfidenceScore,
+    BehaviorAnalysisResult,
 )
+import re
 
 
 class UserBehaviorAnalyzer:
@@ -27,12 +32,12 @@ class UserBehaviorAnalyzer:
             "content_engagement": self._analyze_content_engagement,
             "format_preferences": self._analyze_format_preferences,
             "technical_depth_preferences": self._analyze_technical_depth,
-            "feedback_patterns": self._analyze_feedback_patterns
+            "feedback_patterns": self._analyze_feedback_patterns,
         }
 
-    async def infer_preferences(self,
-                              conversation_history: List[Message],
-                              feedback_data: List[FeedbackEvent]) -> BehaviorAnalysisResult:
+    async def infer_preferences(
+        self, conversation_history: List[Message], feedback_data: List[FeedbackEvent]
+    ) -> BehaviorAnalysisResult:
         """
         Analyze user behavior to infer implicit preferences
 
@@ -49,7 +54,7 @@ class UserBehaviorAnalyzer:
                 behavioral_patterns={},
                 confidence_score=0.0,
                 analysis_method="behavioral_analysis",
-                data_sources=[]
+                data_sources=[],
             )
 
         # Analyze different behavior patterns
@@ -90,12 +95,12 @@ class UserBehaviorAnalyzer:
             behavioral_patterns=behavioral_patterns,
             confidence_score=confidence_score,
             analysis_method="behavioral_analysis",
-            data_sources=data_sources
+            data_sources=data_sources,
         )
 
-    async def _analyze_message_length_patterns(self,
-                                             messages: List[Message],
-                                             feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_message_length_patterns(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze user's message length patterns to infer communication preferences"""
         if not messages:
             return {}
@@ -119,26 +124,28 @@ class UserBehaviorAnalyzer:
         return {
             "average_user_message_length": avg_user_length,
             "average_assistant_response_length": avg_assistant_length,
-            "user_length_variance": statistics.variance(user_lengths) if len(user_lengths) > 1 else 0,
+            "user_length_variance": (
+                statistics.variance(user_lengths) if len(user_lengths) > 1 else 0
+            ),
             "length_engagement_correlation": self._calculate_length_engagement_correlation(
                 assistant_lengths, engagement_scores
             ),
             "preferred_response_length_range": self._infer_preferred_length_range(
                 assistant_lengths, engagement_scores
-            )
+            ),
         }
 
-    async def _analyze_response_time_patterns(self,
-                                            messages: List[Message],
-                                            feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_response_time_patterns(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze response time patterns to infer pace preferences"""
         if len(messages) < 2:
             return {}
 
         response_times = []
         for i in range(1, len(messages)):
-            if messages[i-1].role == "user" and messages[i].role == "assistant":
-                response_time = messages[i].timestamp - messages[i-1].timestamp
+            if messages[i - 1].role == "user" and messages[i].role == "assistant":
+                response_time = messages[i].timestamp - messages[i - 1].timestamp
                 response_times.append(response_time)
 
         if not response_times:
@@ -146,15 +153,19 @@ class UserBehaviorAnalyzer:
 
         return {
             "average_response_time": statistics.mean(response_times),
-            "response_time_variance": statistics.variance(response_times) if len(response_times) > 1 else 0,
+            "response_time_variance": (
+                statistics.variance(response_times) if len(response_times) > 1 else 0
+            ),
             "fastest_response_time": min(response_times),
             "slowest_response_time": max(response_times),
-            "preferred_response_time_range": self._infer_preferred_response_time(response_times, feedback)
+            "preferred_response_time_range": self._infer_preferred_response_time(
+                response_times, feedback
+            ),
         }
 
-    async def _analyze_interaction_frequency(self,
-                                           messages: List[Message],
-                                           feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_interaction_frequency(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze interaction frequency patterns"""
         if not messages:
             return {}
@@ -175,12 +186,12 @@ class UserBehaviorAnalyzer:
             "average_daily_interactions": statistics.mean(counts),
             "interaction_frequency_variance": statistics.variance(counts) if len(counts) > 1 else 0,
             "most_active_day_count": max(counts),
-            "interaction_consistency": self._calculate_interaction_consistency(daily_counts)
+            "interaction_consistency": self._calculate_interaction_consistency(daily_counts),
         }
 
-    async def _analyze_content_engagement(self,
-                                        messages: List[Message],
-                                        feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_content_engagement(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze engagement with different content types"""
         if not messages:
             return {}
@@ -190,7 +201,7 @@ class UserBehaviorAnalyzer:
             "technical": ["code", "function", "class", "import", "def", "return", "algorithm"],
             "explanatory": ["explain", "why", "how", "what", "because", "reason"],
             "instructional": ["step", "first", "then", "next", "finally", "process"],
-            "conversational": ["think", "feel", "opinion", "prefer", "like", "want"]
+            "conversational": ["think", "feel", "opinion", "prefer", "like", "want"],
         }
 
         category_engagement = {}
@@ -209,14 +220,16 @@ class UserBehaviorAnalyzer:
                 category_engagement[category] = {
                     "message_count": len(category_messages),
                     "engagement_score": engagement_score,
-                    "average_length": statistics.mean([len(msg.content) for msg in category_messages])
+                    "average_length": statistics.mean(
+                        [len(msg.content) for msg in category_messages]
+                    ),
                 }
 
         return category_engagement
 
-    async def _analyze_format_preferences(self,
-                                        messages: List[Message],
-                                        feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_format_preferences(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze preferences for different response formats"""
         if not messages:
             return {}
@@ -226,7 +239,7 @@ class UserBehaviorAnalyzer:
             "code_blocks": [r"```", r"`[^`]+`"],
             "headers": [r"(?:^|\n)#+\s+", r"(?:^|\n)[A-Z][A-Za-z\s]+:"],
             "tables": [r"\|.*\|", r"┌.*┐"],
-            "structured": [r"(?:^|\n)\s*\w+:\s+", r"(?:^|\n)\s*\*\*\w+\*\*"]
+            "structured": [r"(?:^|\n)\s*\w+:\s+", r"(?:^|\n)\s*\*\*\w+\*\*"],
         }
 
         format_usage = {}
@@ -235,8 +248,9 @@ class UserBehaviorAnalyzer:
             format_messages = []
             for msg in messages:
                 if msg.role == "assistant":
-                    pattern_count = sum(len(re.findall(pattern, msg.content))
-                                      for pattern in patterns)
+                    pattern_count = sum(
+                        len(re.findall(pattern, msg.content)) for pattern in patterns
+                    )
                     if pattern_count > 0:
                         format_messages.append((msg, pattern_count))
 
@@ -245,22 +259,30 @@ class UserBehaviorAnalyzer:
                 format_usage[format_name] = {
                     "usage_count": len(format_messages),
                     "engagement_score": engagement_score,
-                    "average_pattern_density": statistics.mean([count for _, count in format_messages])
+                    "average_pattern_density": statistics.mean(
+                        [count for _, count in format_messages]
+                    ),
                 }
 
         return format_usage
 
-    async def _analyze_technical_depth(self,
-                                     messages: List[Message],
-                                     feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_technical_depth(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze preferences for technical depth in responses"""
         if not messages:
             return {}
 
         technical_indicators = {
-            "high_technical": ["implementation", "algorithm", "optimization", "architecture", "protocol"],
+            "high_technical": [
+                "implementation",
+                "algorithm",
+                "optimization",
+                "architecture",
+                "protocol",
+            ],
             "medium_technical": ["function", "method", "process", "system", "structure"],
-            "low_technical": ["simple", "easy", "basic", "overview", "summary"]
+            "low_technical": ["simple", "easy", "basic", "overview", "summary"],
         }
 
         depth_engagement = {}
@@ -270,7 +292,9 @@ class UserBehaviorAnalyzer:
             for msg in messages:
                 if msg.role == "assistant":
                     content_lower = msg.content.lower()
-                    indicator_count = sum(1 for indicator in indicators if indicator in content_lower)
+                    indicator_count = sum(
+                        1 for indicator in indicators if indicator in content_lower
+                    )
                     if indicator_count > 0:
                         depth_messages.append(msg)
 
@@ -278,14 +302,14 @@ class UserBehaviorAnalyzer:
                 engagement_score = self._calculate_category_engagement(depth_messages, feedback)
                 depth_engagement[depth_level] = {
                     "message_count": len(depth_messages),
-                    "engagement_score": engagement_score
+                    "engagement_score": engagement_score,
                 }
 
         return depth_engagement
 
-    async def _analyze_feedback_patterns(self,
-                                       messages: List[Message],
-                                       feedback: List[FeedbackEvent]) -> Dict[str, Any]:
+    async def _analyze_feedback_patterns(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
         """Analyze explicit feedback patterns"""
         if not feedback:
             return {}
@@ -303,14 +327,16 @@ class UserBehaviorAnalyzer:
             "total_feedback_count": len(feedback),
             "positive_ratio": len(positive_feedback) / len(feedback) if feedback else 0,
             "correction_patterns": self._analyze_correction_patterns(corrections),
-            "feedback_frequency": len(feedback) / max(1, len(messages)) * 100  # Percentage
+            "feedback_frequency": len(feedback) / max(1, len(messages)) * 100,  # Percentage
         }
 
-    def _extract_preferences_from_pattern(self,
-                                        pattern_name: str,
-                                        pattern_result: Dict[str, Any],
-                                        messages: List[Message],
-                                        feedback: List[FeedbackEvent]) -> List[ImplicitPreference]:
+    def _extract_preferences_from_pattern(
+        self,
+        pattern_name: str,
+        pattern_result: Dict[str, Any],
+        messages: List[Message],
+        feedback: List[FeedbackEvent],
+    ) -> List[ImplicitPreference]:
         """Extract implicit preferences from behavior pattern analysis"""
         preferences = []
         current_time = time.time()
@@ -325,17 +351,21 @@ class UserBehaviorAnalyzer:
                         value=0.7,
                         data_points=len(messages),
                         recency=0.8,
-                        consistency=1.0 - pattern_result.get("user_length_variance", 0) / 1000
+                        consistency=1.0 - pattern_result.get("user_length_variance", 0) / 1000,
                     )
 
-                    preferences.append(ImplicitPreference(
-                        preference_type=PreferenceType.DETAIL_LEVEL,
-                        value=detail_level,
-                        confidence=confidence,
-                        inference_method="message_length_analysis",
-                        supporting_evidence=[f"Average preferred response length: {preferred_length}"],
-                        timestamp=current_time
-                    ))
+                    preferences.append(
+                        ImplicitPreference(
+                            preference_type=PreferenceType.DETAIL_LEVEL,
+                            value=detail_level,
+                            confidence=confidence,
+                            inference_method="message_length_analysis",
+                            supporting_evidence=[
+                                f"Average preferred response length: {preferred_length}"
+                            ],
+                            timestamp=current_time,
+                        )
+                    )
 
         elif pattern_name == "response_time_patterns":
             # Infer interaction pace preference
@@ -346,37 +376,47 @@ class UserBehaviorAnalyzer:
                     value=0.6,
                     data_points=len(messages) // 2,  # Pairs of messages
                     recency=0.7,
-                    consistency=0.8
+                    consistency=0.8,
                 )
 
-                preferences.append(ImplicitPreference(
-                    preference_type=PreferenceType.INTERACTION_PACE,
-                    value=pace,
-                    confidence=confidence,
-                    inference_method="response_time_analysis",
-                    supporting_evidence=[f"Average response time tolerance: {avg_response_time:.1f}s"],
-                    timestamp=current_time
-                ))
+                preferences.append(
+                    ImplicitPreference(
+                        preference_type=PreferenceType.INTERACTION_PACE,
+                        value=pace,
+                        confidence=confidence,
+                        inference_method="response_time_analysis",
+                        supporting_evidence=[
+                            f"Average response time tolerance: {avg_response_time:.1f}s"
+                        ],
+                        timestamp=current_time,
+                    )
+                )
 
         elif pattern_name == "content_engagement":
             # Infer content type preferences
-            best_engagement = max(pattern_result.items(), key=lambda x: x[1].get("engagement_score", 0))
+            best_engagement = max(
+                pattern_result.items(), key=lambda x: x[1].get("engagement_score", 0)
+            )
             if best_engagement[1].get("engagement_score", 0) > 0.6:
                 confidence = ConfidenceScore(
                     value=0.65,
                     data_points=best_engagement[1].get("message_count", 0),
                     recency=0.7,
-                    consistency=0.75
+                    consistency=0.75,
                 )
 
-                preferences.append(ImplicitPreference(
-                    preference_type=PreferenceType.CONTENT_TYPE,
-                    value=best_engagement[0],
-                    confidence=confidence,
-                    inference_method="content_engagement_analysis",
-                    supporting_evidence=[f"Highest engagement with {best_engagement[0]} content"],
-                    timestamp=current_time
-                ))
+                preferences.append(
+                    ImplicitPreference(
+                        preference_type=PreferenceType.CONTENT_TYPE,
+                        value=best_engagement[0],
+                        confidence=confidence,
+                        inference_method="content_engagement_analysis",
+                        supporting_evidence=[
+                            f"Highest engagement with {best_engagement[0]} content"
+                        ],
+                        timestamp=current_time,
+                    )
+                )
 
         elif pattern_name == "format_preferences":
             # Infer format preferences
@@ -386,17 +426,19 @@ class UserBehaviorAnalyzer:
                     value=0.65,
                     data_points=best_format[1].get("usage_count", 0),
                     recency=0.7,
-                    consistency=0.75
+                    consistency=0.75,
                 )
 
-                preferences.append(ImplicitPreference(
-                    preference_type=PreferenceType.RESPONSE_FORMAT,
-                    value=best_format[0],
-                    confidence=confidence,
-                    inference_method="format_engagement_analysis",
-                    supporting_evidence=[f"Highest engagement with {best_format[0]} format"],
-                    timestamp=current_time
-                ))
+                preferences.append(
+                    ImplicitPreference(
+                        preference_type=PreferenceType.RESPONSE_FORMAT,
+                        value=best_format[0],
+                        confidence=confidence,
+                        inference_method="format_engagement_analysis",
+                        supporting_evidence=[f"Highest engagement with {best_format[0]} format"],
+                        timestamp=current_time,
+                    )
+                )
 
         elif pattern_name == "technical_depth_preferences":
             # Infer technical depth preference
@@ -406,31 +448,39 @@ class UserBehaviorAnalyzer:
                     value=0.7,
                     data_points=best_depth[1].get("message_count", 0),
                     recency=0.8,
-                    consistency=0.8
+                    consistency=0.8,
                 )
 
-                preferences.append(ImplicitPreference(
-                    preference_type=PreferenceType.TECHNICAL_DEPTH,
-                    value=best_depth[0],
-                    confidence=confidence,
-                    inference_method="technical_depth_analysis",
-                    supporting_evidence=[f"Highest engagement with {best_depth[0]} technical depth"],
-                    timestamp=current_time
-                ))
+                preferences.append(
+                    ImplicitPreference(
+                        preference_type=PreferenceType.TECHNICAL_DEPTH,
+                        value=best_depth[0],
+                        confidence=confidence,
+                        inference_method="technical_depth_analysis",
+                        supporting_evidence=[
+                            f"Highest engagement with {best_depth[0]} technical depth"
+                        ],
+                        timestamp=current_time,
+                    )
+                )
 
         return preferences
 
     # Helper methods for analysis
-    def _calculate_message_engagement(self, messages: List[Message],
-                                    feedback: List[FeedbackEvent]) -> List[float]:
+    def _calculate_message_engagement(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> List[float]:
         """Calculate engagement scores for messages based on feedback"""
         engagement_scores = []
 
         for msg in messages:
             if msg.role == "assistant":
                 # Find feedback for this message
-                msg_feedback = [f for f in feedback if f.timestamp > msg.timestamp and
-                              f.timestamp < msg.timestamp + 3600]  # Within 1 hour
+                msg_feedback = [
+                    f
+                    for f in feedback
+                    if f.timestamp > msg.timestamp and f.timestamp < msg.timestamp + 3600
+                ]  # Within 1 hour
 
                 if msg_feedback:
                     positive_count = sum(1 for f in msg_feedback if f.feedback_type == "positive")
@@ -448,14 +498,16 @@ class UserBehaviorAnalyzer:
 
         return engagement_scores
 
-    def _calculate_length_engagement_correlation(self, lengths: List[int],
-                                               engagement_scores: List[float]) -> float:
+    def _calculate_length_engagement_correlation(
+        self, lengths: List[int], engagement_scores: List[float]
+    ) -> float:
         """Calculate correlation between response length and engagement"""
         if len(lengths) != len(engagement_scores) or len(lengths) < 2:
             return 0.0
 
         try:
             import numpy as np
+
             correlation = np.corrcoef(lengths, engagement_scores)[0, 1]
             return correlation if not np.isnan(correlation) else 0.0
         except ImportError:
@@ -479,35 +531,44 @@ class UserBehaviorAnalyzer:
 
         return numerator / denominator if denominator != 0 else 0.0
 
-    def _infer_preferred_length_range(self, lengths: List[int],
-                                    engagement_scores: List[float]) -> Dict[str, int]:
+    def _infer_preferred_length_range(
+        self, lengths: List[int], engagement_scores: List[float]
+    ) -> Dict[str, int]:
         """Infer preferred response length range based on engagement"""
         if not lengths or not engagement_scores:
             return {}
 
         # Find high-engagement messages
         high_engagement_threshold = 0.7
-        high_engagement_lengths = [lengths[i] for i, score in enumerate(engagement_scores)
-                                 if score >= high_engagement_threshold]
+        high_engagement_lengths = [
+            lengths[i]
+            for i, score in enumerate(engagement_scores)
+            if score >= high_engagement_threshold
+        ]
 
         if high_engagement_lengths:
             return {
                 "min": min(high_engagement_lengths),
                 "max": max(high_engagement_lengths),
-                "average": int(statistics.mean(high_engagement_lengths))
+                "average": int(statistics.mean(high_engagement_lengths)),
             }
 
         return {}
 
-    def _infer_preferred_response_time(self, response_times: List[float],
-                                     feedback: List[FeedbackEvent]) -> Dict[str, float]:
+    def _infer_preferred_response_time(
+        self, response_times: List[float], feedback: List[FeedbackEvent]
+    ) -> Dict[str, float]:
         """Infer preferred response time based on feedback patterns"""
         # This is a simplified implementation
         # In practice, you'd correlate response times with feedback
         if response_times:
             return {
-                "preferred_max": statistics.mean(response_times) + statistics.stdev(response_times) if len(response_times) > 1 else statistics.mean(response_times),
-                "acceptable_range": statistics.mean(response_times)
+                "preferred_max": (
+                    statistics.mean(response_times) + statistics.stdev(response_times)
+                    if len(response_times) > 1
+                    else statistics.mean(response_times)
+                ),
+                "acceptable_range": statistics.mean(response_times),
             }
         return {}
 
@@ -522,21 +583,25 @@ class UserBehaviorAnalyzer:
 
         # Consistency is inverse of coefficient of variation
         if mean_count > 0:
-            cv = (variance ** 0.5) / mean_count
+            cv = (variance**0.5) / mean_count
             return max(0.0, 1.0 - cv)
 
         return 0.0
 
-    def _calculate_category_engagement(self, messages: List[Message],
-                                     feedback: List[FeedbackEvent]) -> float:
+    def _calculate_category_engagement(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> float:
         """Calculate engagement score for a category of messages"""
         if not messages:
             return 0.0
 
         total_engagement = 0.0
         for msg in messages:
-            msg_feedback = [f for f in feedback if f.timestamp > msg.timestamp and
-                          f.timestamp < msg.timestamp + 3600]
+            msg_feedback = [
+                f
+                for f in feedback
+                if f.timestamp > msg.timestamp and f.timestamp < msg.timestamp + 3600
+            ]
 
             if msg_feedback:
                 positive_count = sum(1 for f in msg_feedback if f.feedback_type == "positive")
@@ -549,16 +614,20 @@ class UserBehaviorAnalyzer:
 
         return total_engagement / len(messages)
 
-    def _calculate_format_engagement(self, format_messages: List[Tuple[Message, int]],
-                                   feedback: List[FeedbackEvent]) -> float:
+    def _calculate_format_engagement(
+        self, format_messages: List[Tuple[Message, int]], feedback: List[FeedbackEvent]
+    ) -> float:
         """Calculate engagement score for format usage"""
         if not format_messages:
             return 0.0
 
         total_engagement = 0.0
         for msg, pattern_count in format_messages:
-            msg_feedback = [f for f in feedback if f.timestamp > msg.timestamp and
-                          f.timestamp < msg.timestamp + 3600]
+            msg_feedback = [
+                f
+                for f in feedback
+                if f.timestamp > msg.timestamp and f.timestamp < msg.timestamp + 3600
+            ]
 
             if msg_feedback:
                 positive_count = sum(1 for f in msg_feedback if f.feedback_type == "positive")
@@ -596,7 +665,9 @@ class UserBehaviorAnalyzer:
         return {
             "total_corrections": len(corrections),
             "theme_distribution": dict(correction_themes),
-            "most_common_theme": max(correction_themes.items(), key=lambda x: x[1])[0] if correction_themes else None
+            "most_common_theme": (
+                max(correction_themes.items(), key=lambda x: x[1])[0] if correction_themes else None
+            ),
         }
 
     def _infer_detail_level_from_length(self, length_range: Dict[str, int]) -> Optional[str]:
@@ -626,17 +697,21 @@ class UserBehaviorAnalyzer:
         else:
             return "relaxed"
 
-    def _calculate_analysis_confidence(self,
-                                     preferences: List[ImplicitPreference],
-                                     behavioral_patterns: Dict[str, Any],
-                                     message_count: int,
-                                     feedback_count: int) -> float:
+    def _calculate_analysis_confidence(
+        self,
+        preferences: List[ImplicitPreference],
+        behavioral_patterns: Dict[str, Any],
+        message_count: int,
+        feedback_count: int,
+    ) -> float:
         """Calculate overall confidence in behavior analysis"""
         if not preferences:
             return 0.0
 
         # Base confidence on preference quality
-        avg_preference_confidence = sum(p.confidence.weighted_confidence for p in preferences) / len(preferences)
+        avg_preference_confidence = sum(
+            p.confidence.weighted_confidence for p in preferences
+        ) / len(preferences)
 
         # Adjust for data volume
         data_volume_factor = min((message_count + feedback_count) / 20, 1.0)
@@ -644,6 +719,8 @@ class UserBehaviorAnalyzer:
         # Adjust for pattern diversity
         pattern_diversity_factor = min(len(behavioral_patterns) / 5, 1.0)
 
-        return (avg_preference_confidence * 0.6 +
-                data_volume_factor * 0.3 +
-                pattern_diversity_factor * 0.1)
+        return (
+            avg_preference_confidence * 0.6
+            + data_volume_factor * 0.3
+            + pattern_diversity_factor * 0.1
+        )

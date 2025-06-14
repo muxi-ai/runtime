@@ -11,14 +11,7 @@ import asyncio
 from typing import Dict, List, Tuple, Any
 from collections import defaultdict, deque
 
-from .types import (
-    TaskNode,
-    ParallelGroup,
-    BottleneckInfo,
-    BottleneckType
-)
-
-
+from .types import TaskNode, ParallelGroup, BottleneckInfo, BottleneckType
 
 
 class DependencyAnalyzer:
@@ -45,11 +38,11 @@ class DependencyAnalyzer:
         for task_id, task_data in tasks.items():
             task_node = TaskNode(
                 task_id=task_id,
-                description=task_data.get('description', ''),
-                required_capabilities=task_data.get('required_capabilities', []),
-                estimated_duration=task_data.get('estimated_duration', 30.0),
-                priority=task_data.get('priority', 1),
-                dependencies=set(task_data.get('dependencies', [])),
+                description=task_data.get("description", ""),
+                required_capabilities=task_data.get("required_capabilities", []),
+                estimated_duration=task_data.get("estimated_duration", 30.0),
+                priority=task_data.get("priority", 1),
+                dependencies=set(task_data.get("dependencies", [])),
             )
             self.dependency_graph[task_id] = task_node
 
@@ -60,6 +53,7 @@ class DependencyAnalyzer:
                     self.dependency_graph[dependency_id].dependents.add(task_id)
                 else:
                     #  Warning - add observability event
+                    _ = dependency_id  # remove this after implementing observability
 
         return self.dependency_graph
 
@@ -114,7 +108,7 @@ class DependencyAnalyzer:
             parallel_group = ParallelGroup(
                 group_id=group_id,
                 task_ids=task_ids.copy(),
-                group_priority=level_index + 1  # Earlier levels have higher priority
+                group_priority=level_index + 1,  # Earlier levels have higher priority
             )
 
             # Calculate group metrics
@@ -130,8 +124,11 @@ class DependencyAnalyzer:
             parallel_group.estimated_duration = max_duration
             parallel_group.required_agents = len(task_ids)
             parallel_group.resource_requirements = {
-                cap: sum(1 for task_id in task_ids
-                        if cap in self.dependency_graph[task_id].required_capabilities)
+                cap: sum(
+                    1
+                    for task_id in task_ids
+                    if cap in self.dependency_graph[task_id].required_capabilities
+                )
                 for cap in total_capabilities
             }
 
@@ -160,8 +157,7 @@ class DependencyAnalyzer:
 
         # Find tasks with no dependencies (starting points)
         start_tasks = [
-            task_id for task_id, task in self.dependency_graph.items()
-            if not task.dependencies
+            task_id for task_id, task in self.dependency_graph.items() if not task.dependencies
         ]
 
         # Use a modified Bellman-Ford algorithm for longest path
@@ -255,8 +251,7 @@ class DependencyAnalyzer:
         """Find tasks that cannot be reached from any starting point."""
         # Find all reachable tasks from tasks with no dependencies
         start_tasks = [
-            task_id for task_id, task in self.dependency_graph.items()
-            if not task.dependencies
+            task_id for task_id, task in self.dependency_graph.items() if not task.dependencies
         ]
 
         if not start_tasks:
@@ -293,7 +288,9 @@ class DependencyAnalyzer:
             be executed at the same level (in parallel)
         """
         # Calculate in-degrees
-        in_degree = {task_id: len(task.dependencies) for task_id, task in self.dependency_graph.items()}
+        in_degree = {
+            task_id: len(task.dependencies) for task_id, task in self.dependency_graph.items()
+        }
 
         # Initialize queue with tasks that have no dependencies
         queue = deque([task_id for task_id, degree in in_degree.items() if degree == 0])
@@ -335,10 +332,10 @@ class DependencyAnalyzer:
                 affected_tasks=critical_path,
                 severity_score=min(1.0, len(critical_path) / 20.0),  # Scale severity
                 estimated_delay=duration * 0.2,  # Estimate 20% overhead
-                description=f"Long dependency chain of {len(critical_path)} tasks limits parallelization",
+                description=f"Long dependency chain of {len(critical_path)} tasks limits parallelization",  # noqa: E501
                 suggested_resolution="Consider breaking dependencies or parallelizing sub-tasks",
                 can_auto_resolve=False,
-                resolution_confidence=0.3
+                resolution_confidence=0.3,
             )
             bottlenecks.append(bottleneck)
 
@@ -360,11 +357,11 @@ class DependencyAnalyzer:
                     affected_tasks=task_ids,
                     severity_score=min(1.0, len(task_ids) / 10.0),
                     estimated_delay=len(task_ids) * 5.0,  # Estimate 5s per conflicting task
-                    description=f"High contention for '{capability}' capability among {len(task_ids)} tasks",
+                    description=f"High contention for '{capability}' capability among {len(task_ids)} tasks",  # noqa: E501
                     suggested_resolution=f"Add more agents with '{capability}' capability",
                     can_auto_resolve=True,
                     resolution_confidence=0.7,
-                    resource_context={"capability": capability, "contending_tasks": task_ids}
+                    resource_context={"capability": capability, "contending_tasks": task_ids},
                 )
                 bottlenecks.append(bottleneck)
 
@@ -384,12 +381,14 @@ class DependencyAnalyzer:
                         bottleneck_id=f"critical_path_task_{task_id}",
                         bottleneck_type=BottleneckType.CRITICAL_PATH,
                         affected_tasks=[task_id],
-                        severity_score=min(1.0, task.estimated_duration / 300.0),  # Scale by 5 minutes
+                        severity_score=min(
+                            1.0, task.estimated_duration / 300.0
+                        ),  # Scale by 5 minutes
                         estimated_delay=task.estimated_duration * 0.1,  # 10% overhead
-                        description=f"Long-running task '{task_id}' on critical path ({task.estimated_duration}s)",
+                        description=f"Long-running task '{task_id}' on critical path ({task.estimated_duration}s)",  # noqa: E501
                         suggested_resolution="Consider breaking task into smaller subtasks",
                         can_auto_resolve=False,
-                        resolution_confidence=0.4
+                        resolution_confidence=0.4,
                     )
                     bottlenecks.append(bottleneck)
 
@@ -400,7 +399,11 @@ class DependencyAnalyzer:
 
         total_tasks = len(self.dependency_graph)
         total_groups = len(self.parallel_groups)
-        max_parallelism = max(len(group.task_ids) for group in self.parallel_groups) if self.parallel_groups else 1
+        max_parallelism = (
+            max(len(group.task_ids) for group in self.parallel_groups)
+            if self.parallel_groups
+            else 1
+        )
 
         critical_path, critical_duration = asyncio.run(self.calculate_critical_path())
 
@@ -410,6 +413,7 @@ class DependencyAnalyzer:
             "max_parallelism": max_parallelism,
             "critical_path_length": len(critical_path),
             "critical_path_duration": critical_duration,
-            "average_group_size": sum(len(g.task_ids) for g in self.parallel_groups) / max(total_groups, 1),
-            "parallelization_ratio": max_parallelism / max(total_tasks, 1)
+            "average_group_size": sum(len(g.task_ids) for g in self.parallel_groups)
+            / max(total_groups, 1),
+            "parallelization_ratio": max_parallelism / max(total_tasks, 1),
         }

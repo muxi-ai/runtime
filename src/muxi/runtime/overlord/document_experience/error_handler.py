@@ -5,18 +5,17 @@ This module implements comprehensive fallback mechanisms and error recovery
 for production-ready document processing.
 """
 
-import asyncio
-
 import time
 from typing import Dict, List, Optional, Any, Tuple
 from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
-# Loguru import removed - add observability import
+from ... import observability
 
 
 class DocumentErrorType(Enum):
     """Types of document processing errors"""
+
     PARSING_ERROR = "parsing_error"
     SIZE_LIMIT_EXCEEDED = "size_limit_exceeded"
     UNSUPPORTED_FORMAT = "unsupported_format"
@@ -29,6 +28,7 @@ class DocumentErrorType(Enum):
 
 class FallbackStrategy(Enum):
     """Fallback processing strategies"""
+
     TEXT_EXTRACTION_ONLY = "text_only"
     SIMPLIFIED_PROCESSING = "simplified"
     EXTERNAL_SERVICE = "external"
@@ -39,6 +39,7 @@ class FallbackStrategy(Enum):
 @dataclass
 class ProcessingMetrics:
     """Track processing performance metrics"""
+
     file_size_mb: float
     processing_time_ms: float
     memory_usage_mb: float
@@ -50,6 +51,7 @@ class ProcessingMetrics:
 @dataclass
 class CircuitBreakerState:
     """Circuit breaker for failing operations"""
+
     failure_count: int = 0
     last_failure_time: float = 0
     state: str = "closed"  # closed, open, half_open
@@ -60,6 +62,7 @@ class CircuitBreakerState:
 @dataclass
 class DocumentError:
     """Represents a document processing error"""
+
     error_id: str
     error_type: str
     error_message: str
@@ -74,6 +77,7 @@ class DocumentError:
 @dataclass
 class ErrorPattern:
     """Represents a recurring error pattern"""
+
     pattern_id: str
     error_type: str
     occurrence_count: int
@@ -134,44 +138,44 @@ class DocumentErrorHandler:
                 "severity": "medium",
                 "stage": "parsing",
                 "keywords": ["format", "encoding", "corrupt", "invalid"],
-                "recovery_difficulty": "easy"
+                "recovery_difficulty": "easy",
             },
             "size_limit": {
                 "severity": "low",
                 "stage": "upload",
                 "keywords": ["size", "large", "limit", "exceeded"],
-                "recovery_difficulty": "easy"
+                "recovery_difficulty": "easy",
             },
             "content_extraction": {
                 "severity": "medium",
                 "stage": "processing",
                 "keywords": ["extract", "parse", "read", "decode"],
-                "recovery_difficulty": "medium"
+                "recovery_difficulty": "medium",
             },
             "memory_limit": {
                 "severity": "high",
                 "stage": "processing",
                 "keywords": ["memory", "ram", "allocation", "out of"],
-                "recovery_difficulty": "hard"
+                "recovery_difficulty": "hard",
             },
             "network_timeout": {
                 "severity": "medium",
                 "stage": "upload",
                 "keywords": ["timeout", "network", "connection", "failed"],
-                "recovery_difficulty": "easy"
+                "recovery_difficulty": "easy",
             },
             "permission_denied": {
                 "severity": "high",
                 "stage": "access",
                 "keywords": ["permission", "denied", "access", "forbidden"],
-                "recovery_difficulty": "hard"
+                "recovery_difficulty": "hard",
             },
             "vectorization_failure": {
                 "severity": "high",
                 "stage": "indexing",
                 "keywords": ["vector", "embedding", "model", "api"],
-                "recovery_difficulty": "medium"
-            }
+                "recovery_difficulty": "medium",
+            },
         }
 
     def _initialize_recovery_templates(self) -> Dict[str, List[str]]:
@@ -180,38 +184,38 @@ class DocumentErrorHandler:
             "file_format": [
                 "Try converting the file to a supported format (PDF, DOCX, TXT)",
                 "Check if the file is corrupted and try re-uploading",
-                "Ensure the file encoding is UTF-8 or a standard format"
+                "Ensure the file encoding is UTF-8 or a standard format",
             ],
             "size_limit": [
                 "Try splitting the document into smaller sections",
                 "Compress the file size by reducing image quality",
-                "Contact support to increase your file size limit"
+                "Contact support to increase your file size limit",
             ],
             "content_extraction": [
                 "Verify the document contains readable text",
                 "Try saving the file in a different format",
-                "Check if the document is password-protected"
+                "Check if the document is password-protected",
             ],
             "memory_limit": [
                 "Try processing the document in smaller chunks",
                 "Wait a moment and try again when system load is lower",
-                "Consider upgrading to a plan with more processing capacity"
+                "Consider upgrading to a plan with more processing capacity",
             ],
             "network_timeout": [
                 "Check your internet connection and try again",
                 "Try uploading the file again",
-                "If the problem persists, try a smaller file first"
+                "If the problem persists, try a smaller file first",
             ],
             "permission_denied": [
                 "Check that you have permission to access this file",
                 "Verify your account has the necessary privileges",
-                "Contact your administrator for access rights"
+                "Contact your administrator for access rights",
             ],
             "vectorization_failure": [
                 "The document content may be too complex for automatic processing",
                 "Try simplifying the document structure",
-                "Contact support if this error persists"
-            ]
+                "Contact support if this error persists",
+            ],
         }
 
     def _initialize_fallback_processors(self) -> None:
@@ -228,13 +232,10 @@ class DocumentErrorHandler:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
 
     async def handle_document_error(
-        self,
-        error: Exception,
-        filename: str,
-        file_size_mb: float,
-        operation: str = "parsing"
+        self, error: Exception, filename: str, file_size_mb: float, operation: str = "parsing"
     ) -> Tuple[Optional[str], str]:
         """
         Handle document processing errors with fallback strategies
@@ -249,80 +250,101 @@ class DocumentErrorHandler:
 
         # Check if circuit breaker is open
         if self._is_circuit_breaker_open(operation):
-            return None, f"⚠️ Service temporarily unavailable for {operation}. Please try again later."
+            return (
+                None,
+                f"⚠️ Service temporarily unavailable for {operation}. Please try again later.",
+            )
 
         # Attempt fallback strategy
-        fallback_strategy = self.fallback_strategies.get(error_type, FallbackStrategy.SKIP_WITH_WARNING)
+        fallback_strategy = self.fallback_strategies.get(
+            error_type, FallbackStrategy.SKIP_WITH_WARNING
+        )
 
         #  Warning - add observability event
-            f"Document error for {filename}: {error_type.value}, "
-            f"attempting fallback: {fallback_strategy.value}"
-        )
+        #     f"Document error for {filename}: {error_type.value}, "
+        #     f"attempting fallback: {fallback_strategy.value}"
+        # )
 
-        return await self._execute_fallback_strategy(
-            fallback_strategy, filename, error_type, error
-        )
+        return await self._execute_fallback_strategy(fallback_strategy, filename, error_type, error)
 
     async def _execute_fallback_strategy(
         self,
         strategy: FallbackStrategy,
         filename: str,
         error_type: DocumentErrorType,
-        original_error: Exception
+        original_error: Exception,
     ) -> Tuple[Optional[str], str]:
         """Execute the appropriate fallback strategy"""
 
         try:
             if strategy == FallbackStrategy.TEXT_EXTRACTION_ONLY:
                 content = await self._fallback_text_extraction(filename)
-                return content, f"✅ Extracted text using fallback method (original error: {error_type.value})"
+                return (
+                    content,
+                    f"✅ Extracted text using fallback method (original error: {error_type.value})",
+                )
 
             elif strategy == FallbackStrategy.SIMPLIFIED_PROCESSING:
                 content = await self._fallback_simplified_processing(filename)
-                return content, f"✅ Processed using simplified method (original error: {error_type.value})"
+                return (
+                    content,
+                    f"✅ Processed using simplified method (original error: {error_type.value})",
+                )
 
             elif strategy == FallbackStrategy.EXTERNAL_SERVICE:
                 content = await self._fallback_external_service(filename)
-                return content, f"✅ Processed using external service (original error: {error_type.value})"
+                return (
+                    content,
+                    f"✅ Processed using external service (original error: {error_type.value})",
+                )
 
             elif strategy == FallbackStrategy.MANUAL_REVIEW:
                 await self._queue_for_manual_review(filename, error_type, original_error)
                 return None, f"📋 Document queued for manual review (error: {error_type.value})"
 
             elif strategy == FallbackStrategy.SKIP_WITH_WARNING:
-                return None, f"⚠️ Skipping document due to {error_type.value}: {str(original_error)}"
+                return (
+                    None,
+                    f"⚠️ Skipping document due to {error_type.value}: {str(original_error)}",
+                )
 
         except Exception as fallback_error:
             #  Error - add observability event
-            return None, f"❌ All processing methods failed. Original: {error_type.value}, Fallback: {str(fallback_error)}"
+            _ = fallback_error  # remove this after implementing observability
+            return (
+                None,
+                f"❌ All processing methods failed. Original: {error_type.value}, Fallback: {str(fallback_error)}",  # noqa: E501
+            )
 
     async def _fallback_text_extraction(self, filename: str) -> Optional[str]:
         """Basic text extraction fallback"""
         try:
-            if filename.lower().endswith('.pdf'):
+            if filename.lower().endswith(".pdf"):
                 return await self._extract_pdf_text_basic(filename)
-            elif filename.lower().endswith(('.docx', '.doc')):
+            elif filename.lower().endswith((".docx", ".doc")):
                 return await self._extract_docx_text_basic(filename)
-            elif filename.lower().endswith(('.txt', '.md')):
+            elif filename.lower().endswith((".txt", ".md")):
                 return await self._extract_plain_text(filename)
             else:
                 return f"Unable to extract text from {Path(filename).suffix} files"
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def _fallback_simplified_processing(self, filename: str) -> Optional[str]:
         """Simplified processing with reduced memory usage"""
         try:
             # Use streaming processing for large files
-            if filename.lower().endswith('.pdf'):
+            if filename.lower().endswith(".pdf"):
                 return await self._process_pdf_streaming(filename)
-            elif filename.lower().endswith(('.docx', '.doc')):
+            elif filename.lower().endswith((".docx", ".doc")):
                 return await self._process_docx_minimal(filename)
             else:
                 return await self._fallback_text_extraction(filename)
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return await self._fallback_text_extraction(filename)
 
     async def _fallback_external_service(self, filename: str) -> Optional[str]:
@@ -333,31 +355,32 @@ class DocumentErrorHandler:
             return await self._fallback_text_extraction(filename)
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return await self._fallback_text_extraction(filename)
 
     def _classify_error(self, error: Exception, file_size_mb: float) -> DocumentErrorType:
         """Classify error type for appropriate fallback strategy"""
         error_str = str(error).lower()
 
-        if file_size_mb > self.persona_config.get('max_file_size_mb', 50):
+        if file_size_mb > self.persona_config.get("max_file_size_mb", 50):
             return DocumentErrorType.SIZE_LIMIT_EXCEEDED
 
-        if any(keyword in error_str for keyword in ['memory', 'ram', 'out of memory']):
+        if any(keyword in error_str for keyword in ["memory", "ram", "out of memory"]):
             return DocumentErrorType.MEMORY_ERROR
 
-        if any(keyword in error_str for keyword in ['timeout', 'time out', 'deadline']):
+        if any(keyword in error_str for keyword in ["timeout", "time out", "deadline"]):
             return DocumentErrorType.TIMEOUT_ERROR
 
-        if any(keyword in error_str for keyword in ['network', 'connection', 'dns']):
+        if any(keyword in error_str for keyword in ["network", "connection", "dns"]):
             return DocumentErrorType.NETWORK_ERROR
 
-        if any(keyword in error_str for keyword in ['corrupt', 'damaged', 'invalid']):
+        if any(keyword in error_str for keyword in ["corrupt", "damaged", "invalid"]):
             return DocumentErrorType.CORRUPTION_ERROR
 
-        if any(keyword in error_str for keyword in ['unsupported', 'not supported', 'format']):
+        if any(keyword in error_str for keyword in ["unsupported", "not supported", "format"]):
             return DocumentErrorType.UNSUPPORTED_FORMAT
 
-        if any(keyword in error_str for keyword in ['import', 'module', 'dependency']):
+        if any(keyword in error_str for keyword in ["import", "module", "dependency"]):
             return DocumentErrorType.DEPENDENCY_ERROR
 
         # Default to parsing error
@@ -407,7 +430,7 @@ class DocumentErrorHandler:
         memory_usage_mb: float,
         success: bool,
         fallback_used: Optional[str] = None,
-        error_type: Optional[str] = None
+        error_type: Optional[str] = None,
     ) -> None:
         """Record processing metrics for analysis"""
         metrics = ProcessingMetrics(
@@ -416,7 +439,7 @@ class DocumentErrorHandler:
             memory_usage_mb=memory_usage_mb,
             success=success,
             fallback_used=fallback_used,
-            error_type=error_type
+            error_type=error_type,
         )
 
         self.processing_metrics.append(metrics)
@@ -446,7 +469,7 @@ class DocumentErrorHandler:
             "error_types": error_types,
             "circuit_breaker_states": {
                 op: breaker.state for op, breaker in self.circuit_breakers.items()
-            }
+            },
         }
 
     # Helper methods for fallback processing
@@ -456,10 +479,12 @@ class DocumentErrorHandler:
 
     def _create_simplified_pdf_processor(self):
         """Create simplified PDF processor with minimal dependencies"""
+
         def simple_pdf_extract(filename):
             try:
                 import PyPDF2
-                with open(filename, 'rb') as file:
+
+                with open(filename, "rb") as file:
                     reader = PyPDF2.PdfReader(file)
                     text = ""
                     for page_num in range(min(5, len(reader.pages))):  # Limit to 5 pages
@@ -467,13 +492,16 @@ class DocumentErrorHandler:
                     return text[:5000]  # Limit output size
             except Exception:
                 return f"Unable to process PDF: {filename}"
+
         return simple_pdf_extract
 
     def _create_simplified_docx_processor(self):
         """Create simplified DOCX processor"""
+
         def simple_docx_extract(filename):
             try:
                 import docx
+
                 doc = docx.Document(filename)
                 text = ""
                 for paragraph in doc.paragraphs[:20]:  # Limit to 20 paragraphs
@@ -481,6 +509,7 @@ class DocumentErrorHandler:
                 return text[:5000]  # Limit output size
             except Exception:
                 return f"Unable to process Word document: {filename}"
+
         return simple_docx_extract
 
     async def _extract_pdf_text_basic(self, filename: str) -> str:
@@ -494,10 +523,10 @@ class DocumentErrorHandler:
     async def _extract_plain_text(self, filename: str) -> str:
         """Extract plain text files"""
         try:
-            with open(filename, 'r', encoding='utf-8') as f:
+            with open(filename, "r", encoding="utf-8") as f:
                 return f.read()
         except UnicodeDecodeError:
-            with open(filename, 'r', encoding='latin-1') as f:
+            with open(filename, "r", encoding="latin-1") as f:
                 return f.read()
 
     async def _process_pdf_streaming(self, filename: str) -> str:
@@ -511,17 +540,14 @@ class DocumentErrorHandler:
         return await self._extract_docx_text_basic(filename)
 
     async def _queue_for_manual_review(
-        self,
-        filename: str,
-        error_type: DocumentErrorType,
-        error: Exception
+        self, filename: str, error_type: DocumentErrorType, error: Exception
     ) -> None:
         """Queue document for manual review"""
         # This could integrate with a ticketing system, email alerts, etc.
         #  Warning - add observability event
-            f"Document {filename} queued for manual review: "
-            f"{error_type.value} - {str(error)}"
-        )
+        #     f"Document {filename} queued for manual review: "
+        #     f"{error_type.value} - {str(error)}"
+        # )
 
     def _track_error(self, doc_error: DocumentError) -> None:
         """Track error for pattern analysis"""
@@ -541,7 +567,7 @@ class DocumentErrorHandler:
                 occurrence_count=1,
                 common_causes=[],
                 success_rate=0.0,
-                last_seen=doc_error.timestamp
+                last_seen=doc_error.timestamp,
             )
 
         # Keep error history manageable
@@ -570,16 +596,16 @@ class DocumentErrorHandler:
                 "memory_limit": "Insufficient system resources to process this document.",
                 "network_timeout": "The upload request timed out.",
                 "permission_denied": "Access to the document is restricted.",
-                "vectorization_failure": "Unable to process document for search indexing."
+                "vectorization_failure": "Unable to process document for search indexing.",
             },
             "friendly": {
                 "file_format": "Hmm, I'm having trouble reading this file format.",
                 "size_limit": "This file is a bit too large for me to handle right now.",
-                "content_extraction": "I'm having difficulty extracting the content from this document.",
+                "content_extraction": "I'm having difficulty extracting the content from this document.",  # noqa: E501
                 "memory_limit": "This document is quite complex and needs more processing power.",
                 "network_timeout": "The upload seems to have timed out.",
                 "permission_denied": "It looks like I don't have permission to access this file.",
-                "vectorization_failure": "I'm having trouble processing this document for search."
+                "vectorization_failure": "I'm having trouble processing this document for search.",
             },
             "technical": {
                 "file_format": "Document parsing failed due to format incompatibility.",
@@ -588,20 +614,20 @@ class DocumentErrorHandler:
                 "memory_limit": "Memory allocation exceeded available system resources.",
                 "network_timeout": "Network operation exceeded timeout threshold.",
                 "permission_denied": "Access control validation failed.",
-                "vectorization_failure": "Vector embedding generation process failed."
-            }
+                "vectorization_failure": "Vector embedding generation process failed.",
+            },
         }
 
-        return messages.get(style, {}).get(error_type, "An error occurred while processing the document.")
+        return messages.get(style, {}).get(
+            error_type, "An error occurred while processing the document."
+        )
 
     def _add_document_context(self, doc_error: DocumentError) -> str:
         """Add document-specific context to error message"""
         filename = doc_error.metadata.get("filename", "your document")
         return f"Document '{filename}' could not be processed."
 
-    def _format_recovery_suggestions(
-        self, suggestions: List[str], style: str
-    ) -> str:
+    def _format_recovery_suggestions(self, suggestions: List[str], style: str) -> str:
         """Format recovery suggestions based on message style"""
         if not suggestions:
             return ""
@@ -633,8 +659,7 @@ class DocumentErrorHandler:
         # Filter error history
         initial_count = len(self._error_history)
         self._error_history = [
-            error for error in self._error_history
-            if error.timestamp >= cutoff_time
+            error for error in self._error_history if error.timestamp >= cutoff_time
         ]
 
         # Update patterns

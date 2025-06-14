@@ -17,12 +17,13 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
 from collections import defaultdict
-from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
+from ... import observability
 
 
 @dataclass
 class DocumentContext:
     """Represents document context information"""
+
     document_id: str
     title: str
     summary: str
@@ -37,6 +38,7 @@ class DocumentContext:
 @dataclass
 class ConversationContext:
     """Represents conversation context with document awareness"""
+
     conversation_id: str
     user_id: str
     documents_referenced: List[str]
@@ -51,6 +53,7 @@ class ConversationContext:
 @dataclass
 class ContextSnapshot:
     """Represents a preserved context snapshot"""
+
     snapshot_id: str
     conversation_id: str
     document_contexts: List[DocumentContext]
@@ -72,7 +75,7 @@ class DocumentContextPreserver:
         self,
         storage_path: Optional[str] = None,
         llm_model=None,
-        context_config: Optional[Dict[str, Any]] = None
+        context_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the document context preserver.
@@ -105,8 +108,8 @@ class DocumentContextPreserver:
         self._load_contexts()
 
         #  Context preserver info - add observability event
-            f"Initialized DocumentContextPreserver with storage at {self.storage_path}"
-        )
+        #     f"Initialized DocumentContextPreserver with storage at {self.storage_path}"
+        # )
 
     async def preserve_document_context(
         self,
@@ -116,7 +119,7 @@ class DocumentContextPreserver:
         conversation_id: str,
         user_id: str,
         key_concepts: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Preserve context for a document.
@@ -151,7 +154,7 @@ class DocumentContextPreserver:
                 access_count=1,
                 relevance_score=1.0,
                 conversation_references=[conversation_id],
-                metadata=metadata or {}
+                metadata=metadata or {},
             )
             self._document_contexts[document_id] = doc_context
 
@@ -169,15 +172,12 @@ class DocumentContextPreserver:
         await self._save_contexts()
 
         #  Context preserver info - add observability event
-            f"Preserved context for document {document_id} in conversation {conversation_id}"
-        )
+        #     f"Preserved context for document {document_id} in conversation {conversation_id}"
+        # )
         return document_id
 
     async def get_relevant_context(
-        self,
-        conversation_id: str,
-        query: Optional[str] = None,
-        limit: int = 5
+        self, conversation_id: str, query: Optional[str] = None, limit: int = 5
     ) -> List[DocumentContext]:
         """
         Get relevant document context for a conversation.
@@ -198,7 +198,7 @@ class DocumentContextPreserver:
             recent_contexts = sorted(
                 self._document_contexts.values(),
                 key=lambda x: (x.relevance_score, x.last_accessed),
-                reverse=True
+                reverse=True,
             )
             return recent_contexts[:limit]
 
@@ -221,7 +221,7 @@ class DocumentContextPreserver:
         self,
         conversation_id: str,
         snapshot_metadata: Optional[Dict[str, Any]] = None,
-        expires_at: Optional[float] = None
+        expires_at: Optional[float] = None,
     ) -> str:
         """
         Create a snapshot of current context.
@@ -262,7 +262,7 @@ class DocumentContextPreserver:
             conversation_state=conversation_state,
             preserved_at=current_time,
             expires_at=expires_at,
-            metadata=snapshot_metadata or {}
+            metadata=snapshot_metadata or {},
         )
 
         self._context_snapshots[snapshot_id] = snapshot
@@ -276,10 +276,7 @@ class DocumentContextPreserver:
         #  Context preserver info - add observability event
         return snapshot_id
 
-    async def restore_context_snapshot(
-        self,
-        snapshot_id: str
-    ) -> Optional[ContextSnapshot]:
+    async def restore_context_snapshot(self, snapshot_id: str) -> Optional[ContextSnapshot]:
         """
         Restore a context snapshot.
 
@@ -316,14 +313,16 @@ class DocumentContextPreserver:
         # Document statistics
         total_documents = len(self._document_contexts)
         active_documents = sum(
-            1 for ctx in self._document_contexts.values()
+            1
+            for ctx in self._document_contexts.values()
             if current_time - ctx.last_accessed < self.max_context_age
         )
 
         # Conversation statistics
         total_conversations = len(self._conversation_contexts)
         active_conversations = sum(
-            1 for ctx in self._conversation_contexts.values()
+            1
+            for ctx in self._conversation_contexts.values()
             if current_time - ctx.last_update < self.max_context_age
         )
 
@@ -336,7 +335,8 @@ class DocumentContextPreserver:
             total_relevance = sum(ctx.relevance_score for ctx in self._document_contexts.values())
             avg_relevance = total_relevance / total_documents
             high_relevance_docs = sum(
-                1 for ctx in self._document_contexts.values()
+                1
+                for ctx in self._document_contexts.values()
                 if ctx.relevance_score > self.relevance_threshold
             )
         else:
@@ -353,14 +353,11 @@ class DocumentContextPreserver:
             "avg_accesses_per_document": avg_accesses,
             "avg_relevance_score": avg_relevance,
             "high_relevance_documents": high_relevance_docs,
-            "context_age_hours": self.max_context_age / 3600
+            "context_age_hours": self.max_context_age / 3600,
         }
 
     async def _update_conversation_context(
-        self,
-        conversation_id: str,
-        user_id: str,
-        document_id: str
+        self, conversation_id: str, user_id: str, document_id: str
     ):
         """Update conversation context with document information"""
         current_time = time.time()
@@ -387,7 +384,7 @@ class DocumentContextPreserver:
                 start_time=current_time,
                 last_update=current_time,
                 message_count=1,
-                active_document_context=document_id
+                active_document_context=document_id,
             )
             self._conversation_contexts[conversation_id] = conv_context
 
@@ -410,14 +407,12 @@ class DocumentContextPreserver:
         reference_score = min(len(doc_context.conversation_references) / 5.0, 1.0)
 
         # Combined score (weighted average)
-        relevance_score = (access_score * 0.3 + recency_score * 0.4 + reference_score * 0.3)
+        relevance_score = access_score * 0.3 + recency_score * 0.4 + reference_score * 0.3
 
         return min(relevance_score, 1.0)
 
     async def _filter_contexts_by_query(
-        self,
-        contexts: List[DocumentContext],
-        query: str
+        self, contexts: List[DocumentContext], query: str
     ) -> List[DocumentContext]:
         """Filter contexts based on query relevance"""
         if not self.llm_model:
@@ -443,7 +438,7 @@ class DocumentContextPreserver:
 
             # Parse response to get relevant indices
             relevant_indices = []
-            for part in response.split(','):
+            for part in response.split(","):
                 try:
                     idx = int(part.strip())
                     if 0 <= idx < len(contexts):
@@ -455,6 +450,7 @@ class DocumentContextPreserver:
 
         except Exception as e:
             #  Context preserver error - add observability event
+            _ = e  # remove this after implementing observability
             return contexts
 
     async def _cleanup_snapshots(self):
@@ -463,7 +459,8 @@ class DocumentContextPreserver:
 
         # Remove expired snapshots
         expired_snapshots = [
-            snapshot_id for snapshot_id, snapshot in self._context_snapshots.items()
+            snapshot_id
+            for snapshot_id, snapshot in self._context_snapshots.items()
             if snapshot.expires_at and current_time > snapshot.expires_at
         ]
 
@@ -474,8 +471,7 @@ class DocumentContextPreserver:
         # Remove oldest snapshots if over limit
         if len(self._context_snapshots) > self.max_snapshots:
             sorted_snapshots = sorted(
-                self._context_snapshots.items(),
-                key=lambda x: x[1].preserved_at
+                self._context_snapshots.items(), key=lambda x: x[1].preserved_at
             )
 
             excess_count = len(self._context_snapshots) - self.max_snapshots
@@ -499,12 +495,12 @@ class DocumentContextPreserver:
                     "access_count": ctx.access_count,
                     "relevance_score": ctx.relevance_score,
                     "conversation_references": ctx.conversation_references,
-                    "metadata": ctx.metadata
+                    "metadata": ctx.metadata,
                 }
                 for doc_id, ctx in self._document_contexts.items()
             }
 
-            with open(doc_contexts_file, 'w') as f:
+            with open(doc_contexts_file, "w") as f:
                 json.dump(doc_contexts_data, f, indent=2)
 
             # Save conversation contexts
@@ -519,16 +515,17 @@ class DocumentContextPreserver:
                     "start_time": ctx.start_time,
                     "last_update": ctx.last_update,
                     "message_count": ctx.message_count,
-                    "active_document_context": ctx.active_document_context
+                    "active_document_context": ctx.active_document_context,
                 }
                 for conv_id, ctx in self._conversation_contexts.items()
             }
 
-            with open(conv_contexts_file, 'w') as f:
+            with open(conv_contexts_file, "w") as f:
                 json.dump(conv_contexts_data, f, indent=2)
 
         except Exception as e:
             #  Context preserver error - add observability event
+            _ = e  # remove this after implementing observability
 
     async def _save_snapshots(self):
         """Save context snapshots to storage"""
@@ -548,23 +545,24 @@ class DocumentContextPreserver:
                             "access_count": ctx.access_count,
                             "relevance_score": ctx.relevance_score,
                             "conversation_references": ctx.conversation_references,
-                            "metadata": ctx.metadata
+                            "metadata": ctx.metadata,
                         }
                         for ctx in snap.document_contexts
                     ],
                     "conversation_state": snap.conversation_state,
                     "preserved_at": snap.preserved_at,
                     "expires_at": snap.expires_at,
-                    "metadata": snap.metadata
+                    "metadata": snap.metadata,
                 }
                 for snap_id, snap in self._context_snapshots.items()
             }
 
-            with open(snapshots_file, 'w') as f:
+            with open(snapshots_file, "w") as f:
                 json.dump(snapshots_data, f, indent=2)
 
         except Exception as e:
             #  Context preserver error - add observability event
+            _ = e  # remove this after implementing observability
 
     def _load_contexts(self):
         """Load contexts from storage"""
@@ -572,7 +570,7 @@ class DocumentContextPreserver:
             # Load document contexts
             doc_contexts_file = self.storage_path / "document_contexts.json"
             if doc_contexts_file.exists():
-                with open(doc_contexts_file, 'r') as f:
+                with open(doc_contexts_file, "r") as f:
                     doc_contexts_data = json.load(f)
 
                 for doc_id, ctx_data in doc_contexts_data.items():
@@ -583,7 +581,7 @@ class DocumentContextPreserver:
             # Load conversation contexts
             conv_contexts_file = self.storage_path / "conversation_contexts.json"
             if conv_contexts_file.exists():
-                with open(conv_contexts_file, 'r') as f:
+                with open(conv_contexts_file, "r") as f:
                     conv_contexts_data = json.load(f)
 
                 for conv_id, ctx_data in conv_contexts_data.items():
@@ -594,14 +592,13 @@ class DocumentContextPreserver:
             # Load snapshots
             snapshots_file = self.storage_path / "context_snapshots.json"
             if snapshots_file.exists():
-                with open(snapshots_file, 'r') as f:
+                with open(snapshots_file, "r") as f:
                     snapshots_data = json.load(f)
 
                 for snap_id, snap_data in snapshots_data.items():
                     # Reconstruct document contexts
                     doc_contexts = [
-                        DocumentContext(**ctx_data)
-                        for ctx_data in snap_data["document_contexts"]
+                        DocumentContext(**ctx_data) for ctx_data in snap_data["document_contexts"]
                     ]
                     snap_data["document_contexts"] = doc_contexts
 
@@ -615,3 +612,4 @@ class DocumentContextPreserver:
 
         except Exception as e:
             #  Context preserver error - add observability event
+            _ = e  # remove this after implementing observability

@@ -6,18 +6,17 @@ and optimization strategies for the multi-layer caching system.
 """
 
 import asyncio
-import hashlib
 import json
 import pickle
 import sqlite3
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import numpy as np
 from scipy.spatial.distance import cosine
 
-from .cache_types import CachedResponse, CacheKey
+from .cache_types import CachedResponse
 
 
 class LRUCache:
@@ -85,11 +84,11 @@ class LRUCache:
         total_bytes = 0
         for key, response in self.cache.items():
             # Estimate key size
-            total_bytes += len(key.encode('utf-8'))
+            total_bytes += len(key.encode("utf-8"))
             # Estimate response size
-            total_bytes += len(response.content.encode('utf-8'))
-            total_bytes += len(json.dumps(response.interactive_elements).encode('utf-8'))
-            total_bytes += len(json.dumps(response.media_content).encode('utf-8'))
+            total_bytes += len(response.content.encode("utf-8"))
+            total_bytes += len(json.dumps(response.interactive_elements).encode("utf-8"))
+            total_bytes += len(json.dumps(response.media_content).encode("utf-8"))
             # Add metadata overhead
             total_bytes += 200  # Rough estimate for metadata
         return total_bytes
@@ -129,12 +128,7 @@ class TTLCache:
                     del self.cache[key]
             return None
 
-    async def put(
-        self,
-        key: str,
-        response: CachedResponse,
-        ttl: Optional[int] = None
-    ) -> bool:
+    async def put(self, key: str, response: CachedResponse, ttl: Optional[int] = None) -> bool:
         """Put item in cache with TTL."""
         async with self._lock:
             # Set TTL if not already set
@@ -147,11 +141,8 @@ class TTLCache:
 
                 # If still at capacity, remove oldest items
                 if len(self.cache) >= self.max_size:
-                    oldest_keys = sorted(
-                        self.cache.keys(),
-                        key=lambda k: self.cache[k].timestamp
-                    )
-                    for old_key in oldest_keys[:len(self.cache) - self.max_size + 1]:
+                    oldest_keys = sorted(self.cache.keys(), key=lambda k: self.cache[k].timestamp)
+                    for old_key in oldest_keys[: len(self.cache) - self.max_size + 1]:
                         del self.cache[old_key]
 
             self.cache[key] = response
@@ -177,10 +168,7 @@ class TTLCache:
 
     async def _cleanup_expired(self) -> int:
         """Internal method to clean up expired items."""
-        expired_keys = [
-            key for key, response in self.cache.items()
-            if not response.is_valid()
-        ]
+        expired_keys = [key for key, response in self.cache.items() if not response.is_valid()]
         for key in expired_keys:
             del self.cache[key]
         return len(expired_keys)
@@ -193,10 +181,10 @@ class TTLCache:
         """Estimate memory usage in bytes."""
         total_bytes = 0
         for key, response in self.cache.items():
-            total_bytes += len(key.encode('utf-8'))
-            total_bytes += len(response.content.encode('utf-8'))
-            total_bytes += len(json.dumps(response.interactive_elements).encode('utf-8'))
-            total_bytes += len(json.dumps(response.media_content).encode('utf-8'))
+            total_bytes += len(key.encode("utf-8"))
+            total_bytes += len(response.content.encode("utf-8"))
+            total_bytes += len(json.dumps(response.interactive_elements).encode("utf-8"))
+            total_bytes += len(json.dumps(response.media_content).encode("utf-8"))
             total_bytes += 200  # Metadata overhead
         return total_bytes
 
@@ -243,10 +231,7 @@ class SizeBasedCache:
             current_usage = self.get_memory_usage()
             while current_usage + item_size > self.max_memory_bytes and self.cache:
                 # Remove oldest item
-                oldest_key = min(
-                    self.cache.keys(),
-                    key=lambda k: self.cache[k].timestamp
-                )
+                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k].timestamp)
                 del self.cache[oldest_key]
                 current_usage = self.get_memory_usage()
 
@@ -279,10 +264,10 @@ class SizeBasedCache:
 
     def _calculate_item_size(self, key: str, response: CachedResponse) -> int:
         """Calculate size of cache item in bytes."""
-        size = len(key.encode('utf-8'))
-        size += len(response.content.encode('utf-8'))
-        size += len(json.dumps(response.interactive_elements).encode('utf-8'))
-        size += len(json.dumps(response.media_content).encode('utf-8'))
+        size = len(key.encode("utf-8"))
+        size += len(response.content.encode("utf-8"))
+        size += len(json.dumps(response.interactive_elements).encode("utf-8"))
+        size += len(json.dumps(response.media_content).encode("utf-8"))
         if response.embedding:
             size += len(response.embedding) * 4  # 4 bytes per float
         size += 200  # Metadata overhead
@@ -312,7 +297,8 @@ class PersistentCache:
     def _init_db(self) -> None:
         """Initialize SQLite database."""
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("""
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS cache_entries (
                     key TEXT PRIMARY KEY,
                     content TEXT NOT NULL,
@@ -329,22 +315,25 @@ class PersistentCache:
                     workflow_id TEXT,
                     task_results TEXT
                 )
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_timestamp ON cache_entries(timestamp)
-            """)
-            conn.execute("""
+            """
+            )
+            conn.execute(
+                """
                 CREATE INDEX IF NOT EXISTS idx_ttl ON cache_entries(ttl_seconds)
-            """)
+            """
+            )
 
     async def get(self, key: str) -> Optional[CachedResponse]:
         """Get item from persistent cache."""
         async with self._lock:
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
-                cursor = conn.execute(
-                    "SELECT * FROM cache_entries WHERE key = ?", (key,)
-                )
+                cursor = conn.execute("SELECT * FROM cache_entries WHERE key = ?", (key,))
                 row = cursor.fetchone()
 
                 if row:
@@ -353,8 +342,8 @@ class PersistentCache:
                         response.increment_access()
                         # Update access count in database
                         conn.execute(
-                            "UPDATE cache_entries SET access_count = ?, last_accessed = ? WHERE key = ?",
-                            (response.access_count, response.last_accessed, key)
+                            "UPDATE cache_entries SET access_count = ?, last_accessed = ? WHERE key = ?",  # noqa: E501
+                            (response.access_count, response.last_accessed, key),
                         )
                         return response
                     else:
@@ -375,22 +364,32 @@ class PersistentCache:
                 if response.embedding:
                     embedding_blob = pickle.dumps(response.embedding)
 
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT OR REPLACE INTO cache_entries (
                         key, content, response_type, interactive_elements, media_content,
                         timestamp, ttl_seconds, access_count, last_accessed,
                         embedding, context_fingerprint, quality_score,
                         workflow_id, task_results
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    key, response.content, response.response_type,
-                    interactive_elements_json, media_content_json,
-                    response.timestamp, response.ttl_seconds,
-                    response.access_count, response.last_accessed,
-                    embedding_blob, response.context_fingerprint,
-                    response.quality_score, response.workflow_id,
-                    task_results_json
-                ))
+                """,
+                    (
+                        key,
+                        response.content,
+                        response.response_type,
+                        interactive_elements_json,
+                        media_content_json,
+                        response.timestamp,
+                        response.ttl_seconds,
+                        response.access_count,
+                        response.last_accessed,
+                        embedding_blob,
+                        response.context_fingerprint,
+                        response.quality_score,
+                        response.workflow_id,
+                        task_results_json,
+                    ),
+                )
                 return True
 
     async def remove(self, key: str) -> bool:
@@ -411,11 +410,14 @@ class PersistentCache:
         async with self._lock:
             with sqlite3.connect(self.db_path) as conn:
                 current_time = time.time()
-                cursor = conn.execute("""
+                cursor = conn.execute(
+                    """
                     DELETE FROM cache_entries
                     WHERE ttl_seconds IS NOT NULL
                     AND (timestamp + ttl_seconds) < ?
-                """, (current_time,))
+                """,
+                    (current_time,),
+                )
                 return cursor.rowcount
 
     def size(self) -> int:
@@ -431,23 +433,23 @@ class PersistentCache:
     def _row_to_response(self, row: sqlite3.Row) -> CachedResponse:
         """Convert database row to CachedResponse object."""
         embedding = None
-        if row['embedding']:
-            embedding = pickle.loads(row['embedding'])
+        if row["embedding"]:
+            embedding = pickle.loads(row["embedding"])
 
         return CachedResponse(
-            content=row['content'],
-            response_type=row['response_type'],
-            interactive_elements=json.loads(row['interactive_elements'] or '[]'),
-            media_content=json.loads(row['media_content'] or '[]'),
-            timestamp=row['timestamp'],
-            ttl_seconds=row['ttl_seconds'],
-            access_count=row['access_count'],
-            last_accessed=row['last_accessed'],
+            content=row["content"],
+            response_type=row["response_type"],
+            interactive_elements=json.loads(row["interactive_elements"] or "[]"),
+            media_content=json.loads(row["media_content"] or "[]"),
+            timestamp=row["timestamp"],
+            ttl_seconds=row["ttl_seconds"],
+            access_count=row["access_count"],
+            last_accessed=row["last_accessed"],
             embedding=embedding,
-            context_fingerprint=row['context_fingerprint'] or '',
-            quality_score=row['quality_score'],
-            workflow_id=row['workflow_id'],
-            task_results=json.loads(row['task_results'] or '{}')
+            context_fingerprint=row["context_fingerprint"] or "",
+            quality_score=row["quality_score"],
+            workflow_id=row["workflow_id"],
+            task_results=json.loads(row["task_results"] or "{}"),
         )
 
 
@@ -460,10 +462,7 @@ class SemanticCache:
     """
 
     def __init__(
-        self,
-        max_size: int = 500,
-        similarity_threshold: float = 0.85,
-        embedding_dim: int = 1536
+        self, max_size: int = 500, similarity_threshold: float = 0.85, embedding_dim: int = 1536
     ):
         """
         Initialize semantic cache.
@@ -490,9 +489,7 @@ class SemanticCache:
             return None
 
     async def find_similar(
-        self,
-        query_embedding: List[float],
-        top_k: int = 3
+        self, query_embedding: List[float], top_k: int = 3
     ) -> List[Tuple[str, CachedResponse, float]]:
         """
         Find similar cached responses using cosine similarity.
@@ -527,10 +524,7 @@ class SemanticCache:
             return similarities[:top_k]
 
     async def put(
-        self,
-        key: str,
-        response: CachedResponse,
-        embedding: Optional[List[float]] = None
+        self, key: str, response: CachedResponse, embedding: Optional[List[float]] = None
     ) -> bool:
         """Put item in semantic cache with embedding."""
         async with self._lock:
@@ -543,10 +537,7 @@ class SemanticCache:
 
             # Remove oldest items if at capacity
             if len(self.cache) >= self.max_size and key not in self.cache:
-                oldest_key = min(
-                    self.cache.keys(),
-                    key=lambda k: self.cache[k].timestamp
-                )
+                oldest_key = min(self.cache.keys(), key=lambda k: self.cache[k].timestamp)
                 del self.cache[oldest_key]
                 del self.embeddings[oldest_key]
 
@@ -579,10 +570,10 @@ class SemanticCache:
 
         # Cache content
         for key, response in self.cache.items():
-            total_bytes += len(key.encode('utf-8'))
-            total_bytes += len(response.content.encode('utf-8'))
-            total_bytes += len(json.dumps(response.interactive_elements).encode('utf-8'))
-            total_bytes += len(json.dumps(response.media_content).encode('utf-8'))
+            total_bytes += len(key.encode("utf-8"))
+            total_bytes += len(response.content.encode("utf-8"))
+            total_bytes += len(json.dumps(response.interactive_elements).encode("utf-8"))
+            total_bytes += len(json.dumps(response.media_content).encode("utf-8"))
             total_bytes += 200  # Metadata overhead
 
         # Embeddings

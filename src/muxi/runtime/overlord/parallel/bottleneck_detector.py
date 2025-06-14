@@ -5,23 +5,17 @@ This module detects and analyzes bottlenecks in workflow execution to identify
 performance constraints and suggest optimizations for parallel execution.
 """
 
-
-import time
 from datetime import datetime
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
 from collections import defaultdict
 
 from .types import (
-    TaskNode,
-    ParallelGroup,
     ResourceAllocation,
     BottleneckInfo,
     BottleneckType,
     ExecutionPlan,
-    ParallelExecutionResult
+    ParallelExecutionResult,
 )
-
-
 
 
 class BottleneckDetector:
@@ -40,9 +34,7 @@ class BottleneckDetector:
         self.bottleneck_patterns: Dict[str, int] = defaultdict(int)
 
     async def analyze_workflow_bottlenecks(
-        self,
-        execution_plan: ExecutionPlan,
-        resource_allocation: ResourceAllocation
+        self, execution_plan: ExecutionPlan, resource_allocation: ResourceAllocation
     ) -> List[BottleneckInfo]:
         """
         Analyze a workflow execution plan for potential bottlenecks.
@@ -67,7 +59,8 @@ class BottleneckDetector:
 
         # Filter by sensitivity threshold
         significant_bottlenecks = [
-            bottleneck for bottleneck in scored_bottlenecks
+            bottleneck
+            for bottleneck in scored_bottlenecks
             if bottleneck.severity_score >= self.sensitivity_threshold
         ]
 
@@ -77,8 +70,7 @@ class BottleneckDetector:
         return significant_bottlenecks
 
     async def analyze_runtime_bottlenecks(
-        self,
-        execution_result: ParallelExecutionResult
+        self, execution_result: ParallelExecutionResult
     ) -> List[BottleneckInfo]:
         """
         Analyze runtime execution for actual bottlenecks that occurred.
@@ -103,8 +95,7 @@ class BottleneckDetector:
         return bottlenecks
 
     async def suggest_optimizations(
-        self,
-        bottlenecks: List[BottleneckInfo]
+        self, bottlenecks: List[BottleneckInfo]
     ) -> List[Dict[str, Any]]:
         """
         Suggest optimizations based on detected bottlenecks.
@@ -130,20 +121,19 @@ class BottleneckDetector:
             suggestions.extend(type_suggestions)
 
         # Sort by impact potential
-        suggestions.sort(key=lambda x: x.get('impact_score', 0), reverse=True)
+        suggestions.sort(key=lambda x: x.get("impact_score", 0), reverse=True)
 
         return suggestions
 
     async def _detect_critical_path_bottlenecks(
-        self,
-        execution_plan: ExecutionPlan
+        self, execution_plan: ExecutionPlan
     ) -> List[BottleneckInfo]:
         """Detect bottlenecks along the critical path."""
         bottlenecks = []
 
         # Check if critical path time is significantly longer than parallel time
-        critical_path_ratio = (
-            execution_plan.critical_path_time / max(execution_plan.estimated_total_time, 1.0)
+        critical_path_ratio = execution_plan.critical_path_time / max(
+            execution_plan.estimated_total_time, 1.0
         )
 
         if critical_path_ratio > 0.8:  # Critical path dominates execution time
@@ -156,7 +146,7 @@ class BottleneckDetector:
                 description=f"Critical path dominates execution time ({critical_path_ratio:.1%})",
                 suggested_resolution="Break down critical path tasks or parallelize components",
                 can_auto_resolve=False,
-                resolution_confidence=0.6
+                resolution_confidence=0.6,
             )
             bottlenecks.append(bottleneck)
 
@@ -175,15 +165,14 @@ class BottleneckDetector:
                         description=f"Long-running parallel group ({group.estimated_duration}s)",
                         suggested_resolution="Break down long tasks in this group",
                         can_auto_resolve=False,
-                        resolution_confidence=0.4
+                        resolution_confidence=0.4,
                     )
                     bottlenecks.append(bottleneck)
 
         return bottlenecks
 
     async def _detect_resource_bottlenecks(
-        self,
-        resource_allocation: ResourceAllocation
+        self, resource_allocation: ResourceAllocation
     ) -> List[BottleneckInfo]:
         """Detect resource-related bottlenecks."""
         bottlenecks = []
@@ -196,10 +185,10 @@ class BottleneckDetector:
                 affected_tasks=[],
                 severity_score=1.0 - resource_allocation.load_balance_score,
                 estimated_delay=resource_allocation.total_estimated_time * 0.3,
-                description=f"Poor load balance across agents ({resource_allocation.load_balance_score:.2f})",
+                description=f"Poor load balance across agents ({resource_allocation.load_balance_score:.2f})",  # noqa: E501
                 suggested_resolution="Redistribute tasks more evenly across agents",
                 can_auto_resolve=True,
-                resolution_confidence=0.8
+                resolution_confidence=0.8,
             )
             bottlenecks.append(bottleneck)
 
@@ -211,10 +200,10 @@ class BottleneckDetector:
                 affected_tasks=[],
                 severity_score=1.0 - resource_allocation.parallel_efficiency,
                 estimated_delay=resource_allocation.total_estimated_time * 0.5,
-                description=f"Low parallel efficiency ({resource_allocation.parallel_efficiency:.2f})",
+                description=f"Low parallel efficiency ({resource_allocation.parallel_efficiency:.2f})",  # noqa: E501
                 suggested_resolution="Increase parallelization opportunities or add more agents",
                 can_auto_resolve=False,
-                resolution_confidence=0.5
+                resolution_confidence=0.5,
             )
             bottlenecks.append(bottleneck)
 
@@ -231,15 +220,14 @@ class BottleneckDetector:
                     description=f"Agent {agent_id} is over-utilized ({utilization:.1%})",
                     suggested_resolution=f"Redistribute some tasks from agent {agent_id}",
                     can_auto_resolve=True,
-                    resolution_confidence=0.9
+                    resolution_confidence=0.9,
                 )
                 bottlenecks.append(bottleneck)
 
         return bottlenecks
 
     async def _detect_dependency_bottlenecks(
-        self,
-        execution_plan: ExecutionPlan
+        self, execution_plan: ExecutionPlan
     ) -> List[BottleneckInfo]:
         """Detect dependency-related bottlenecks."""
         bottlenecks = []
@@ -256,14 +244,13 @@ class BottleneckDetector:
                 description=f"Too many sequential execution levels ({total_groups})",
                 suggested_resolution="Reduce dependencies to enable more parallelization",
                 can_auto_resolve=False,
-                resolution_confidence=0.4
+                resolution_confidence=0.4,
             )
             bottlenecks.append(bottleneck)
 
         # Check for groups with only one task (missed parallelization)
         single_task_groups = [
-            group for group in execution_plan.parallel_groups
-            if len(group.task_ids) == 1
+            group for group in execution_plan.parallel_groups if len(group.task_ids) == 1
         ]
 
         if len(single_task_groups) > total_groups * 0.5:  # More than 50% single-task groups
@@ -273,18 +260,17 @@ class BottleneckDetector:
                 affected_tasks=[],
                 severity_score=len(single_task_groups) / max(total_groups, 1),
                 estimated_delay=len(single_task_groups) * 15.0,
-                description=f"Many single-task groups indicate missed parallelization opportunities",
+                description="Many single-task groups indicate missed parallelization opportunities",
                 suggested_resolution="Review dependencies to enable task grouping",
                 can_auto_resolve=False,
-                resolution_confidence=0.3
+                resolution_confidence=0.3,
             )
             bottlenecks.append(bottleneck)
 
         return bottlenecks
 
     async def _detect_parallelization_bottlenecks(
-        self,
-        execution_plan: ExecutionPlan
+        self, execution_plan: ExecutionPlan
     ) -> List[BottleneckInfo]:
         """Detect parallelization-related bottlenecks."""
         bottlenecks = []
@@ -300,10 +286,10 @@ class BottleneckDetector:
                 affected_tasks=[],
                 severity_score=1.0 - (max_group_size / max_concurrent),
                 estimated_delay=execution_plan.estimated_total_time * 0.2,
-                description=f"Not fully utilizing available agents ({max_group_size}/{max_concurrent})",
+                description=f"Not fully utilizing available agents ({max_group_size}/{max_concurrent})",  # noqa: E501
                 suggested_resolution="Increase parallelization or reduce agent count",
                 can_auto_resolve=True,
-                resolution_confidence=0.7
+                resolution_confidence=0.7,
             )
             bottlenecks.append(bottleneck)
 
@@ -315,24 +301,25 @@ class BottleneckDetector:
                 affected_tasks=[],
                 severity_score=1.0 - (execution_plan.parallelization_speedup / 2.0),
                 estimated_delay=execution_plan.estimated_total_time * 0.3,
-                description=f"Low parallelization speedup ({execution_plan.parallelization_speedup:.1f}x)",
+                description=f"Low parallelization speedup ({execution_plan.parallelization_speedup:.1f}x)",  # noqa: E501
                 suggested_resolution="Restructure workflow for better parallelization",
                 can_auto_resolve=False,
-                resolution_confidence=0.4
+                resolution_confidence=0.4,
             )
             bottlenecks.append(bottleneck)
 
         return bottlenecks
 
     async def _detect_timing_bottlenecks(
-        self,
-        execution_result: ParallelExecutionResult
+        self, execution_result: ParallelExecutionResult
     ) -> List[BottleneckInfo]:
         """Detect bottlenecks based on actual execution timing."""
         bottlenecks = []
 
         # Check if actual time significantly exceeded estimated time
-        time_overrun = execution_result.actual_duration - execution_result.execution_plan.estimated_total_time
+        time_overrun = (
+            execution_result.actual_duration - execution_result.execution_plan.estimated_total_time
+        )
         if time_overrun > 30.0:  # More than 30 seconds overrun
             overrun_ratio = time_overrun / execution_result.execution_plan.estimated_total_time
             bottleneck = BottleneckInfo(
@@ -344,15 +331,14 @@ class BottleneckDetector:
                 description=f"Execution took {time_overrun:.1f}s longer than estimated",
                 suggested_resolution="Improve time estimation or identify blocking factors",
                 can_auto_resolve=False,
-                resolution_confidence=0.6
+                resolution_confidence=0.6,
             )
             bottlenecks.append(bottleneck)
 
         return bottlenecks
 
     async def _detect_failure_bottlenecks(
-        self,
-        execution_result: ParallelExecutionResult
+        self, execution_result: ParallelExecutionResult
     ) -> List[BottleneckInfo]:
         """Detect bottlenecks based on task failures."""
         bottlenecks = []
@@ -372,15 +358,14 @@ class BottleneckDetector:
                     description=f"High task failure rate ({failure_rate:.1%})",
                     suggested_resolution="Investigate agent reliability or task complexity",
                     can_auto_resolve=False,
-                    resolution_confidence=0.7
+                    resolution_confidence=0.7,
                 )
                 bottlenecks.append(bottleneck)
 
         return bottlenecks
 
     async def _detect_efficiency_bottlenecks(
-        self,
-        execution_result: ParallelExecutionResult
+        self, execution_result: ParallelExecutionResult
     ) -> List[BottleneckInfo]:
         """Detect efficiency-related bottlenecks."""
         bottlenecks = []
@@ -397,19 +382,16 @@ class BottleneckDetector:
                 affected_tasks=[],
                 severity_score=min(1.0, speedup_gap / expected_speedup),
                 estimated_delay=execution_result.actual_duration * 0.2,
-                description=f"Actual speedup ({actual_speedup:.1f}x) below expected ({expected_speedup:.1f}x)",
+                description=f"Actual speedup ({actual_speedup:.1f}x) below expected ({expected_speedup:.1f}x)",  # noqa: E501
                 suggested_resolution="Optimize resource allocation or reduce coordination overhead",
                 can_auto_resolve=True,
-                resolution_confidence=0.6
+                resolution_confidence=0.6,
             )
             bottlenecks.append(bottleneck)
 
         return bottlenecks
 
-    async def _score_bottlenecks(
-        self,
-        bottlenecks: List[BottleneckInfo]
-    ) -> List[BottleneckInfo]:
+    async def _score_bottlenecks(self, bottlenecks: List[BottleneckInfo]) -> List[BottleneckInfo]:
         """Score and prioritize bottlenecks."""
         for bottleneck in bottlenecks:
             # Enhance severity score based on impact and resolution confidence
@@ -417,7 +399,9 @@ class BottleneckDetector:
             confidence_factor = bottleneck.resolution_confidence
 
             # Adjust severity score
-            bottleneck.severity_score = min(1.0, bottleneck.severity_score * (1 + impact_factor * 0.1))
+            bottleneck.severity_score = min(
+                1.0, bottleneck.severity_score * (1 + impact_factor * 0.1)
+            )
 
             # Track patterns
             pattern_key = f"{bottleneck.bottleneck_type.value}_{bottleneck.affected_tasks[:3]}"
@@ -427,11 +411,7 @@ class BottleneckDetector:
         bottlenecks.sort(key=lambda x: x.severity_score, reverse=True)
         return bottlenecks
 
-    async def _record_detection(
-        self,
-        plan_id: str,
-        bottlenecks: List[BottleneckInfo]
-    ) -> None:
+    async def _record_detection(self, plan_id: str, bottlenecks: List[BottleneckInfo]) -> None:
         """Record bottleneck detection for historical analysis."""
         detection_record = {
             "timestamp": datetime.now().isoformat(),
@@ -439,7 +419,7 @@ class BottleneckDetector:
             "bottleneck_count": len(bottlenecks),
             "bottleneck_types": [b.bottleneck_type.value for b in bottlenecks],
             "total_severity": sum(b.severity_score for b in bottlenecks),
-            "auto_resolvable": sum(1 for b in bottlenecks if b.can_auto_resolve)
+            "auto_resolvable": sum(1 for b in bottlenecks if b.can_auto_resolve),
         }
 
         self.detection_history.append(detection_record)
@@ -449,57 +429,65 @@ class BottleneckDetector:
             self.detection_history = self.detection_history[-100:]
 
     async def _generate_type_specific_suggestions(
-        self,
-        bottleneck_type: BottleneckType,
-        bottlenecks: List[BottleneckInfo]
+        self, bottleneck_type: BottleneckType, bottlenecks: List[BottleneckInfo]
     ) -> List[Dict[str, Any]]:
         """Generate optimization suggestions for a specific bottleneck type."""
         suggestions = []
 
         if bottleneck_type == BottleneckType.CRITICAL_PATH:
-            suggestions.append({
-                "type": "task_decomposition",
-                "description": "Break down critical path tasks into smaller parallel subtasks",
-                "impact_score": 0.8,
-                "effort_level": "medium",
-                "affected_bottlenecks": len(bottlenecks)
-            })
+            suggestions.append(
+                {
+                    "type": "task_decomposition",
+                    "description": "Break down critical path tasks into smaller parallel subtasks",
+                    "impact_score": 0.8,
+                    "effort_level": "medium",
+                    "affected_bottlenecks": len(bottlenecks),
+                }
+            )
 
         elif bottleneck_type == BottleneckType.AGENT_OVERLOAD:
-            suggestions.append({
-                "type": "load_balancing",
-                "description": "Redistribute tasks more evenly across available agents",
-                "impact_score": 0.7,
-                "effort_level": "low",
-                "affected_bottlenecks": len(bottlenecks)
-            })
+            suggestions.append(
+                {
+                    "type": "load_balancing",
+                    "description": "Redistribute tasks more evenly across available agents",
+                    "impact_score": 0.7,
+                    "effort_level": "low",
+                    "affected_bottlenecks": len(bottlenecks),
+                }
+            )
 
         elif bottleneck_type == BottleneckType.RESOURCE_CONTENTION:
-            suggestions.append({
-                "type": "resource_scaling",
-                "description": "Add more agents or optimize resource allocation",
-                "impact_score": 0.6,
-                "effort_level": "high",
-                "affected_bottlenecks": len(bottlenecks)
-            })
+            suggestions.append(
+                {
+                    "type": "resource_scaling",
+                    "description": "Add more agents or optimize resource allocation",
+                    "impact_score": 0.6,
+                    "effort_level": "high",
+                    "affected_bottlenecks": len(bottlenecks),
+                }
+            )
 
         elif bottleneck_type == BottleneckType.DEPENDENCY_CHAIN:
-            suggestions.append({
-                "type": "dependency_optimization",
-                "description": "Reduce unnecessary dependencies to enable more parallelization",
-                "impact_score": 0.9,
-                "effort_level": "high",
-                "affected_bottlenecks": len(bottlenecks)
-            })
+            suggestions.append(
+                {
+                    "type": "dependency_optimization",
+                    "description": "Reduce unnecessary dependencies to enable more parallelization",
+                    "impact_score": 0.9,
+                    "effort_level": "high",
+                    "affected_bottlenecks": len(bottlenecks),
+                }
+            )
 
         elif bottleneck_type == BottleneckType.CAPABILITY_SHORTAGE:
-            suggestions.append({
-                "type": "capability_expansion",
-                "description": "Add agents with required capabilities or cross-train existing agents",
-                "impact_score": 0.8,
-                "effort_level": "high",
-                "affected_bottlenecks": len(bottlenecks)
-            })
+            suggestions.append(
+                {
+                    "type": "capability_expansion",
+                    "description": "Add agents with required capabilities or cross-train existing agents",  # noqa: E501
+                    "impact_score": 0.8,
+                    "effort_level": "high",
+                    "affected_bottlenecks": len(bottlenecks),
+                }
+            )
 
         return suggestions
 
@@ -515,11 +503,12 @@ class BottleneckDetector:
             "recent_detections": len(recent_detections),
             "average_bottlenecks_per_detection": sum(
                 d["bottleneck_count"] for d in recent_detections
-            ) / len(recent_detections),
+            )
+            / len(recent_detections),
             "most_common_bottleneck_patterns": dict(
                 sorted(self.bottleneck_patterns.items(), key=lambda x: x[1], reverse=True)[:5]
             ),
-            "auto_resolvable_percentage": sum(
-                d["auto_resolvable"] for d in recent_detections
-            ) / max(sum(d["bottleneck_count"] for d in recent_detections), 1) * 100
+            "auto_resolvable_percentage": sum(d["auto_resolvable"] for d in recent_detections)
+            / max(sum(d["bottleneck_count"] for d in recent_detections), 1)
+            * 100,
         }

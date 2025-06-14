@@ -13,20 +13,15 @@ import aiohttp
 
 
 # Import unified response types
-from ...types.response import (
-    MuxiUnifiedResponse,
-    MuxiContentItem,
-    MuxiErrorDetails
-)
+from ...types.response import MuxiUnifiedResponse, MuxiContentItem, MuxiErrorDetails
 from ...utils.response_converter import create_unified_response
-
-
-
+from ... import observability
 
 
 @dataclass
 class ClarificationWebhookPayload:
     """Webhook payload for clarification questions in async mode."""
+
     request_id: str
     clarification_question: str
     clarification_request_id: Optional[str] = None
@@ -80,7 +75,7 @@ class WebhookManager:
         user_id: Optional[str] = None,
         formation_id: Optional[str] = None,
         retries: Optional[int] = None,
-        timeout: Optional[int] = None
+        timeout: Optional[int] = None,
     ) -> bool:
         """
         Deliver async completion to webhook URL using unified response format.
@@ -101,9 +96,7 @@ class WebhookManager:
             True if delivery was successful, False otherwise
         """
         max_retries = retries if retries is not None else self.default_retries
-        request_timeout = (
-            timeout if timeout is not None else self.default_timeout
-        )
+        request_timeout = timeout if timeout is not None else self.default_timeout
 
         # Create unified response payload
         if error:
@@ -111,7 +104,7 @@ class WebhookManager:
             error_details: MuxiErrorDetails = {
                 "code": "processing_failed",
                 "message": error,
-                "trace": None
+                "trace": None,
             }
             unified_response = create_unified_response(
                 request_id=request_id,
@@ -122,24 +115,22 @@ class WebhookManager:
                 processing_time=processing_time,
                 processing_mode=processing_mode or "async",
                 webhook_url=webhook_url,
-                error=error_details
+                error=error_details,
             )
         else:
             # Successful completion
             # Convert result to content items
             response_content = []
             if result:
-                if hasattr(result, 'content'):
+                if hasattr(result, "content"):
                     # MCPMessage or similar object
                     content_str = str(result.content)
                 else:
                     content_str = str(result)
 
-                response_content: List[MuxiContentItem] = [{
-                    "type": "text",
-                    "text": content_str,
-                    "file": None
-                }]
+                response_content: List[MuxiContentItem] = [
+                    {"type": "text", "text": content_str, "file": None}
+                ]
 
             unified_response = create_unified_response(
                 request_id=request_id,
@@ -150,60 +141,64 @@ class WebhookManager:
                 processing_time=processing_time,
                 processing_mode=processing_mode or "async",
                 webhook_url=webhook_url,
-                error=None
+                error=None,
             )
 
         for attempt in range(max_retries + 1):
             try:
                 success = await self._deliver_webhook(
-                    webhook_url,
-                    unified_response,
-                    request_timeout
+                    webhook_url, unified_response, request_timeout
                 )
                 if success:
                     if attempt > 0:
                         #  Webhook info - add observability event
-                            f"✅ Webhook delivered successfully for request "
-                            f"{request_id} (succeeded on attempt {attempt + 1})"
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"✅ Webhook delivered successfully for request "
+                        #     f"{request_id} (succeeded on attempt {attempt + 1})"
+                        # )
                     else:
                         #  Webhook info - add observability event
-                            f"✅ Webhook delivered successfully for request "
-                            f"{request_id}"
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"✅ Webhook delivered successfully for request "
+                        #     f"{request_id}"
+                        # )
                     return True
                 else:
                     if attempt < max_retries:
                         #  Webhook warning - add observability event
-                            f"🔄 Webhook delivery attempt "
-                            f"{attempt + 1}/{max_retries + 1} failed "
-                            f"for request {request_id}, retrying..."
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"🔄 Webhook delivery attempt "
+                        #     f"{attempt + 1}/{max_retries + 1} failed "
+                        #     f"for request {request_id}, retrying..."
+                        # )
                     else:
                         #  Webhook error - add observability event
-                            f"❌ Webhook delivery failed permanently for "
-                            f"request {request_id} after {max_retries + 1} "
-                            f"attempts"
-                        )
+                        _ = None  # remove this after implementing observability
+                        # f"❌ Webhook delivery failed permanently for "
+                        #     f"request {request_id} after {max_retries + 1} "
+                        #     f"attempts"
+                        # )
 
             except Exception as e:
                 # Provide elegant error messages instead of verbose HTTP details
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
                     #  Webhook warning - add observability event
-                        f"🔄 Webhook delivery attempt "
-                        f"{attempt + 1}/{max_retries + 1} failed "
-                        f"for request {request_id}: {error_summary}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"🔄 Webhook delivery attempt "
+                    #     f"{attempt + 1}/{max_retries + 1} failed "
+                    #     f"for request {request_id}: {error_summary}"
+                    # )
                 else:
                     #  Webhook error - add observability event
-                        f"❌ Webhook delivery failed permanently for "
-                        f"request {request_id}: {error_summary}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"❌ Webhook delivery failed permanently for "
+                    #     f"request {request_id}: {error_summary}"
+                    # )
 
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
-                wait_time = min(2 ** attempt, 60)  # Cap at 60 seconds
+                wait_time = min(2**attempt, 60)  # Cap at 60 seconds
                 #  Webhook debug - add observability event
                 await asyncio.sleep(wait_time)
 
@@ -260,18 +255,19 @@ class WebhookManager:
             return "Request timeout"
 
         # DNS/host resolution errors
-        if ("name or service not known" in error_str or
-                "nodename nor servname provided" in error_str):
+        if (
+            "name or service not known" in error_str
+            or "nodename nor servname provided" in error_str
+        ):
             return "Host not found (DNS resolution failed)"
 
         # SSL/TLS errors
-        if ("ssl" in error_str and
-                ("certificate" in error_str or "handshake" in error_str)):
+        if "ssl" in error_str and ("certificate" in error_str or "handshake" in error_str):
             return "SSL/TLS handshake failed"
 
         # HTTP status errors
-        if hasattr(exception, 'status'):
-            status = getattr(exception, 'status')
+        if hasattr(exception, "status"):
+            status = getattr(exception, "status")
             if status >= 500:
                 return f"Server error (HTTP {status})"
             elif status >= 400:
@@ -291,10 +287,7 @@ class WebhookManager:
             return f"{exception_type}: {str(exception)[:50]}..."
 
     async def _deliver_webhook(
-        self,
-        webhook_url: str,
-        payload: MuxiUnifiedResponse,
-        timeout: int
+        self, webhook_url: str, payload: MuxiUnifiedResponse, timeout: int
     ) -> bool:
         """
         Internal method to deliver a single webhook using unified response format.
@@ -314,24 +307,25 @@ class WebhookManager:
             payload_dict = self._clean_payload_for_serialization(payload)
 
             async with session.post(
-                webhook_url,
-                json=payload_dict,
-                timeout=aiohttp.ClientTimeout(total=timeout)
+                webhook_url, json=payload_dict, timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
                     #  Webhook debug - add observability event
-                        f"Webhook delivered successfully (HTTP {response.status})"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"Webhook delivered successfully (HTTP {response.status})"
+                    # )
                     return True
                 else:
                     #  Webhook warning - add observability event
-                        f"Webhook delivery failed with HTTP {response.status}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"Webhook delivery failed with HTTP {response.status}"
+                    # )
                     return False
 
         except Exception as e:
             #  Webhook debug - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     async def close(self):
@@ -356,7 +350,7 @@ class WebhookManager:
         original_message: Optional[str] = None,
         user_id: Optional[str] = None,
         retries: Optional[int] = None,
-        timeout: Optional[int] = None
+        timeout: Optional[int] = None,
     ) -> bool:
         """
         Deliver clarification question to webhook URL.
@@ -375,9 +369,7 @@ class WebhookManager:
             True if delivery was successful, False otherwise
         """
         max_retries = retries if retries is not None else self.default_retries
-        request_timeout = (
-            timeout if timeout is not None else self.default_timeout
-        )
+        request_timeout = timeout if timeout is not None else self.default_timeout
 
         # Create clarification payload
         payload = ClarificationWebhookPayload(
@@ -385,71 +377,72 @@ class WebhookManager:
             clarification_question=clarification_question,
             clarification_request_id=clarification_request_id,
             original_message=original_message,
-            user_id=user_id
+            user_id=user_id,
         )
 
         for attempt in range(max_retries + 1):
             try:
                 success = await self._deliver_clarification_webhook(
-                    webhook_url,
-                    payload,
-                    request_timeout
+                    webhook_url, payload, request_timeout
                 )
                 if success:
                     if attempt > 0:
                         #  Webhook info - add observability event
-                            f"✅ Clarification webhook delivered successfully "
-                            f"for request {request_id} (succeeded on attempt "
-                            f"{attempt + 1})"
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"✅ Clarification webhook delivered successfully "
+                        #     f"for request {request_id} (succeeded on attempt "
+                        #     f"{attempt + 1})"
+                        # )
                     else:
                         #  Webhook info - add observability event
-                            f"✅ Clarification webhook delivered successfully "
-                            f"for request {request_id}"
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"✅ Clarification webhook delivered successfully "
+                        #     f"for request {request_id}"
+                        # )
                     return True
                 else:
                     if attempt < max_retries:
                         #  Webhook warning - add observability event
-                            f"🔄 Clarification webhook delivery attempt "
-                            f"{attempt + 1}/{max_retries + 1} failed "
-                            f"for request {request_id}, retrying..."
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"🔄 Clarification webhook delivery attempt "
+                        #     f"{attempt + 1}/{max_retries + 1} failed "
+                        #     f"for request {request_id}, retrying..."
+                        # )
                     else:
                         #  Webhook error - add observability event
-                            f"❌ Clarification webhook delivery failed "
-                            f"permanently for request {request_id} "
-                            f"after {max_retries + 1} attempts"
-                        )
+                        _ = None  # remove this after implementing observability
+                        #     f"❌ Clarification webhook delivery failed "
+                        #     f"permanently for request {request_id} "
+                        #     f"after {max_retries + 1} attempts"
+                        # )
 
             except Exception as e:
                 error_summary = self._summarize_webhook_error(e)
                 if attempt < max_retries:
                     #  Webhook warning - add observability event
-                        f"🔄 Clarification webhook delivery attempt "
-                        f"{attempt + 1}/{max_retries + 1} failed "
-                        f"for request {request_id}: {error_summary}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"🔄 Clarification webhook delivery attempt "
+                    #     f"{attempt + 1}/{max_retries + 1} failed "
+                    #     f"for request {request_id}: {error_summary}"
+                    # )
                 else:
                     #  Webhook error - add observability event
-                        f"❌ Clarification webhook delivery failed "
-                        f"permanently for request {request_id}: "
-                        f"{error_summary}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"❌ Clarification webhook delivery failed "
+                    #     f"permanently for request {request_id}: "
+                    #     f"{error_summary}"
+                    # )
 
             # Wait before retry (exponential backoff)
             if attempt < max_retries:
-                wait_time = min(2 ** attempt, 60)  # Cap at 60 seconds
+                wait_time = min(2**attempt, 60)  # Cap at 60 seconds
                 #  Webhook debug - add observability event
                 await asyncio.sleep(wait_time)
 
         return False
 
     async def _deliver_clarification_webhook(
-        self,
-        webhook_url: str,
-        payload: ClarificationWebhookPayload,
-        timeout: int
+        self, webhook_url: str, payload: ClarificationWebhookPayload, timeout: int
     ) -> bool:
         """
         Internal method to deliver a clarification webhook.
@@ -466,24 +459,25 @@ class WebhookManager:
             session = await self._get_session()
 
             async with session.post(
-                webhook_url,
-                json=payload.to_dict(),
-                timeout=aiohttp.ClientTimeout(total=timeout)
+                webhook_url, json=payload.to_dict(), timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
                     #  Webhook debug - add observability event
-                        f"Clarification webhook delivered successfully "
-                        f"(HTTP {response.status})"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"Clarification webhook delivered successfully "
+                    #     f"(HTTP {response.status})"
+                    # )
                     return True
                 else:
                     #  Webhook warning - add observability event
-                        f"Clarification webhook delivery failed with "
-                        f"HTTP {response.status}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"Clarification webhook delivery failed with "
+                    #     f"HTTP {response.status}"
+                    # )
                     return False
 
         except Exception as e:
             #  Webhook debug - add observability event
+            _ = e  # remove this after implementing observability
             return False

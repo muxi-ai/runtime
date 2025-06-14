@@ -8,12 +8,13 @@ thread-safe operations.
 import asyncio
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Any
 from enum import Enum
+from typing import Any, Dict, Optional
 
 
 class RequestStatus(Enum):
     """Request status enumeration."""
+
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -23,6 +24,7 @@ class RequestStatus(Enum):
 @dataclass
 class RequestState:
     """Represents the state of an async request."""
+
     id: str
     status: RequestStatus
     start_time: float
@@ -69,7 +71,7 @@ class RequestTracker:
         request_id: str,
         status: RequestStatus,
         result: Any = None,
-        error: Optional[str] = None
+        error: Optional[str] = None,
     ) -> bool:
         """
         Update request status and result.
@@ -156,9 +158,11 @@ class RequestTracker:
         async with self._lock:
             to_remove = []
             for request_id, request_state in self._requests.items():
-                if (request_state.status in (RequestStatus.COMPLETED, RequestStatus.FAILED) and
-                        request_state.end_time and
-                        (current_time - request_state.end_time) > max_age_seconds):
+                if (
+                    request_state.status in (RequestStatus.COMPLETED, RequestStatus.FAILED)
+                    and request_state.end_time
+                    and (current_time - request_state.end_time) > max_age_seconds
+                ):
                     to_remove.append(request_id)
 
             for request_id in to_remove:

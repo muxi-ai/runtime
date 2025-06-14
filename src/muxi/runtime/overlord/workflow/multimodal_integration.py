@@ -6,26 +6,26 @@ into workflow execution, enabling tasks to receive, process, and output
 rich multi-modal content.
 """
 
-import asyncio
 import mimetypes
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
+import time
+from ... import observability
 
-# Loguru import removed - add observability import
-
-from .types import Workflow, SubTask, TaskInput, TaskOutput, TaskStatus
+from .types import Workflow, SubTask, TaskInput, TaskOutput
 from .multimodal import (
     MultiModalFusionEngine,
     MultiModalContent,
     ModalityType,
-    MultiModalProcessingResult
+    MultiModalProcessingResult,
 )
 
 
 @dataclass
 class MultiModalTaskInput(TaskInput):
     """Enhanced task input with multi-modal content support"""
+
     content_items: List[MultiModalContent] = field(default_factory=list)
     fusion_context: Optional[Dict[str, Any]] = None
     processing_mode: str = "adaptive"
@@ -34,6 +34,7 @@ class MultiModalTaskInput(TaskInput):
 @dataclass
 class MultiModalTaskOutput(TaskOutput):
     """Enhanced task output with multi-modal content support"""
+
     content_items: List[MultiModalContent] = field(default_factory=list)
     fusion_result: Optional[MultiModalProcessingResult] = None
     generated_media: List[Dict[str, Any]] = field(default_factory=list)
@@ -54,9 +55,7 @@ class WorkflowMultiModalProcessor:
         self.task_content_mapping: Dict[str, List[str]] = {}  # task_id -> content_ids
 
     async def process_workflow_content(
-        self,
-        workflow: Workflow,
-        initial_content: List[MultiModalContent] = None
+        self, workflow: Workflow, initial_content: List[MultiModalContent] = None
     ) -> Workflow:
         """
         Process multi-modal content for entire workflow.
@@ -89,6 +88,7 @@ class WorkflowMultiModalProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return workflow
 
     async def _register_content(self, content: MultiModalContent) -> str:
@@ -113,8 +113,12 @@ class WorkflowMultiModalProcessor:
     def _task_requires_multimodal(self, task: SubTask) -> bool:
         """Determine if task requires multi-modal processing"""
         multimodal_capabilities = [
-            "image_analysis", "audio_processing", "video_analysis",
-            "multimodal_fusion", "content_generation", "media_creation"
+            "image_analysis",
+            "audio_processing",
+            "video_analysis",
+            "multimodal_fusion",
+            "content_generation",
+            "media_creation",
         ]
 
         return any(cap in task.required_capabilities for cap in multimodal_capabilities)
@@ -131,9 +135,7 @@ class WorkflowMultiModalProcessor:
             )
 
             # Configure multi-modal outputs
-            task.multimodal_outputs = self._configure_task_outputs(
-                task, required_modalities
-            )
+            task.multimodal_outputs = self._configure_task_outputs(task, required_modalities)
 
             # Add multi-modal processing instructions
             task.processing_instructions = self._create_processing_instructions(
@@ -142,6 +144,7 @@ class WorkflowMultiModalProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
 
     def _get_required_modalities(self, task: SubTask) -> List[ModalityType]:
         """Determine which modalities this task requires"""
@@ -151,7 +154,7 @@ class WorkflowMultiModalProcessor:
             "video_analysis": [ModalityType.VIDEO],
             "text_processing": [ModalityType.TEXT],
             "document_analysis": [ModalityType.DOCUMENT],
-            "multimodal_fusion": [ModalityType.TEXT, ModalityType.IMAGE, ModalityType.AUDIO]
+            "multimodal_fusion": [ModalityType.TEXT, ModalityType.IMAGE, ModalityType.AUDIO],
         }
 
         required_modalities = set()
@@ -162,10 +165,7 @@ class WorkflowMultiModalProcessor:
         return list(required_modalities)
 
     async def _prepare_task_inputs(
-        self,
-        task: SubTask,
-        required_modalities: List[ModalityType],
-        workflow: Workflow
+        self, task: SubTask, required_modalities: List[ModalityType], workflow: Workflow
     ) -> List[MultiModalTaskInput]:
         """Prepare multi-modal inputs for task"""
         task_inputs = []
@@ -180,17 +180,13 @@ class WorkflowMultiModalProcessor:
         all_content = relevant_content + dependency_content
 
         if all_content:
-            task_input = MultiModalTaskInput(
-                content_items=all_content,
-                processing_mode="adaptive"
-            )
+            task_input = MultiModalTaskInput(content_items=all_content, processing_mode="adaptive")
             task_inputs.append(task_input)
 
         return task_inputs
 
     def _get_relevant_content(
-        self,
-        required_modalities: List[ModalityType]
+        self, required_modalities: List[ModalityType]
     ) -> List[MultiModalContent]:
         """Get content items matching required modalities"""
         relevant_content = []
@@ -202,9 +198,7 @@ class WorkflowMultiModalProcessor:
         return relevant_content
 
     async def _get_dependency_content(
-        self,
-        task: SubTask,
-        workflow: Workflow
+        self, task: SubTask, workflow: Workflow
     ) -> List[MultiModalContent]:
         """Get multi-modal content from task dependencies"""
         dependency_content = []
@@ -214,7 +208,7 @@ class WorkflowMultiModalProcessor:
                 dep_task = workflow.tasks[dep_task_id]
 
                 # Check if dependency has multi-modal outputs
-                if hasattr(dep_task, 'multimodal_outputs') and dep_task.multimodal_outputs:
+                if hasattr(dep_task, "multimodal_outputs") and dep_task.multimodal_outputs:
                     for output in dep_task.multimodal_outputs:
                         if isinstance(output, MultiModalTaskOutput):
                             dependency_content.extend(output.content_items)
@@ -222,9 +216,7 @@ class WorkflowMultiModalProcessor:
         return dependency_content
 
     def _configure_task_outputs(
-        self,
-        task: SubTask,
-        required_modalities: List[ModalityType]
+        self, task: SubTask, required_modalities: List[ModalityType]
     ) -> List[MultiModalTaskOutput]:
         """Configure expected multi-modal outputs for task"""
         # Determine expected output modalities based on task type
@@ -235,16 +227,14 @@ class WorkflowMultiModalProcessor:
             output = MultiModalTaskOutput(
                 name=config["name"],
                 description=config["description"],
-                content_type=config.get("content_type", "mixed")
+                content_type=config.get("content_type", "mixed"),
             )
             task_outputs.append(output)
 
         return task_outputs
 
     def _get_output_configuration(
-        self,
-        task: SubTask,
-        input_modalities: List[ModalityType]
+        self, task: SubTask, input_modalities: List[ModalityType]
     ) -> List[Dict[str, Any]]:
         """Get output configuration based on task capabilities"""
         output_configs = []
@@ -252,27 +242,43 @@ class WorkflowMultiModalProcessor:
         # Map capabilities to expected outputs
         capability_outputs = {
             "image_analysis": [
-                {"name": "analysis_result", "description": "Image analysis results", "content_type": "text"},
-                {"name": "annotated_image", "description": "Annotated image", "content_type": "image"}
+                {
+                    "name": "analysis_result",
+                    "description": "Image analysis results",
+                    "content_type": "text",
+                },
+                {
+                    "name": "annotated_image",
+                    "description": "Annotated image",
+                    "content_type": "image",
+                },
             ],
             "content_generation": [
-                {"name": "generated_content", "description": "Generated content", "content_type": "text"}
+                {
+                    "name": "generated_content",
+                    "description": "Generated content",
+                    "content_type": "text",
+                }
             ],
             "multimodal_fusion": [
-                {"name": "fusion_result", "description": "Fused multi-modal content", "content_type": "mixed"}
-            ]
+                {
+                    "name": "fusion_result",
+                    "description": "Fused multi-modal content",
+                    "content_type": "mixed",
+                }
+            ],
         }
 
         for capability in task.required_capabilities:
             if capability in capability_outputs:
                 output_configs.extend(capability_outputs[capability])
 
-        return output_configs or [{"name": "default_output", "description": "Task output", "content_type": "text"}]
+        return output_configs or [
+            {"name": "default_output", "description": "Task output", "content_type": "text"}
+        ]
 
     def _create_processing_instructions(
-        self,
-        task: SubTask,
-        required_modalities: List[ModalityType]
+        self, task: SubTask, required_modalities: List[ModalityType]
     ) -> Dict[str, Any]:
         """Create multi-modal processing instructions for task"""
         return {
@@ -282,8 +288,8 @@ class WorkflowMultiModalProcessor:
             "quality_requirements": {
                 "min_fusion_quality": 0.7,
                 "preserve_original_content": True,
-                "generate_fallbacks": True
-            }
+                "generate_fallbacks": True,
+            },
         }
 
     async def _setup_content_flow(self, workflow: Workflow):
@@ -315,13 +321,11 @@ class TaskInputProcessor:
             ModalityType.IMAGE: ["jpg", "jpeg", "png", "gif", "svg", "webp"],
             ModalityType.AUDIO: ["mp3", "wav", "m4a", "ogg", "flac"],
             ModalityType.VIDEO: ["mp4", "avi", "mkv", "webm", "mov"],
-            ModalityType.DOCUMENT: ["pdf", "doc", "docx", "txt", "md", "rtf"]
+            ModalityType.DOCUMENT: ["pdf", "doc", "docx", "txt", "md", "rtf"],
         }
 
     async def process_task_inputs(
-        self,
-        task: SubTask,
-        raw_inputs: List[Any]
+        self, task: SubTask, raw_inputs: List[Any]
     ) -> List[MultiModalTaskInput]:
         """
         Process raw inputs into multi-modal task inputs.
@@ -342,8 +346,7 @@ class TaskInputProcessor:
 
                 if content_items:
                     task_input = MultiModalTaskInput(
-                        content_items=content_items,
-                        processing_mode="adaptive"
+                        content_items=content_items, processing_mode="adaptive"
                     )
                     processed_inputs.append(task_input)
 
@@ -351,6 +354,7 @@ class TaskInputProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return []
 
     async def _process_single_input(self, raw_input: Any) -> List[MultiModalContent]:
@@ -385,9 +389,10 @@ class TaskInputProcessor:
     def _is_file_path(self, input_str: str) -> bool:
         """Check if string is a file path"""
         return (
-            Path(input_str).exists() or
-            input_str.startswith(('http://', 'https://')) or
-            '.' in input_str and len(input_str.split('.')[-1]) <= 4
+            Path(input_str).exists()
+            or input_str.startswith(("http://", "https://"))
+            or "." in input_str
+            and len(input_str.split(".")[-1]) <= 4
         )
 
     async def _process_file_input(self, file_path: str) -> Optional[MultiModalContent]:
@@ -403,7 +408,7 @@ class TaskInputProcessor:
 
             # Read file content
             if Path(file_path).exists():
-                with open(file_path, 'rb') as f:
+                with open(file_path, "rb") as f:
                     content = f.read()
             else:
                 # Handle URL or remote file
@@ -414,7 +419,7 @@ class TaskInputProcessor:
                 modality=modality,
                 content=content,
                 mime_type=mime_type,
-                metadata={"source": file_path}
+                metadata={"source": file_path},
             )
 
             # Add file-specific metadata
@@ -427,6 +432,7 @@ class TaskInputProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     def _detect_modality_from_mime(self, mime_type: Optional[str]) -> Optional[ModalityType]:
@@ -434,15 +440,15 @@ class TaskInputProcessor:
         if not mime_type:
             return None
 
-        mime_main = mime_type.split('/')[0]
+        mime_main = mime_type.split("/")[0]
 
-        if mime_main == 'image':
+        if mime_main == "image":
             return ModalityType.IMAGE
-        elif mime_main == 'audio':
+        elif mime_main == "audio":
             return ModalityType.AUDIO
-        elif mime_main == 'video':
+        elif mime_main == "video":
             return ModalityType.VIDEO
-        elif mime_main == 'text' or mime_type == 'application/pdf':
+        elif mime_main == "text" or mime_type == "application/pdf":
             return ModalityType.DOCUMENT
         else:
             return ModalityType.DOCUMENT  # Default fallback
@@ -453,8 +459,8 @@ class TaskInputProcessor:
             modality=ModalityType.TEXT,
             content=text,
             mime_type="text/plain",
-            size_bytes=len(text.encode('utf-8')),
-            metadata={"source": "direct_input"}
+            size_bytes=len(text.encode("utf-8")),
+            metadata={"source": "direct_input"},
         )
 
     async def _process_binary_input(self, binary_data: bytes) -> Optional[MultiModalContent]:
@@ -462,10 +468,10 @@ class TaskInputProcessor:
         try:
             # Try to detect content type from binary data
             # This is a simplified implementation
-            if binary_data.startswith(b'\x89PNG'):
+            if binary_data.startswith(b"\x89PNG"):
                 modality = ModalityType.IMAGE
                 mime_type = "image/png"
-            elif binary_data.startswith(b'\xff\xd8\xff'):
+            elif binary_data.startswith(b"\xff\xd8\xff"):
                 modality = ModalityType.IMAGE
                 mime_type = "image/jpeg"
             else:
@@ -478,14 +484,17 @@ class TaskInputProcessor:
                 content=binary_data,
                 mime_type=mime_type,
                 size_bytes=len(binary_data),
-                metadata={"source": "binary_input"}
+                metadata={"source": "binary_input"},
             )
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
-    async def _process_structured_input(self, structured_data: Dict[str, Any]) -> Optional[MultiModalContent]:
+    async def _process_structured_input(
+        self, structured_data: Dict[str, Any]
+    ) -> Optional[MultiModalContent]:
         """Process structured input data"""
         try:
             # Extract content type and data
@@ -498,7 +507,7 @@ class TaskInputProcessor:
                 "image": ModalityType.IMAGE,
                 "audio": ModalityType.AUDIO,
                 "video": ModalityType.VIDEO,
-                "document": ModalityType.DOCUMENT
+                "document": ModalityType.DOCUMENT,
             }
 
             modality = type_mapping.get(content_type, ModalityType.TEXT)
@@ -507,11 +516,12 @@ class TaskInputProcessor:
                 modality=modality,
                 content=content_data,
                 mime_type=structured_data.get("mime_type", "text/plain"),
-                metadata=structured_data.get("metadata", {})
+                metadata=structured_data.get("metadata", {}),
             )
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
 
@@ -527,9 +537,7 @@ class TaskOutputProcessor:
         self.fusion_engine = fusion_engine
 
     async def process_task_outputs(
-        self,
-        task: SubTask,
-        raw_outputs: List[Any]
+        self, task: SubTask, raw_outputs: List[Any]
     ) -> List[MultiModalTaskOutput]:
         """
         Process raw task outputs into multi-modal task outputs.
@@ -552,7 +560,7 @@ class TaskOutputProcessor:
                 task_output = MultiModalTaskOutput(
                     name=f"output_{len(processed_outputs)}",
                     content_items=content_items,
-                    metadata={"task_id": task.id, "generated_at": time.time()}
+                    metadata={"task_id": task.id, "generated_at": time.time()},
                 )
 
                 processed_outputs.append(task_output)
@@ -561,12 +569,11 @@ class TaskOutputProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return []
 
     async def _convert_output_to_content(
-        self,
-        raw_output: Any,
-        task: SubTask
+        self, raw_output: Any, task: SubTask
     ) -> List[MultiModalContent]:
         """Convert raw output to MultiModalContent items"""
         content_items = []
@@ -577,7 +584,7 @@ class TaskOutputProcessor:
                 modality=ModalityType.TEXT,
                 content=raw_output,
                 mime_type="text/plain",
-                metadata={"task_id": task.id, "output_type": "text"}
+                metadata={"task_id": task.id, "output_type": "text"},
             )
             content_items.append(content_item)
 
@@ -590,7 +597,7 @@ class TaskOutputProcessor:
                         modality=ModalityType.IMAGE,
                         content=value,
                         mime_type="image/png",
-                        metadata={"task_id": task.id, "output_type": key}
+                        metadata={"task_id": task.id, "output_type": key},
                     )
                     content_items.append(content_item)
 
@@ -600,7 +607,7 @@ class TaskOutputProcessor:
                         modality=ModalityType.AUDIO,
                         content=value,
                         mime_type="audio/wav",
-                        metadata={"task_id": task.id, "output_type": key}
+                        metadata={"task_id": task.id, "output_type": key},
                     )
                     content_items.append(content_item)
 
@@ -610,15 +617,14 @@ class TaskOutputProcessor:
                         modality=ModalityType.TEXT,
                         content=str(value),
                         mime_type="text/plain",
-                        metadata={"task_id": task.id, "output_type": key}
+                        metadata={"task_id": task.id, "output_type": key},
                     )
                     content_items.append(content_item)
 
         return content_items
 
     async def synthesize_outputs(
-        self,
-        task_outputs: List[MultiModalTaskOutput]
+        self, task_outputs: List[MultiModalTaskOutput]
     ) -> MultiModalProcessingResult:
         """
         Synthesize multiple task outputs using fusion engine.
@@ -638,20 +644,18 @@ class TaskOutputProcessor:
             # Use fusion engine to synthesize
             if all_content:
                 result = await self.fusion_engine.process_multimodal_content(
-                    content_items=all_content,
-                    fusion_options={"synthesis_mode": "comprehensive"}
+                    content_items=all_content, fusion_options={"synthesis_mode": "comprehensive"}
                 )
                 return result
             else:
                 # Create empty result
                 return MultiModalProcessingResult(
                     unified_representation={"summary": "No content to synthesize"},
-                    modality_results={}
+                    modality_results={},
                 )
 
         except Exception as e:
             #  Error - add observability event
             return MultiModalProcessingResult(
-                unified_representation={"error": str(e)},
-                modality_results={}
+                unified_representation={"error": str(e)}, modality_results={}
             )

@@ -14,12 +14,13 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-# Loguru import removed - add observability import
+from ... import observability
 
 
 @dataclass
 class DocumentTask:
     """Represents a task generated from document analysis"""
+
     task_id: str
     title: str
     description: str
@@ -38,6 +39,7 @@ class DocumentTask:
 @dataclass
 class WorkflowEnrichment:
     """Represents workflow enrichment from document analysis"""
+
     enrichment_id: str
     workflow_id: str
     document_insights: List[str]
@@ -60,7 +62,7 @@ class DocumentWorkflowIntegrator:
         self,
         llm_model,
         persona_config: Optional[Dict[str, Any]] = None,
-        workflow_config: Optional[Dict[str, Any]] = None
+        workflow_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the document workflow integrator.
@@ -100,7 +102,6 @@ class DocumentWorkflowIntegrator:
             - Priority level (low/medium/high/critical)
             - Estimated effort if possible
             """,
-
             "decision_tasks": """
             Identify decisions that need to be made based on this document.
             Look for:
@@ -115,7 +116,6 @@ class DocumentWorkflowIntegrator:
             - Stakeholders involved
             - Timeline if specified
             """,
-
             "review_tasks": """
             Identify items that require review or evaluation based on this document.
             Focus on:
@@ -130,7 +130,6 @@ class DocumentWorkflowIntegrator:
             - Who should conduct the review
             - Expected timeline
             """,
-
             "research_tasks": """
             Identify research or investigation tasks suggested by this document.
             Look for:
@@ -144,7 +143,7 @@ class DocumentWorkflowIntegrator:
             - Key questions to answer
             - Information sources to explore
             - Expected deliverables
-            """
+            """,
         }
 
     async def generate_tasks_from_document(
@@ -152,7 +151,7 @@ class DocumentWorkflowIntegrator:
         document_id: str,
         document_content: str,
         document_metadata: Optional[Dict[str, Any]] = None,
-        task_categories: Optional[List[str]] = None
+        task_categories: Optional[List[str]] = None,
     ) -> List[DocumentTask]:
         """
         Generate actionable tasks from document analysis.
@@ -179,6 +178,7 @@ class DocumentWorkflowIntegrator:
                 all_tasks.extend(tasks)
             except Exception as e:
                 #  Error - add observability event
+                _ = e  # remove this after implementing observability
                 continue
 
         # Store generated tasks
@@ -193,7 +193,7 @@ class DocumentWorkflowIntegrator:
         workflow_id: str,
         document_id: str,
         document_content: str,
-        existing_workflow: Dict[str, Any]
+        existing_workflow: Dict[str, Any],
     ) -> WorkflowEnrichment:
         """
         Enrich an existing workflow with document insights.
@@ -243,7 +243,7 @@ class DocumentWorkflowIntegrator:
                 risk_factors=parsed_insights["risks"],
                 optimization_opportunities=parsed_insights["opportunities"],
                 confidence_score=self._calculate_enrichment_confidence(parsed_insights),
-                timestamp=time.time()
+                timestamp=time.time(),
             )
 
             # Store enrichment
@@ -254,13 +254,11 @@ class DocumentWorkflowIntegrator:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             raise
 
     async def generate_follow_up_suggestions(
-        self,
-        document_id: str,
-        user_query: str,
-        document_content: str
+        self, document_id: str, user_query: str, document_content: str
     ) -> List[str]:
         """
         Generate follow-up suggestions based on document content and user query.
@@ -290,12 +288,13 @@ class DocumentWorkflowIntegrator:
             suggestions = self._parse_follow_up_suggestions(response)
 
             #  Info - add observability event
-                f"Generated {len(suggestions)} follow-up suggestions for document {document_id}"
-            )
+            #     f"Generated {len(suggestions)} follow-up suggestions for document {document_id}"
+            # )
             return suggestions
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return []
 
     async def _generate_tasks_for_category(
@@ -303,7 +302,7 @@ class DocumentWorkflowIntegrator:
         document_id: str,
         document_content: str,
         category: str,
-        document_metadata: Optional[Dict[str, Any]] = None
+        document_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[DocumentTask]:
         """Generate tasks for a specific category"""
         prompt = self._task_prompts.get(category, self._task_prompts["action_tasks"])
@@ -324,6 +323,7 @@ class DocumentWorkflowIntegrator:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return []
 
     def _parse_task_response(
@@ -331,11 +331,11 @@ class DocumentWorkflowIntegrator:
         response: str,
         document_id: str,
         category: str,
-        document_metadata: Optional[Dict[str, Any]] = None
+        document_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[DocumentTask]:
         """Parse LLM response into DocumentTask objects"""
         tasks = []
-        lines = response.strip().split('\n')
+        lines = response.strip().split("\n")
         current_task = {}
 
         for line in lines:
@@ -344,10 +344,11 @@ class DocumentWorkflowIntegrator:
                 continue
 
             # Look for task indicators
-            if (line.startswith('**') and line.endswith('**')) or \
-               (line.startswith('##') or line.startswith('###')):
+            if (line.startswith("**") and line.endswith("**")) or (
+                line.startswith("##") or line.startswith("###")
+            ):
                 # Save previous task if exists
-                if current_task.get('title'):
+                if current_task.get("title"):
                     task = self._create_task_from_parsed_data(
                         current_task, document_id, category, document_metadata
                     )
@@ -356,31 +357,31 @@ class DocumentWorkflowIntegrator:
 
                 # Start new task
                 current_task = {
-                    'title': line.strip('*#').strip(),
-                    'description': '',
-                    'priority': 'medium',
-                    'effort': None
+                    "title": line.strip("*#").strip(),
+                    "description": "",
+                    "priority": "medium",
+                    "effort": None,
                 }
 
-            elif line.startswith('- ') or line.startswith('• '):
+            elif line.startswith("- ") or line.startswith("• "):
                 # Add to description
-                if 'description' in current_task:
-                    current_task['description'] += f"\n{line}"
+                if "description" in current_task:
+                    current_task["description"] += f"\n{line}"
                 else:
-                    current_task['description'] = line
+                    current_task["description"] = line
 
-            elif 'priority:' in line.lower():
+            elif "priority:" in line.lower():
                 # Extract priority
-                priority_text = line.lower().split('priority:')[1].strip()
-                if any(p in priority_text for p in ['high', 'critical']):
-                    current_task['priority'] = 'high'
-                elif 'low' in priority_text:
-                    current_task['priority'] = 'low'
+                priority_text = line.lower().split("priority:")[1].strip()
+                if any(p in priority_text for p in ["high", "critical"]):
+                    current_task["priority"] = "high"
+                elif "low" in priority_text:
+                    current_task["priority"] = "low"
                 else:
-                    current_task['priority'] = 'medium'
+                    current_task["priority"] = "medium"
 
         # Save final task
-        if current_task.get('title'):
+        if current_task.get("title"):
             task = self._create_task_from_parsed_data(
                 current_task, document_id, category, document_metadata
             )
@@ -394,10 +395,10 @@ class DocumentWorkflowIntegrator:
         task_data: Dict[str, Any],
         document_id: str,
         category: str,
-        document_metadata: Optional[Dict[str, Any]] = None
+        document_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[DocumentTask]:
         """Create DocumentTask from parsed data"""
-        if not task_data.get('title'):
+        if not task_data.get("title"):
             return None
 
         task_id = f"{document_id}_{category}_{int(time.time())}"
@@ -407,36 +408,31 @@ class DocumentWorkflowIntegrator:
             "action_tasks": "action",
             "decision_tasks": "decision",
             "review_tasks": "review",
-            "research_tasks": "research"
+            "research_tasks": "research",
         }
 
         return DocumentTask(
             task_id=task_id,
-            title=task_data['title'],
-            description=task_data.get('description', ''),
-            priority=task_data.get('priority', 'medium'),
-            category=category_map.get(category, 'action'),
+            title=task_data["title"],
+            description=task_data.get("description", ""),
+            priority=task_data.get("priority", "medium"),
+            category=category_map.get(category, "action"),
             source_document_id=document_id,
             source_references=[document_id],
-            estimated_effort=task_data.get('effort'),
+            estimated_effort=task_data.get("effort"),
             dependencies=[],
             due_date=None,
             assignee=None,
             metadata=document_metadata or {},
-            created_at=time.time()
+            created_at=time.time(),
         )
 
     def _parse_workflow_insights(self, insights_response: str) -> Dict[str, List[str]]:
         """Parse workflow insights from LLM response"""
-        sections = {
-            "insights": [],
-            "improvements": [],
-            "risks": [],
-            "opportunities": []
-        }
+        sections = {"insights": [], "improvements": [], "risks": [], "opportunities": []}
 
         current_section = None
-        lines = insights_response.split('\n')
+        lines = insights_response.split("\n")
 
         for line in lines:
             line = line.strip()
@@ -444,15 +440,15 @@ class DocumentWorkflowIntegrator:
                 continue
 
             # Identify sections
-            if 'insight' in line.lower() or 'finding' in line.lower():
+            if "insight" in line.lower() or "finding" in line.lower():
                 current_section = "insights"
-            elif 'improvement' in line.lower() or 'optimization' in line.lower():
+            elif "improvement" in line.lower() or "optimization" in line.lower():
                 current_section = "improvements"
-            elif 'risk' in line.lower() or 'challenge' in line.lower():
+            elif "risk" in line.lower() or "challenge" in line.lower():
                 current_section = "risks"
-            elif 'opportunit' in line.lower() or 'potential' in line.lower():
+            elif "opportunit" in line.lower() or "potential" in line.lower():
                 current_section = "opportunities"
-            elif line.startswith('- ') or line.startswith('• '):
+            elif line.startswith("- ") or line.startswith("• "):
                 if current_section:
                     sections[current_section].append(line[2:])
 
@@ -461,13 +457,13 @@ class DocumentWorkflowIntegrator:
     def _parse_follow_up_suggestions(self, response: str) -> List[str]:
         """Parse follow-up suggestions from LLM response"""
         suggestions = []
-        lines = response.split('\n')
+        lines = response.split("\n")
 
         for line in lines:
             line = line.strip()
-            if line.startswith('- ') or line.startswith('• '):
+            if line.startswith("- ") or line.startswith("• "):
                 suggestions.append(line[2:])
-            elif line and not line.startswith('#') and '?' in line:
+            elif line and not line.startswith("#") and "?" in line:
                 # Likely a question suggestion
                 suggestions.append(line)
 
@@ -495,21 +491,20 @@ class DocumentWorkflowIntegrator:
     def get_tasks_by_document(self, document_id: str) -> List[DocumentTask]:
         """Get all tasks generated from a specific document"""
         return [
-            task for task in self._generated_tasks.values()
+            task
+            for task in self._generated_tasks.values()
             if task.source_document_id == document_id
         ]
 
     def get_tasks_by_category(self, category: str) -> List[DocumentTask]:
         """Get all tasks of a specific category"""
-        return [
-            task for task in self._generated_tasks.values()
-            if task.category == category
-        ]
+        return [task for task in self._generated_tasks.values() if task.category == category]
 
     def get_workflow_enrichments(self, workflow_id: str) -> List[WorkflowEnrichment]:
         """Get all enrichments for a specific workflow"""
         return [
-            enrichment for enrichment in self._workflow_enrichments.values()
+            enrichment
+            for enrichment in self._workflow_enrichments.values()
             if enrichment.workflow_id == workflow_id
         ]
 
@@ -538,7 +533,7 @@ class DocumentWorkflowIntegrator:
             "task_categories": task_categories,
             "task_priorities": task_priorities,
             "avg_enrichment_confidence": avg_confidence,
-            "unique_documents": len(set(
-                task.source_document_id for task in self._generated_tasks.values()
-            ))
+            "unique_documents": len(
+                set(task.source_document_id for task in self._generated_tasks.values())
+            ),
         }

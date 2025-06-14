@@ -11,9 +11,14 @@ import time
 from typing import List, Dict, Any, Optional
 from ...llm import LLM
 from .types import (
-    Message, ExplicitPreference, PreferenceType, ConfidenceScore,
-    PreferenceExtractionResult
+    Message,
+    ExplicitPreference,
+    PreferenceType,
+    ConfidenceScore,
+    PreferenceExtractionResult,
 )
+
+from ... import observability
 
 
 class PreferenceExtractor:
@@ -29,14 +34,15 @@ class PreferenceExtractor:
         self.model = model
         if not model:
             # Warn that preference extraction will be limited without LLM
-
-
+            _ = None  # remove this after implementing observability
             #  Warning - add observability event
-                "PreferenceExtractor initialized without model - "
-                "preference extraction will be disabled"
-            )
+            #     "PreferenceExtractor initialized without model - "
+            #     "preference extraction will be disabled"
+            # )
 
-    async def extract_explicit(self, conversation_history: List[Message]) -> PreferenceExtractionResult:
+    async def extract_explicit(
+        self, conversation_history: List[Message]
+    ) -> PreferenceExtractionResult:
         """
         Extract explicit preferences from conversation history using pure LLM analysis
 
@@ -51,7 +57,7 @@ class PreferenceExtractor:
                 explicit_preferences=[],
                 confidence_score=0.0,
                 extraction_method="no_data",
-                supporting_evidence=[]
+                supporting_evidence=[],
             )
 
         if not self.model:
@@ -60,7 +66,7 @@ class PreferenceExtractor:
                 explicit_preferences=[],
                 confidence_score=0.0,
                 extraction_method="no_model_available",
-                supporting_evidence=[]
+                supporting_evidence=[],
             )
 
         # Use pure LLM analysis for multilingual preference extraction
@@ -81,7 +87,7 @@ class PreferenceExtractor:
             explicit_preferences=deduplicated_preferences,
             confidence_score=confidence_score,
             extraction_method="llm_analysis_multilingual",
-            supporting_evidence=supporting_evidence
+            supporting_evidence=supporting_evidence,
         )
 
     async def _extract_with_llm(self, messages: List[Message]) -> List[ExplicitPreference]:
@@ -89,9 +95,9 @@ class PreferenceExtractor:
         preferences = []
 
         # Prepare messages for LLM analysis
-        message_text = "\n".join([
-            f"{msg.role}: {msg.content}" for msg in messages[-15:]  # Last 15 messages
-        ])
+        message_text = "\n".join(
+            [f"{msg.role}: {msg.content}" for msg in messages[-15:]]  # Last 15 messages
+        )
 
         prompt = f"""
         Analyze this conversation to identify explicit user preferences about how they like to
@@ -147,7 +153,7 @@ class PreferenceExtractor:
                             value=float(pref_data.get("confidence", 0.6)),
                             data_points=1,
                             recency=self._calculate_recent_message_recency(messages),
-                            consistency=1.0
+                            consistency=1.0,
                         )
 
                         preference = ExplicitPreference(
@@ -158,16 +164,14 @@ class PreferenceExtractor:
                             timestamp=time.time(),
                             context={
                                 "extraction_method": "llm_analysis_multilingual",
-                                "reasoning": pref_data.get("reasoning", "")
-                            }
+                                "reasoning": pref_data.get("reasoning", ""),
+                            },
                         )
                         preferences.append(preference)
 
         except Exception as e:
-            # Log error but continue
-
-
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
 
         return preferences
 
@@ -177,7 +181,7 @@ class PreferenceExtractor:
             "communication_style": PreferenceType.COMMUNICATION_STYLE,
             "detail_level": PreferenceType.DETAIL_LEVEL,
             "response_format": PreferenceType.RESPONSE_FORMAT,
-            "interaction_pace": PreferenceType.INTERACTION_PACE
+            "interaction_pace": PreferenceType.INTERACTION_PACE,
         }
         return type_mapping.get(type_string)
 
@@ -185,8 +189,8 @@ class PreferenceExtractor:
         """Parse LLM response JSON"""
         try:
             # Try to find JSON in the response
-            json_start = response.find('[')
-            json_end = response.rfind(']') + 1
+            json_start = response.find("[")
+            json_end = response.rfind("]") + 1
 
             if json_start >= 0 and json_end > json_start:
                 json_text = response[json_start:json_end]
@@ -196,7 +200,9 @@ class PreferenceExtractor:
         except Exception:
             return []
 
-    def _deduplicate_preferences(self, preferences: List[ExplicitPreference]) -> List[ExplicitPreference]:
+    def _deduplicate_preferences(
+        self, preferences: List[ExplicitPreference]
+    ) -> List[ExplicitPreference]:
         """Remove duplicate preferences, keeping the most confident ones"""
         seen = {}
 
@@ -212,14 +218,17 @@ class PreferenceExtractor:
 
         return list(seen.values())
 
-    def _calculate_extraction_confidence(self, preferences: List[ExplicitPreference],
-                                       message_count: int) -> float:
+    def _calculate_extraction_confidence(
+        self, preferences: List[ExplicitPreference], message_count: int
+    ) -> float:
         """Calculate overall confidence in extraction results"""
         if not preferences:
             return 0.0
 
         # Base confidence on average preference confidence
-        avg_confidence = sum(p.confidence.weighted_confidence for p in preferences) / len(preferences)
+        avg_confidence = sum(p.confidence.weighted_confidence for p in preferences) / len(
+            preferences
+        )
 
         # Adjust based on data volume
         data_factor = min(message_count / 10, 1.0)  # More messages = higher confidence

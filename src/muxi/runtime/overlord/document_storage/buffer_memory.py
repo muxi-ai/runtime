@@ -14,7 +14,7 @@ Features:
 import time
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
-# Loguru import removed - add observability import
+from ... import observability
 
 from .chunk_manager import DocumentChunkManager
 from .metadata_store import DocumentMetadata, DocumentMetadataStore
@@ -23,6 +23,7 @@ from .metadata_store import DocumentMetadata, DocumentMetadataStore
 @dataclass
 class DocumentBufferEntry:
     """Represents a document entry in the buffer memory"""
+
     document_id: str
     filename: str
     chunk_id: str
@@ -41,8 +42,8 @@ class DocumentBufferEntry:
                 "filename": self.filename,
                 "chunk_id": self.chunk_id,
                 "timestamp": self.timestamp,
-                "is_document": True
-            }
+                "is_document": True,
+            },
         }
 
 
@@ -69,7 +70,7 @@ class DocumentAwareBufferMemory:
         max_memory_mb: int = 1000,
         fifo_interval_min: float = 5,
         chunk_config: Optional[Dict[str, Any]] = None,
-        metadata_storage_path: Optional[str] = None
+        metadata_storage_path: Optional[str] = None,
     ):
         """
         Initialize document-aware buffer memory.
@@ -99,13 +100,23 @@ class DocumentAwareBufferMemory:
             mode=mode,
             remote=remote,
             max_memory_mb=max_memory_mb,
-            fifo_interval_min=fifo_interval_min
+            fifo_interval_min=fifo_interval_min,
         )
 
         # Copy important private attributes
-        for attr in ['buffer', 'max_size', 'buffer_multiplier', 'model',
-                     'vector_dimension', 'recency_bias', 'mode', 'remote',
-                     'max_memory_mb', 'fifo_interval_min', 'has_vector_search']:
+        for attr in [
+            "buffer",
+            "max_size",
+            "buffer_multiplier",
+            "model",
+            "vector_dimension",
+            "recency_bias",
+            "mode",
+            "remote",
+            "max_memory_mb",
+            "fifo_interval_min",
+            "has_vector_search",
+        ]:
             if hasattr(self._short_term_memory, attr):
                 setattr(self, attr, getattr(self._short_term_memory, attr))
 
@@ -127,7 +138,7 @@ class DocumentAwareBufferMemory:
         user_id: Optional[int] = None,
         tags: Optional[List[str]] = None,
         custom_metadata: Optional[Dict[str, Any]] = None,
-        chunking_strategy: str = "adaptive"
+        chunking_strategy: str = "adaptive",
     ) -> str:
         """
         Add a complete document to buffer memory with chunking.
@@ -147,9 +158,7 @@ class DocumentAwareBufferMemory:
 
         # Chunk the document
         chunks = await self.chunk_manager.chunk_document(
-            content=content,
-            filename=filename,
-            strategy=chunking_strategy
+            content=content, filename=filename, strategy=chunking_strategy
         )
 
         if not chunks:
@@ -159,7 +168,7 @@ class DocumentAwareBufferMemory:
         current_time = time.time()
 
         # Store document metadata
-        file_size = len(content.encode('utf-8'))
+        file_size = len(content.encode("utf-8"))
         total_words = sum(chunk.metadata.get("word_count", 0) for chunk in chunks)
 
         document_metadata = await self.metadata_store.store_document_metadata(
@@ -171,7 +180,7 @@ class DocumentAwareBufferMemory:
             chunk_strategy=chunking_strategy,
             user_id=user_id,
             tags=tags,
-            custom_metadata=custom_metadata
+            custom_metadata=custom_metadata,
         )
 
         # Create buffer entries for each chunk
@@ -184,7 +193,7 @@ class DocumentAwareBufferMemory:
                 content=chunk.content,
                 metadata=chunk.metadata,
                 timestamp=current_time,
-                document_metadata=document_metadata
+                document_metadata=document_metadata,
             )
             buffer_entries.append(entry)
 
@@ -192,10 +201,7 @@ class DocumentAwareBufferMemory:
             self._chunk_to_document[chunk.chunk_id] = document_id
 
             # Add to buffer memory
-            await self.add(
-                entry.content,
-                metadata=entry.to_memory_item()["metadata"]
-            )
+            await self.add(entry.content, metadata=entry.to_memory_item()["metadata"])
 
         # Track document entries
         self._document_entries[document_id] = buffer_entries
@@ -212,7 +218,7 @@ class DocumentAwareBufferMemory:
         filename_pattern: Optional[str] = None,
         tags: Optional[List[str]] = None,
         user_id: Optional[int] = None,
-        recency_bias: Optional[float] = None
+        recency_bias: Optional[float] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search specifically within document content.
@@ -240,7 +246,7 @@ class DocumentAwareBufferMemory:
             query=query,
             limit=limit * 3,  # Get more results for filtering
             filter_metadata=filter_metadata,
-            recency_bias=recency_bias or self.recency_bias
+            recency_bias=recency_bias or self.recency_bias,
         )
 
         # Filter and enhance results
@@ -266,6 +272,7 @@ class DocumentAwareBufferMemory:
             # Apply filename filter
             if filename_pattern:
                 import fnmatch
+
                 if not fnmatch.fnmatch(doc_metadata.filename.lower(), filename_pattern.lower()):
                     continue
 
@@ -283,8 +290,8 @@ class DocumentAwareBufferMemory:
                     "chunk_index": metadata.get("chunk_index", 0),
                     "total_chunks": doc_metadata.chunk_count,
                     "document_tags": doc_metadata.tags,
-                    "upload_timestamp": doc_metadata.upload_timestamp
-                }
+                    "upload_timestamp": doc_metadata.upload_timestamp,
+                },
             }
 
             filtered_results.append(enhanced_result)
@@ -295,9 +302,7 @@ class DocumentAwareBufferMemory:
 
         return filtered_results
 
-    async def get_document_chunks(
-        self, document_id: str
-    ) -> List[DocumentBufferEntry]:
+    async def get_document_chunks(self, document_id: str) -> List[DocumentBufferEntry]:
         """
         Get all chunks for a specific document.
 
@@ -329,7 +334,7 @@ class DocumentAwareBufferMemory:
         for entry in entries:
             # Find and remove from buffer
             for i, item in enumerate(self.buffer):
-                if (item.get("metadata", {}).get("chunk_id") == entry.chunk_id):
+                if item.get("metadata", {}).get("chunk_id") == entry.chunk_id:
                     del self.buffer[i]
                     break
 
@@ -374,7 +379,7 @@ class DocumentAwareBufferMemory:
             "max_chunks_per_document": max(chunk_counts),
             "oldest_document_timestamp": min(self._document_timestamps.values()),
             "newest_document_timestamp": max(self._document_timestamps.values()),
-            **storage_stats
+            **storage_stats,
         }
 
     async def _enhanced_fifo_cleanup(self) -> None:
@@ -389,14 +394,11 @@ class DocumentAwareBufferMemory:
             return
 
         #  Info - add observability event
-            f"Document-aware FIFO cleanup triggered: {current_memory}MB > {self.max_memory_mb}MB"
-        )
+        #     f"Document-aware FIFO cleanup triggered: {current_memory}MB > {self.max_memory_mb}MB"
+        # )
 
         # Sort documents by timestamp (oldest first)
-        sorted_docs = sorted(
-            self._document_timestamps.items(),
-            key=lambda x: x[1]
-        )
+        sorted_docs = sorted(self._document_timestamps.items(), key=lambda x: x[1])
 
         # Remove oldest documents until memory is acceptable
         removed_count = 0
@@ -442,4 +444,5 @@ class DocumentAwareBufferMemory:
 
             except Exception as e:
                 #  Error - add observability event
+                _ = e  # remove this after implementing observability
                 self.has_vector_search = False

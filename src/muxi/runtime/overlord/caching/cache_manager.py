@@ -6,20 +6,16 @@ with intelligent eviction policies, semantic similarity matching, and automatic
 memory optimization.
 """
 
-import asyncio
 import hashlib
 import json
 
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .cache_types import CacheKey, CachedResponse, CacheType, CacheStatistics
-from .implementations import LRUCache, TTLCache, SizeBasedCache, PersistentCache, SemanticCache
+from .implementations import LRUCache, SizeBasedCache, PersistentCache, SemanticCache
 from .analytics import CacheHitAnalyzer
 from .memory_optimizer import MemoryOptimizer
-
-
-
 
 
 class IntelligentCacheManager:
@@ -40,7 +36,7 @@ class IntelligentCacheManager:
         default_ttl_seconds: int = 3600,
         enable_analytics: bool = True,
         enable_memory_optimization: bool = True,
-        embedding_service: Optional[Any] = None
+        embedding_service: Optional[Any] = None,
     ):
         """
         Initialize intelligent cache manager.
@@ -62,16 +58,18 @@ class IntelligentCacheManager:
 
         # Initialize cache layers
         self.l1_cache = LRUCache(max_size=l1_max_size)  # Exact match cache
-        self.l2_cache = SemanticCache(max_size=l2_max_size, similarity_threshold=similarity_threshold)  # Semantic similarity
+        self.l2_cache = SemanticCache(
+            max_size=l2_max_size, similarity_threshold=similarity_threshold
+        )  # Semantic similarity
         self.l3_cache = SizeBasedCache(max_memory_mb=l3_max_memory_mb)  # Partial workflow cache
         self.persistent_cache = PersistentCache(db_path=persistent_db_path)  # Long-term storage
 
         # Cache layer names for analytics
         self.cache_layers = {
-            'L1': self.l1_cache,
-            'L2': self.l2_cache,
-            'L3': self.l3_cache,
-            'persistent': self.persistent_cache
+            "L1": self.l1_cache,
+            "L2": self.l2_cache,
+            "L3": self.l3_cache,
+            "persistent": self.persistent_cache,
         }
 
         # Analytics and optimization
@@ -119,7 +117,7 @@ class IntelligentCacheManager:
         user_message: str,
         context: Optional[Dict[str, Any]] = None,
         user_id: Optional[int] = None,
-        agent_id: Optional[str] = None
+        agent_id: Optional[str] = None,
     ) -> Optional[CachedResponse]:
         """
         Intelligent cache retrieval with multi-layer checking.
@@ -144,7 +142,7 @@ class IntelligentCacheManager:
         l1_response = await self.l1_cache.get(cache_key_str)
         if l1_response and l1_response.is_valid():
             response_time_ms = (time.time() - start_time) * 1000
-            self._record_cache_hit('L1', CacheType.EXACT, response_time_ms, cache_key_str)
+            self._record_cache_hit("L1", CacheType.EXACT, response_time_ms, cache_key_str)
             #  Cache manager debug - add observability event
             return l1_response
 
@@ -158,17 +156,20 @@ class IntelligentCacheManager:
                         best_match = similar_responses[0]  # (key, response, similarity)
                         if best_match[2] >= self.similarity_threshold:
                             response_time_ms = (time.time() - start_time) * 1000
-                            self._record_cache_hit('L2', CacheType.SIMILAR, response_time_ms, cache_key_str)
+                            self._record_cache_hit(
+                                "L2", CacheType.SIMILAR, response_time_ms, cache_key_str
+                            )
                             #  Cache manager debug - add observability event
                             return best_match[1]
             except Exception as e:
                 #  Cache manager error - add observability event
+                _ = e  # remove this after implementing observability
 
         # L3: Partial workflow cache (for workflow-based requests)
         l3_response = await self.l3_cache.get(cache_key_str)
         if l3_response and l3_response.is_valid():
             response_time_ms = (time.time() - start_time) * 1000
-            self._record_cache_hit('L3', CacheType.PARTIAL, response_time_ms, cache_key_str)
+            self._record_cache_hit("L3", CacheType.PARTIAL, response_time_ms, cache_key_str)
             #  Cache manager debug - add observability event
             return l3_response
 
@@ -178,13 +179,13 @@ class IntelligentCacheManager:
             # Promote to L1 cache for faster future access
             await self.l1_cache.put(cache_key_str, persistent_response)
             response_time_ms = (time.time() - start_time) * 1000
-            self._record_cache_hit('persistent', CacheType.EXACT, response_time_ms, cache_key_str)
+            self._record_cache_hit("persistent", CacheType.EXACT, response_time_ms, cache_key_str)
             #  Cache manager debug - add observability event
             return persistent_response
 
         # Cache miss
         response_time_ms = (time.time() - start_time) * 1000
-        self._record_cache_miss('overall', response_time_ms, cache_key_str)
+        self._record_cache_miss("overall", response_time_ms, cache_key_str)
         #  Cache manager debug - add observability event
         return None
 
@@ -201,7 +202,7 @@ class IntelligentCacheManager:
         workflow_id: Optional[str] = None,
         task_results: Optional[Dict[str, Any]] = None,
         ttl_seconds: Optional[int] = None,
-        quality_score: float = 1.0
+        quality_score: float = 1.0,
     ) -> bool:
         """
         Cache a response with intelligent layer placement.
@@ -238,7 +239,7 @@ class IntelligentCacheManager:
             ttl_seconds=ttl_seconds or self.default_ttl_seconds,
             quality_score=quality_score,
             workflow_id=workflow_id,
-            task_results=task_results or {}
+            task_results=task_results or {},
         )
 
         # Generate embedding for semantic caching
@@ -249,6 +250,7 @@ class IntelligentCacheManager:
                     cached_response.embedding = embedding
             except Exception as e:
                 #  Cache manager error - add observability event
+                _ = e  # remove this after implementing observability
 
         # Cache in multiple layers
         success_count = 0
@@ -281,7 +283,7 @@ class IntelligentCacheManager:
                 cache_component="intelligent_manager",
                 duration_ms=duration_ms,
                 success=success_count > 0,
-                memory_usage_bytes=self._get_total_memory_usage()
+                memory_usage_bytes=self._get_total_memory_usage(),
             )
 
         #  Cache manager debug - add observability event
@@ -292,7 +294,7 @@ class IntelligentCacheManager:
         user_message: Optional[str] = None,
         user_id: Optional[int] = None,
         agent_id: Optional[str] = None,
-        pattern: Optional[str] = None
+        pattern: Optional[str] = None,
     ) -> int:
         """
         Invalidate cached entries based on criteria.
@@ -333,14 +335,16 @@ class IntelligentCacheManager:
         cleanup_results = {}
 
         for name, cache in self.cache_layers.items():
-            if hasattr(cache, 'cleanup_expired'):
+            if hasattr(cache, "cleanup_expired"):
                 try:
                     cleaned = await cache.cleanup_expired()
                     cleanup_results[name] = cleaned
                     if cleaned > 0:
                         #  Cache manager info - add observability event
+                        _ = None  # remove this after implementing observability
                 except Exception as e:
                     #  Cache manager error - add observability event
+                    _ = e  # remove this after implementing observability
                     cleanup_results[name] = 0
             else:
                 cleanup_results[name] = 0
@@ -350,32 +354,34 @@ class IntelligentCacheManager:
     async def get_cache_statistics(self) -> Dict[str, Any]:
         """Get comprehensive cache statistics."""
         stats = {
-            'overall': {
-                'total_requests': self.request_count,
-                'total_memory_usage_bytes': self._get_total_memory_usage(),
-                'cache_layers': len(self.cache_layers)
+            "overall": {
+                "total_requests": self.request_count,
+                "total_memory_usage_bytes": self._get_total_memory_usage(),
+                "cache_layers": len(self.cache_layers),
             },
-            'layers': {}
+            "layers": {},
         }
 
         # Get statistics for each layer
         for name, cache in self.cache_layers.items():
             layer_stats = {
-                'size': cache.size() if hasattr(cache, 'size') else 0,
-                'memory_usage_bytes': cache.get_memory_usage() if hasattr(cache, 'get_memory_usage') else 0,
-                'type': type(cache).__name__
+                "size": cache.size() if hasattr(cache, "size") else 0,
+                "memory_usage_bytes": (
+                    cache.get_memory_usage() if hasattr(cache, "get_memory_usage") else 0
+                ),
+                "type": type(cache).__name__,
             }
-            stats['layers'][name] = layer_stats
+            stats["layers"][name] = layer_stats
 
         # Add analytics data if available
         if self.analytics:
-            stats['hit_rate_summary'] = self.analytics.get_hit_rate_summary(24)
-            stats['performance_summary'] = self.analytics.get_performance_summary(24)
-            stats['recommendations'] = self.analytics.get_optimization_recommendations()
+            stats["hit_rate_summary"] = self.analytics.get_hit_rate_summary(24)
+            stats["performance_summary"] = self.analytics.get_performance_summary(24)
+            stats["recommendations"] = self.analytics.get_optimization_recommendations()
 
         # Add memory optimizer data if available
         if self.memory_optimizer:
-            stats['memory_optimization'] = self.memory_optimizer.get_performance_summary()
+            stats["memory_optimization"] = self.memory_optimizer.get_performance_summary()
 
         return stats
 
@@ -394,7 +400,7 @@ class IntelligentCacheManager:
         user_message: str,
         context: Optional[Dict[str, Any]] = None,
         user_id: Optional[int] = None,
-        agent_id: Optional[str] = None
+        agent_id: Optional[str] = None,
     ) -> CacheKey:
         """
         Generate a composite cache key for the request.
@@ -415,8 +421,11 @@ class IntelligentCacheManager:
         # Generate context hash
         context_data = context or {}
         # Remove volatile context elements that shouldn't affect caching
-        stable_context = {k: v for k, v in context_data.items()
-                         if k not in ['timestamp', 'request_id', 'session_id']}
+        stable_context = {
+            k: v
+            for k, v in context_data.items()
+            if k not in ["timestamp", "request_id", "session_id"]
+        }
         context_str = json.dumps(stable_context, sort_keys=True)
         context_hash = hashlib.sha256(context_str.encode()).hexdigest()[:16]
 
@@ -424,7 +433,7 @@ class IntelligentCacheManager:
             request_fingerprint=request_fingerprint,
             context_hash=context_hash,
             user_id=user_id,
-            agent_id=agent_id
+            agent_id=agent_id,
         )
 
     async def _get_embedding(self, text: str) -> Optional[List[float]]:
@@ -441,26 +450,29 @@ class IntelligentCacheManager:
             return None
 
         try:
-            if hasattr(self.embedding_service, 'embed'):
+            if hasattr(self.embedding_service, "embed"):
                 return await self.embedding_service.embed(text)
-            elif hasattr(self.embedding_service, 'get_embedding'):
+            elif hasattr(self.embedding_service, "get_embedding"):
                 return await self.embedding_service.get_embedding(text)
             else:
                 #  Cache manager warning - add observability event
                 return None
         except Exception as e:
             #  Cache manager error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     def _get_total_memory_usage(self) -> int:
         """Get total memory usage across all cache layers."""
         total = 0
         for cache in self.cache_layers.values():
-            if hasattr(cache, 'get_memory_usage'):
+            if hasattr(cache, "get_memory_usage"):
                 total += cache.get_memory_usage()
         return total
 
-    def _record_cache_hit(self, layer: str, cache_type: CacheType, response_time_ms: float, cache_key: str) -> None:
+    def _record_cache_hit(
+        self, layer: str, cache_type: CacheType, response_time_ms: float, cache_key: str
+    ) -> None:
         """Record a cache hit for analytics."""
         self.statistics.record_hit(cache_type, response_time_ms)
 
@@ -469,7 +481,7 @@ class IntelligentCacheManager:
                 cache_layer=layer,
                 cache_type=cache_type,
                 response_time_ms=response_time_ms,
-                cache_key=cache_key
+                cache_key=cache_key,
             )
 
     def _record_cache_miss(self, layer: str, response_time_ms: float, cache_key: str) -> None:
@@ -478,9 +490,7 @@ class IntelligentCacheManager:
 
         if self.analytics:
             self.analytics.record_cache_miss(
-                cache_layer=layer,
-                response_time_ms=response_time_ms,
-                cache_key=cache_key
+                cache_layer=layer, response_time_ms=response_time_ms, cache_key=cache_key
             )
 
     async def __aenter__(self):

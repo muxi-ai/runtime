@@ -14,7 +14,7 @@ Supports:
 import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
-# Loguru import removed - add observability import
+from ... import observability
 
 from ...config.document_processing import DocumentProcessingConfig
 
@@ -26,6 +26,7 @@ import spacy
 @dataclass
 class DocumentChunk:
     """Represents a chunk of document content with metadata"""
+
     content: str
     chunk_id: str
     document_id: str
@@ -55,7 +56,7 @@ class DocumentChunkManager:
     def __init__(
         self,
         document_config: Optional[DocumentProcessingConfig] = None,
-        legacy_config: Optional[Dict[str, Any]] = None
+        legacy_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the document chunk manager.
@@ -91,29 +92,28 @@ class DocumentChunkManager:
         try:
             # Use configured spacy model if available
             model_name = (
-                self.document_config.get_spacy_model()
-                if self.document_config
-                else "en_core_web_sm"
+                self.document_config.get_spacy_model() if self.document_config else "en_core_web_sm"
             )
             self._nlp_model = spacy.load(model_name)
         except OSError:
             #  Warning - add observability event
-                "spaCy model not found - falling back to basic processing"
-            )
+            _ = None  # remove this after implementing observability
+            #     "spaCy model not found - falling back to basic processing"
+            # )
 
         # Ensure NLTK data is available
         try:
-            nltk.data.find('tokenizers/punkt')
+            nltk.data.find("tokenizers/punkt")
         except LookupError:
             #  Info - add observability event
-            nltk.download('punkt', quiet=True)
+            nltk.download("punkt", quiet=True)
 
     async def chunk_document(
         self,
         content: str,
         filename: str,
         strategy: str = "adaptive",
-        document_id: Optional[str] = None
+        document_id: Optional[str] = None,
     ) -> List[DocumentChunk]:
         """
         Chunk document using specified strategy.
@@ -167,8 +167,8 @@ class DocumentChunkManager:
                     "chunk_index": i,
                     "total_chunks": len(chunks),
                     "word_count": len(chunk_content.split()),
-                    "char_count": len(chunk_content)
-                }
+                    "char_count": len(chunk_content),
+                },
             )
             document_chunks.append(chunk)
 
@@ -187,15 +187,15 @@ class DocumentChunkManager:
             Recommended chunking strategy
         """
         # File extension hints
-        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+        ext = filename.lower().split(".")[-1] if "." in filename else ""
 
         # Analyze content characteristics
-        lines = content.split('\n')
+        lines = content.split("\n")
         avg_line_length = sum(len(line) for line in lines) / max(len(lines), 1)
-        paragraph_count = len([line for line in lines if line.strip() and not line.startswith(' ')])
+        paragraph_count = len([line for line in lines if line.strip() and not line.startswith(" ")])
 
         # Decision logic
-        if ext in ['md', 'txt', 'rst'] and paragraph_count > 3:
+        if ext in ["md", "txt", "rst"] and paragraph_count > 3:
             return "paragraph"
         elif avg_line_length > 100 and paragraph_count > 5:
             return "semantic"
@@ -225,7 +225,7 @@ class DocumentChunkManager:
             sentence_size = len(sentence)
 
             if current_size + sentence_size > self.default_chunk_size and current_chunk:
-                chunks.append(' '.join(current_chunk))
+                chunks.append(" ".join(current_chunk))
                 current_chunk = [sentence]
                 current_size = sentence_size
             else:
@@ -233,7 +233,7 @@ class DocumentChunkManager:
                 current_size += sentence_size
 
         if current_chunk:
-            chunks.append(' '.join(current_chunk))
+            chunks.append(" ".join(current_chunk))
 
         return chunks
 
@@ -249,7 +249,7 @@ class DocumentChunkManager:
             sentence_size = len(sentence)
 
             if current_size + sentence_size > self.default_chunk_size and current_chunk:
-                chunks.append(' '.join(current_chunk))
+                chunks.append(" ".join(current_chunk))
                 current_chunk = [sentence]
                 current_size = sentence_size
             else:
@@ -257,7 +257,7 @@ class DocumentChunkManager:
                 current_size += sentence_size
 
         if current_chunk:
-            chunks.append(' '.join(current_chunk))
+            chunks.append(" ".join(current_chunk))
 
         return chunks
 
@@ -309,7 +309,7 @@ class DocumentChunkManager:
             List of paragraph-based chunks
         """
         # Split by double newlines (paragraph breaks)
-        paragraphs = re.split(r'\n\s*\n', content)
+        paragraphs = re.split(r"\n\s*\n", content)
         chunks = []
         current_chunk = []
         current_size = 0
@@ -325,7 +325,7 @@ class DocumentChunkManager:
             if paragraph_size > self.max_chunk_size:
                 # Add current chunk if exists
                 if current_chunk:
-                    chunks.append('\n\n'.join(current_chunk))
+                    chunks.append("\n\n".join(current_chunk))
                     current_chunk = []
                     current_size = 0
 
@@ -336,7 +336,7 @@ class DocumentChunkManager:
 
             # Check if adding this paragraph exceeds chunk size
             if current_size + paragraph_size > self.default_chunk_size and current_chunk:
-                chunks.append('\n\n'.join(current_chunk))
+                chunks.append("\n\n".join(current_chunk))
                 current_chunk = [paragraph]
                 current_size = paragraph_size
             else:
@@ -345,7 +345,7 @@ class DocumentChunkManager:
 
         # Add final chunk
         if current_chunk:
-            chunks.append('\n\n'.join(current_chunk))
+            chunks.append("\n\n".join(current_chunk))
 
         return chunks if chunks else [content]
 
@@ -416,5 +416,5 @@ class DocumentChunkManager:
             "max_chunk_size": max(chunk_sizes),
             "total_words": sum(word_counts),
             "avg_words_per_chunk": sum(word_counts) / len(chunks),
-            "strategies_used": list(set(chunk.metadata.get("strategy") for chunk in chunks))
+            "strategies_used": list(set(chunk.metadata.get("strategy") for chunk in chunks)),
         }

@@ -6,10 +6,7 @@ determine if requests should be processed asynchronously.
 """
 
 from typing import Optional, Dict
-
-
-
-
+from ... import observability
 
 
 class TimeEstimator:
@@ -25,9 +22,7 @@ class TimeEstimator:
         self.analyzer = analyzer
 
     async def estimate_processing_time(
-        self,
-        request: str,
-        context: Optional[Dict] = None
+        self, request: str, context: Optional[Dict] = None
     ) -> Optional[float]:
         """
         Estimate processing time in seconds.
@@ -53,54 +48,48 @@ class TimeEstimator:
             complexity_multiplier = max(1.0, analysis.complexity_score / 5.0)
 
             # Capability multiplier - more capabilities = more time
-            required_capabilities = getattr(
-                analysis, 'required_capabilities', []
-            )
+            required_capabilities = getattr(analysis, "required_capabilities", [])
             capability_multiplier = max(1.0, len(required_capabilities))
 
             # Decomposition multiplier - complex tasks requiring breakdown
             decomposition_multiplier = (
-                2.0 if getattr(analysis, 'requires_decomposition', False)
-                else 1.0
+                2.0 if getattr(analysis, "requires_decomposition", False) else 1.0
             )
 
             # Multi-agent multiplier - coordination overhead
             multi_agent_multiplier = (
-                1.5 if getattr(analysis, 'requires_multi_agent', False)
-                else 1.0
+                1.5 if getattr(analysis, "requires_multi_agent", False) else 1.0
             )
 
             # Calculate estimated time
             estimated_seconds = (
-                base_time *
-                complexity_multiplier *
-                capability_multiplier *
-                decomposition_multiplier *
-                multi_agent_multiplier
+                base_time
+                * complexity_multiplier
+                * capability_multiplier
+                * decomposition_multiplier
+                * multi_agent_multiplier
             )
 
             # Cap at 1 hour maximum
             estimated_seconds = min(estimated_seconds, 3600)
 
             #  Debug - add observability event
-                f"Time estimation for request: {estimated_seconds:.1f}s "
-                f"(complexity: {analysis.complexity_score}, "
-                f"capabilities: {len(required_capabilities)}, "
-                f"decomposition: {getattr(analysis, 'requires_decomposition', False)}, "
-                f"multi-agent: {getattr(analysis, 'requires_multi_agent', False)})"
-            )
+            #     f"Time estimation for request: {estimated_seconds:.1f}s "
+            #     f"(complexity: {analysis.complexity_score}, "
+            #     f"capabilities: {len(required_capabilities)}, "
+            #     f"decomposition: {getattr(analysis, 'requires_decomposition', False)}, "
+            #     f"multi-agent: {getattr(analysis, 'requires_multi_agent', False)})"
+            # )
 
             return estimated_seconds
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def estimate_with_historical_data(
-        self,
-        request: str,
-        context: Optional[Dict] = None,
-        request_history=None
+        self, request: str, context: Optional[Dict] = None, request_history=None
     ) -> Optional[float]:
         """
         Estimate processing time including historical data.
@@ -125,21 +114,16 @@ class TimeEstimator:
         try:
             # Try to get historical average for similar request patterns
             request_type = await self._classify_request_type(request)
-            historical_average = await request_history.get_average_time_for_pattern(
-                request_type
-            )
+            historical_average = await request_history.get_average_time_for_pattern(request_type)
 
             if historical_average is not None:
                 # Blend base estimate with historical data (70% historical, 30% analysis)
-                adjusted_estimate = (
-                    0.7 * historical_average +
-                    0.3 * base_estimate
-                )
+                adjusted_estimate = 0.7 * historical_average + 0.3 * base_estimate
 
                 #  Debug - add observability event
-                    f"Adjusted time estimate using history: {adjusted_estimate:.1f}s "
-                    f"(base: {base_estimate:.1f}s, historical: {historical_average:.1f}s)"
-                )
+                #     f"Adjusted time estimate using history: {adjusted_estimate:.1f}s "
+                #     f"(base: {base_estimate:.1f}s, historical: {historical_average:.1f}s)"
+                # )
 
                 return adjusted_estimate
             else:
@@ -147,6 +131,7 @@ class TimeEstimator:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return base_estimate
 
     async def _classify_request_type(self, request: str) -> str:
@@ -162,23 +147,21 @@ class TimeEstimator:
         request_lower = request.lower()
 
         # Simple keyword-based classification
-        if any(word in request_lower for word in ['analyze', 'analysis', 'report']):
+        if any(word in request_lower for word in ["analyze", "analysis", "report"]):
             return "analysis"
-        elif any(word in request_lower for word in ['create', 'generate', 'build']):
+        elif any(word in request_lower for word in ["create", "generate", "build"]):
             return "creation"
-        elif any(word in request_lower for word in ['search', 'find', 'lookup']):
+        elif any(word in request_lower for word in ["search", "find", "lookup"]):
             return "search"
-        elif any(word in request_lower for word in ['summarize', 'summary']):
+        elif any(word in request_lower for word in ["summarize", "summary"]):
             return "summarization"
-        elif any(word in request_lower for word in ['explain', 'describe']):
+        elif any(word in request_lower for word in ["explain", "describe"]):
             return "explanation"
         else:
             return "general"
 
     def should_use_async(
-        self,
-        estimated_time: Optional[float],
-        threshold_seconds: float = 30.0
+        self, estimated_time: Optional[float], threshold_seconds: float = 30.0
     ) -> bool:
         """
         Determine if a request should be processed asynchronously.

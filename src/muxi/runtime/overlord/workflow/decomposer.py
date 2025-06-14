@@ -1,14 +1,17 @@
-import asyncio
-from typing import Optional, Dict, Any, List, Tuple
-import json
+from typing import Optional, Dict, Any, Tuple
 import re
-from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
 
 from .types import (
-    Workflow, SubTask, TaskStatus, WorkflowStatus, ApprovalStatus,
-    TaskInput, TaskOutput, RequestAnalysis,
-    generate_workflow_id, generate_task_id, validate_workflow_dag,
-    build_execution_phases
+    Workflow,
+    SubTask,
+    TaskStatus,
+    WorkflowStatus,
+    ApprovalStatus,
+    RequestAnalysis,
+    generate_workflow_id,
+    generate_task_id,
+    validate_workflow_dag,
+    build_execution_phases,
 )
 from ...llm import LLM
 
@@ -35,7 +38,7 @@ class TaskDecomposer:
         request: str,
         context: Optional[Dict[str, Any]] = None,
         analysis: Optional[RequestAnalysis] = None,
-        requires_approval: bool = False
+        requires_approval: bool = False,
     ) -> Workflow:
         """
         Break down complex request into executable workflow.
@@ -67,30 +70,27 @@ class TaskDecomposer:
                 )
             else:
                 # Fall back to heuristic decomposition
-                workflow = self._heuristic_decompose_request(
-                    workflow_id, request, analysis
-                )
+                workflow = self._heuristic_decompose_request(workflow_id, request, analysis)
 
             # Generate plan preview if user approval required
             if requires_approval:
                 workflow.requires_approval = True
-                workflow.plan_preview = await self._generate_plan_preview(
-                    workflow, request
-                )
+                workflow.plan_preview = await self._generate_plan_preview(workflow, request)
                 workflow.approval_status = ApprovalStatus.AWAITING_APPROVAL
 
             # Validate workflow structure
             validated_workflow = self._validate_workflow(workflow)
 
             #  Decomposer info - add observability event
-                f"Decomposed request into workflow {workflow_id} with "
-                f"{len(validated_workflow.tasks)} tasks"
-            )
+            #     f"Decomposed request into workflow {workflow_id} with "
+            #     f"{len(validated_workflow.tasks)} tasks"
+            # )
 
             return validated_workflow
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             # Return minimal fallback workflow
             return self._create_fallback_workflow(request)
 
@@ -98,7 +98,7 @@ class TaskDecomposer:
         self,
         workflow: Workflow,
         modification_instructions: str,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> Workflow:
         """
         Modify an existing workflow based on user feedback.
@@ -132,6 +132,7 @@ class TaskDecomposer:
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             return workflow  # Return original on error
 
     async def _generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -155,7 +156,7 @@ class TaskDecomposer:
         workflow_id: str,
         request: str,
         context: Optional[Dict[str, Any]] = None,
-        analysis: Optional[RequestAnalysis] = None
+        analysis: Optional[RequestAnalysis] = None,
     ) -> Workflow:
         """
         Use LLM to decompose request into workflow.
@@ -178,13 +179,14 @@ class TaskDecomposer:
 
         except Exception as e:
             #  Decomposer warning - add observability event
+            _ = e  # remove this after implementing observability
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
     def _create_decomposition_prompt(
         self,
         request: str,
         context: Optional[Dict[str, Any]] = None,
-        analysis: Optional[RequestAnalysis] = None
+        analysis: Optional[RequestAnalysis] = None,
     ) -> str:
         """
         Create sophisticated decomposition prompt for LLM.
@@ -254,12 +256,7 @@ Example capabilities to choose from:
 Provide a clear, structured response that can be parsed into executable tasks.
 """
 
-    def _parse_llm_decomposition(
-        self,
-        workflow_id: str,
-        request: str,
-        response: str
-    ) -> Workflow:
+    def _parse_llm_decomposition(self, workflow_id: str, request: str, response: str) -> Workflow:
         """
         Parse LLM decomposition response into Workflow object.
 
@@ -275,7 +272,9 @@ Provide a clear, structured response that can be parsed into executable tasks.
             tasks = {}
 
             # Extract tasks section
-            tasks_section = re.search(r'TASKS:(.*?)(?=EXECUTION_STRATEGY:|$)', response, re.DOTALL | re.IGNORECASE)
+            tasks_section = re.search(
+                r"TASKS:(.*?)(?=EXECUTION_STRATEGY:|$)", response, re.DOTALL | re.IGNORECASE
+            )
             if not tasks_section:
                 # Fallback if structure is different
                 return self._heuristic_decompose_request(workflow_id, request)
@@ -283,7 +282,7 @@ Provide a clear, structured response that can be parsed into executable tasks.
             tasks_text = tasks_section.group(1)
 
             # Parse individual tasks
-            task_blocks = re.split(r'Task_ID:', tasks_text)[1:]  # Skip empty first element
+            task_blocks = re.split(r"Task_ID:", tasks_text)[1:]  # Skip empty first element
 
             for block in task_blocks:
                 try:
@@ -292,6 +291,7 @@ Provide a clear, structured response that can be parsed into executable tasks.
                         tasks[task.id] = task
                 except Exception as e:
                     #  Decomposer warning - add observability event
+                    _ = e  # remove this after implementing observability
                     continue
 
             if not tasks:
@@ -299,16 +299,14 @@ Provide a clear, structured response that can be parsed into executable tasks.
                 return self._heuristic_decompose_request(workflow_id, request)
 
             workflow = Workflow(
-                id=workflow_id,
-                user_request=request,
-                tasks=tasks,
-                status=WorkflowStatus.PENDING
+                id=workflow_id, user_request=request, tasks=tasks, status=WorkflowStatus.PENDING
             )
 
             return workflow
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             return self._heuristic_decompose_request(workflow_id, request)
 
     def _parse_task_block(self, block: str) -> Optional[SubTask]:
@@ -322,38 +320,38 @@ Provide a clear, structured response that can be parsed into executable tasks.
             Parsed SubTask or None if parsing fails
         """
         try:
-            lines = block.split('\n')
+            lines = block.split("\n")
             task_data = {}
 
             for line in lines:
-                if ':' in line:
-                    key, value = line.split(':', 1)
-                    key = key.strip().lower().replace(' ', '_')
+                if ":" in line:
+                    key, value = line.split(":", 1)
+                    key = key.strip().lower().replace(" ", "_")
                     value = value.strip()
                     task_data[key] = value
 
             # Extract required fields
-            task_id = task_data.get('task_id', generate_task_id())
-            description = task_data.get('description', 'Task description')
+            task_id = task_data.get("task_id", generate_task_id())
+            description = task_data.get("description", "Task description")
 
             # Parse capabilities
-            capabilities_text = task_data.get('required_capabilities', 'general')
-            if capabilities_text.startswith('[') and capabilities_text.endswith(']'):
+            capabilities_text = task_data.get("required_capabilities", "general")
+            if capabilities_text.startswith("[") and capabilities_text.endswith("]"):
                 capabilities_text = capabilities_text[1:-1]
-            required_capabilities = [cap.strip() for cap in capabilities_text.split(',')]
+            required_capabilities = [cap.strip() for cap in capabilities_text.split(",")]
 
             # Parse dependencies
-            dependencies_text = task_data.get('dependencies', 'none')
+            dependencies_text = task_data.get("dependencies", "none")
             dependencies = []
-            if dependencies_text.lower() != 'none':
-                if dependencies_text.startswith('[') and dependencies_text.endswith(']'):
+            if dependencies_text.lower() != "none":
+                if dependencies_text.startswith("[") and dependencies_text.endswith("]"):
                     dependencies_text = dependencies_text[1:-1]
-                dependencies = [dep.strip() for dep in dependencies_text.split(',') if dep.strip()]
+                dependencies = [dep.strip() for dep in dependencies_text.split(",") if dep.strip()]
 
             # Parse complexity
             complexity = 5.0
             try:
-                complexity = float(task_data.get('estimated_complexity', 5.0))
+                complexity = float(task_data.get("estimated_complexity", 5.0))
             except (ValueError, TypeError):
                 pass
 
@@ -363,18 +361,16 @@ Provide a clear, structured response that can be parsed into executable tasks.
                 required_capabilities=required_capabilities,
                 dependencies=dependencies,
                 estimated_complexity=complexity,
-                status=TaskStatus.PENDING
+                status=TaskStatus.PENDING,
             )
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     def _heuristic_decompose_request(
-        self,
-        workflow_id: str,
-        request: str,
-        analysis: Optional[RequestAnalysis] = None
+        self, workflow_id: str, request: str, analysis: Optional[RequestAnalysis] = None
     ) -> Workflow:
         """
         Use heuristic rules to decompose request when LLM is unavailable.
@@ -393,56 +389,60 @@ Provide a clear, structured response that can be parsed into executable tasks.
         # Common task patterns
         task_patterns = [
             {
-                'keywords': ['research', 'investigate', 'study', 'analyze'],
-                'description': 'Research and gather information',
-                'capabilities': ['research', 'web_search'],
-                'complexity': 6
+                "keywords": ["research", "investigate", "study", "analyze"],
+                "description": "Research and gather information",
+                "capabilities": ["research", "web_search"],
+                "complexity": 6,
             },
             {
-                'keywords': ['write', 'draft', 'create', 'compose'],
-                'description': 'Create written content',
-                'capabilities': ['writing'],
-                'complexity': 7,
-                'dependencies': []  # Will be set based on other tasks
+                "keywords": ["write", "draft", "create", "compose"],
+                "description": "Create written content",
+                "capabilities": ["writing"],
+                "complexity": 7,
+                "dependencies": [],  # Will be set based on other tasks
             },
             {
-                'keywords': ['analyze', 'process', 'examine'],
-                'description': 'Analyze data and information',
-                'capabilities': ['data_analysis'],
-                'complexity': 6
+                "keywords": ["analyze", "process", "examine"],
+                "description": "Analyze data and information",
+                "capabilities": ["data_analysis"],
+                "complexity": 6,
             },
             {
-                'keywords': ['implement', 'build', 'develop', 'code'],
-                'description': 'Implement solution',
-                'capabilities': ['coding', 'development'],
-                'complexity': 8
+                "keywords": ["implement", "build", "develop", "code"],
+                "description": "Implement solution",
+                "capabilities": ["coding", "development"],
+                "complexity": 8,
             },
             {
-                'keywords': ['design', 'mockup', 'wireframe'],
-                'description': 'Create design deliverables',
-                'capabilities': ['design'],
-                'complexity': 6
-            }
+                "keywords": ["design", "mockup", "wireframe"],
+                "description": "Create design deliverables",
+                "capabilities": ["design"],
+                "complexity": 6,
+            },
         ]
 
         # Generate tasks based on patterns found
         task_counter = 1
         for pattern in task_patterns:
-            if any(keyword in request_lower for keyword in pattern['keywords']):
+            if any(keyword in request_lower for keyword in pattern["keywords"]):
                 task_id = f"task_{task_counter}"
 
                 # Set dependencies (writing usually comes after research)
                 dependencies = []
-                if 'writing' in pattern['capabilities'] and any(t for t in tasks.values() if 'research' in t.required_capabilities):
-                    dependencies = [t.id for t in tasks.values() if 'research' in t.required_capabilities]
+                if "writing" in pattern["capabilities"] and any(
+                    t for t in tasks.values() if "research" in t.required_capabilities
+                ):
+                    dependencies = [
+                        t.id for t in tasks.values() if "research" in t.required_capabilities
+                    ]
 
                 task = SubTask(
                     id=task_id,
-                    description=pattern['description'],
-                    required_capabilities=pattern['capabilities'],
+                    description=pattern["description"],
+                    required_capabilities=pattern["capabilities"],
                     dependencies=dependencies,
-                    estimated_complexity=pattern['complexity'],
-                    status=TaskStatus.PENDING
+                    estimated_complexity=pattern["complexity"],
+                    status=TaskStatus.PENDING,
                 )
 
                 tasks[task_id] = task
@@ -453,18 +453,15 @@ Provide a clear, structured response that can be parsed into executable tasks.
             task = SubTask(
                 id="task_1",
                 description=f"Complete request: {request[:100]}...",
-                required_capabilities=['general'],
+                required_capabilities=["general"],
                 dependencies=[],
                 estimated_complexity=5.0,
-                status=TaskStatus.PENDING
+                status=TaskStatus.PENDING,
             )
             tasks["task_1"] = task
 
         return Workflow(
-            id=workflow_id,
-            user_request=request,
-            tasks=tasks,
-            status=WorkflowStatus.PENDING
+            id=workflow_id, user_request=request, tasks=tasks, status=WorkflowStatus.PENDING
         )
 
     async def _llm_generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -505,6 +502,7 @@ Keep it concise but comprehensive.
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             return self._heuristic_generate_plan_preview(workflow, original_request)
 
     def _heuristic_generate_plan_preview(self, workflow: Workflow, original_request: str) -> str:
@@ -527,8 +525,8 @@ Keep it concise but comprehensive.
                 phases = [[task_id for task_id in workflow.tasks.keys()]]
 
             plan_lines = [
-                f"Here's my plan to handle your request: \"{original_request}\"\n",
-                "## Proposed Approach\n"
+                f'Here\'s my plan to handle your request: "{original_request}"\n',
+                "## Proposed Approach\n",
             ]
 
             for i, phase in enumerate(phases, 1):
@@ -556,15 +554,18 @@ Keep it concise but comprehensive.
             else:
                 time_estimate = f"{estimated_minutes//60}+ hours"
 
-            plan_lines.extend([
-                f"\n**Estimated completion time: {time_estimate}**\n",
-                "Does this approach work for you? Would you like me to proceed, or should I adjust anything?"
-            ])
+            plan_lines.extend(
+                [
+                    f"\n**Estimated completion time: {time_estimate}**\n",
+                    "Does this approach work for you? Would you like me to proceed, or should I adjust anything?",
+                ]
+            )
 
             return "\n".join(plan_lines)
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             return f"""
 I'll work on your request: "{original_request}"
 
@@ -587,7 +588,9 @@ Would you like me to proceed with this plan?
         for task_id, task in workflow.tasks.items():
             lines.append(f"Task {task_id}: {task.description}")
             lines.append(f"  Capabilities: {', '.join(task.required_capabilities)}")
-            lines.append(f"  Dependencies: {', '.join(task.dependencies) if task.dependencies else 'None'}")
+            lines.append(
+                f"  Dependencies: {', '.join(task.dependencies) if task.dependencies else 'None'}"
+            )
             lines.append(f"  Complexity: {task.estimated_complexity}/10")
             lines.append("")
 
@@ -614,11 +617,13 @@ Would you like me to proceed with this plan?
                 build_execution_phases(workflow)
             except Exception as e:
                 #  Decomposer warning - add observability event
+                _ = e  # remove this after implementing observability
 
             return workflow
 
         except Exception as e:
             #  Decomposer error - add observability event
+            _ = e  # remove this after implementing observability
             return workflow
 
     def _fix_workflow_cycles(self, workflow: Workflow) -> Workflow:
@@ -639,7 +644,7 @@ Would you like me to proceed with this plan?
             if i == 0:
                 task.dependencies = []
             else:
-                task.dependencies = [task_ids[i-1]]
+                task.dependencies = [task_ids[i - 1]]
 
         #  Decomposer info - add observability event
         return workflow
@@ -661,21 +666,21 @@ Would you like me to proceed with this plan?
             required_capabilities=["general"],
             dependencies=[],
             estimated_complexity=5.0,
-            status=TaskStatus.PENDING
+            status=TaskStatus.PENDING,
         )
 
         return Workflow(
             id=workflow_id,
             user_request=request,
             tasks={"fallback_task": task},
-            status=WorkflowStatus.PENDING
+            status=WorkflowStatus.PENDING,
         )
 
     async def _llm_modify_workflow(
         self,
         workflow: Workflow,
         modification_instructions: str,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ) -> Workflow:
         """
         Use LLM to modify workflow based on user feedback.
@@ -694,9 +699,7 @@ Would you like me to proceed with this plan?
         return workflow
 
     def _heuristic_modify_workflow(
-        self,
-        workflow: Workflow,
-        modification_instructions: str
+        self, workflow: Workflow, modification_instructions: str
     ) -> Workflow:
         """
         Simple heuristic workflow modification.
@@ -726,9 +729,7 @@ class ApprovalManager:
         return workflow.plan_preview
 
     async def process_approval_response(
-        self,
-        workflow: Workflow,
-        user_response: str
+        self, workflow: Workflow, user_response: str
     ) -> Tuple[ApprovalStatus, Optional[str]]:
         """
         Process user's approval response
@@ -739,27 +740,43 @@ class ApprovalManager:
         response_lower = user_response.lower()
 
         # Approval indicators
-        if any(phrase in response_lower for phrase in [
-            "yes", "proceed", "go ahead", "approved", "looks good",
-            "perfect", "that works", "sounds good", "ok", "okay"
-        ]):
+        if any(
+            phrase in response_lower
+            for phrase in [
+                "yes",
+                "proceed",
+                "go ahead",
+                "approved",
+                "looks good",
+                "perfect",
+                "that works",
+                "sounds good",
+                "ok",
+                "okay",
+            ]
+        ):
             workflow.approval_status = ApprovalStatus.APPROVED
             return ApprovalStatus.APPROVED, None
 
         # Rejection indicators
-        elif any(phrase in response_lower for phrase in [
-            "no", "don't", "reject", "different approach", "not right"
-        ]):
+        elif any(
+            phrase in response_lower
+            for phrase in ["no", "don't", "reject", "different approach", "not right"]
+        ):
             workflow.approval_status = ApprovalStatus.REJECTED
             return ApprovalStatus.REJECTED, user_response
 
         # Modification requests
-        elif any(phrase in response_lower for phrase in [
-            "but", "instead", "change", "modify", "adjust", "add", "remove"
-        ]):
+        elif any(
+            phrase in response_lower
+            for phrase in ["but", "instead", "change", "modify", "adjust", "add", "remove"]
+        ):
             workflow.approval_status = ApprovalStatus.MODIFIED
             return ApprovalStatus.MODIFIED, user_response
 
         # Unclear response - ask for clarification
         else:
-            return ApprovalStatus.AWAITING_APPROVAL, "I want to make sure I understand correctly. Should I proceed with this plan, or would you like me to adjust something?"
+            return (
+                ApprovalStatus.AWAITING_APPROVAL,
+                "I want to make sure I understand correctly. Should I proceed with this plan, or would you like me to adjust something?",
+            )

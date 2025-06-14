@@ -17,12 +17,13 @@ import json
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
-# Loguru import removed - add observability import
+from ... import observability
 
 
 @dataclass
 class DocumentReference:
     """Represents a reference between documents"""
+
     reference_id: str
     source_document_id: str
     target_document_id: str
@@ -38,6 +39,7 @@ class DocumentReference:
 @dataclass
 class DocumentConnection:
     """Represents a discovered connection between documents"""
+
     connection_id: str
     document_ids: List[str]
     connection_type: str  # "thematic", "temporal", "authorial", "procedural"
@@ -50,6 +52,7 @@ class DocumentConnection:
 @dataclass
 class CitationStyle:
     """Represents a citation formatting style"""
+
     style_name: str
     author_format: str
     title_format: str
@@ -70,7 +73,7 @@ class DocumentCrossReferenceManager:
         self,
         storage_path: Optional[str] = None,
         llm_model=None,
-        citation_styles: Optional[Dict[str, CitationStyle]] = None
+        citation_styles: Optional[Dict[str, CitationStyle]] = None,
     ):
         """
         Initialize the cross reference manager.
@@ -97,8 +100,8 @@ class DocumentCrossReferenceManager:
         self._load_references()
 
         #  Info - add observability event
-            f"Initialized DocumentCrossReferenceManager with storage at {self.storage_path}"
-        )
+        #     f"Initialized DocumentCrossReferenceManager with storage at {self.storage_path}"
+        # )
 
     def _default_citation_styles(self) -> Dict[str, CitationStyle]:
         """Initialize default citation styles"""
@@ -109,26 +112,24 @@ class DocumentCrossReferenceManager:
                 title_format="{title}",
                 date_format="({year})",
                 url_format="Retrieved from {url}",
-                full_format="{author} {date}. {title}. {url}"
+                full_format="{author} {date}. {title}. {url}",
             ),
-
             "mla": CitationStyle(
                 style_name="MLA",
                 author_format="{last}, {first}",
-                title_format="\"{title}\"",
+                title_format='"{title}"',
                 date_format="{day} {month} {year}",
                 url_format="Web. {access_date}",
-                full_format="{author}. {title}. {date}. {url}"
+                full_format="{author}. {title}. {date}. {url}",
             ),
-
             "chicago": CitationStyle(
                 style_name="Chicago",
                 author_format="{last}, {first}",
-                title_format="\"{title}\"",
+                title_format='"{title}"',
                 date_format="{month} {day}, {year}",
                 url_format="accessed {access_date}, {url}",
-                full_format="{author}. {title}. {date}. {url}"
-            )
+                full_format="{author}. {title}. {date}. {url}",
+            ),
         }
 
     async def add_reference(
@@ -140,7 +141,7 @@ class DocumentCrossReferenceManager:
         confidence: float = 1.0,
         page_number: Optional[int] = None,
         section: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Add a reference between two documents.
@@ -170,7 +171,7 @@ class DocumentCrossReferenceManager:
             page_number=page_number,
             section=section,
             created_at=time.time(),
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Store reference
@@ -185,14 +186,12 @@ class DocumentCrossReferenceManager:
         await self._save_references()
 
         #  Info - add observability event
-            f"Added reference {reference_id} from {source_document_id} to {target_document_id}"
-        )
+        #     f"Added reference {reference_id} from {source_document_id} to {target_document_id}"
+        # )
         return reference_id
 
     def get_references_for_document(
-        self,
-        document_id: str,
-        direction: str = "outgoing"
+        self, document_id: str, direction: str = "outgoing"
     ) -> List[DocumentReference]:
         """
         Get all references for a document.
@@ -206,27 +205,21 @@ class DocumentCrossReferenceManager:
         """
         if direction == "outgoing":
             return [
-                ref for ref in self._references.values()
-                if ref.source_document_id == document_id
+                ref for ref in self._references.values() if ref.source_document_id == document_id
             ]
         elif direction == "incoming":
             return [
-                ref for ref in self._references.values()
-                if ref.target_document_id == document_id
+                ref for ref in self._references.values() if ref.target_document_id == document_id
             ]
         else:
             # Both directions
             return [
-                ref for ref in self._references.values()
+                ref
+                for ref in self._references.values()
                 if ref.source_document_id == document_id or ref.target_document_id == document_id
             ]
 
-    def _generate_reference_id(
-        self,
-        source_doc_id: str,
-        target_doc_id: str,
-        context: str
-    ) -> str:
+    def _generate_reference_id(self, source_doc_id: str, target_doc_id: str, context: str) -> str:
         """Generate unique reference ID"""
         content = f"{source_doc_id}_{target_doc_id}_{context}"
         return hashlib.md5(content.encode()).hexdigest()[:12]
@@ -246,23 +239,24 @@ class DocumentCrossReferenceManager:
                     "page_number": ref.page_number,
                     "section": ref.section,
                     "created_at": ref.created_at,
-                    "metadata": ref.metadata
+                    "metadata": ref.metadata,
                 }
                 for ref_id, ref in self._references.items()
             }
 
-            with open(references_file, 'w') as f:
+            with open(references_file, "w") as f:
                 json.dump(references_data, f, indent=2)
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
 
     def _load_references(self):
         """Load references from storage"""
         try:
             references_file = self.storage_path / "references.json"
             if references_file.exists():
-                with open(references_file, 'r') as f:
+                with open(references_file, "r") as f:
                     references_data = json.load(f)
 
                 for ref_id, ref_data in references_data.items():
@@ -275,6 +269,7 @@ class DocumentCrossReferenceManager:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
 
     def _rebuild_document_graph(self):
         """Rebuild document graph from references"""

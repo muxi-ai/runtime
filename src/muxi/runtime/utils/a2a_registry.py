@@ -752,10 +752,6 @@ def main():
     print(f"🧪 Hardcoded test agents: {len(HARDCODED_AGENTS)}")
 
     # Initialize storage and log startup info
-    #  Info - add observability event
-    #  Info - add observability event
-    #  Info - add observability event
-
     print()
     print("Available endpoints:")
     print("  POST   /register          - Register an agent")

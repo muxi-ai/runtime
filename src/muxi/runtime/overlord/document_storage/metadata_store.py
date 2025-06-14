@@ -16,12 +16,13 @@ import json
 from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass, asdict
 from pathlib import Path
-# Loguru import removed - add observability import
+from ... import observability
 
 
 @dataclass
 class DocumentMetadata:
     """Document metadata structure"""
+
     document_id: str
     filename: str
     original_path: Optional[str]
@@ -85,7 +86,7 @@ class DocumentMetadataStore:
         original_path: Optional[str] = None,
         mime_type: Optional[str] = None,
         tags: Optional[List[str]] = None,
-        custom_metadata: Optional[Dict[str, Any]] = None
+        custom_metadata: Optional[Dict[str, Any]] = None,
     ) -> DocumentMetadata:
         """
         Store document metadata.
@@ -121,7 +122,7 @@ class DocumentMetadataStore:
             chunk_strategy=chunk_strategy,
             user_id=user_id,
             tags=tags or [],
-            custom_metadata=custom_metadata or {}
+            custom_metadata=custom_metadata or {},
         )
 
         # Store in cache
@@ -159,7 +160,9 @@ class DocumentMetadataStore:
             List of DocumentMetadata objects
         """
         doc_ids = self._filename_index.get(filename, [])
-        return [self._metadata_cache[doc_id] for doc_id in doc_ids if doc_id in self._metadata_cache]
+        return [
+            self._metadata_cache[doc_id] for doc_id in doc_ids if doc_id in self._metadata_cache
+        ]
 
     async def get_documents_by_user(self, user_id: int) -> List[DocumentMetadata]:
         """
@@ -172,7 +175,9 @@ class DocumentMetadataStore:
             List of DocumentMetadata objects
         """
         doc_ids = self._user_index.get(user_id, set())
-        return [self._metadata_cache[doc_id] for doc_id in doc_ids if doc_id in self._metadata_cache]
+        return [
+            self._metadata_cache[doc_id] for doc_id in doc_ids if doc_id in self._metadata_cache
+        ]
 
     async def get_documents_by_tag(self, tag: str) -> List[DocumentMetadata]:
         """
@@ -185,7 +190,9 @@ class DocumentMetadataStore:
             List of DocumentMetadata objects
         """
         doc_ids = self._tag_index.get(tag, set())
-        return [self._metadata_cache[doc_id] for doc_id in doc_ids if doc_id in self._metadata_cache]
+        return [
+            self._metadata_cache[doc_id] for doc_id in doc_ids if doc_id in self._metadata_cache
+        ]
 
     async def search_documents(
         self,
@@ -196,7 +203,7 @@ class DocumentMetadataStore:
         min_size: Optional[int] = None,
         max_size: Optional[int] = None,
         since_timestamp: Optional[float] = None,
-        custom_filters: Optional[Dict[str, Any]] = None
+        custom_filters: Optional[Dict[str, Any]] = None,
     ) -> List[DocumentMetadata]:
         """
         Search documents by multiple criteria.
@@ -251,7 +258,7 @@ class DocumentMetadataStore:
         self,
         document_id: str,
         tags: Optional[List[str]] = None,
-        custom_metadata: Optional[Dict[str, Any]] = None
+        custom_metadata: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """
         Update document metadata.
@@ -321,12 +328,7 @@ class DocumentMetadataStore:
             Dictionary with storage statistics
         """
         if not self._metadata_cache:
-            return {
-                "total_documents": 0,
-                "total_size": 0,
-                "total_chunks": 0,
-                "total_words": 0
-            }
+            return {"total_documents": 0, "total_size": 0, "total_chunks": 0, "total_words": 0}
 
         total_size = sum(meta.file_size for meta in self._metadata_cache.values())
         total_chunks = sum(meta.chunk_count for meta in self._metadata_cache.values())
@@ -359,7 +361,7 @@ class DocumentMetadataStore:
             "avg_words_per_doc": total_words / len(self._metadata_cache),
             "users_with_documents": len(user_counts),
             "most_common_tags": sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10],
-            "strategy_distribution": strategy_counts
+            "strategy_distribution": strategy_counts,
         }
 
     def _update_indexes(self, metadata: DocumentMetadata) -> None:
@@ -407,6 +409,7 @@ class DocumentMetadataStore:
     def _match_pattern(self, text: str, pattern: str) -> bool:
         """Simple pattern matching with wildcards"""
         import fnmatch
+
         return fnmatch.fnmatch(text.lower(), pattern.lower())
 
     def _match_custom_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> bool:
@@ -422,7 +425,7 @@ class DocumentMetadataStore:
         """Load metadata from storage file"""
         try:
             if Path(self.storage_path).exists():
-                with open(self.storage_path, 'r') as f:
+                with open(self.storage_path, "r") as f:
                     data = json.load(f)
 
                 # Load metadata objects
@@ -434,6 +437,7 @@ class DocumentMetadataStore:
                 #  Info - add observability event
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
 
     async def _persist_metadata(self) -> None:
         """Persist metadata to storage file"""
@@ -441,19 +445,20 @@ class DocumentMetadataStore:
             # Convert metadata to serializable format
             data = {
                 "metadata": {
-                    doc_id: metadata.to_dict()
-                    for doc_id, metadata in self._metadata_cache.items()
+                    doc_id: metadata.to_dict() for doc_id, metadata in self._metadata_cache.items()
                 },
                 "indexes": {
                     "filename": dict(self._filename_index),
                     "tags": {tag: list(doc_ids) for tag, doc_ids in self._tag_index.items()},
-                    "users": {str(user_id): list(doc_ids) for user_id, doc_ids in self._user_index.items()}
-                }
+                    "users": {
+                        str(user_id): list(doc_ids) for user_id, doc_ids in self._user_index.items()
+                    },
+                },
             }
 
             # Write to temporary file first, then rename for atomic operation
             temp_path = f"{self.storage_path}.tmp"
-            with open(temp_path, 'w') as f:
+            with open(temp_path, "w") as f:
                 json.dump(data, f, indent=2)
 
             # Atomic rename
@@ -461,4 +466,4 @@ class DocumentMetadataStore:
 
         except Exception as e:
             #  Error - add observability event
-            raise
+            _ = e  # remove this after implementing observability

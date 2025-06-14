@@ -8,10 +8,14 @@ Supports both multi-user and single-user modes with appropriate adaptation strat
 import time
 import re
 from typing import Optional, List, Dict, Any
-from ...llm import LLM
+
 from .types import (
-    UserPreferences, ConversationContext, AdaptedResponse, AdaptationDetails,
-    AdaptationType, PreferenceType
+    UserPreferences,
+    ConversationContext,
+    AdaptedResponse,
+    AdaptationDetails,
+    AdaptationType,
+    PreferenceType,
 )
 
 
@@ -41,7 +45,7 @@ class AdaptiveResponseGenerator:
             AdaptationType.FORMAT_ADAPTATION: self._adapt_response_format,
             AdaptationType.TIMING_ADAPTATION: self._adapt_response_timing,
             AdaptationType.CONTENT_ADAPTATION: self._adapt_content_type,
-            AdaptationType.VISUAL_ADAPTATION: self._adapt_visual_elements
+            AdaptationType.VISUAL_ADAPTATION: self._adapt_visual_elements,
         }
 
         # Adaptation history for learning
@@ -53,9 +57,12 @@ class AdaptiveResponseGenerator:
             if not self.overlord.long_term_memory:
                 return False
 
-            from ..memory.memobase import Memobase
-            return (isinstance(self.overlord.long_term_memory, Memobase) and
-                   self.overlord.long_term_memory.uses_postgresql())
+            from ...memory.memobase import Memobase
+
+            return (
+                isinstance(self.overlord.long_term_memory, Memobase)
+                and self.overlord.long_term_memory.uses_postgresql()
+            )
         except Exception:
             return False
 
@@ -64,7 +71,7 @@ class AdaptiveResponseGenerator:
         base_response: str,
         user_preferences: UserPreferences,
         context: ConversationContext,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ) -> AdaptedResponse:
         """
         Adapt response based on user preferences with mode-aware operation
@@ -104,7 +111,7 @@ class AdaptiveResponseGenerator:
             "topic": context.topic,
             "current_task": context.current_task,
             "user_mood": context.user_mood,
-            **context.metadata
+            **context.metadata,
         }
 
         # 1. Style adaptation
@@ -144,7 +151,9 @@ class AdaptiveResponseGenerator:
                 adaptations_applied.append(adaptation_details)
 
         # 4. Timing adaptation (for interactive elements)
-        interaction_pace = user_preferences.get_preference(PreferenceType.INTERACTION_PACE, context_for_matching)
+        interaction_pace = user_preferences.get_preference(
+            PreferenceType.INTERACTION_PACE, context_for_matching
+        )
         if interaction_pace:
             adapted_response, adaptation_details = await self._adapt_response_timing(
                 current_response, interaction_pace, adaptation_context, context
@@ -154,7 +163,9 @@ class AdaptiveResponseGenerator:
                 adaptations_applied.append(adaptation_details)
 
         # 5. Content type adaptation
-        content_type_pref = user_preferences.get_preference(PreferenceType.CONTENT_TYPE, context.metadata)
+        content_type_pref = user_preferences.get_preference(
+            PreferenceType.CONTENT_TYPE, context.metadata
+        )
         if content_type_pref:
             adapted_response, adaptation_details = await self._adapt_content_type(
                 current_response, content_type_pref, adaptation_context, context
@@ -164,7 +175,9 @@ class AdaptiveResponseGenerator:
                 adaptations_applied.append(adaptation_details)
 
         # 6. Visual adaptation
-        visual_pref = user_preferences.get_preference(PreferenceType.VISUAL_PREFERENCE, context.metadata)
+        visual_pref = user_preferences.get_preference(
+            PreferenceType.VISUAL_PREFERENCE, context.metadata
+        )
         if visual_pref:
             adapted_response, adaptation_details = await self._adapt_visual_elements(
                 current_response, visual_pref, adaptation_context, context
@@ -174,7 +187,9 @@ class AdaptiveResponseGenerator:
                 adaptations_applied.append(adaptation_details)
 
         # Calculate adaptation confidence
-        adaptation_confidence = self._calculate_adaptation_confidence(adaptations_applied, user_preferences)
+        adaptation_confidence = self._calculate_adaptation_confidence(
+            adaptations_applied, user_preferences
+        )
 
         # Create adapted response result
         adapted_result = AdaptedResponse(
@@ -185,7 +200,7 @@ class AdaptiveResponseGenerator:
             adaptations_applied=adaptations_applied,
             confidence=adaptation_confidence,
             context_used=context,
-            preferences_used=user_preferences
+            preferences_used=user_preferences,
         )
 
         # Learn from this adaptation for future improvements
@@ -198,7 +213,7 @@ class AdaptiveResponseGenerator:
         response: str,
         preferred_style: str,
         adaptation_context: Dict[str, Any],
-        conversation_context: ConversationContext
+        conversation_context: ConversationContext,
     ) -> tuple[str, Optional[AdaptationDetails]]:
         """Adapt communication style of response"""
 
@@ -212,11 +227,11 @@ class AdaptiveResponseGenerator:
                     (r"\blet's\b", "let us"),
                     (r"\bI'll\b", "I will"),
                     (r"\bwe'll\b", "we will"),
-                    (r"\byou'll\b", "you will")
+                    (r"\byou'll\b", "you will"),
                 ],
                 "prefix": "",
                 "suffix": "",
-                "tone_words": ["please", "kindly", "would", "should", "recommend"]
+                "tone_words": ["please", "kindly", "would", "should", "recommend"],
             },
             "casual": {
                 "patterns": [
@@ -227,17 +242,17 @@ class AdaptiveResponseGenerator:
                     (r"\blet us\b", "let's"),
                     (r"\bI will\b", "I'll"),
                     (r"\bwe will\b", "we'll"),
-                    (r"\byou will\b", "you'll")
+                    (r"\byou will\b", "you'll"),
                 ],
                 "prefix": "",
                 "suffix": "",
-                "tone_words": ["hey", "just", "probably", "maybe", "cool"]
+                "tone_words": ["hey", "just", "probably", "maybe", "cool"],
             },
             "friendly": {
                 "patterns": [],
                 "prefix": "",
                 "suffix": " 😊",
-                "tone_words": ["happy to", "great", "awesome", "wonderful", "excited"]
+                "tone_words": ["happy to", "great", "awesome", "wonderful", "excited"],
             },
             "professional": {
                 "patterns": [
@@ -247,14 +262,14 @@ class AdaptiveResponseGenerator:
                 ],
                 "prefix": "",
                 "suffix": "",
-                "tone_words": ["implement", "execute", "optimize", "analyze", "recommend"]
+                "tone_words": ["implement", "execute", "optimize", "analyze", "recommend"],
             },
             "technical": {
                 "patterns": [],
                 "prefix": "",
                 "suffix": "",
-                "tone_words": ["function", "method", "algorithm", "implementation", "optimization"]
-            }
+                "tone_words": ["function", "method", "algorithm", "implementation", "optimization"],
+            },
         }
 
         if preferred_style not in style_adaptations:
@@ -305,10 +320,12 @@ class AdaptiveResponseGenerator:
         adaptation_details = AdaptationDetails(
             adaptation_type=AdaptationType.STYLE_ADAPTATION,
             original_value=response[:100] + "..." if len(response) > 100 else response,
-            adapted_value=adapted_response[:100] + "..." if len(adapted_response) > 100 else adapted_response,
+            adapted_value=(
+                adapted_response[:100] + "..." if len(adapted_response) > 100 else adapted_response
+            ),
             reason=f"Adapted to {preferred_style} communication style",
             confidence=0.8,
-            method_used="pattern_replacement_with_fallback"
+            method_used="pattern_replacement_with_fallback",
         )
 
         return adapted_response, adaptation_details
@@ -318,7 +335,7 @@ class AdaptiveResponseGenerator:
         response: str,
         preferred_depth: str,
         adaptation_context: Dict[str, Any],
-        conversation_context: ConversationContext
+        conversation_context: ConversationContext,
     ) -> tuple[str, Optional[AdaptationDetails]]:
         """Adapt content depth/detail level of response"""
 
@@ -328,7 +345,7 @@ class AdaptiveResponseGenerator:
             "brief": {"min_words": 20, "max_words": 100, "summary_ratio": 0.3},
             "concise": {"min_words": 50, "max_words": 200, "summary_ratio": 0.5},
             "detailed": {"min_words": 150, "max_words": 400, "summary_ratio": 1.0},
-            "comprehensive": {"min_words": 300, "max_words": 800, "summary_ratio": 1.5}
+            "comprehensive": {"min_words": 300, "max_words": 800, "summary_ratio": 1.5},
         }
 
         if preferred_depth not in depth_targets:
@@ -347,13 +364,16 @@ class AdaptiveResponseGenerator:
                 adapted_value=f"{len(adapted_response.split())} words",
                 reason=f"Shortened response to match {preferred_depth} preference",
                 confidence=0.7,
-                method_used="summarization"
+                method_used="summarization",
             )
 
             return adapted_response, adaptation_details
 
         # If response is too short, add more detail (if context allows)
-        elif word_count < target_config["min_words"] and preferred_depth in ["detailed", "comprehensive"]:
+        elif word_count < target_config["min_words"] and preferred_depth in [
+            "detailed",
+            "comprehensive",
+        ]:
             adapted_response = await self._expand_response(response, target_config["min_words"])
 
             adaptation_details = AdaptationDetails(
@@ -362,7 +382,7 @@ class AdaptiveResponseGenerator:
                 adapted_value=f"{len(adapted_response.split())} words",
                 reason=f"Expanded response to match {preferred_depth} preference",
                 confidence=0.6,
-                method_used="expansion"
+                method_used="expansion",
             )
 
             return adapted_response, adaptation_details
@@ -374,7 +394,7 @@ class AdaptiveResponseGenerator:
         response: str,
         preferred_formats: List[str],
         adaptation_context: Dict[str, Any],
-        conversation_context: ConversationContext
+        conversation_context: ConversationContext,
     ) -> tuple[str, Optional[AdaptationDetails]]:
         """Adapt response format based on preferences"""
 
@@ -429,7 +449,7 @@ class AdaptiveResponseGenerator:
             adapted_value=f"Applied format: {applicable_format}",
             reason=f"Applied preferred {applicable_format} format",
             confidence=0.75,
-            method_used="format_conversion_with_fallback"
+            method_used="format_conversion_with_fallback",
         )
 
         return adapted_response, adaptation_details
@@ -439,7 +459,7 @@ class AdaptiveResponseGenerator:
         response: str,
         preferred_pace: str,
         adaptation_context: Dict[str, Any],
-        conversation_context: ConversationContext
+        conversation_context: ConversationContext,
     ) -> tuple[str, Optional[AdaptationDetails]]:
         """Adapt response timing elements for interactive experiences"""
 
@@ -471,7 +491,7 @@ class AdaptiveResponseGenerator:
 
         elif preferred_pace == "relaxed":
             # Add thoughtful pauses and considerate language
-            if re.search(r'\?\s*$', response):
+            if re.search(r"\?\s*$", response):
                 adapted_response = response.replace("?", "? Take your time thinking about this.")
                 changes_made.append("Added relaxed pace marker")
             elif "you should" in response.lower():
@@ -499,7 +519,7 @@ class AdaptiveResponseGenerator:
             adapted_value=f"{preferred_pace} pacing",
             reason=specific_reason,
             confidence=0.6,
-            method_used="pace_adaptation_with_fallback"
+            method_used="pace_adaptation_with_fallback",
         )
 
         return adapted_response, adaptation_details
@@ -509,31 +529,35 @@ class AdaptiveResponseGenerator:
         response: str,
         preferred_content_type: str,
         adaptation_context: Dict[str, Any],
-        conversation_context: ConversationContext
+        conversation_context: ConversationContext,
     ) -> tuple[str, Optional[AdaptationDetails]]:
         """Adapt content type and focus based on preferences"""
 
         content_adaptations = {
             "technical": {
-                "add_elements": ["implementation details", "code examples", "technical specifications"],
+                "add_elements": [
+                    "implementation details",
+                    "code examples",
+                    "technical specifications",
+                ],
                 "remove_elements": ["simplified explanations", "analogies"],
-                "emphasis": "technical accuracy and detail"
+                "emphasis": "technical accuracy and detail",
             },
             "explanatory": {
                 "add_elements": ["why explanations", "background context", "reasoning"],
                 "remove_elements": ["bare facts", "brief statements"],
-                "emphasis": "understanding and comprehension"
+                "emphasis": "understanding and comprehension",
             },
             "instructional": {
                 "add_elements": ["step-by-step instructions", "clear procedures", "action items"],
                 "remove_elements": ["theoretical discussion", "background information"],
-                "emphasis": "actionable guidance"
+                "emphasis": "actionable guidance",
             },
             "conversational": {
                 "add_elements": ["personal touches", "engaging questions", "interactive elements"],
                 "remove_elements": ["dry technical content", "formal language"],
-                "emphasis": "engagement and interaction"
-            }
+                "emphasis": "engagement and interaction",
+            },
         }
 
         if preferred_content_type not in content_adaptations:
@@ -543,7 +567,9 @@ class AdaptiveResponseGenerator:
         config = content_adaptations[preferred_content_type]
 
         # Add a contextual note about the content focus
-        emphasis_note = f"\n\n*Note: This response emphasizes {config['emphasis']} based on your preferences.*"
+        emphasis_note = (
+            f"\n\n*Note: This response emphasizes {config['emphasis']} based on your preferences.*"
+        )
         adapted_response = response + emphasis_note
 
         adaptation_details = AdaptationDetails(
@@ -552,7 +578,7 @@ class AdaptiveResponseGenerator:
             adapted_value=f"{preferred_content_type} content approach",
             reason=f"Adapted content to focus on {preferred_content_type} elements",
             confidence=0.5,
-            method_used="content_emphasis"
+            method_used="content_emphasis",
         )
 
         return adapted_response, adaptation_details
@@ -562,14 +588,14 @@ class AdaptiveResponseGenerator:
         response: str,
         visual_preference: str,
         adaptation_context: Dict[str, Any],
-        conversation_context: ConversationContext
+        conversation_context: ConversationContext,
     ) -> tuple[str, Optional[AdaptationDetails]]:
         """Adapt visual elements and formatting"""
 
         if visual_preference == "minimal":
             # Remove excessive formatting
-            adapted_response = re.sub(r'\*\*(.*?)\*\*', r'\1', response)  # Remove bold
-            adapted_response = re.sub(r'\*(.*?)\*', r'\1', adapted_response)  # Remove italics
+            adapted_response = re.sub(r"\*\*(.*?)\*\*", r"\1", response)  # Remove bold
+            adapted_response = re.sub(r"\*(.*?)\*", r"\1", adapted_response)  # Remove italics
 
             if adapted_response != response:
                 adaptation_details = AdaptationDetails(
@@ -578,19 +604,21 @@ class AdaptiveResponseGenerator:
                     adapted_value="Plain text format",
                     reason="Removed visual formatting for minimal preference",
                     confidence=0.7,
-                    method_used="format_simplification"
+                    method_used="format_simplification",
                 )
                 return adapted_response, adaptation_details
 
         elif visual_preference == "rich":
             # Add more visual structure
-            sentences = response.split('. ')
+            sentences = response.split(". ")
             if len(sentences) > 3:
                 # Add emphasis to key sentences
-                adapted_response = '. '.join([
-                    f"**{sentence.strip()}**" if i % 3 == 0 and sentence.strip() else sentence
-                    for i, sentence in enumerate(sentences)
-                ])
+                adapted_response = ". ".join(
+                    [
+                        f"**{sentence.strip()}**" if i % 3 == 0 and sentence.strip() else sentence
+                        for i, sentence in enumerate(sentences)
+                    ]
+                )
 
                 adaptation_details = AdaptationDetails(
                     adaptation_type=AdaptationType.VISUAL_ADAPTATION,
@@ -598,7 +626,7 @@ class AdaptiveResponseGenerator:
                     adapted_value="Enhanced visual formatting",
                     reason="Added visual emphasis for rich preference",
                     confidence=0.6,
-                    method_used="visual_enhancement"
+                    method_used="visual_enhancement",
                 )
                 return adapted_response, adaptation_details
 
@@ -610,48 +638,48 @@ class AdaptiveResponseGenerator:
         """Detect current formats in response"""
         formats = []
 
-        if re.search(r'(?:^|\n)\s*[-•*]\s+', response):
+        if re.search(r"(?:^|\n)\s*[-•*]\s+", response):
             formats.append("bullets")
-        if re.search(r'(?:^|\n)\s*\d+\.\s+', response):
+        if re.search(r"(?:^|\n)\s*\d+\.\s+", response):
             formats.append("numbered")
-        if re.search(r'(?:^|\n)#+\s+', response):
+        if re.search(r"(?:^|\n)#+\s+", response):
             formats.append("headers")
-        if re.search(r'```', response):
+        if re.search(r"```", response):
             formats.append("code_blocks")
-        if re.search(r'(?:^|\n)\s*\w+:\s+', response):
+        if re.search(r"(?:^|\n)\s*\w+:\s+", response):
             formats.append("structured")
-        if re.search(r'(?i)step\s+\d+', response):
+        if re.search(r"(?i)step\s+\d+", response):
             formats.append("step-by-step")
 
         return formats
 
     def _has_lists(self, response: str) -> bool:
-        return bool(re.search(r'(?:^|\n)\s*[-•*]\s+', response))
+        return bool(re.search(r"(?:^|\n)\s*[-•*]\s+", response))
 
     def _has_numbered_list(self, response: str) -> bool:
-        return bool(re.search(r'(?:^|\n)\s*\d+\.\s+', response))
+        return bool(re.search(r"(?:^|\n)\s*\d+\.\s+", response))
 
     def _has_bullet_list(self, response: str) -> bool:
-        return bool(re.search(r'(?:^|\n)\s*[-•*]\s+', response))
+        return bool(re.search(r"(?:^|\n)\s*[-•*]\s+", response))
 
     def _has_structure(self, response: str) -> bool:
-        return bool(re.search(r'(?:^|\n)#+\s+', response))
+        return bool(re.search(r"(?:^|\n)#+\s+", response))
 
     def _has_steps(self, response: str) -> bool:
-        return bool(re.search(r'(?i)step\s+\d+', response))
+        return bool(re.search(r"(?i)step\s+\d+", response))
 
     def _convert_to_list_format(self, response: str) -> str:
         """Convert response to list format"""
-        sentences = [s.strip() for s in response.split('.') if s.strip()]
+        sentences = [s.strip() for s in response.split(".") if s.strip()]
         if len(sentences) > 1:
-            return '\n'.join([f"• {sentence}." for sentence in sentences])
+            return "\n".join([f"• {sentence}." for sentence in sentences])
         return response
 
     def _convert_to_numbered_format(self, response: str) -> str:
         """Convert response to numbered list format"""
-        sentences = [s.strip() for s in response.split('.') if s.strip()]
+        sentences = [s.strip() for s in response.split(".") if s.strip()]
         if len(sentences) > 1:
-            return '\n'.join([f"{i+1}. {sentence}." for i, sentence in enumerate(sentences)])
+            return "\n".join([f"{i+1}. {sentence}." for i, sentence in enumerate(sentences)])
         return response
 
     def _convert_to_bullet_format(self, response: str) -> str:
@@ -660,7 +688,7 @@ class AdaptiveResponseGenerator:
 
     def _add_structure_headers(self, response: str) -> str:
         """Add structural headers to response"""
-        paragraphs = [p.strip() for p in response.split('\n\n') if p.strip()]
+        paragraphs = [p.strip() for p in response.split("\n\n") if p.strip()]
         if len(paragraphs) > 1:
             structured = []
             for i, paragraph in enumerate(paragraphs):
@@ -668,14 +696,16 @@ class AdaptiveResponseGenerator:
                     structured.append(f"## Overview\n{paragraph}")
                 else:
                     structured.append(f"## Section {i}\n{paragraph}")
-            return '\n\n'.join(structured)
+            return "\n\n".join(structured)
         return response
 
     def _convert_to_steps(self, response: str) -> str:
         """Convert response to step-by-step format"""
-        sentences = [s.strip() for s in response.split('.') if s.strip()]
+        sentences = [s.strip() for s in response.split(".") if s.strip()]
         if len(sentences) > 1:
-            return '\n'.join([f"**Step {i+1}:** {sentence}." for i, sentence in enumerate(sentences)])
+            return "\n".join(
+                [f"**Step {i+1}:** {sentence}." for i, sentence in enumerate(sentences)]
+            )
         return response
 
     async def _summarize_response(self, response: str, target_words: int) -> str:
@@ -685,7 +715,7 @@ class AdaptiveResponseGenerator:
             return response
 
         # Simple truncation with ellipsis - could be enhanced with LLM summarization
-        truncated = ' '.join(words[:target_words])
+        truncated = " ".join(words[:target_words])
         return truncated + "..."
 
     async def _expand_response(self, response: str, target_words: int) -> str:
@@ -695,33 +725,40 @@ class AdaptiveResponseGenerator:
             return response
 
         # Simple expansion by adding clarifying phrases - could be enhanced with LLM
-        expanded = response + "\n\nTo provide more detail: this approach ensures comprehensive coverage of the topic while maintaining clarity and accuracy."
+        expanded = (
+            response
+            + "\n\nTo provide more detail: this approach ensures comprehensive coverage of the topic while maintaining clarity and accuracy."  # noqa: E501
+        )
         return expanded
 
     # Context and learning methods
 
     async def _get_user_adaptation_context(self, user_id: str) -> Dict[str, Any]:
         """Get adaptation context for specific user"""
-        return self.adaptation_history.get(user_id, {
-            "successful_adaptations": [],
-            "failed_adaptations": [],
-            "preference_confidence": {},
-            "last_updated": time.time()
-        })
+        return self.adaptation_history.get(
+            user_id,
+            {
+                "successful_adaptations": [],
+                "failed_adaptations": [],
+                "preference_confidence": {},
+                "last_updated": time.time(),
+            },
+        )
 
     async def _get_global_adaptation_context(self) -> Dict[str, Any]:
         """Get global adaptation context for single-user mode"""
-        return self.adaptation_history.get("global", {
-            "successful_adaptations": [],
-            "failed_adaptations": [],
-            "preference_confidence": {},
-            "last_updated": time.time()
-        })
+        return self.adaptation_history.get(
+            "global",
+            {
+                "successful_adaptations": [],
+                "failed_adaptations": [],
+                "preference_confidence": {},
+                "last_updated": time.time(),
+            },
+        )
 
     def _calculate_adaptation_confidence(
-        self,
-        adaptations: List[AdaptationDetails],
-        user_preferences: UserPreferences
+        self, adaptations: List[AdaptationDetails], user_preferences: UserPreferences
     ) -> float:
         """Calculate overall confidence in adaptations applied"""
         if not adaptations:
@@ -734,7 +771,9 @@ class AdaptiveResponseGenerator:
         relevant_pref_confidences = []
         for adaptation in adaptations:
             if adaptation.adaptation_type == AdaptationType.STYLE_ADAPTATION:
-                pref_conf = user_preferences.confidence_scores.get(PreferenceType.COMMUNICATION_STYLE)
+                pref_conf = user_preferences.confidence_scores.get(
+                    PreferenceType.COMMUNICATION_STYLE
+                )
             elif adaptation.adaptation_type == AdaptationType.DEPTH_ADAPTATION:
                 pref_conf = user_preferences.confidence_scores.get(PreferenceType.DETAIL_LEVEL)
             elif adaptation.adaptation_type == AdaptationType.FORMAT_ADAPTATION:
@@ -762,15 +801,21 @@ class AdaptiveResponseGenerator:
                     "successful_adaptations": [],
                     "failed_adaptations": [],
                     "preference_confidence": {},
-                    "last_updated": time.time()
+                    "last_updated": time.time(),
                 }
 
             # Record this adaptation
             adaptation_record = {
-                "adaptations": [a.adaptation_type.value for a in adaptation_result.adaptations_applied],
+                "adaptations": [
+                    a.adaptation_type.value for a in adaptation_result.adaptations_applied
+                ],
                 "confidence": adaptation_result.confidence,
                 "timestamp": adaptation_result.adaptation_time,
-                "context": adaptation_result.context_used.metadata if adaptation_result.context_used else {}
+                "context": (
+                    adaptation_result.context_used.metadata
+                    if adaptation_result.context_used
+                    else {}
+                ),
             }
 
             self.adaptation_history[storage_key]["successful_adaptations"].append(adaptation_record)
@@ -779,15 +824,18 @@ class AdaptiveResponseGenerator:
             # Keep only recent history to prevent memory growth
             max_history = 100
             if len(self.adaptation_history[storage_key]["successful_adaptations"]) > max_history:
-                self.adaptation_history[storage_key]["successful_adaptations"] = \
+                self.adaptation_history[storage_key]["successful_adaptations"] = (
                     self.adaptation_history[storage_key]["successful_adaptations"][-max_history:]
+                )
 
         except Exception as e:
             print(f"Error learning from adaptation: {e}")
 
     def get_adaptation_stats(self, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Get adaptation statistics for analysis"""
-        storage_key = f"adaptations_{user_id}" if self.is_multi_user and user_id else "global_adaptations"
+        storage_key = (
+            f"adaptations_{user_id}" if self.is_multi_user and user_id else "global_adaptations"
+        )
 
         if storage_key not in self.adaptation_history:
             return {"total_adaptations": 0, "average_confidence": 0.0}
@@ -802,10 +850,12 @@ class AdaptiveResponseGenerator:
             "total_adaptations": len(successful),
             "average_confidence": sum(a["confidence"] for a in successful) / len(successful),
             "most_common_adaptations": self._get_most_common_adaptations(successful),
-            "last_updated": history["last_updated"]
+            "last_updated": history["last_updated"],
         }
 
-    def _get_most_common_adaptations(self, adaptation_records: List[Dict[str, Any]]) -> Dict[str, int]:
+    def _get_most_common_adaptations(
+        self, adaptation_records: List[Dict[str, Any]]
+    ) -> Dict[str, int]:
         """Get most commonly applied adaptations"""
         adaptation_counts = {}
         for record in adaptation_records:

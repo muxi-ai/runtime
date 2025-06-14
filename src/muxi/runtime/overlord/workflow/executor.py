@@ -1,13 +1,10 @@
 import asyncio
-from typing import Optional, Dict, Any, List, Set, Callable
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 import json
-# Loguru import removed - add observability import
+from ... import observability
 
-from .types import (
-    Workflow, SubTask, TaskStatus, WorkflowStatus,
-    TaskResult, build_execution_phases
-)
+from .types import Workflow, SubTask, TaskStatus, WorkflowStatus, TaskResult, build_execution_phases
 from ...agent import Agent
 
 
@@ -34,9 +31,7 @@ class WorkflowExecutor:
         self.progress_callbacks: List[Callable[[str, Workflow], None]] = []
 
     async def execute_workflow(
-        self,
-        workflow: Workflow,
-        context: Optional[Dict[str, Any]] = None
+        self, workflow: Workflow, context: Optional[Dict[str, Any]] = None
     ) -> Workflow:
         """
         Execute complete workflow with DAG orchestration.
@@ -100,10 +95,7 @@ class WorkflowExecutor:
         return workflow
 
     async def _execute_phase(
-        self,
-        workflow: Workflow,
-        task_ids: List[str],
-        context: Optional[Dict[str, Any]] = None
+        self, workflow: Workflow, task_ids: List[str], context: Optional[Dict[str, Any]] = None
     ):
         """
         Execute all tasks in a phase concurrently.
@@ -125,10 +117,7 @@ class WorkflowExecutor:
             await asyncio.gather(*task_coroutines, return_exceptions=True)
 
     async def _execute_task(
-        self,
-        task: SubTask,
-        workflow: Workflow,
-        context: Optional[Dict[str, Any]] = None
+        self, task: SubTask, workflow: Workflow, context: Optional[Dict[str, Any]] = None
     ) -> TaskResult:
         """
         Execute individual task by routing to appropriate agent.
@@ -155,7 +144,7 @@ class WorkflowExecutor:
                 "user_request": workflow.user_request,
                 "task_description": task.description,
                 "inputs": task_inputs,
-                **(context or {})
+                **(context or {}),
             }
 
             # Select and execute with appropriate agent
@@ -166,9 +155,7 @@ class WorkflowExecutor:
             #  Info - add observability event
 
             # Execute task
-            result = await self._execute_task_with_agent(
-                task, agent, execution_context
-            )
+            result = await self._execute_task_with_agent(task, agent, execution_context)
 
             # Store result
             task.status = TaskStatus.DONE
@@ -190,19 +177,12 @@ class WorkflowExecutor:
 
             # Create error result
             error_result = TaskResult(
-                task_id=task.id,
-                status=TaskStatus.FAILED,
-                outputs={},
-                error_message=str(e)
+                task_id=task.id, status=TaskStatus.FAILED, outputs={}, error_message=str(e)
             )
             self.task_results[task.id] = error_result
             return error_result
 
-    async def _collect_task_inputs(
-        self,
-        task: SubTask,
-        workflow: Workflow
-    ) -> Dict[str, Any]:
+    async def _collect_task_inputs(self, task: SubTask, workflow: Workflow) -> Dict[str, Any]:
         """
         Collect outputs from dependency tasks as inputs.
 
@@ -249,17 +229,14 @@ class WorkflowExecutor:
             # Look for agents with matching specialization
             for agent_id, agent in self.agent_registry.items():
                 # Simple matching - in real implementation would be more sophisticated
-                if capability in ['research', 'writing', 'analysis', 'coding', 'general']:
+                if capability in ["research", "writing", "analysis", "coding", "general"]:
                     return agent
 
         # Fallback to any available agent
         return next(iter(self.agent_registry.values()), None)
 
     async def _execute_task_with_agent(
-        self,
-        task: SubTask,
-        agent: Agent,
-        context: Dict[str, Any]
+        self, task: SubTask, agent: Agent, context: Dict[str, Any]
     ) -> TaskResult:
         """
         Execute task with selected agent.
@@ -279,9 +256,9 @@ class WorkflowExecutor:
             # Execute with agent
             response = await agent.process_message(
                 task_prompt,
-                user_id=context.get('user_id', 0),
-                conversation_id=context.get('conversation_id'),
-                context=context
+                user_id=context.get("user_id", 0),
+                conversation_id=context.get("conversation_id"),
+                context=context,
             )
 
             # Parse response into structured outputs
@@ -292,7 +269,7 @@ class WorkflowExecutor:
                 agent_id=agent.agent_id,
                 status=TaskStatus.DONE,
                 outputs=outputs,
-                raw_response=response
+                raw_response=response,
             )
 
         except Exception as e:
@@ -302,7 +279,7 @@ class WorkflowExecutor:
                 agent_id=agent.agent_id,
                 status=TaskStatus.FAILED,
                 outputs={},
-                error_message=str(e)
+                error_message=str(e),
             )
 
     def _create_task_prompt(self, task: SubTask, context: Dict[str, Any]) -> str:
@@ -318,27 +295,25 @@ class WorkflowExecutor:
         """
         prompt_parts = [
             f"## Task: {task.description}",
-            f"",
+            "",
             f"Original Request: {context.get('user_request', 'N/A')}",
-            f"",
-            f"Task Details:",
+            "",
+            "Task Details:",
             f"- Required Capabilities: {', '.join(task.required_capabilities)}",
-            f"- Estimated Complexity: {task.estimated_complexity}/10"
+            f"- Estimated Complexity: {task.estimated_complexity}/10",
         ]
 
         # Add inputs if available
-        if context.get('inputs'):
-            prompt_parts.extend([
-                f"",
-                f"Available Inputs:",
-                json.dumps(context['inputs'], indent=2)
-            ])
+        if context.get("inputs"):
+            prompt_parts.extend(["", "Available Inputs:", json.dumps(context["inputs"], indent=2)])
 
-        prompt_parts.extend([
-            f"",
-            f"Please complete this task thoroughly and provide the results.",
-            f"Focus on delivering exactly what's needed for this specific task."
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "Please complete this task thoroughly and provide the results.",
+                "Focus on delivering exactly what's needed for this specific task.",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
@@ -356,18 +331,14 @@ class WorkflowExecutor:
         # For now, simple output structure
         # In full implementation, would parse based on task type and expected outputs
 
-        outputs = {
-            "content": response,
-            "task_id": task.id,
-            "completed": True
-        }
+        outputs = {"content": response, "task_id": task.id, "completed": True}
 
         # Add capability-specific parsing
-        if 'research' in task.required_capabilities:
+        if "research" in task.required_capabilities:
             outputs["research_findings"] = response
-        elif 'writing' in task.required_capabilities:
+        elif "writing" in task.required_capabilities:
             outputs["written_content"] = response
-        elif 'analysis' in task.required_capabilities:
+        elif "analysis" in task.required_capabilities:
             outputs["analysis_results"] = response
 
         return outputs
@@ -384,8 +355,7 @@ class WorkflowExecutor:
         """
         # Check if any critical tasks failed
         critical_failures = [
-            task for task in workflow.tasks.values()
-            if task.status == TaskStatus.FAILED
+            task for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
         ]
 
         # For now, continue unless there are critical failures
@@ -424,6 +394,7 @@ class WorkflowExecutor:
                 callback(workflow_id, workflow)
             except Exception as e:
                 #  Error - add observability event
+                _ = e  # remove this after implementing observability
 
     # Public methods for workflow management
 
@@ -498,9 +469,15 @@ class WorkflowExecutor:
 
         workflow = self.active_workflows[workflow_id]
         total_tasks = len(workflow.tasks)
-        completed_tasks = sum(1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE)
-        failed_tasks = sum(1 for task in workflow.tasks.values() if task.status == TaskStatus.FAILED)
-        in_progress_tasks = sum(1 for task in workflow.tasks.values() if task.status == TaskStatus.IN_PROGRESS)
+        completed_tasks = sum(
+            1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE
+        )
+        failed_tasks = sum(
+            1 for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
+        )
+        in_progress_tasks = sum(
+            1 for task in workflow.tasks.values() if task.status == TaskStatus.IN_PROGRESS
+        )
 
         return {
             "workflow_id": workflow_id,
@@ -510,7 +487,7 @@ class WorkflowExecutor:
             "failed_tasks": failed_tasks,
             "in_progress_tasks": in_progress_tasks,
             "progress_percentage": (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0,
-            "started_at": workflow.started_at.isoformat() if workflow.started_at else None
+            "started_at": workflow.started_at.isoformat() if workflow.started_at else None,
         }
 
 
@@ -531,8 +508,12 @@ class ProgressTracker:
             workflow: Updated workflow
         """
         total_tasks = len(workflow.tasks)
-        completed_tasks = sum(1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE)
-        failed_tasks = sum(1 for task in workflow.tasks.values() if task.status == TaskStatus.FAILED)
+        completed_tasks = sum(
+            1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE
+        )
+        failed_tasks = sum(
+            1 for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
+        )
 
         progress_info = {
             "workflow_id": workflow_id,
@@ -541,15 +522,15 @@ class ProgressTracker:
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
             "progress_percentage": (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0,
-            "last_updated": datetime.now().isoformat()
+            "last_updated": datetime.now().isoformat(),
         }
 
         self.workflow_progress[workflow_id] = progress_info
 
-        #  Info - add observability event
-            f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks completed "
-            f"({progress_info['progress_percentage']:.1f}%)"
-        )
+        # #  Info - add observability event
+        #     f"Workflow {workflow_id} progress: {completed_tasks}/{total_tasks} tasks completed "
+        #     f"({progress_info['progress_percentage']:.1f}%)"
+        # )
 
     def get_progress(self, workflow_id: str) -> Optional[Dict[str, Any]]:
         """

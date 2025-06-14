@@ -12,6 +12,7 @@ import time
 
 class PreferenceType(Enum):
     """Types of user preferences that can be learned"""
+
     COMMUNICATION_STYLE = "communication_style"
     DETAIL_LEVEL = "detail_level"
     RESPONSE_FORMAT = "response_format"
@@ -24,6 +25,7 @@ class PreferenceType(Enum):
 
 class AdaptationType(Enum):
     """Types of adaptations that can be applied to responses"""
+
     STYLE_ADAPTATION = "style_adaptation"
     DEPTH_ADAPTATION = "depth_adaptation"
     FORMAT_ADAPTATION = "format_adaptation"
@@ -35,6 +37,7 @@ class AdaptationType(Enum):
 @dataclass
 class ConfidenceScore:
     """Confidence scoring for preferences and adaptations"""
+
     value: float  # 0.0 to 1.0
     data_points: int  # Number of observations supporting this score
     recency: float  # How recent the data is (0.0 to 1.0, 1.0 = very recent)
@@ -43,15 +46,18 @@ class ConfidenceScore:
     @property
     def weighted_confidence(self) -> float:
         """Calculate weighted confidence considering all factors"""
-        return (self.value * 0.4 +
-                min(self.data_points / 10, 1.0) * 0.3 +
-                self.recency * 0.2 +
-                self.consistency * 0.1)
+        return (
+            self.value * 0.4
+            + min(self.data_points / 10, 1.0) * 0.3
+            + self.recency * 0.2
+            + self.consistency * 0.1
+        )
 
 
 @dataclass
 class Message:
     """Represents a conversation message"""
+
     content: str
     role: str  # "user" or "assistant"
     timestamp: float
@@ -62,6 +68,7 @@ class Message:
 @dataclass
 class FeedbackEvent:
     """Represents user feedback on responses"""
+
     user_id: Optional[str]
     message_id: str
     feedback_type: Literal["positive", "negative", "correction", "preference"]
@@ -73,6 +80,7 @@ class FeedbackEvent:
 @dataclass
 class ExplicitPreference:
     """Explicitly stated user preference"""
+
     preference_type: PreferenceType
     value: Any
     confidence: ConfidenceScore
@@ -84,6 +92,7 @@ class ExplicitPreference:
 @dataclass
 class ImplicitPreference:
     """Implicitly inferred user preference"""
+
     preference_type: PreferenceType
     value: Any
     confidence: ConfidenceScore
@@ -95,6 +104,7 @@ class ImplicitPreference:
 @dataclass
 class ContextualPreference:
     """Context-dependent user preference"""
+
     preference_type: PreferenceType
     value: Any
     confidence: ConfidenceScore
@@ -106,6 +116,7 @@ class ContextualPreference:
 @dataclass
 class UserPreferences:
     """Complete user preference profile"""
+
     user_id: Optional[str]  # None for single-user mode
     deployment_mode: Literal["multi_user", "single_user"]
     explicit: List[ExplicitPreference] = field(default_factory=list)
@@ -114,8 +125,9 @@ class UserPreferences:
     confidence_scores: Dict[PreferenceType, ConfidenceScore] = field(default_factory=dict)
     last_updated: float = field(default_factory=time.time)
 
-    def get_preference(self, preference_type: PreferenceType,
-                       context: Optional[Dict[str, Any]] = None) -> Optional[Any]:
+    def get_preference(
+        self, preference_type: PreferenceType, context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Any]:
         """Get the best preference value for a given type and context"""
         # First try contextual preferences if context is provided
         if context:
@@ -169,6 +181,7 @@ class UserPreferences:
 @dataclass
 class ConversationContext:
     """Current conversation context for adaptation"""
+
     topic: Optional[str] = None
     complexity_level: Optional[str] = None
     urgency: Optional[str] = None
@@ -183,6 +196,7 @@ class ConversationContext:
 @dataclass
 class AdaptationDetails:
     """Details about a specific adaptation applied"""
+
     adaptation_type: AdaptationType
     original_value: Any
     adapted_value: Any
@@ -194,6 +208,7 @@ class AdaptationDetails:
 @dataclass
 class AdaptedResponse:
     """Response that has been adapted based on user preferences"""
+
     user_id: Optional[str]  # None for single-user mode
     deployment_mode: Literal["multi_user", "single_user"]
     original: str
@@ -211,16 +226,18 @@ class AdaptedResponse:
             "total_adaptations": len(self.adaptations_applied),
             "adaptation_types": [a.adaptation_type.value for a in self.adaptations_applied],
             "average_confidence": (
-                sum(a.confidence for a in self.adaptations_applied) /
-                len(self.adaptations_applied) if self.adaptations_applied else 0.0
+                sum(a.confidence for a in self.adaptations_applied) / len(self.adaptations_applied)
+                if self.adaptations_applied
+                else 0.0
             ),
-            "deployment_mode": self.deployment_mode
+            "deployment_mode": self.deployment_mode,
         }
 
 
 @dataclass
 class LearningEvent:
     """Event for learning from user interactions"""
+
     user_id: Optional[str]
     event_type: Literal[
         "response_generated", "feedback_received", "preference_updated", "adaptation_applied"
@@ -233,6 +250,7 @@ class LearningEvent:
 @dataclass
 class PreferenceExtractionResult:
     """Result of preference extraction from conversations"""
+
     explicit_preferences: List[ExplicitPreference]
     confidence_score: float
     extraction_method: str
@@ -243,6 +261,7 @@ class PreferenceExtractionResult:
 @dataclass
 class BehaviorAnalysisResult:
     """Result of user behavior analysis"""
+
     implicit_preferences: List[ImplicitPreference]
     behavioral_patterns: Dict[str, Any]
     confidence_score: float
@@ -254,6 +273,7 @@ class BehaviorAnalysisResult:
 @dataclass
 class ContextPredictionResult:
     """Result of contextual preference prediction"""
+
     contextual_preferences: List[ContextualPreference]
     prediction_confidence: float
     prediction_method: str

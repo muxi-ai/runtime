@@ -8,8 +8,15 @@ Automatically detects multi-user vs single-user deployment mode and adapts behav
 import time
 from typing import List, Optional, Dict, Any
 from .types import (
-    Message, FeedbackEvent, UserPreferences, PreferenceType, ConfidenceScore,
-    ConversationContext, ExplicitPreference, ImplicitPreference, ContextualPreference
+    Message,
+    FeedbackEvent,
+    UserPreferences,
+    PreferenceType,
+    ConfidenceScore,
+    ConversationContext,
+    ExplicitPreference,
+    ImplicitPreference,
+    ContextualPreference,
 )
 from .preference_extractor import PreferenceExtractor
 from .behavior_analyzer import UserBehaviorAnalyzer
@@ -57,7 +64,7 @@ class UserPreferenceEngine:
                 return False
 
             # Import here to avoid circular imports
-            from ..memory.memobase import Memobase
+            from ...memory.memobase import Memobase
 
             if not isinstance(self.overlord.long_term_memory, Memobase):
                 return False
@@ -73,7 +80,7 @@ class UserPreferenceEngine:
         self,
         user_id: Optional[str],
         conversation_history: List[Message],
-        feedback_data: List[FeedbackEvent]
+        feedback_data: List[FeedbackEvent],
     ) -> UserPreferences:
         """
         Extract and analyze user preferences with mode-aware operation
@@ -100,7 +107,7 @@ class UserPreferenceEngine:
         # Single-user mode: global preference learning
         else:
             user_history = conversation_history  # Use all history
-            user_feedback = feedback_data        # Use all feedback
+            user_feedback = feedback_data  # Use all feedback
             storage_key = "global_user_preferences"  # Single preference model
             cache_key = "global_preferences"
             user_id = None  # Normalize to None for single-user mode
@@ -140,7 +147,7 @@ class UserPreferenceEngine:
             implicit=implicit_prefs,
             contextual=contextual_prefs,
             confidence_scores=confidence_scores,
-            last_updated=time.time()
+            last_updated=time.time(),
         )
 
         # Cache the preferences
@@ -156,7 +163,7 @@ class UserPreferenceEngine:
         self,
         user_id: Optional[str],
         feedback_event: FeedbackEvent,
-        current_preferences: UserPreferences
+        current_preferences: UserPreferences,
     ) -> UserPreferences:
         """
         Update user preferences based on new feedback
@@ -183,9 +190,7 @@ class UserPreferenceEngine:
 
         # Update implicit preferences
         new_implicit_prefs = behavior_result.implicit_preferences
-        updated_implicit = self._merge_preferences(
-            current_preferences.implicit, new_implicit_prefs
-        )
+        updated_implicit = self._merge_preferences(current_preferences.implicit, new_implicit_prefs)
 
         # Update confidence scores
         updated_confidence_scores = self._calculate_confidence_scores(
@@ -200,7 +205,7 @@ class UserPreferenceEngine:
             implicit=updated_implicit,
             contextual=current_preferences.contextual,
             confidence_scores=updated_confidence_scores,
-            last_updated=time.time()
+            last_updated=time.time(),
         )
 
         # Update cache
@@ -209,15 +214,15 @@ class UserPreferenceEngine:
 
         # Store updated preferences
         if self.overlord.long_term_memory:
-            storage_key = f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+            storage_key = (
+                f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+            )
             await self._store_preferences(storage_key, updated_preferences)
 
         return updated_preferences
 
     async def get_preferences_for_context(
-        self,
-        user_id: Optional[str],
-        context: ConversationContext
+        self, user_id: Optional[str], context: ConversationContext
     ) -> UserPreferences:
         """
         Get user preferences optimized for a specific context
@@ -236,11 +241,13 @@ class UserPreferenceEngine:
             # If no stored preferences, create empty ones
             base_preferences = UserPreferences(
                 user_id=user_id if self.is_multi_user else None,
-                deployment_mode="multi_user" if self.is_multi_user else "single_user"
+                deployment_mode="multi_user" if self.is_multi_user else "single_user",
             )
 
         # Get contextual predictions
-        storage_key = f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+        storage_key = (
+            f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+        )
         context_result = await self.context_predictor.predict_preferences(storage_key, context)
 
         # Merge contextual preferences with base preferences
@@ -256,7 +263,7 @@ class UserPreferenceEngine:
             confidence_scores=self._calculate_confidence_scores(
                 base_preferences.explicit, base_preferences.implicit, enhanced_contextual
             ),
-            last_updated=time.time()
+            last_updated=time.time(),
         )
 
         return context_preferences
@@ -279,7 +286,9 @@ class UserPreferenceEngine:
 
         # Try to load from long-term memory
         if self.overlord.long_term_memory:
-            storage_key = f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+            storage_key = (
+                f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+            )
             try:
                 stored_data = await self._load_preferences(storage_key)
                 if stored_data:
@@ -308,7 +317,9 @@ class UserPreferenceEngine:
 
         # Clear from long-term memory
         if self.overlord.long_term_memory:
-            storage_key = f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+            storage_key = (
+                f"user_preferences_{user_id}" if self.is_multi_user else "global_user_preferences"
+            )
             try:
                 await self._delete_preferences(storage_key)
             except Exception as e:
@@ -320,11 +331,15 @@ class UserPreferenceEngine:
         """Filter messages for a specific user"""
         return [msg for msg in messages if msg.user_id == user_id]
 
-    async def _filter_user_feedback(self, feedback: List[FeedbackEvent], user_id: str) -> List[FeedbackEvent]:
+    async def _filter_user_feedback(
+        self, feedback: List[FeedbackEvent], user_id: str
+    ) -> List[FeedbackEvent]:
         """Filter feedback for a specific user"""
         return [fb for fb in feedback if fb.user_id == user_id]
 
-    def _get_current_context(self, messages: List[Message], feedback: List[FeedbackEvent]) -> ConversationContext:
+    def _get_current_context(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> ConversationContext:
         """Extract current conversation context from messages and feedback"""
         context = ConversationContext()
 
@@ -334,13 +349,19 @@ class UserPreferenceEngine:
             all_content = " ".join([msg.content.lower() for msg in recent_messages])
 
             # Simple topic extraction
-            if any(keyword in all_content for keyword in ["urgent", "emergency", "asap", "quickly"]):
+            if any(
+                keyword in all_content for keyword in ["urgent", "emergency", "asap", "quickly"]
+            ):
                 context.urgency = "high"
-            elif any(keyword in all_content for keyword in ["when you can", "no rush", "take your time"]):
+            elif any(
+                keyword in all_content for keyword in ["when you can", "no rush", "take your time"]
+            ):
                 context.urgency = "low"
 
             # Simple mood detection
-            if any(keyword in all_content for keyword in ["frustrated", "confused", "problem", "issue"]):
+            if any(
+                keyword in all_content for keyword in ["frustrated", "confused", "problem", "issue"]
+            ):
                 context.user_mood = "frustrated"
             elif any(keyword in all_content for keyword in ["excited", "great", "awesome", "love"]):
                 context.user_mood = "excited"
@@ -349,7 +370,9 @@ class UserPreferenceEngine:
             context.session_length = len(messages)
 
             # Available modalities (simplified)
-            context.available_modalities = ["text"]  # Could be enhanced to detect multimodal content
+            context.available_modalities = [
+                "text"
+            ]  # Could be enhanced to detect multimodal content
 
         return context
 
@@ -357,7 +380,7 @@ class UserPreferenceEngine:
         self,
         explicit: List[ExplicitPreference],
         implicit: List[ImplicitPreference],
-        contextual: List[ContextualPreference]
+        contextual: List[ContextualPreference],
     ) -> Dict[PreferenceType, ConfidenceScore]:
         """Calculate overall confidence scores for each preference type"""
         confidence_scores = {}
@@ -386,7 +409,7 @@ class UserPreferenceEngine:
                     value=avg_confidence,
                     data_points=total_data_points,
                     recency=avg_recency,
-                    consistency=consistency
+                    consistency=consistency,
                 )
 
         return confidence_scores
@@ -407,11 +430,16 @@ class UserPreferenceEngine:
 
         for new_pref in new:
             # Find if there's an existing preference of the same type
-            existing_pref = next((p for p in merged if p.preference_type == new_pref.preference_type), None)
+            existing_pref = next(
+                (p for p in merged if p.preference_type == new_pref.preference_type), None
+            )
 
             if existing_pref:
                 # Replace if new preference is more confident
-                if new_pref.confidence.weighted_confidence > existing_pref.confidence.weighted_confidence:
+                if (
+                    new_pref.confidence.weighted_confidence
+                    > existing_pref.confidence.weighted_confidence
+                ):
                     merged.remove(existing_pref)
                     merged.append(new_pref)
             else:
@@ -484,6 +512,5 @@ class UserPreferenceEngine:
         # This would convert stored data back to UserPreferences object
         # Implementation depends on storage system format
         return UserPreferences(
-            user_id=data.get("user_id"),
-            deployment_mode=data.get("deployment_mode", "single_user")
+            user_id=data.get("user_id"), deployment_mode=data.get("deployment_mode", "single_user")
         )

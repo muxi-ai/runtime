@@ -10,19 +10,19 @@ import json
 
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Any
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Any
 import statistics
 
-from .cache_types import CacheType, CacheStatistics
+from ... import observability
 
-
-
+from .cache_types import CacheType
 
 
 @dataclass
 class HitRateMetric:
     """Metrics for cache hit rates over time."""
+
     timestamp: float
     cache_layer: str  # L1, L2, L3, or overall
     hit_count: int
@@ -39,6 +39,7 @@ class HitRateMetric:
 @dataclass
 class PerformanceMetric:
     """Performance metrics for cache operations."""
+
     timestamp: float
     operation: str  # get, put, remove, clear
     cache_component: str
@@ -52,6 +53,7 @@ class PerformanceMetric:
 @dataclass
 class CacheLayerStats:
     """Statistics for a specific cache layer."""
+
     layer_name: str
     total_hits: int = 0
     total_misses: int = 0
@@ -79,9 +81,7 @@ class CacheHitAnalyzer:
     for optimization and tuning decisions.
     """
 
-    def __init__(self,
-                 history_retention_hours: int = 24,
-                 metric_collection_interval: int = 60):
+    def __init__(self, history_retention_hours: int = 24, metric_collection_interval: int = 60):
         """
         Initialize cache hit analyzer.
 
@@ -155,12 +155,14 @@ class CacheHitAnalyzer:
 
         #  Info - add observability event
 
-    def record_cache_hit(self,
-                        cache_layer: str,
-                        cache_type: CacheType,
-                        response_time_ms: float,
-                        cache_key: str = "",
-                        metadata: Optional[Dict[str, Any]] = None) -> None:
+    def record_cache_hit(
+        self,
+        cache_layer: str,
+        cache_type: CacheType,
+        response_time_ms: float,
+        cache_key: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Record a cache hit event.
 
@@ -187,26 +189,30 @@ class CacheHitAnalyzer:
             self.response_time_buckets[cache_layer] = self.response_time_buckets[cache_layer][-500:]
 
         # Record recent request
-        self.recent_requests.append({
-            'timestamp': timestamp,
-            'cache_layer': cache_layer,
-            'cache_type': cache_type.value,
-            'hit': True,
-            'response_time_ms': response_time_ms,
-            'cache_key': cache_key,
-            'metadata': metadata or {}
-        })
+        self.recent_requests.append(
+            {
+                "timestamp": timestamp,
+                "cache_layer": cache_layer,
+                "cache_type": cache_type.value,
+                "hit": True,
+                "response_time_ms": response_time_ms,
+                "cache_key": cache_key,
+                "metadata": metadata or {},
+            }
+        )
 
         # Check for anomalies
         self._check_performance_anomalies(cache_layer, response_time_ms, True)
 
         #  Debug - add observability event
 
-    def record_cache_miss(self,
-                         cache_layer: str,
-                         response_time_ms: float,
-                         cache_key: str = "",
-                         metadata: Optional[Dict[str, Any]] = None) -> None:
+    def record_cache_miss(
+        self,
+        cache_layer: str,
+        response_time_ms: float,
+        cache_key: str = "",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Record a cache miss event.
 
@@ -232,29 +238,33 @@ class CacheHitAnalyzer:
             self.response_time_buckets[cache_layer] = self.response_time_buckets[cache_layer][-500:]
 
         # Record recent request
-        self.recent_requests.append({
-            'timestamp': timestamp,
-            'cache_layer': cache_layer,
-            'cache_type': CacheType.MISS.value,
-            'hit': False,
-            'response_time_ms': response_time_ms,
-            'cache_key': cache_key,
-            'metadata': metadata or {}
-        })
+        self.recent_requests.append(
+            {
+                "timestamp": timestamp,
+                "cache_layer": cache_layer,
+                "cache_type": CacheType.MISS.value,
+                "hit": False,
+                "response_time_ms": response_time_ms,
+                "cache_key": cache_key,
+                "metadata": metadata or {},
+            }
+        )
 
         # Check for anomalies
         self._check_performance_anomalies(cache_layer, response_time_ms, False)
 
         #  Debug - add observability event
 
-    def record_cache_operation(self,
-                              operation: str,
-                              cache_component: str,
-                              duration_ms: float,
-                              success: bool,
-                              cache_size_before: int = 0,
-                              cache_size_after: int = 0,
-                              memory_usage_bytes: int = 0) -> None:
+    def record_cache_operation(
+        self,
+        operation: str,
+        cache_component: str,
+        duration_ms: float,
+        success: bool,
+        cache_size_before: int = 0,
+        cache_size_after: int = 0,
+        memory_usage_bytes: int = 0,
+    ) -> None:
         """
         Record a cache operation (put, remove, clear, etc.).
 
@@ -275,7 +285,7 @@ class CacheHitAnalyzer:
             success=success,
             cache_size_before=cache_size_before,
             cache_size_after=cache_size_after,
-            memory_usage_bytes=memory_usage_bytes
+            memory_usage_bytes=memory_usage_bytes,
         )
 
         self.performance_history.append(metric)
@@ -298,46 +308,51 @@ class CacheHitAnalyzer:
         cutoff_time = time.time() - (hours * 3600)
 
         # Filter recent requests
-        recent_requests = [
-            req for req in self.recent_requests
-            if req['timestamp'] > cutoff_time
-        ]
+        recent_requests = [req for req in self.recent_requests if req["timestamp"] > cutoff_time]
 
         if not recent_requests:
-            return {'total_requests': 0, 'overall_hit_rate': 0.0, 'layers': {}}
+            return {"total_requests": 0, "overall_hit_rate": 0.0, "layers": {}}
 
         # Overall statistics
         total_requests = len(recent_requests)
-        total_hits = sum(1 for req in recent_requests if req['hit'])
+        total_hits = sum(1 for req in recent_requests if req["hit"])
         overall_hit_rate = (total_hits / total_requests) * 100 if total_requests > 0 else 0.0
 
         # Per-layer statistics
         layer_summary = {}
-        for layer_name in set(req['cache_layer'] for req in recent_requests):
-            layer_requests = [req for req in recent_requests if req['cache_layer'] == layer_name]
-            layer_hits = sum(1 for req in layer_requests if req['hit'])
+        for layer_name in set(req["cache_layer"] for req in recent_requests):
+            layer_requests = [req for req in recent_requests if req["cache_layer"] == layer_name]
+            layer_hits = sum(1 for req in layer_requests if req["hit"])
             layer_hit_rate = (layer_hits / len(layer_requests)) * 100 if layer_requests else 0.0
 
-            response_times = [req['response_time_ms'] for req in layer_requests]
+            response_times = [req["response_time_ms"] for req in layer_requests]
             avg_response_time = statistics.mean(response_times) if response_times else 0.0
 
             layer_summary[layer_name] = {
-                'requests': len(layer_requests),
-                'hits': layer_hits,
-                'misses': len(layer_requests) - layer_hits,
-                'hit_rate': layer_hit_rate,
-                'avg_response_time_ms': avg_response_time,
-                'p95_response_time_ms': statistics.quantiles(response_times, n=20)[18] if len(response_times) >= 5 else avg_response_time,
-                'p99_response_time_ms': statistics.quantiles(response_times, n=100)[98] if len(response_times) >= 10 else avg_response_time
+                "requests": len(layer_requests),
+                "hits": layer_hits,
+                "misses": len(layer_requests) - layer_hits,
+                "hit_rate": layer_hit_rate,
+                "avg_response_time_ms": avg_response_time,
+                "p95_response_time_ms": (
+                    statistics.quantiles(response_times, n=20)[18]
+                    if len(response_times) >= 5
+                    else avg_response_time
+                ),
+                "p99_response_time_ms": (
+                    statistics.quantiles(response_times, n=100)[98]
+                    if len(response_times) >= 10
+                    else avg_response_time
+                ),
             }
 
         return {
-            'time_period_hours': hours,
-            'total_requests': total_requests,
-            'total_hits': total_hits,
-            'total_misses': total_requests - total_hits,
-            'overall_hit_rate': overall_hit_rate,
-            'layers': layer_summary
+            "time_period_hours": hours,
+            "total_requests": total_requests,
+            "total_hits": total_hits,
+            "total_misses": total_requests - total_hits,
+            "overall_hit_rate": overall_hit_rate,
+            "layers": layer_summary,
         }
 
     def get_performance_summary(self, hours: int = 1) -> Dict[str, Any]:
@@ -352,13 +367,10 @@ class CacheHitAnalyzer:
         """
         cutoff_time = time.time() - (hours * 3600)
 
-        recent_operations = [
-            op for op in self.performance_history
-            if op.timestamp > cutoff_time
-        ]
+        recent_operations = [op for op in self.performance_history if op.timestamp > cutoff_time]
 
         if not recent_operations:
-            return {'total_operations': 0, 'operations': {}}
+            return {"total_operations": 0, "operations": {}}
 
         # Group by operation type
         operation_summary = {}
@@ -368,18 +380,22 @@ class CacheHitAnalyzer:
             successes = sum(1 for op in ops if op.success)
 
             operation_summary[op_type] = {
-                'count': len(ops),
-                'success_count': successes,
-                'success_rate': (successes / len(ops)) * 100 if ops else 0.0,
-                'avg_duration_ms': statistics.mean(durations) if durations else 0.0,
-                'p95_duration_ms': statistics.quantiles(durations, n=20)[18] if len(durations) >= 5 else 0.0,
-                'p99_duration_ms': statistics.quantiles(durations, n=100)[98] if len(durations) >= 10 else 0.0
+                "count": len(ops),
+                "success_count": successes,
+                "success_rate": (successes / len(ops)) * 100 if ops else 0.0,
+                "avg_duration_ms": statistics.mean(durations) if durations else 0.0,
+                "p95_duration_ms": (
+                    statistics.quantiles(durations, n=20)[18] if len(durations) >= 5 else 0.0
+                ),
+                "p99_duration_ms": (
+                    statistics.quantiles(durations, n=100)[98] if len(durations) >= 10 else 0.0
+                ),
             }
 
         return {
-            'time_period_hours': hours,
-            'total_operations': len(recent_operations),
-            'operations': operation_summary
+            "time_period_hours": hours,
+            "total_operations": len(recent_operations),
+            "operations": operation_summary,
         }
 
     def get_optimization_recommendations(self) -> List[Dict[str, Any]]:
@@ -394,59 +410,67 @@ class CacheHitAnalyzer:
         # Analyze hit rates
         hit_rate_summary = self.get_hit_rate_summary(24)  # Last 24 hours
 
-        for layer_name, layer_data in hit_rate_summary.get('layers', {}).items():
-            hit_rate = layer_data['hit_rate']
-            avg_response_time = layer_data['avg_response_time_ms']
+        for layer_name, layer_data in hit_rate_summary.get("layers", {}).items():
+            hit_rate = layer_data["hit_rate"]
+            avg_response_time = layer_data["avg_response_time_ms"]
 
             # Low hit rate recommendations
             if hit_rate < 50:
-                recommendations.append({
-                    'type': 'hit_rate_optimization',
-                    'priority': 'high',
-                    'layer': layer_name,
-                    'issue': f'Low hit rate ({hit_rate:.1f}%)',
-                    'recommendation': 'Consider increasing cache size or adjusting TTL settings',
-                    'impact': 'high'
-                })
+                recommendations.append(
+                    {
+                        "type": "hit_rate_optimization",
+                        "priority": "high",
+                        "layer": layer_name,
+                        "issue": f"Low hit rate ({hit_rate:.1f}%)",
+                        "recommendation": "Consider increasing cache size or adjusting TTL settings",  # noqa: E501
+                        "impact": "high",
+                    }
+                )
 
             # High response time recommendations
             if avg_response_time > 100:  # > 100ms
-                recommendations.append({
-                    'type': 'performance_optimization',
-                    'priority': 'medium',
-                    'layer': layer_name,
-                    'issue': f'High response time ({avg_response_time:.1f}ms)',
-                    'recommendation': 'Consider optimizing cache storage or using faster storage backend',
-                    'impact': 'medium'
-                })
+                recommendations.append(
+                    {
+                        "type": "performance_optimization",
+                        "priority": "medium",
+                        "layer": layer_name,
+                        "issue": f"High response time ({avg_response_time:.1f}ms)",
+                        "recommendation": "Consider optimizing cache storage or using faster storage backend",  # noqa: E501
+                        "impact": "medium",
+                    }
+                )
 
         # Analyze memory usage
         for layer_name, stats in self.layer_stats.items():
             if stats.memory_usage_bytes > 100 * 1024 * 1024:  # > 100MB
-                recommendations.append({
-                    'type': 'memory_optimization',
-                    'priority': 'medium',
-                    'layer': layer_name,
-                    'issue': f'High memory usage ({stats.memory_usage_bytes / (1024*1024):.1f}MB)',
-                    'recommendation': 'Consider implementing compression or reducing cache size',
-                    'impact': 'medium'
-                })
+                recommendations.append(
+                    {
+                        "type": "memory_optimization",
+                        "priority": "medium",
+                        "layer": layer_name,
+                        "issue": f"High memory usage ({stats.memory_usage_bytes / (1024*1024):.1f}MB)",  # noqa: E501
+                        "recommendation": "Consider implementing compression or reducing cache size",  # noqa: E501
+                        "impact": "medium",
+                    }
+                )
 
         # Check for performance anomalies
         if self.performance_alerts:
             for alert in self.performance_alerts[-5:]:  # Last 5 alerts
-                recommendations.append({
-                    'type': 'anomaly_detection',
-                    'priority': 'high',
-                    'layer': alert.get('layer', 'unknown'),
-                    'issue': alert.get('issue', 'Performance anomaly detected'),
-                    'recommendation': 'Investigate recent changes or system resource constraints',
-                    'impact': 'high'
-                })
+                recommendations.append(
+                    {
+                        "type": "anomaly_detection",
+                        "priority": "high",
+                        "layer": alert.get("layer", "unknown"),
+                        "issue": alert.get("issue", "Performance anomaly detected"),
+                        "recommendation": "Investigate recent changes or system resource constraints",  # noqa: E501
+                        "impact": "high",
+                    }
+                )
 
         return recommendations
 
-    def export_analytics_data(self, format: str = 'json') -> str:
+    def export_analytics_data(self, format: str = "json") -> str:
         """
         Export analytics data for external analysis.
 
@@ -457,24 +481,24 @@ class CacheHitAnalyzer:
             Exported data as string
         """
         data = {
-            'timestamp': time.time(),
-            'hit_rate_summary': self.get_hit_rate_summary(24),
-            'performance_summary': self.get_performance_summary(24),
-            'layer_stats': {
+            "timestamp": time.time(),
+            "hit_rate_summary": self.get_hit_rate_summary(24),
+            "performance_summary": self.get_performance_summary(24),
+            "layer_stats": {
                 name: {
-                    'layer_name': stats.layer_name,
-                    'total_hits': stats.total_hits,
-                    'total_misses': stats.total_misses,
-                    'hit_rate': stats.hit_rate,
-                    'memory_usage_bytes': stats.memory_usage_bytes,
-                    'cache_size': stats.cache_size
+                    "layer_name": stats.layer_name,
+                    "total_hits": stats.total_hits,
+                    "total_misses": stats.total_misses,
+                    "hit_rate": stats.hit_rate,
+                    "memory_usage_bytes": stats.memory_usage_bytes,
+                    "cache_size": stats.cache_size,
                 }
                 for name, stats in self.layer_stats.items()
             },
-            'recommendations': self.get_optimization_recommendations()
+            "recommendations": self.get_optimization_recommendations(),
         }
 
-        if format == 'json':
+        if format == "json":
             return json.dumps(data, indent=2)
         else:
             # CSV export would require additional formatting
@@ -490,6 +514,7 @@ class CacheHitAnalyzer:
                 break
             except Exception as e:
                 #  Error - add observability event
+                _ = e  # remove this after implementing observability
                 await asyncio.sleep(self.metric_collection_interval)
 
     async def _collect_current_metrics(self) -> None:
@@ -503,10 +528,10 @@ class CacheHitAnalyzer:
             stats = self.layer_stats[name]
 
             # Update memory usage and cache size
-            if hasattr(component, 'get_memory_usage'):
+            if hasattr(component, "get_memory_usage"):
                 stats.memory_usage_bytes = component.get_memory_usage()
 
-            if hasattr(component, 'size'):
+            if hasattr(component, "size"):
                 stats.cache_size = component.size()
 
             # Calculate average hit rate
@@ -525,7 +550,7 @@ class CacheHitAnalyzer:
                 hit_count=stats.total_hits,
                 miss_count=stats.total_misses,
                 hit_rate=stats.hit_rate,
-                avg_response_time_ms=stats.avg_response_time_ms
+                avg_response_time_ms=stats.avg_response_time_ms,
             )
             self.hit_rate_history.append(metric)
 
@@ -538,23 +563,22 @@ class CacheHitAnalyzer:
 
         # Clean hit rate history
         self.hit_rate_history = [
-            metric for metric in self.hit_rate_history
-            if metric.timestamp > cutoff_time
+            metric for metric in self.hit_rate_history if metric.timestamp > cutoff_time
         ]
 
         # Clean performance history
         self.performance_history = [
-            metric for metric in self.performance_history
-            if metric.timestamp > cutoff_time
+            metric for metric in self.performance_history if metric.timestamp > cutoff_time
         ]
 
         # Clean performance alerts
         self.performance_alerts = [
-            alert for alert in self.performance_alerts
-            if alert.get('timestamp', 0) > cutoff_time
+            alert for alert in self.performance_alerts if alert.get("timestamp", 0) > cutoff_time
         ]
 
-    def _check_performance_anomalies(self, cache_layer: str, response_time_ms: float, hit: bool) -> None:
+    def _check_performance_anomalies(
+        self, cache_layer: str, response_time_ms: float, hit: bool
+    ) -> None:
         """Check for performance anomalies and alert if found."""
         # Establish baseline if not exists
         if cache_layer not in self.baseline_hit_rates:
@@ -568,11 +592,11 @@ class CacheHitAnalyzer:
 
         if baseline_hit_rate > 50 and current_hit_rate < baseline_hit_rate * 0.7:  # 30% drop
             alert = {
-                'timestamp': time.time(),
-                'type': 'hit_rate_drop',
-                'layer': cache_layer,
-                'issue': f'Hit rate dropped from {baseline_hit_rate:.1f}% to {current_hit_rate:.1f}%',
-                'severity': 'high'
+                "timestamp": time.time(),
+                "type": "hit_rate_drop",
+                "layer": cache_layer,
+                "issue": f"Hit rate dropped from {baseline_hit_rate:.1f}% to {current_hit_rate:.1f}%",  # noqa: E501
+                "severity": "high",
             }
             self.performance_alerts.append(alert)
             #  Warning - add observability event
@@ -580,11 +604,11 @@ class CacheHitAnalyzer:
         # Check for extremely high response times
         if response_time_ms > 1000:  # > 1 second
             alert = {
-                'timestamp': time.time(),
-                'type': 'high_response_time',
-                'layer': cache_layer,
-                'issue': f'Very high response time: {response_time_ms:.1f}ms',
-                'severity': 'medium'
+                "timestamp": time.time(),
+                "type": "high_response_time",
+                "layer": cache_layer,
+                "issue": f"Very high response time: {response_time_ms:.1f}ms",
+                "severity": "medium",
             }
             self.performance_alerts.append(alert)
             #  Warning - add observability event

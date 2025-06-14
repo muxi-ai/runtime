@@ -17,7 +17,7 @@ import numpy as np
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
-from ...observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
+from ... import observability
 
 from faissx.client import FaissXClient
 import faiss
@@ -26,6 +26,7 @@ import faiss
 @dataclass
 class DocumentSearchResult:
     """Document search result with metadata"""
+
     document_id: str
     chunk_id: str
     content: str
@@ -49,7 +50,7 @@ class DocumentSemanticIndex:
         mode: str = "local",
         remote_config: Optional[Dict[str, Any]] = None,
         index_path: Optional[str] = None,
-        persist_index: bool = True
+        persist_index: bool = True,
     ):
         """
         Initialize the document semantic index.
@@ -99,11 +100,12 @@ class DocumentSemanticIndex:
             self._faissx_client = FaissXClient(
                 url=self.remote_config.get("url", "tcp://localhost:45678"),
                 api_key=self.remote_config.get("api_key"),
-                tenant_id=self.remote_config.get("tenant_id")
+                tenant_id=self.remote_config.get("tenant_id"),
             )
             #  Semantic index info - add observability event
         except Exception as e:
             #  Semantic index error - add observability event
+            _ = e  # remove this after implementing observability
             # Fall back to local FAISS
             self.mode = "local"
             self._initialize_local_index()
@@ -118,7 +120,7 @@ class DocumentSemanticIndex:
         self,
         chunks: List[Dict[str, Any]],
         embeddings: List[np.ndarray],
-        document_metadata: Optional[Dict[str, Any]] = None
+        document_metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """
         Add document chunks with their embeddings to the index.
@@ -157,7 +159,7 @@ class DocumentSemanticIndex:
                 **chunk.get("metadata", {}),
                 "content": chunk.get("content", ""),
                 "chunk_id": chunk.get("chunk_id", ""),
-                "document_id": chunk.get("document_id", "")
+                "document_id": chunk.get("document_id", ""),
             }
 
             if document_metadata:
@@ -185,9 +187,7 @@ class DocumentSemanticIndex:
                 chunk_id = metadata.get("chunk_id", f"chunk_{int(time.time())}_{i}")
 
                 await self._faissx_client.add_vector(
-                    vector_id=chunk_id,
-                    vector=vector,
-                    metadata=metadata
+                    vector_id=chunk_id, vector=vector, metadata=metadata
                 )
 
                 # Track locally
@@ -201,6 +201,7 @@ class DocumentSemanticIndex:
 
         except Exception as e:
             #  Semantic index error - add observability event
+            _ = e  # remove this after implementing observability
             # Fall back to local index
             await self._add_to_local_index(vectors, metadata_list)
 
@@ -232,7 +233,7 @@ class DocumentSemanticIndex:
         query_vector: np.ndarray,
         k: int = 10,
         document_ids: Optional[List[str]] = None,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[DocumentSearchResult]:
         """
         Search for similar document chunks.
@@ -253,7 +254,7 @@ class DocumentSemanticIndex:
         query_vector: np.ndarray,
         k: int,
         document_ids: Optional[List[str]] = None,
-        metadata_filter: Optional[Dict[str, Any]] = None
+        metadata_filter: Optional[Dict[str, Any]] = None,
     ) -> List[DocumentSearchResult]:
         """Search using local FAISS"""
         if not self._faiss_index or len(self._document_vectors) == 0:
@@ -301,7 +302,7 @@ class DocumentSemanticIndex:
                 score=score,
                 distance=float(distance),
                 metadata=metadata,
-                document_metadata=metadata.get("document_metadata")
+                document_metadata=metadata.get("document_metadata"),
             )
 
             results.append(result)
@@ -397,6 +398,7 @@ class DocumentSemanticIndex:
                     await self._faissx_client.delete_vector(chunk_id)
         except Exception as e:
             #  Semantic index error - add observability event
+            _ = e  # remove this after implementing observability
 
     def get_index_stats(self) -> Dict[str, Any]:
         """Get statistics about the semantic index"""
@@ -418,15 +420,13 @@ class DocumentSemanticIndex:
             "avg_chunks_per_document": total_vectors / max(len(document_ids), 1),
             "vector_dimension": self.vector_dimension,
             "index_mode": self.mode,
-            "index_size_mb": self._estimate_index_size()
+            "index_size_mb": self._estimate_index_size(),
         }
 
     def _estimate_index_size(self) -> float:
         """Estimate index size in MB"""
         vector_size = len(self._document_vectors) * self.vector_dimension * 4  # float32
-        metadata_size = sum(
-            len(str(metadata)) for metadata in self._document_metadata
-        )
+        metadata_size = sum(len(str(metadata)) for metadata in self._document_metadata)
         return (vector_size + metadata_size) / (1024 * 1024)
 
     async def _save_index(self) -> None:
@@ -444,7 +444,7 @@ class DocumentSemanticIndex:
                 "id_to_index": self._id_to_index,
                 "index_to_id": self._index_to_id,
                 "vector_dimension": self.vector_dimension,
-                "mode": self.mode
+                "mode": self.mode,
             }
 
             with open(f"{self.index_path}.pkl", "wb") as f:
@@ -458,6 +458,7 @@ class DocumentSemanticIndex:
 
         except Exception as e:
             #  Semantic index error - add observability event
+            _ = e  # remove this after implementing observability
 
     def _load_index(self) -> None:
         """Load index from disk"""
@@ -485,4 +486,5 @@ class DocumentSemanticIndex:
 
         except Exception as e:
             #  Semantic index error - add observability event
+            _ = e  # remove this after implementing observability
             # Continue with empty index

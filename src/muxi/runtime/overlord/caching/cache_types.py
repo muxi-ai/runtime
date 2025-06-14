@@ -13,10 +13,11 @@ from typing import Any, Dict, List, Optional
 
 class CacheType(Enum):
     """Types of cache hits for analytics tracking."""
-    EXACT = "exact"          # L1: Exact match cache hit
-    SIMILAR = "similar"      # L2: Semantic similarity cache hit
-    PARTIAL = "partial"      # L3: Partial workflow cache hit
-    MISS = "miss"           # Cache miss, full execution required
+
+    EXACT = "exact"  # L1: Exact match cache hit
+    SIMILAR = "similar"  # L2: Semantic similarity cache hit
+    PARTIAL = "partial"  # L3: Partial workflow cache hit
+    MISS = "miss"  # Cache miss, full execution required
 
 
 @dataclass
@@ -27,8 +28,9 @@ class CacheKey:
     The cache key combines multiple factors to ensure accurate cache matching
     while accounting for context variations that might affect the response.
     """
-    request_fingerprint: str        # Hash of normalized request content
-    context_hash: str              # Hash of relevant context variables
+
+    request_fingerprint: str  # Hash of normalized request content
+    context_hash: str  # Hash of relevant context variables
     user_id: Optional[int] = None  # User identifier for personalized caching
     agent_id: Optional[str] = None  # Agent identifier for agent-specific caching
 
@@ -54,27 +56,28 @@ class CachedResponse:
     Contains the cached response data along with metadata needed for cache
     validation, similarity matching, and performance optimization.
     """
-    content: str                           # The cached response content
-    response_type: str                     # Type of response (text, workflow, etc.)
+
+    content: str  # The cached response content
+    response_type: str  # Type of response (text, workflow, etc.)
     interactive_elements: List[Dict] = field(default_factory=list)  # UI elements
-    media_content: List[Dict] = field(default_factory=list)         # Media attachments
+    media_content: List[Dict] = field(default_factory=list)  # Media attachments
 
     # Cache metadata
     timestamp: float = field(default_factory=time.time)
-    ttl_seconds: Optional[int] = None      # Time to live in seconds
-    access_count: int = 0                  # Number of times accessed
+    ttl_seconds: Optional[int] = None  # Time to live in seconds
+    access_count: int = 0  # Number of times accessed
     last_accessed: float = field(default_factory=time.time)
 
     # Similarity matching metadata
     embedding: Optional[List[float]] = None  # Semantic embedding for similarity
-    context_fingerprint: str = ""          # Context signature for matching
+    context_fingerprint: str = ""  # Context signature for matching
 
     # Quality metrics
-    quality_score: float = 1.0             # Response quality (0.0-1.0)
-    user_feedback: Optional[str] = None    # User feedback on response
+    quality_score: float = 1.0  # Response quality (0.0-1.0)
+    user_feedback: Optional[str] = None  # User feedback on response
 
     # Workflow metadata (for partial workflow caching)
-    workflow_id: Optional[str] = None      # Original workflow identifier
+    workflow_id: Optional[str] = None  # Original workflow identifier
     task_results: Dict[str, Any] = field(default_factory=dict)  # Task outputs
 
     def is_valid(self) -> bool:
@@ -103,6 +106,7 @@ class CacheStatistics:
     Tracks hit rates, miss rates, performance metrics, and other analytics
     data for cache performance monitoring and optimization.
     """
+
     # Hit/miss counters
     exact_hits: int = 0
     similar_hits: int = 0
@@ -112,12 +116,12 @@ class CacheStatistics:
     # Performance metrics
     total_requests: int = 0
     total_response_time_saved: float = 0.0  # Milliseconds saved by caching
-    average_similarity_score: float = 0.0   # Average similarity for L2 hits
+    average_similarity_score: float = 0.0  # Average similarity for L2 hits
 
     # Cache efficiency
-    cache_size_bytes: int = 0               # Total cache size in bytes
-    eviction_count: int = 0                 # Number of cache evictions
-    cleanup_count: int = 0                  # Number of memory cleanups
+    cache_size_bytes: int = 0  # Total cache size in bytes
+    eviction_count: int = 0  # Number of cache evictions
+    cleanup_count: int = 0  # Number of memory cleanups
 
     # Time tracking
     start_time: float = field(default_factory=time.time)
@@ -229,24 +233,25 @@ class MemoryStats:
     Tracks memory consumption across different cache levels and provides
     insights for memory optimization decisions.
     """
+
     # Memory usage by cache level
-    l1_memory_bytes: int = 0       # L1 exact match cache memory
-    l2_memory_bytes: int = 0       # L2 semantic similarity cache memory
-    l3_memory_bytes: int = 0       # L3 partial workflow cache memory
+    l1_memory_bytes: int = 0  # L1 exact match cache memory
+    l2_memory_bytes: int = 0  # L2 semantic similarity cache memory
+    l3_memory_bytes: int = 0  # L3 partial workflow cache memory
     embeddings_memory_bytes: int = 0  # Embedding storage memory
 
     # Overall memory metrics
-    total_memory_bytes: int = 0    # Total cache memory usage
-    peak_memory_bytes: int = 0     # Peak memory usage observed
-    memory_limit_bytes: int = 0    # Configured memory limit
+    total_memory_bytes: int = 0  # Total cache memory usage
+    peak_memory_bytes: int = 0  # Peak memory usage observed
+    memory_limit_bytes: int = 0  # Configured memory limit
 
     # Memory events
-    cleanup_events: int = 0        # Number of memory cleanup events
-    oom_warnings: int = 0          # Out of memory warnings
-    eviction_events: int = 0       # Cache evictions due to memory pressure
+    cleanup_events: int = 0  # Number of memory cleanup events
+    oom_warnings: int = 0  # Out of memory warnings
+    eviction_events: int = 0  # Cache evictions due to memory pressure
 
     # Timing
-    last_cleanup: float = 0.0      # Timestamp of last memory cleanup
+    last_cleanup: float = 0.0  # Timestamp of last memory cleanup
     last_update: float = field(default_factory=time.time)
 
     @property
@@ -267,11 +272,7 @@ class MemoryStats:
         return self.memory_utilization > 0.8
 
     def update_memory_usage(
-        self,
-        l1_bytes: int = 0,
-        l2_bytes: int = 0,
-        l3_bytes: int = 0,
-        embeddings_bytes: int = 0
+        self, l1_bytes: int = 0, l2_bytes: int = 0, l3_bytes: int = 0, embeddings_bytes: int = 0
     ) -> None:
         """Update memory usage statistics."""
         self.l1_memory_bytes = l1_bytes

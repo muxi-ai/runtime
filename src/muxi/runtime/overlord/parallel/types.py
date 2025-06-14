@@ -13,8 +13,9 @@ from datetime import datetime
 
 class TaskStatus(Enum):
     """Status of tasks in parallel execution."""
+
     PENDING = "pending"
-    READY = "ready"           # Dependencies satisfied, ready to start
+    READY = "ready"  # Dependencies satisfied, ready to start
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -23,21 +24,23 @@ class TaskStatus(Enum):
 
 class BottleneckType(Enum):
     """Types of bottlenecks that can occur in workflow execution."""
-    RESOURCE_CONTENTION = "resource_contention"    # Too many tasks competing for same agent
-    DEPENDENCY_CHAIN = "dependency_chain"          # Long chain of dependent tasks
-    AGENT_OVERLOAD = "agent_overload"             # Single agent with too many tasks
-    CRITICAL_PATH = "critical_path"               # Tasks on the critical execution path
-    CAPABILITY_SHORTAGE = "capability_shortage"    # Not enough agents with required capabilities
+
+    RESOURCE_CONTENTION = "resource_contention"  # Too many tasks competing for same agent
+    DEPENDENCY_CHAIN = "dependency_chain"  # Long chain of dependent tasks
+    AGENT_OVERLOAD = "agent_overload"  # Single agent with too many tasks
+    CRITICAL_PATH = "critical_path"  # Tasks on the critical execution path
+    CAPABILITY_SHORTAGE = "capability_shortage"  # Not enough agents with required capabilities
 
 
 @dataclass
 class TaskNode:
     """Represents a task in the dependency graph."""
+
     task_id: str
     description: str
     required_capabilities: List[str]
     estimated_duration: float = 30.0  # seconds
-    priority: int = 1                 # 1-10 scale
+    priority: int = 1  # 1-10 scale
     dependencies: Set[str] = field(default_factory=set)
     dependents: Set[str] = field(default_factory=set)
     status: TaskStatus = TaskStatus.PENDING
@@ -56,17 +59,18 @@ class TaskNode:
 @dataclass
 class ParallelGroup:
     """Group of tasks that can be executed in parallel."""
+
     group_id: str
     task_ids: List[str]
     group_priority: int = 1
-    estimated_duration: float = 0.0   # Max duration of tasks in group
-    required_agents: int = 0          # Number of agents needed
+    estimated_duration: float = 0.0  # Max duration of tasks in group
+    required_agents: int = 0  # Number of agents needed
     resource_requirements: Dict[str, int] = field(default_factory=dict)
 
     # Execution metadata
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
-    completion_rate: float = 0.0      # Percentage of tasks completed
+    completion_rate: float = 0.0  # Percentage of tasks completed
 
     def add_task(self, task_id: str, estimated_duration: float) -> None:
         """Add a task to this parallel group."""
@@ -79,6 +83,7 @@ class ParallelGroup:
 @dataclass
 class ResourceAllocation:
     """Allocation of agents to tasks for optimal execution."""
+
     allocation_id: str
     task_assignments: Dict[str, str] = field(default_factory=dict)  # task_id -> agent_id
     agent_workloads: Dict[str, List[str]] = field(default_factory=dict)  # agent_id -> task_ids
@@ -87,7 +92,7 @@ class ResourceAllocation:
     # Optimization metrics
     total_estimated_time: float = 0.0
     parallel_efficiency: float = 0.0  # How well tasks are parallelized (0-1)
-    load_balance_score: float = 0.0   # How evenly work is distributed (0-1)
+    load_balance_score: float = 0.0  # How evenly work is distributed (0-1)
 
     def assign_task(self, task_id: str, agent_id: str, estimated_duration: float) -> None:
         """Assign a task to an agent."""
@@ -116,11 +121,12 @@ class ResourceAllocation:
 @dataclass
 class BottleneckInfo:
     """Information about a detected bottleneck in workflow execution."""
+
     bottleneck_id: str
     bottleneck_type: BottleneckType
     affected_tasks: List[str]
-    severity_score: float = 0.0       # 0-1 scale, higher = more severe
-    estimated_delay: float = 0.0      # Additional time in seconds
+    severity_score: float = 0.0  # 0-1 scale, higher = more severe
+    estimated_delay: float = 0.0  # Additional time in seconds
     description: str = ""
 
     # Resolution suggestions
@@ -136,10 +142,11 @@ class BottleneckInfo:
 @dataclass
 class ExecutionPlan:
     """Detailed plan for parallel execution of a workflow."""
+
     plan_id: str
     parallel_groups: List[ParallelGroup]
     resource_allocation: ResourceAllocation
-    execution_order: List[str]        # Group IDs in execution order
+    execution_order: List[str]  # Group IDs in execution order
 
     # Timing estimates
     estimated_total_time: float = 0.0
@@ -148,10 +155,10 @@ class ExecutionPlan:
 
     # Resource requirements
     max_concurrent_agents: int = 0
-    total_agent_time: float = 0.0     # Sum of all agent work time
+    total_agent_time: float = 0.0  # Sum of all agent work time
 
     # Quality metrics
-    plan_confidence: float = 0.0      # Confidence in time estimates (0-1)
+    plan_confidence: float = 0.0  # Confidence in time estimates (0-1)
     risk_factors: List[str] = field(default_factory=list)
     bottlenecks: List[BottleneckInfo] = field(default_factory=list)
 
@@ -181,8 +188,9 @@ class ExecutionPlan:
 @dataclass
 class OptimizedWorkflow:
     """Workflow optimized for parallel execution."""
+
     workflow_id: str
-    original_workflow: Any           # Reference to original workflow
+    original_workflow: Any  # Reference to original workflow
     execution_plan: ExecutionPlan
     optimization_metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -210,6 +218,7 @@ class OptimizedWorkflow:
 @dataclass
 class ParallelExecutionResult:
     """Result of parallel workflow execution."""
+
     execution_id: str
     workflow_id: str
     execution_plan: ExecutionPlan
@@ -221,13 +230,13 @@ class ParallelExecutionResult:
 
     # Task results
     task_results: Dict[str, Any] = field(default_factory=dict)  # task_id -> result
-    task_errors: Dict[str, str] = field(default_factory=dict)   # task_id -> error
+    task_errors: Dict[str, str] = field(default_factory=dict)  # task_id -> error
     completed_tasks: Set[str] = field(default_factory=set)
     failed_tasks: Set[str] = field(default_factory=set)
 
     # Performance metrics
     actual_speedup: float = 1.0
-    efficiency_achieved: float = 0.0   # Actual vs planned efficiency
+    efficiency_achieved: float = 0.0  # Actual vs planned efficiency
     agent_utilization: Dict[str, float] = field(default_factory=dict)
 
     # Bottlenecks encountered
@@ -256,13 +265,14 @@ class ParallelExecutionResult:
             "efficiency": self.efficiency_achieved,
             "completed_tasks": len(self.completed_tasks),
             "failed_tasks": len(self.failed_tasks),
-            "bottlenecks_encountered": len(self.runtime_bottlenecks)
+            "bottlenecks_encountered": len(self.runtime_bottlenecks),
         }
 
 
 @dataclass
 class AgentCapability:
     """Represents an agent's capability for task assignment."""
+
     agent_id: str
     capabilities: Set[str]
     performance_scores: Dict[str, float] = field(default_factory=dict)  # capability -> score

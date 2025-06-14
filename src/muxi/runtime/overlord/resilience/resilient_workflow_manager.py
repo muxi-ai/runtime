@@ -8,8 +8,9 @@ and fallback mechanisms.
 
 import asyncio
 import time
-from typing import Any, Dict, Optional, Callable
-# Loguru import removed - add observability import
+from typing import Any, Dict, Optional
+
+from ... import observability
 
 from .resilience_types import (
     ResilienceConfig,
@@ -56,9 +57,7 @@ class ResilientWorkflowManager:
         #  Info - add observability event
 
     async def execute_resilient_workflow(
-        self,
-        workflow: Any,
-        resilience_config: Optional[ResilienceConfig] = None
+        self, workflow: Any, resilience_config: Optional[ResilienceConfig] = None
     ) -> ResilientWorkflowResult:
         """
         Execute workflow with comprehensive error handling and recovery.
@@ -72,7 +71,7 @@ class ResilientWorkflowManager:
         """
         start_time = time.time()
         effective_config = resilience_config or self.config
-        workflow_id = getattr(workflow, 'id', f'workflow_{int(time.time())}')
+        workflow_id = getattr(workflow, "id", f"workflow_{int(time.time())}")
 
         #  Debug - add observability event
 
@@ -87,10 +86,10 @@ class ResilientWorkflowManager:
                     workflow,
                     effective_config,
                     fallback=lambda w, c: self.fallback_manager.get_fallback_response(
-                        w, ErrorType.SYSTEM_OVERLOAD, {'circuit_breaker_open': True}
-                    )
+                        w, ErrorType.SYSTEM_OVERLOAD, {"circuit_breaker_open": True}
+                    ),
                 )
-                circuit_breaker_triggered = circuit_breaker.get_state().state.value != 'closed'
+                circuit_breaker_triggered = circuit_breaker.get_state().state.value != "closed"
             else:
                 result = await self._execute_workflow_with_recovery(workflow, effective_config)
                 circuit_breaker_triggered = False
@@ -107,10 +106,10 @@ class ResilientWorkflowManager:
                 execution_time=execution_time,
                 circuit_breaker_triggered=circuit_breaker_triggered,
                 metadata={
-                    'workflow_id': workflow_id,
-                    'execution_path': 'normal',
-                    'config_used': effective_config.__dict__
-                }
+                    "workflow_id": workflow_id,
+                    "execution_path": "normal",
+                    "config_used": effective_config.__dict__,
+                },
             )
 
         except Exception as error:
@@ -124,39 +123,35 @@ class ResilientWorkflowManager:
                 error=error,
                 execution_time=execution_time,
                 metadata={
-                    'workflow_id': workflow_id,
-                    'execution_path': 'failed',
-                    'error_type': getattr(error, 'error_type', ErrorType.UNKNOWN).value
-                }
+                    "workflow_id": workflow_id,
+                    "execution_path": "failed",
+                    "error_type": getattr(error, "error_type", ErrorType.UNKNOWN).value,
+                },
             )
 
     async def _execute_workflow_with_recovery(
-        self,
-        workflow: Any,
-        config: ResilienceConfig,
-        attempt_count: int = 1
+        self, workflow: Any, config: ResilienceConfig, attempt_count: int = 1
     ) -> Any:
         """Execute workflow with recovery mechanisms."""
 
         try:
             # Execute the workflow
-            if hasattr(workflow, 'execute'):
+            if hasattr(workflow, "execute"):
                 if asyncio.iscoroutinefunction(workflow.execute):
                     result = await asyncio.wait_for(
-                        workflow.execute(),
-                        timeout=config.workflow_timeout
+                        workflow.execute(), timeout=config.workflow_timeout
                     )
                 else:
                     loop = asyncio.get_event_loop()
                     result = await asyncio.wait_for(
                         loop.run_in_executor(None, workflow.execute),
-                        timeout=config.workflow_timeout
+                        timeout=config.workflow_timeout,
                     )
             else:
                 raise WorkflowException(
                     "Workflow does not have execute method",
                     ErrorType.WORKFLOW_VALIDATION,
-                    ErrorSeverity.HIGH
+                    ErrorSeverity.HIGH,
                 )
 
             return result
@@ -166,11 +161,11 @@ class ResilientWorkflowManager:
             error_context = await self.error_classifier.classify(
                 error,
                 context={
-                    'workflow_id': getattr(workflow, 'id', None),
-                    'attempt_count': attempt_count,
-                    'workflow_type': getattr(workflow, 'type', 'unknown'),
-                    'user_facing': True
-                }
+                    "workflow_id": getattr(workflow, "id", None),
+                    "attempt_count": attempt_count,
+                    "workflow_type": getattr(workflow, "type", "unknown"),
+                    "user_facing": True,
+                },
             )
 
             # Check if we should attempt recovery
@@ -188,24 +183,18 @@ class ResilientWorkflowManager:
             recovery_strategy = await self.recovery_strategist.select_strategy(error_context)
 
             #  Info - add observability event
-                f"Attempting recovery for workflow {getattr(workflow, 'id', 'unknown')} "
-                f"using strategy: {recovery_strategy.value} (attempt {attempt_count})"
-            )
+            #     f"Attempting recovery for workflow {getattr(workflow, 'id', 'unknown')} "
+            #     f"using strategy: {recovery_strategy.value} (attempt {attempt_count})"
+            # )
 
             # Execute recovery strategy
             recovery_result = await self._execute_recovery_strategy(
-                recovery_strategy,
-                workflow,
-                error_context,
-                config,
-                attempt_count
+                recovery_strategy, workflow, error_context, config, attempt_count
             )
 
             # Record strategy performance
             await self.recovery_strategist.record_strategy_result(
-                error_context.error_type,
-                recovery_strategy,
-                recovery_result.success
+                error_context.error_type, recovery_strategy, recovery_result.success
             )
 
             if recovery_result.success:
@@ -221,10 +210,7 @@ class ResilientWorkflowManager:
                     raise recovery_result.error or error
 
     def _should_attempt_recovery(
-        self,
-        error_context,
-        config: ResilienceConfig,
-        attempt_count: int
+        self, error_context, config: ResilienceConfig, attempt_count: int
     ) -> bool:
         """Determine if recovery should be attempted."""
 
@@ -242,7 +228,7 @@ class ResilientWorkflowManager:
                 ErrorType.AUTH_FAILED,
                 ErrorType.PERMISSION_DENIED,
                 ErrorType.CONFIGURATION_ERROR,
-                ErrorType.DATA_CORRUPTION
+                ErrorType.DATA_CORRUPTION,
             ]
             if error_context.error_type in critical_no_retry:
                 return False
@@ -259,15 +245,19 @@ class ResilientWorkflowManager:
         workflow: Any,
         error_context,
         config: ResilienceConfig,
-        attempt_count: int
+        attempt_count: int,
     ):
         """Execute a specific recovery strategy."""
 
         from .resilience_types import RecoveryResult
 
         try:
-            if strategy in [RecoveryStrategy.IMMEDIATE_RETRY, RecoveryStrategy.EXPONENTIAL_BACKOFF,
-                           RecoveryStrategy.LINEAR_BACKOFF, RecoveryStrategy.JITTERED_RETRY]:
+            if strategy in [
+                RecoveryStrategy.IMMEDIATE_RETRY,
+                RecoveryStrategy.EXPONENTIAL_BACKOFF,
+                RecoveryStrategy.LINEAR_BACKOFF,
+                RecoveryStrategy.JITTERED_RETRY,
+            ]:
                 return await self._execute_retry_strategy(strategy, workflow, config, attempt_count)
 
             elif strategy == RecoveryStrategy.FALLBACK_AGENT:
@@ -290,23 +280,19 @@ class ResilientWorkflowManager:
                 return RecoveryResult(
                     success=False,
                     strategy_used=strategy,
-                    error=WorkflowException(f"Unsupported recovery strategy: {strategy.value}")
+                    error=WorkflowException(f"Unsupported recovery strategy: {strategy.value}"),
                 )
 
         except Exception as recovery_error:
             #  Error - add observability event
-            return RecoveryResult(
-                success=False,
-                strategy_used=strategy,
-                error=recovery_error
-            )
+            return RecoveryResult(success=False, strategy_used=strategy, error=recovery_error)
 
     async def _execute_retry_strategy(
         self,
         strategy: RecoveryStrategy,
         workflow: Any,
         config: ResilienceConfig,
-        attempt_count: int
+        attempt_count: int,
     ):
         """Execute retry-based recovery strategies."""
 
@@ -318,10 +304,16 @@ class ResilientWorkflowManager:
         elif strategy == RecoveryStrategy.LINEAR_BACKOFF:
             delay = config.retry.initial_delay * attempt_count
         elif strategy == RecoveryStrategy.EXPONENTIAL_BACKOFF:
-            delay = config.retry.initial_delay * (config.retry.backoff_factor ** (attempt_count - 1))
+            delay = config.retry.initial_delay * (
+                config.retry.backoff_factor ** (attempt_count - 1)
+            )
         elif strategy == RecoveryStrategy.JITTERED_RETRY:
-            base_delay = config.retry.initial_delay * (config.retry.backoff_factor ** (attempt_count - 1))
-            jitter = base_delay * config.retry.jitter_factor * (2 * asyncio.get_event_loop().time() - 1)
+            base_delay = config.retry.initial_delay * (
+                config.retry.backoff_factor ** (attempt_count - 1)
+            )
+            jitter = (
+                base_delay * config.retry.jitter_factor * (2 * asyncio.get_event_loop().time() - 1)
+            )
             delay = base_delay + jitter
         else:
             delay = config.retry.initial_delay
@@ -337,17 +329,11 @@ class ResilientWorkflowManager:
         try:
             result = await self._execute_workflow_with_recovery(workflow, config, attempt_count + 1)
             return RecoveryResult(
-                success=True,
-                strategy_used=strategy,
-                result=result,
-                attempts=attempt_count + 1
+                success=True, strategy_used=strategy, result=result, attempts=attempt_count + 1
             )
         except Exception as retry_error:
             return RecoveryResult(
-                success=False,
-                strategy_used=strategy,
-                error=retry_error,
-                attempts=attempt_count + 1
+                success=False, strategy_used=strategy, error=retry_error, attempts=attempt_count + 1
             )
 
     async def _execute_fallback_agent_strategy(self, workflow: Any, error_context):
@@ -359,7 +345,7 @@ class ResilientWorkflowManager:
         return RecoveryResult(
             success=False,
             strategy_used=RecoveryStrategy.FALLBACK_AGENT,
-            error=WorkflowException("Fallback agent strategy not implemented")
+            error=WorkflowException("Fallback agent strategy not implemented"),
         )
 
     async def _execute_fallback_model_strategy(self, workflow: Any, error_context):
@@ -369,7 +355,7 @@ class ResilientWorkflowManager:
         return RecoveryResult(
             success=False,
             strategy_used=RecoveryStrategy.FALLBACK_MODEL,
-            error=WorkflowException("Fallback model strategy not implemented")
+            error=WorkflowException("Fallback model strategy not implemented"),
         )
 
     async def _execute_cached_response_strategy(self, workflow: Any, error_context):
@@ -379,58 +365,56 @@ class ResilientWorkflowManager:
         cached_response = await self.fallback_manager._get_cached_fallback(workflow)
         if cached_response:
             return RecoveryResult(
-                success=True,
-                strategy_used=RecoveryStrategy.CACHED_RESPONSE,
-                result=cached_response
+                success=True, strategy_used=RecoveryStrategy.CACHED_RESPONSE, result=cached_response
             )
         else:
             return RecoveryResult(
                 success=False,
                 strategy_used=RecoveryStrategy.CACHED_RESPONSE,
-                error=WorkflowException("No cached response available")
+                error=WorkflowException("No cached response available"),
             )
 
     async def _execute_simplified_workflow_strategy(self, workflow: Any, error_context):
         """Execute simplified workflow strategy."""
         from .resilience_types import RecoveryResult
 
-        simplified_response = await self.fallback_manager._get_simplified_workflow_response(workflow)
+        simplified_response = await self.fallback_manager._get_simplified_workflow_response(
+            workflow
+        )
         if simplified_response:
             return RecoveryResult(
                 success=True,
                 strategy_used=RecoveryStrategy.SIMPLIFIED_WORKFLOW,
-                result=simplified_response
+                result=simplified_response,
             )
         else:
             return RecoveryResult(
                 success=False,
                 strategy_used=RecoveryStrategy.SIMPLIFIED_WORKFLOW,
-                error=WorkflowException("No simplified workflow available")
+                error=WorkflowException("No simplified workflow available"),
             )
 
-    async def _execute_escalation_strategy(self, strategy: RecoveryStrategy, workflow: Any, error_context):
+    async def _execute_escalation_strategy(
+        self, strategy: RecoveryStrategy, workflow: Any, error_context
+    ):
         """Execute escalation strategies."""
         from .resilience_types import RecoveryResult
 
         # Log escalation
         #  Warning - add observability event
-            f"Escalating workflow {getattr(workflow, 'id', 'unknown')} "
-            f"due to {error_context.error_type.value} (strategy: {strategy.value})"
-        )
+        #     f"Escalating workflow {getattr(workflow, 'id', 'unknown')} "
+        #     f"due to {error_context.error_type.value} (strategy: {strategy.value})"
+        # )
 
         # Generate appropriate response
         if strategy == RecoveryStrategy.ESCALATE_TO_ADMIN:
             result = await self.fallback_manager._generate_error_message(
                 workflow, error_context.error_type, error_context.context_data
             )
-            result['escalated'] = True
-            result['admin_notified'] = True
+            result["escalated"] = True
+            result["admin_notified"] = True
 
-            return RecoveryResult(
-                success=True,
-                strategy_used=strategy,
-                result=result
-            )
+            return RecoveryResult(success=True, strategy_used=strategy, result=result)
         else:  # ABORT_WORKFLOW
             return RecoveryResult(
                 success=False,
@@ -438,33 +422,32 @@ class ResilientWorkflowManager:
                 error=WorkflowException(
                     f"Workflow aborted due to {error_context.error_type.value}",
                     error_context.error_type,
-                    error_context.severity
-                )
+                    error_context.severity,
+                ),
             )
 
     def _get_circuit_breaker(self, workflow: Any) -> CircuitBreaker:
         """Get or create circuit breaker for workflow type."""
-        workflow_type = getattr(workflow, 'type', 'default')
+        workflow_type = getattr(workflow, "type", "default")
         return self.circuit_breaker_registry.get_circuit_breaker(
-            f"workflow_{workflow_type}",
-            self.config.circuit_breaker
+            f"workflow_{workflow_type}", self.config.circuit_breaker
         )
 
     def get_resilience_stats(self) -> Dict[str, Any]:
         """Get comprehensive resilience statistics."""
         return {
-            'error_classifier': self.error_classifier.get_classification_stats(),
-            'recovery_strategist': {
-                'strategy_performance': self.recovery_strategist.get_strategy_performance()
+            "error_classifier": self.error_classifier.get_classification_stats(),
+            "recovery_strategist": {
+                "strategy_performance": self.recovery_strategist.get_strategy_performance()
             },
-            'circuit_breakers': self.circuit_breaker_registry.get_all_stats(),
-            'fallback_manager': self.fallback_manager.get_cache_stats(),
-            'config': {
-                'retries_enabled': self.config.enable_retries,
-                'circuit_breaker_enabled': self.config.enable_circuit_breaker,
-                'fallbacks_enabled': self.config.enable_fallbacks,
-                'graceful_degradation_enabled': self.config.enable_graceful_degradation,
-            }
+            "circuit_breakers": self.circuit_breaker_registry.get_all_stats(),
+            "fallback_manager": self.fallback_manager.get_cache_stats(),
+            "config": {
+                "retries_enabled": self.config.enable_retries,
+                "circuit_breaker_enabled": self.config.enable_circuit_breaker,
+                "fallbacks_enabled": self.config.enable_fallbacks,
+                "graceful_degradation_enabled": self.config.enable_graceful_degradation,
+            },
         }
 
     async def reset_resilience_state(self) -> None:
