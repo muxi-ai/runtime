@@ -35,6 +35,7 @@ from typing import Any, Dict, Optional
 
 from ..llm import LLM
 from .handler import MCPHandler
+from .. import observability
 
 
 class MCPService:
@@ -118,24 +119,18 @@ class MCPService:
         """
         # This is just a placeholder implementation
         # Emit system event for server registration
-        try:
-            from ..observability import SystemEventType, EventLevel, ObservabilityManager
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.emit_system_event(
-                    SystemEventType.MCP_SERVER_REGISTRATION_COMPLETED,
-                    level=EventLevel.INFO,
-                    data={
-                        "server_id": server_id,
-                        "url": url,
-                        "command": command,
-                        "has_credentials": bool(credentials),
-                        "request_timeout": request_timeout or 60,
-                    },
-                    description=f"MCP server registered: {server_id}"
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "server_id": server_id,
+                "url": url,
+                "command": command,
+                "has_credentials": bool(credentials),
+                "request_timeout": request_timeout or 60,
+            },
+            description=f"MCP server registered: {server_id}",
+        )
 
         self.servers[server_id] = {
             "url": url,
@@ -180,29 +175,18 @@ class MCPService:
         self.locks[server_id] = asyncio.Lock()
 
         # Emit MCP server registration started event
-        try:
-            from ..observability import (
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    SystemEventType.MCP_SERVER_REGISTRATION_STARTED,
-                    level=EventLevel.INFO,
-                    data={
-                        "server_id": server_id,
-                        "url": url,
-                        "command": command,
-                        "has_credentials": bool(credentials),
-                        "request_timeout": request_timeout,
-                    },
-                    description=f"MCP server registration started: {server_id}",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "server_id": server_id,
+                "url": url,
+                "command": command,
+                "has_credentials": bool(credentials),
+                "request_timeout": request_timeout,
+            },
+            description=f"MCP server registration started: {server_id}",
+        )
 
         # Initialize the handler
         async with self.locks[server_id]:
@@ -241,97 +225,56 @@ class MCPService:
                         tool.get("name", f"unknown_{i}"): tool for i, tool in enumerate(tools)
                     }
                     # Emit tool discovery completed event
-                    try:
-                        from ..observability import SystemEventType, EventLevel, ObservabilityManager
-                        observability_manager = ObservabilityManager.get_instance()
-                        if observability_manager:
-                            await observability_manager.emit_system_event(
-                                SystemEventType.MCP_TOOL_DISCOVERY_COMPLETED,
-                                level=EventLevel.INFO,
-                                data={
-                                    "server_id": server_id,
-                                    "tools_count": len(tools),
-                                    "tools": [
-                                        tool.get("name", f"unknown_{i}")
-                                        for i, tool in enumerate(tools)
-                                    ]
-                                },
-                                description=(
-                                    f"Discovered {len(tools)} tools from MCP server: {server_id}"
-                                )
-                            )
-                    except Exception:
-                        pass
+                    observability.emit_event(
+                        event_type=observability.SystemEventType.MCP_TOOL_DISCOVERY_COMPLETED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "server_id": server_id,
+                            "tools_count": len(tools),
+                            "tools": [
+                                tool.get("name", f"unknown_{i}") for i, tool in enumerate(tools)
+                            ],
+                        },
+                        description=(f"Discovered {len(tools)} tools from MCP server: {server_id}"),
+                    )
                 except Exception as e:
                     # Emit tool discovery failed event
-                    try:
-                        from ..observability import SystemEventType, EventLevel, ObservabilityManager
-                        observability_manager = ObservabilityManager.get_instance()
-                        if observability_manager:
-                            await observability_manager.emit_system_event(
-                                SystemEventType.MCP_TOOL_DISCOVERY_COMPLETED,
-                                level=EventLevel.WARNING,
-                                data={
-                                    "server_id": server_id,
-                                    "error": str(e),
-                                    "tools_count": 0
-                                },
-                                description=f"Unable to discover tools from MCP server {server_id}: {str(e)}"
-                            )
-                    except Exception:
-                        pass
+                    observability.emit_event(
+                        event_type=observability.SystemEventType.MCP_TOOL_DISCOVERY_COMPLETED,
+                        level=observability.EventLevel.WARNING,
+                        data={"server_id": server_id, "error": str(e), "tools_count": 0},
+                        description=f"Unable to discover tools from MCP server {server_id}: {str(e)}",
+                    )
                     self.tool_registry[server_id] = {}
 
                 # Emit MCP server registration completed event
-                try:
-                    from ..observability import (
-                        SystemEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.event_logger.emit_event(
-                            SystemEventType.MCP_SERVER_REGISTRATION_COMPLETED,
-                            level=EventLevel.INFO,
-                            data={
-                                "server_id": server_id,
-                                "tools_discovered": len(self.tool_registry.get(server_id, {})),
-                                "connection_status": "connected",
-                            },
-                            description=f"MCP server registration completed: {server_id}",
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "server_id": server_id,
+                        "tools_discovered": len(self.tool_registry.get(server_id, {})),
+                        "connection_status": "connected",
+                    },
+                    description=f"mcp server registration completed: {server_id}",
+                )
 
                 # Final registration success event already emitted above
                 return server_id
 
             except Exception as e:
                 # Emit MCP server registration failed event
-                try:
-                    from ..observability import (
-                        SystemEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.event_logger.emit_event(
-                            SystemEventType.MCP_SERVER_REGISTRATION_FAILED,
-                            level=EventLevel.ERROR,
-                            data={
-                                "server_id": server_id,
-                                "error": str(e),
-                                "url": url,
-                                "command": command,
-                            },
-                            description=f"MCP server registration failed: {server_id} - {e}",
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_id,
+                        "error": str(e),
+                        "url": url,
+                        "command": command,
+                    },
+                    description=f"MCP server registration failed: {server_id} - {e}",
+                )
 
                 # Clean up if something went wrong
                 if server_id in self.locks:
@@ -370,25 +313,18 @@ class MCPService:
 
         # Emit MCP tool invocation started event
         try:
-            from ..observability import (
-                ConversationEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
 
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MCP_TOOL_CALL_STARTED,
-                    level=EventLevel.INFO,
-                    data={
-                        "server_id": server_id,
-                        "tool_name": tool_name,
-                        "parameters": parameters,
-                        "request_timeout": request_timeout,
-                    },
-                    description=f"MCP tool invocation started: {tool_name} on {server_id}",
-                )
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MCP_TOOL_CALL_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "server_id": server_id,
+                    "tool_name": tool_name,
+                    "parameters": parameters,
+                    "request_timeout": request_timeout,
+                },
+                description=f"MCP tool invocation started: {tool_name} on {server_id}",
+            )
         except Exception:
             pass  # Don't let observability errors break the flow
 
@@ -424,59 +360,33 @@ class MCPService:
                 )
 
                 # Emit MCP tool invocation completed event
-                try:
-                    from ..observability import (
-                        ConversationEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.event_logger.emit_event(
-                            ConversationEventType.MCP_TOOL_CALL_COMPLETED,
-                            level=EventLevel.INFO,
-                            data={
-                                "server_id": server_id,
-                                "tool_name": tool_name,
-                                "result_type": type(result).__name__,
-                                "success": True,
-                            },
-                            description=(
-                                f"MCP tool invocation completed: {tool_name} on {server_id}"
-                            ),
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "server_id": server_id,
+                        "tool_name": tool_name,
+                        "result_type": type(result).__name__,
+                        "success": True,
+                    },
+                    description=(f"MCP tool invocation completed: {tool_name} on {server_id}"),
+                )
 
                 return {"result": result, "status": "success"}
 
             except Exception as e:
                 # Emit MCP tool invocation failed event
-                try:
-                    from ..observability import (
-                        ConversationEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.event_logger.emit_event(
-                            ConversationEventType.MCP_TOOL_CALL_FAILED,
-                            level=EventLevel.ERROR,
-                            data={
-                                "server_id": server_id,
-                                "tool_name": tool_name,
-                                "error": str(e),
-                                "error_type": type(e).__name__,
-                            },
-                            description=(
-                                f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"
-                            ),
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_id,
+                        "tool_name": tool_name,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
+                )
 
                 # Error event already emitted above
                 return {"error": str(e), "status": "error"}
@@ -517,32 +427,20 @@ class MCPService:
                     del self.tool_registry[server_id]
 
                 # Emit disconnection success event
-                try:
-                    from ..observability import SystemEventType, EventLevel, ObservabilityManager
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.emit_system_event(
-                            SystemEventType.MCP_SERVER_DISCONNECTED,
-                            level=EventLevel.INFO,
-                            data={"server_id": server_id},
-                            description=f"Disconnected from MCP server: {server_id}"
-                        )
-                except Exception:
-                    pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.MCP_SERVER_DISCONNECTED,
+                    level=observability.EventLevel.INFO,
+                    data={"server_id": server_id},
+                    description=f"Disconnected from MCP server: {server_id}",
+                )
                 return True
 
             except Exception as e:
                 # Emit disconnection error event
-                try:
-                    from ..observability import SystemEventType, EventLevel, ObservabilityManager
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.emit_system_event(
-                            SystemEventType.MCP_SERVER_DISCONNECTED,
-                            level=EventLevel.ERROR,
-                            data={"server_id": server_id, "error": str(e)},
-                            description=f"Error disconnecting from MCP server {server_id}: {str(e)}"
-                        )
-                except Exception:
-                    pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.MCP_SERVER_DISCONNECTED,
+                    level=observability.EventLevel.ERROR,
+                    data={"server_id": server_id, "error": str(e)},
+                    description=f"Error disconnecting from MCP server {server_id}: {str(e)}",
+                )
                 return False

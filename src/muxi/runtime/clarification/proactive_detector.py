@@ -6,16 +6,9 @@ multi-step planning assistance, or guided information gathering.
 Uses pure LLM detection for multilingual support.
 """
 
-import logging
 from typing import Optional
 
-from .types import (
-    ProactiveRequest,
-    ProactiveRequestType,
-    MultiStepPlan
-)
-
-logger = logging.getLogger(__name__)
+from .types import ProactiveRequest, ProactiveRequestType, MultiStepPlan
 
 
 class ProactiveClarificationIntentDetector:
@@ -32,9 +25,10 @@ class ProactiveClarificationIntentDetector:
         self.model = model
         if not model:
             #  Proactive detector warning - add observability event
-                "ProactiveClarificationIntentDetector initialized without model - "
-                "all detection will fail"
-            )
+            _ = None  # remove this after implementing observability
+            #     "ProactiveClarificationIntentDetector initialized without model - "
+            #     "all detection will fail"
+            # )
 
     async def detect_proactive_request(self, message: str) -> Optional[ProactiveRequest]:
         """
@@ -64,6 +58,7 @@ class ProactiveClarificationIntentDetector:
 
         except Exception as e:
             #  Proactive detector error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def _detect_with_llm(self, message: str) -> Optional[ProactiveRequest]:
@@ -113,6 +108,7 @@ class ProactiveClarificationIntentDetector:
 
             # Parse LLM response
             import json
+
             try:
                 result = json.loads(response.strip())
                 if result.get("is_proactive", False) and result.get("confidence", 0) >= 0.7:
@@ -133,19 +129,22 @@ class ProactiveClarificationIntentDetector:
                             completion_criteria=result.get(
                                 "completion_criteria", "request fulfilled"
                             ),
-                            confidence=result.get("confidence", 0.7)
+                            confidence=result.get("confidence", 0.7),
                         )
                 else:
                     #  Proactive detector debug - add observability event
-                        f"Proactive request not detected. "
-                        f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"Proactive request not detected. "
+                    #     f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
+                    # )
 
             except json.JSONDecodeError:
                 #  Proactive detector warning - add observability event
+                _ = None  # remove this after implementing observability
 
         except Exception as e:
             #  Proactive detector warning - add observability event
+            _ = e  # remove this after implementing observability
 
         return None
 
@@ -195,31 +194,37 @@ class ProactiveClarificationIntentDetector:
             response = await self.model.generate(prompt, max_tokens=400, temperature=0.1)
 
             import json
+
             try:
                 result = json.loads(response.strip())
-                if (result.get("has_plan", False) and
-                    len(result.get("steps", [])) >= 2 and
-                    result.get("confidence", 0) >= 0.7):
+                if (
+                    result.get("has_plan", False)
+                    and len(result.get("steps", [])) >= 2
+                    and result.get("confidence", 0) >= 0.7
+                ):
 
                     plan = MultiStepPlan(
                         steps=result.get("steps", []),
                         goal=result.get("goal", "achieve multi-step plan"),
                         original_message=message,
-                        confidence=result.get("confidence", 0.7)
+                        confidence=result.get("confidence", 0.7),
                     )
 
                     #  Proactive detector info - add observability event
                     return plan
                 else:
                     #  Proactive detector debug - add observability event
-                        f"Multi-step plan not detected. "
-                        f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
-                    )
+                    _ = None  # remove this after implementing observability
+                    #     f"Multi-step plan not detected. "
+                    #     f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
+                    # )
 
             except json.JSONDecodeError:
                 #  Proactive detector warning - add observability event
+                _ = None  # remove this after implementing observability
 
         except Exception as e:
             #  Proactive detector error - add observability event
+            _ = e  # remove this after implementing observability
 
         return None

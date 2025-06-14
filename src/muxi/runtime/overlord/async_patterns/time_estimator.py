@@ -6,10 +6,10 @@ determine if requests should be processed asynchronously.
 """
 
 from typing import Optional, Dict
-import logging
 
 
-logger = logging.getLogger(__name__)
+
+
 
 
 class TimeEstimator:

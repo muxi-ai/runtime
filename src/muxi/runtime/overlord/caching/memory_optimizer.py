@@ -7,7 +7,7 @@ monitoring to ensure the caching system maintains optimal memory usage.
 
 import asyncio
 import gc
-import logging
+
 import psutil
 import time
 from dataclasses import dataclass
@@ -16,7 +16,7 @@ from typing import Dict, List, Optional, Tuple
 from .cache_types import MemoryStats
 
 
-logger = logging.getLogger(__name__)
+
 
 
 @dataclass

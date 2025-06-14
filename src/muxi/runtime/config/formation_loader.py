@@ -231,9 +231,11 @@ class FormationLoader:
                     #  Agent loaded successfully - add observability event
                 else:
                     #  Agent disabled - add observability event
+                    _ = None  # remove this after implementing observability
 
             except Exception as e:
                 #  Agent config error - add observability event
+                _ = e  # remove this after implementing observability
                 continue
 
         #  Agent discovery complete - add observability event
@@ -265,6 +267,7 @@ class FormationLoader:
                 #  Agent loaded successfully - add observability event
             else:
                 #  Agent disabled - add observability event
+                _ = None  # remove this after implementing observability
 
         config["agents"] = filtered_agents
 
@@ -315,11 +318,12 @@ class FormationLoader:
 
             except Exception as e:
                 #  MCP config error - add observability event
+                _ = e  # remove this after implementing observability
                 continue
 
         #  Info - add observability event
-            f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
-        )
+        #     f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
+        # )
 
     async def _discover_and_merge_a2a_services(
         self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None
@@ -370,12 +374,13 @@ class FormationLoader:
 
             except Exception as e:
                 #  A2A config error - add observability event
+                _ = e  # remove this after implementing observability
                 continue
 
         #  Info - add observability event
-            f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
-            "A2A services from a2a/ directory"
-        )
+        #     f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
+        #     "A2A services from a2a/ directory"
+        # )
 
     def _resolve_knowledge_paths(
         self, config: Dict[str, Any], formation_dir: str

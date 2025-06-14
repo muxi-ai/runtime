@@ -104,8 +104,7 @@ class ConfigLoader:
 
     @staticmethod
     async def process_secrets(
-        config: Dict[str, Any],
-        secrets_manager: Optional[Any] = None
+        config: Dict[str, Any], secrets_manager: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Process secrets variables in the configuration.
@@ -129,7 +128,7 @@ class ConfigLoader:
         async def replace_secrets(obj: Any) -> Any:
             if isinstance(obj, str):
                 # Find all ${{ secrets.SECRET_NAME }} patterns (whitespace tolerant)
-                secret_pattern = r'\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}'
+                secret_pattern = r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}"
                 matches = re.findall(secret_pattern, obj)
                 result = obj
 
@@ -147,13 +146,11 @@ class ConfigLoader:
                             raise ValueError(f"Secret '{secret_name}' not found in SecretsManager")
 
                         # Replace the pattern with the secret value
-                        pattern = rf'\$\{{\{{\s*secrets\.{secret_name}\s*\}}\}}'
+                        pattern = rf"\$\{{\{{\s*secrets\.{secret_name}\s*\}}\}}"
                         result = re.sub(pattern, secret_value, result)
 
                     except Exception as e:
-                        raise ValueError(
-                            f"Failed to retrieve secret '{secret_name}': {str(e)}"
-                        )
+                        raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}")
 
                 return result
             elif isinstance(obj, dict):
@@ -331,9 +328,7 @@ class ConfigLoader:
                 )
 
     async def load_and_process(
-        self,
-        path: str,
-        secrets_manager: Optional[Any] = None
+        self, path: str, secrets_manager: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Load, validate, and process a configuration file.

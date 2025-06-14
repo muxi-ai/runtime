@@ -5,7 +5,6 @@ This module manages different conversation modes for proactive clarification,
 switching between reactive and proactive questioning based on user needs.
 """
 
-import logging
 import time
 from typing import Dict, Optional, List
 
@@ -16,10 +15,8 @@ from .types import (
     ProactiveRequestType,
     GoalContext,
     PlanAnalysis,
-    ClarificationError
+    ClarificationError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ClarificationModeManager:
@@ -37,10 +34,7 @@ class ClarificationModeManager:
         self._user_to_session: Dict[str, str] = {}  # user_id -> session_id mapping
 
     async def enter_proactive_mode(
-        self,
-        user_id: str,
-        agent_id: str,
-        proactive_request: ProactiveRequest
+        self, user_id: str, agent_id: str, proactive_request: ProactiveRequest
     ) -> ClarificationSession:
         """
         Switch to proactive questioning mode with specific goal
@@ -64,7 +58,10 @@ class ClarificationModeManager:
 
             # Create goal context for goal-driven modes
             goal_context = None
-            if mode in [ClarificationMode.PROACTIVE_QUESTIONING, ClarificationMode.GOAL_ACHIEVEMENT]:
+            if mode in [
+                ClarificationMode.PROACTIVE_QUESTIONING,
+                ClarificationMode.GOAL_ACHIEVEMENT,
+            ]:
                 goal_context = await self._create_goal_context(proactive_request)
 
             # Create new clarification session
@@ -75,7 +72,7 @@ class ClarificationModeManager:
                 mode=mode,
                 proactive_request=proactive_request,
                 goal_context=goal_context,
-                max_questions=proactive_request.max_questions
+                max_questions=proactive_request.max_questions,
             )
 
             # Store the session
@@ -90,10 +87,7 @@ class ClarificationModeManager:
             raise ClarificationError(f"Failed to enter proactive mode: {e}")
 
     async def enter_plan_analysis_mode(
-        self,
-        user_id: str,
-        agent_id: str,
-        plan_analysis: PlanAnalysis
+        self, user_id: str, agent_id: str, plan_analysis: PlanAnalysis
     ) -> ClarificationSession:
         """
         Switch to plan analysis mode for multi-step planning assistance
@@ -119,7 +113,7 @@ class ClarificationModeManager:
                 agent_id=agent_id,
                 mode=ClarificationMode.PLAN_ANALYSIS,
                 plan_analysis=plan_analysis,
-                max_questions=len(plan_analysis.clarification_questions) + 3  # Flexible limit
+                max_questions=len(plan_analysis.clarification_questions) + 3,  # Flexible limit
             )
 
             # Store the session
@@ -149,10 +143,7 @@ class ClarificationModeManager:
         return None
 
     async def update_session_progress(
-        self,
-        session_id: str,
-        collected_info: Dict[str, any] = None,
-        questions_asked: int = None
+        self, session_id: str, collected_info: Dict[str, any] = None, questions_asked: int = None
     ) -> bool:
         """
         Update session progress with new information
@@ -188,6 +179,7 @@ class ClarificationModeManager:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     async def complete_session(self, session_id: str) -> Dict[str, any]:
@@ -213,14 +205,14 @@ class ClarificationModeManager:
                 complete_info["goal_achievement"] = {
                     "goal": session.goal_context.goal,
                     "completion_percentage": session.goal_context.completion_percentage,
-                    "goal_type": session.goal_context.goal_type
+                    "goal_type": session.goal_context.goal_type,
                 }
 
             if session.plan_analysis:
                 complete_info["plan_analysis"] = {
                     "overall_feasibility": session.plan_analysis.overall_feasibility,
                     "recommendations": session.plan_analysis.recommendations,
-                    "steps_analyzed": len(session.plan_analysis.step_analyses)
+                    "steps_analyzed": len(session.plan_analysis.step_analyses),
                 }
 
             # Clean up the session
@@ -252,9 +244,12 @@ class ClarificationModeManager:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
-    def _determine_mode_from_request(self, proactive_request: ProactiveRequest) -> ClarificationMode:
+    def _determine_mode_from_request(
+        self, proactive_request: ProactiveRequest
+    ) -> ClarificationMode:
         """Determine the appropriate clarification mode from the request type"""
         mode_mapping = {
             ProactiveRequestType.GUIDED_QUESTIONING: ClarificationMode.PROACTIVE_QUESTIONING,
@@ -263,7 +258,9 @@ class ClarificationModeManager:
             ProactiveRequestType.STEP_BY_STEP: ClarificationMode.GOAL_ACHIEVEMENT,
             ProactiveRequestType.COMPREHENSIVE_ADVICE: ClarificationMode.GOAL_ACHIEVEMENT,
         }
-        return mode_mapping.get(proactive_request.request_type, ClarificationMode.PROACTIVE_QUESTIONING)
+        return mode_mapping.get(
+            proactive_request.request_type, ClarificationMode.PROACTIVE_QUESTIONING
+        )
 
     async def _create_goal_context(self, proactive_request: ProactiveRequest) -> GoalContext:
         """Create goal context for goal-driven clarification"""
@@ -275,7 +272,7 @@ class ClarificationModeManager:
             goal_type=goal_type,
             required_info_areas=required_info_areas,
             collected_info={},
-            completion_percentage=0.0
+            completion_percentage=0.0,
         )
 
     def _determine_goal_type(self, goal: str) -> str:
@@ -302,19 +299,36 @@ class ClarificationModeManager:
         common_areas = ["background", "preferences", "constraints", "timeline"]
 
         goal_specific_areas = {
-            "investment_advice": ["risk_tolerance", "financial_situation", "investment_timeline", "investment_goals"],
-            "business_planning": ["business_idea", "market_research", "funding_needs", "experience"],
-            "career_guidance": ["current_situation", "career_goals", "skills", "industry_preferences"],
+            "investment_advice": [
+                "risk_tolerance",
+                "financial_situation",
+                "investment_timeline",
+                "investment_goals",
+            ],
+            "business_planning": [
+                "business_idea",
+                "market_research",
+                "funding_needs",
+                "experience",
+            ],
+            "career_guidance": [
+                "current_situation",
+                "career_goals",
+                "skills",
+                "industry_preferences",
+            ],
             "learning_guidance": ["current_knowledge", "learning_style", "available_time", "goals"],
             "health_guidance": ["current_health", "goals", "limitations", "preferences"],
             "travel_planning": ["destination_preferences", "budget", "travel_dates", "group_size"],
-            "general_assistance": ["specific_needs", "context", "goals", "preferences"]
+            "general_assistance": ["specific_needs", "context", "goals", "preferences"],
         }
 
         specific_areas = goal_specific_areas.get(goal_type, [])
         return common_areas + specific_areas
 
-    async def _update_goal_context(self, session: ClarificationSession, collected_info: Dict[str, any]):
+    async def _update_goal_context(
+        self, session: ClarificationSession, collected_info: Dict[str, any]
+    ):
         """Update goal context with newly collected information"""
         if not session.goal_context:
             return
@@ -325,15 +339,22 @@ class ClarificationModeManager:
         # Calculate completion percentage
         total_areas = len(session.goal_context.required_info_areas)
         covered_areas = sum(
-            1 for area in session.goal_context.required_info_areas
-            if any(area.lower() in key.lower() for key in session.goal_context.collected_info.keys())
+            1
+            for area in session.goal_context.required_info_areas
+            if any(
+                area.lower() in key.lower() for key in session.goal_context.collected_info.keys()
+            )
         )
 
-        session.goal_context.completion_percentage = (covered_areas / total_areas) if total_areas > 0 else 1.0
+        session.goal_context.completion_percentage = (
+            (covered_areas / total_areas) if total_areas > 0 else 1.0
+        )
 
         # Determine next focus area
         for area in session.goal_context.required_info_areas:
-            if not any(area.lower() in key.lower() for key in session.goal_context.collected_info.keys()):
+            if not any(
+                area.lower() in key.lower() for key in session.goal_context.collected_info.keys()
+            ):
                 session.goal_context.next_focus_area = area
                 break
         else:

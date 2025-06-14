@@ -10,12 +10,14 @@ from typing import Optional, List, Literal, TypedDict
 
 class MuxiFileContent(TypedDict):
     """File content with type specification."""
+
     type: Literal["image", "audio", "video", "document"]
     url: str
 
 
 class MuxiContentItem(TypedDict):
     """Unified content item for MUXI responses."""
+
     type: Literal["text", "file"]
     text: Optional[str]  # Present when type="text"
     file: Optional[MuxiFileContent]  # Present when type="file"
@@ -23,6 +25,7 @@ class MuxiContentItem(TypedDict):
 
 class MuxiErrorDetails(TypedDict):
     """Standardized error information."""
+
     code: str  # Error code from error registry
     message: str  # Human-readable error message
     trace: Optional[str]  # Stack trace for debugging (optional)
@@ -30,6 +33,7 @@ class MuxiErrorDetails(TypedDict):
 
 class MuxiUnifiedResponse(TypedDict):
     """Unified response format for all MUXI communication modes."""
+
     id: str  # Request ID (req_NANO_ID format)
     object: Literal["response"]  # Always "response"
     status: Literal[

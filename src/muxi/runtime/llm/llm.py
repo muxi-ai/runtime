@@ -70,7 +70,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 import random
 
-from ..observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
+from .. import observability
 
 # File processing imports
 # Required runtime dependencies
@@ -81,9 +81,6 @@ import magic
 from onellm import ChatCompletion, Embedding
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
-
-# Import observability components
-from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
 
 
 # File processing configuration
@@ -183,6 +180,7 @@ class FileProcessor:
             return True
         except Exception as e:
             #  LLM error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     @staticmethod
@@ -197,6 +195,7 @@ class FileProcessor:
                 return mime_type
         except Exception as e:
             #  LLM debug - add observability event
+            _ = e  # remove this after implementing observability
 
         # Fallback to mimetypes module
         mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -463,14 +462,14 @@ async def _exponential_backoff_retry(
             if attempt == max_retries or not e.retryable or e.error_type not in retryable_errors:
                 _retry_stats["failed_requests"] += 1
                 #  LLM error - add observability event
-                    f"Request failed after {attempt + 1} attempts: {str(e)}",
-                    extra={
-                        "error_type": e.error_type.value,
-                        "provider": e.provider,
-                        "retryable": e.retryable,
-                        "attempt": attempt + 1,
-                    },
-                )
+                #     f"Request failed after {attempt + 1} attempts: {str(e)}",
+                #     extra={
+                #         "error_type": e.error_type.value,
+                #         "provider": e.provider,
+                #         "retryable": e.retryable,
+                #         "attempt": attempt + 1,
+                #     },
+                # )
                 raise e
 
             _retry_stats["retry_attempts"] += 1
@@ -481,15 +480,15 @@ async def _exponential_backoff_retry(
                 delay = delay * (0.5 + random.random() * 0.5)  # Add 50% jitter
 
             #  LLM warning - add observability event
-                f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {str(e)}. "
-                f"Retrying in {delay:.2f}s",
-                extra={
-                    "error_type": e.error_type.value,
-                    "provider": e.provider,
-                    "retry_delay": delay,
-                    "attempt": attempt + 1,
-                },
-            )
+            #     f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {str(e)}. "
+            #     f"Retrying in {delay:.2f}s",
+            #     extra={
+            #         "error_type": e.error_type.value,
+            #         "provider": e.provider,
+            #         "retry_delay": delay,
+            #         "attempt": attempt + 1,
+            #     },
+            # )
 
             await asyncio.sleep(delay)
         except Exception as e:
@@ -589,15 +588,15 @@ class LLM:
             set_llm_api_key(api_key, self._provider)
 
         #  LLM info - add observability event
-            f"Initialized LLM with {self.model_name}",
-            extra={
-                "provider": self._provider,
-                "model": self._model,
-                "timeout": timeout,
-                "max_retries": max_retries,
-                "circuit_breaker_enabled": enable_circuit_breaker,
-            },
-        )
+        #     f"Initialized LLM with {self.model_name}",
+        #     extra={
+        #         "provider": self._provider,
+        #         "model": self._model,
+        #         "timeout": timeout,
+        #         "max_retries": max_retries,
+        #         "circuit_breaker_enabled": enable_circuit_breaker,
+        #     },
+        # )
 
         # Initialize fusion engine for advanced multimodal processing (lazy loaded)
         self._fusion_engine = None
@@ -613,8 +612,9 @@ class LLM:
                 #  LLM debug - add observability event
             except ImportError as e:
                 #  LLM warning - add observability event
-                    f"Could not import fusion engine: {e}. " "Falling back to basic processing."
-                )
+                _ = e  # remove this after implementing observability
+                #     f"Could not import fusion engine: {e}. " "Falling back to basic processing."
+                # )
                 self._fusion_engine = None
         return self._fusion_engine
 
@@ -765,9 +765,9 @@ class LLM:
 
         # Emit LLM request started event
         try:
-            await ObservabilityManager.get_instance().event_logger.emit_event(
-                ConversationEventType.LLM_REQUEST_STARTED,
-                level=EventLevel.INFO,
+            observability.emit_event(
+                event_type=observability.ConversationEventType.LLM_REQUEST_STARTED,
+                level=observability.EventLevel.INFO,
                 data={
                     "model": self.model_name,
                     "provider": self._provider,
@@ -782,6 +782,7 @@ class LLM:
             )
         except Exception as e:
             #  LLM warning - add observability event
+            _ = e  # remove this after implementing observability
 
         # Handle text-only conversations
         if not files:
@@ -843,8 +844,8 @@ class LLM:
             if multimodal_content is None:
                 # Fallback to basic processing if conversion failed
                 #  LLM warning - add observability event
-                    "Failed to convert files to multimodal content, " "using basic processing"
-                )
+                #     "Failed to convert files to multimodal content, " "using basic processing"
+                # )
                 return await self._legacy_chat_with_files(messages, files, **kwargs)
 
             # Map fusion_mode to ProcessingMode
@@ -872,6 +873,7 @@ class LLM:
 
         except Exception as e:
             #  LLM error - add observability event
+            _ = e  # remove this after implementing observability
             # Fallback to basic processing on any error
             return await self._legacy_chat_with_files(messages, files, **kwargs)
 

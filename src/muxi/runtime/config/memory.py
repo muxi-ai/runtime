@@ -37,10 +37,8 @@
 #   similarity = memory_config.similarity_threshold
 # =============================================================================
 
-import logging
-from typing import Any, Dict, Optional
 
-logger = logging.getLogger(__name__)
+from typing import Any, Dict, Optional
 
 
 class MemoryConfig:
@@ -56,9 +54,9 @@ class MemoryConfig:
         # Handle legacy memory.short_term configuration
         if "short_term" in self.memory_config:
             #  Warning - add observability event
-                "Legacy memory.short_term configuration detected. "
-                "Please migrate to memory.working and memory.buffer structure."
-            )
+            #     "Legacy memory.short_term configuration detected. "
+            #     "Please migrate to memory.working and memory.buffer structure."
+            # )
             # Migrate short_term to working
             short_term_config = self.memory_config.pop("short_term")
             if "working" not in self.memory_config:
@@ -77,9 +75,9 @@ class MemoryConfig:
         # Handle legacy memory.long_term configuration
         if "long_term" in self.memory_config:
             #  Warning - add observability event
-                "Legacy memory.long_term configuration detected. "
-                "Please migrate to memory.persistent structure."
-            )
+            #     "Legacy memory.long_term configuration detected. "
+            #     "Please migrate to memory.persistent structure."
+            # )
             # Migrate long_term to persistent
             long_term_config = self.memory_config.pop("long_term")
             if "persistent" not in self.memory_config:

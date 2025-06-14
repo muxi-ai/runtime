@@ -214,6 +214,7 @@ class ToolParser:
                     )
             except Exception as e:
                 #  Warning - add observability event
+                _ = e  # remove this after implementing observability
 
         return tool_calls
 
@@ -283,6 +284,7 @@ class ToolParser:
                 )
             except Exception as e:
                 #  Warning - add observability event
+                _ = e  # remove this after implementing observability
 
         return tool_calls
 
@@ -313,6 +315,7 @@ class ToolParser:
                     params = json.loads(params_str)
                 except json.JSONDecodeError:
                     #  Warning - add observability event
+                    _ = None  # remove this after implementing observability
 
                 tool_calls.append(
                     ToolCall(
@@ -325,6 +328,7 @@ class ToolParser:
                 )
             except Exception as e:
                 #  Warning - add observability event
+                _ = e  # remove this after implementing observability
 
         return tool_calls
 

@@ -41,7 +41,7 @@ import asyncio
 import hashlib
 import time
 from typing import Dict, List, Optional, Any, Tuple, Union
-import logging
+
 
 # OneLLM imports - external package
 from onellm import ChatCompletion, Embedding, set_api_key
@@ -56,16 +56,7 @@ from .errors import (
 )
 
 # Observability imports
-try:
-    from muxi.runtime.observability.manager import ObservabilityManager
-    from muxi.runtime.observability.events import ConversationEventType, EventLevel, SystemEventType
-except ImportError:
-    # Graceful fallback if observability is not available
-    ObservabilityManager = None
-    ConversationEventType = None
-    EventLevel = None
-
-logger = logging.getLogger(__name__)
+from .. import observability
 
 
 class OneLLMService:
@@ -77,15 +68,13 @@ class OneLLMService:
     error handling, and performance optimization.
     """
 
-    _instance: Optional['OneLLMService'] = None
+    _instance: Optional["OneLLMService"] = None
     _lock = asyncio.Lock()
 
     def __init__(self):
         """Initialize the OneLLM service."""
         if OneLLMService._instance is not None:
-            raise OneLLMServiceError(
-                "OneLLMService is a singleton. Use get_instance() instead."
-            )
+            raise OneLLMServiceError("OneLLMService is a singleton. Use get_instance() instead.")
 
         # Configuration
         self._api_keys: Dict[str, str] = {}
@@ -95,12 +84,12 @@ class OneLLMService:
 
         # Statistics
         self._stats = {
-            'total_requests': 0,
-            'successful_requests': 0,
-            'failed_requests': 0,
-            'total_tokens': 0,
-            'cache_hits': 0,
-            'cache_misses': 0,
+            "total_requests": 0,
+            "successful_requests": 0,
+            "failed_requests": 0,
+            "total_tokens": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
         }
 
         # Cache for responses (simple in-memory cache)
@@ -111,26 +100,22 @@ class OneLLMService:
         #  LLM service info - add observability event
 
         # Emit service initialization event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=ConversationEventType.SESSION_CREATED,
-                level=EventLevel.INFO,
-                message="OneLLMService singleton initialized",
-                data={
-                    "service": "OneLLMService",
-                    "default_timeout": self._default_timeout,
-                    "max_retries": self._max_retries,
-                    "retry_delay": self._retry_delay,
-                    "cache_ttl": self._cache_ttl,
-                    "stats": self._stats.copy()
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEventType.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description="OneLLMService singleton initialized",
+            data={
+                "service": "OneLLMService",
+                "default_timeout": self._default_timeout,
+                "max_retries": self._max_retries,
+                "retry_delay": self._retry_delay,
+                "cache_ttl": self._cache_ttl,
+                "stats": self._stats.copy(),
+            },
+        )
 
     @classmethod
-    async def get_instance(cls) -> 'OneLLMService':
+    async def get_instance(cls) -> "OneLLMService":
         """
         Get the singleton instance of OneLLMService.
 
@@ -143,19 +128,12 @@ class OneLLMService:
                     cls._instance = cls()
 
                     # Emit singleton access event
-                    try:
-                        observability = ObservabilityManager.get_instance()
-                        observability.emit_event(
-                            event_type=SystemEventType.RESOURCE_ALLOCATED,
-                            level=EventLevel.INFO,
-                            message="OneLLMService singleton instance created",
-                            data={
-                                "service": "OneLLMService",
-                                "action": "singleton_created"
-                            }
-                        )
-                    except Exception as e:
-                        #  LLM service warning - add observability event
+                    observability.emit_event(
+                        event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                        level=observability.EventLevel.INFO,
+                        description="OneLLMService singleton instance created",
+                        data={"service": "OneLLMService", "action": "singleton_created"},
+                    )
 
         return cls._instance
 
@@ -173,21 +151,17 @@ class OneLLMService:
         #  LLM service info - add observability event
 
         # Emit API key configuration event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=ConversationEventType.SESSION_CREATED,
-                level=EventLevel.INFO,
-                message=f"API key configured for provider: {provider}",
-                data={
-                    "service": "OneLLMService",
-                    "action": "api_key_set",
-                    "provider": provider,
-                    "has_api_key": bool(api_key)
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEventType.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description=f"API key configured for provider: {provider}",
+            data={
+                "service": "OneLLMService",
+                "action": "api_key_set",
+                "provider": provider,
+                "has_api_key": bool(api_key),
+            },
+        )
 
     def get_api_key(self, provider: str) -> Optional[str]:
         """
@@ -202,21 +176,17 @@ class OneLLMService:
         api_key = self._api_keys.get(provider)
 
         # Emit API key access event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=ConversationEventType.SESSION_CREATED,
-                level=EventLevel.DEBUG,
-                message=f"API key accessed for provider: {provider}",
-                data={
-                    "service": "OneLLMService",
-                    "action": "api_key_get",
-                    "provider": provider,
-                    "has_api_key": api_key is not None
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEventType.SESSION_CREATED,
+            level=observability.EventLevel.DEBUG,
+            description=f"API key accessed for provider: {provider}",
+            data={
+                "service": "OneLLMService",
+                "action": "api_key_get",
+                "provider": provider,
+                "has_api_key": api_key is not None,
+            },
+        )
 
         return api_key
 
@@ -230,11 +200,11 @@ class OneLLMService:
         Returns:
             Tuple of (provider, model_name)
         """
-        if '/' in model:
-            provider, model_name = model.split('/', 1)
+        if "/" in model:
+            provider, model_name = model.split("/", 1)
         else:
             # Default to openai if no provider specified
-            provider, model_name = 'openai', model
+            provider, model_name = "openai", model
 
         return provider, model_name
 
@@ -281,45 +251,37 @@ class OneLLMService:
             Cached response if valid, None otherwise
         """
         if self._is_cache_valid(cache_key):
-            self._stats['cache_hits'] += 1
+            self._stats["cache_hits"] += 1
 
             # Emit cache hit event
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.emit_event(
-                    event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
-                    level=EventLevel.DEBUG,
-                    message="Cache hit for LLM request",
-                    data={
-                        "service": "OneLLMService",
-                        "action": "cache_hit",
-                        "cache_key": cache_key,
-                        "total_cache_hits": self._stats['cache_hits']
-                    }
-                )
-            except Exception as e:
-                #  LLM service warning - add observability event
+            observability.emit_event(
+                event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+                level=observability.EventLevel.DEBUG,
+                description="Cache hit for LLM request",
+                data={
+                    "service": "OneLLMService",
+                    "action": "cache_hit",
+                    "cache_key": cache_key,
+                    "total_cache_hits": self._stats["cache_hits"],
+                },
+            )
 
             return self._response_cache.get(cache_key)
 
-        self._stats['cache_misses'] += 1
+        self._stats["cache_misses"] += 1
 
         # Emit cache miss event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
-                level=EventLevel.DEBUG,
-                message="Cache miss for LLM request",
-                data={
-                    "service": "OneLLMService",
-                    "action": "cache_miss",
-                    "cache_key": cache_key,
-                    "total_cache_misses": self._stats['cache_misses']
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            level=observability.EventLevel.DEBUG,
+            description="Cache miss for LLM request",
+            data={
+                "service": "OneLLMService",
+                "action": "cache_miss",
+                "cache_key": cache_key,
+                "total_cache_misses": self._stats["cache_misses"],
+            },
+        )
 
         return None
 
@@ -335,21 +297,17 @@ class OneLLMService:
         self._cache_timestamps[cache_key] = time.time()
 
         # Emit cache store event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
-                level=EventLevel.DEBUG,
-                message="Response cached for LLM request",
-                data={
-                    "service": "OneLLMService",
-                    "action": "cache_store",
-                    "cache_key": cache_key,
-                    "cache_size": len(self._response_cache)
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            level=observability.EventLevel.DEBUG,
+            description="Response cached for LLM request",
+            data={
+                "service": "OneLLMService",
+                "action": "cache_store",
+                "cache_key": cache_key,
+                "cache_size": len(self._response_cache),
+            },
+        )
 
     async def chat(
         self,
@@ -359,7 +317,7 @@ class OneLLMService:
         max_tokens: Optional[int] = None,
         timeout: Optional[float] = None,
         use_cache: bool = True,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Generate chat completion using specified model.
@@ -383,129 +341,116 @@ class OneLLMService:
         timeout = timeout or self._default_timeout
 
         # Emit chat request start event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=ConversationEventType.MODEL_REQUEST_STARTED,
-                level=EventLevel.INFO,
-                message=f"Chat completion request started for {model}",
-                data={
-                    "service": "OneLLMService",
-                    "operation": "chat",
-                    "model": model,
-                    "provider": provider,
-                    "model_name": model_name,
-                    "message_count": len(messages),
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                    "timeout": timeout,
-                    "use_cache": use_cache
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MODEL_REQUEST_STARTED,
+            level=observability.EventLevel.INFO,
+            description=f"Chat completion request started for {model}",
+            data={
+                "service": "OneLLMService",
+                "operation": "chat",
+                "model": model,
+                "provider": provider,
+                "model_name": model_name,
+                "message_count": len(messages),
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "timeout": timeout,
+                "use_cache": use_cache,
+            },
+        )
 
         # Check cache first
         cache_key = None
         if use_cache:
             cache_key = self._get_cache_key(
-                'chat', model, messages=messages,
-                temperature=temperature, max_tokens=max_tokens, **kwargs
+                "chat",
+                model,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                **kwargs,
             )
             cached_response = self._get_from_cache(cache_key)
             if cached_response:
                 # Emit cache hit completion event
-                try:
-                    observability = ObservabilityManager.get_instance()
-                    observability.emit_event(
-                        event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
-                        level=EventLevel.INFO,
-                        message=f"Chat completion served from cache for {model}",
-                        data={
-                            "service": "OneLLMService",
-                            "operation": "chat",
-                            "model": model,
-                            "provider": provider,
-                            "source": "cache",
-                            "cache_key": cache_key
-                        }
-                    )
-                except Exception as e:
-                    #  LLM service warning - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Chat completion served from cache for {model}",
+                    data={
+                        "service": "OneLLMService",
+                        "operation": "chat",
+                        "model": model,
+                        "provider": provider,
+                        "source": "cache",
+                        "cache_key": cache_key,
+                    },
+                )
 
                 return cached_response
 
         try:
-            self._stats['total_requests'] += 1
+            self._stats["total_requests"] += 1
 
             # Prepare parameters
             params = {
-                'model': model_name,
-                'messages': messages,
-                'temperature': temperature,
-                **kwargs
+                "model": model_name,
+                "messages": messages,
+                "temperature": temperature,
+                **kwargs,
             }
 
             if max_tokens:
-                params['max_tokens'] = max_tokens
+                params["max_tokens"] = max_tokens
 
             # Make the request
             response = ChatCompletion.create(**params)
 
-            self._stats['successful_requests'] += 1
+            self._stats["successful_requests"] += 1
 
             # Cache the response
             if use_cache and cache_key:
                 self._set_cache(cache_key, response)
 
             # Emit successful completion event
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.emit_event(
-                    event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
-                    level=EventLevel.INFO,
-                    message=f"Chat completion successful for {model}",
-                    data={
-                        "service": "OneLLMService",
-                        "operation": "chat",
-                        "model": model,
-                        "provider": provider,
-                        "source": "api",
-                        "success": True,
-                        "total_requests": self._stats['total_requests'],
-                        "successful_requests": self._stats['successful_requests']
-                    }
-                )
-            except Exception as e:
-                #  LLM service warning - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                level=observability.EventLevel.INFO,
+                description=f"Chat completion successful for {model}",
+                data={
+                    "service": "OneLLMService",
+                    "operation": "chat",
+                    "model": model,
+                    "provider": provider,
+                    "source": "api",
+                    "success": True,
+                    "total_requests": self._stats["total_requests"],
+                    "successful_requests": self._stats["successful_requests"],
+                },
+            )
 
             return response
 
         except Exception as e:
-            self._stats['failed_requests'] += 1
+            self._stats["failed_requests"] += 1
             #  LLM service error - add observability event
 
             # Emit error event
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.emit_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message=f"Chat completion failed for {model}: {str(e)}",
-                    data={
-                        "service": "OneLLMService",
-                        "operation": "chat",
-                        "model": model,
-                        "provider": provider,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "failed_requests": self._stats['failed_requests'],
-                        "total_requests": self._stats['total_requests']
-                    }
-                )
-            except Exception as obs_e:
-                #  LLM service warning - add observability event
-
+            observability.emit_event(
+                event_type=observability.conversationeventtype.error_retry_attempted,
+                level=observability.eventlevel.error,
+                description=f"chat completion failed for {model}: {str(e)}",
+                data={
+                    "service": "onellmservice",
+                    "operation": "chat",
+                    "model": model,
+                    "provider": provider,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "failed_requests": self._stats["failed_requests"],
+                    "total_requests": self._stats["total_requests"],
+                },
+            )
             # Convert to appropriate OneLLM exception
             if "authentication" in str(e).lower():
                 raise OneLLMAuthenticationError(
@@ -516,9 +461,7 @@ class OneLLMService:
                     f"Rate limit exceeded for {provider}", provider, model_name
                 )
             elif "timeout" in str(e).lower():
-                raise OneLLMTimeoutError(
-                    f"Request timeout for {provider}", provider, model_name
-                )
+                raise OneLLMTimeoutError(f"Request timeout for {provider}", provider, model_name)
             else:
                 raise OneLLMConnectionError(
                     f"Connection error for {provider}: {e}", provider, model_name
@@ -530,7 +473,7 @@ class OneLLMService:
         texts: Union[str, List[str]],
         timeout: Optional[float] = None,
         use_cache: bool = True,
-        **kwargs
+        **kwargs,
     ) -> Dict[str, Any]:
         """
         Generate embeddings using specified model.
@@ -556,121 +499,97 @@ class OneLLMService:
             texts = [texts]
 
         # Emit embedding request start event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=ConversationEventType.MODEL_REQUEST_STARTED,
-                level=EventLevel.INFO,
-                message=f"Embedding request started for {model}",
-                data={
-                    "service": "OneLLMService",
-                    "operation": "embed",
-                    "model": model,
-                    "provider": provider,
-                    "model_name": model_name,
-                    "text_count": len(texts),
-                    "timeout": timeout,
-                    "use_cache": use_cache
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MODEL_REQUEST_STARTED,
+            level=observability.EventLevel.INFO,
+            description=f"Embedding request started for {model}",
+            data={
+                "service": "OneLLMService",
+                "operation": "embed",
+                "model": model,
+                "provider": provider,
+                "model_name": model_name,
+                "text_count": len(texts),
+                "timeout": timeout,
+                "use_cache": use_cache,
+            },
+        )
 
         # Check cache first
         cache_key = None
         if use_cache:
-            cache_key = self._get_cache_key(
-                'embed', model, texts=texts, **kwargs
-            )
+            cache_key = self._get_cache_key("embed", model, texts=texts, **kwargs)
             cached_response = self._get_from_cache(cache_key)
             if cached_response:
                 # Emit cache hit completion event
-                try:
-                    observability = ObservabilityManager.get_instance()
-                    observability.emit_event(
-                        event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
-                        level=EventLevel.INFO,
-                        message=f"Embedding served from cache for {model}",
-                        data={
-                            "service": "OneLLMService",
-                            "operation": "embed",
-                            "model": model,
-                            "provider": provider,
-                            "source": "cache",
-                            "cache_key": cache_key
-                        }
-                    )
-                except Exception as e:
-                    #  LLM service warning - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Embedding served from cache for {model}",
+                    data={
+                        "service": "OneLLMService",
+                        "operation": "embed",
+                        "model": model,
+                        "provider": provider,
+                        "source": "cache",
+                        "cache_key": cache_key,
+                    },
+                )
 
                 return cached_response
 
         try:
-            self._stats['total_requests'] += 1
+            self._stats["total_requests"] += 1
 
             # Prepare parameters
-            params = {
-                'model': model_name,
-                'input': texts,
-                **kwargs
-            }
+            params = {"model": model_name, "input": texts, **kwargs}
 
             # Make the request
             response = Embedding.create(**params)
 
-            self._stats['successful_requests'] += 1
+            self._stats["successful_requests"] += 1
 
             # Cache the response
             if use_cache and cache_key:
                 self._set_cache(cache_key, response)
 
             # Emit successful completion event
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.emit_event(
-                    event_type=ConversationEventType.MODEL_REQUEST_COMPLETED,
-                    level=EventLevel.INFO,
-                    message=f"Embedding successful for {model}",
-                    data={
-                        "service": "OneLLMService",
-                        "operation": "embed",
-                        "model": model,
-                        "provider": provider,
-                        "source": "api",
-                        "success": True,
-                        "total_requests": self._stats['total_requests'],
-                        "successful_requests": self._stats['successful_requests']
-                    }
-                )
-            except Exception as e:
-                #  LLM service warning - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                level=observability.EventLevel.INFO,
+                description=f"Embedding successful for {model}",
+                data={
+                    "service": "OneLLMService",
+                    "operation": "embed",
+                    "model": model,
+                    "provider": provider,
+                    "source": "api",
+                    "success": True,
+                    "total_requests": self._stats["total_requests"],
+                    "successful_requests": self._stats["successful_requests"],
+                },
+            )
 
             return response
 
         except Exception as e:
-            self._stats['failed_requests'] += 1
-            #  LLM service error - add observability event
-
+            self._stats["failed_requests"] += 1
             # Emit error event
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.emit_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message=f"Embedding failed for {model}: {str(e)}",
-                    data={
-                        "service": "OneLLMService",
-                        "operation": "embed",
-                        "model": model,
-                        "provider": provider,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "failed_requests": self._stats['failed_requests'],
-                        "total_requests": self._stats['total_requests']
-                    }
-                )
-            except Exception as obs_e:
-                #  LLM service warning - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description=f"Embedding failed for {model}: {str(e)}",
+                data={
+                    "service": "OneLLMService",
+                    "operation": "embed",
+                    "model": model,
+                    "provider": provider,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "failed_requests": self._stats["failed_requests"],
+                    "total_requests": self._stats["total_requests"],
+                },
+            )
 
             # Convert to appropriate OneLLM exception
             if "authentication" in str(e).lower():
@@ -682,9 +601,7 @@ class OneLLMService:
                     f"Rate limit exceeded for {provider}", provider, model_name
                 )
             elif "timeout" in str(e).lower():
-                raise OneLLMTimeoutError(
-                    f"Request timeout for {provider}", provider, model_name
-                )
+                raise OneLLMTimeoutError(f"Request timeout for {provider}", provider, model_name)
             else:
                 raise OneLLMConnectionError(
                     f"Connection error for {provider}: {e}", provider, model_name
@@ -700,20 +617,12 @@ class OneLLMService:
         stats = self._stats.copy()
 
         # Emit stats access event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
-                level=EventLevel.DEBUG,
-                message="Service statistics accessed",
-                data={
-                    "service": "OneLLMService",
-                    "action": "get_stats",
-                    "stats": stats
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            level=observability.EventLevel.DEBUG,
+            description="Service statistics accessed",
+            data={"service": "OneLLMService", "action": "get_stats", "stats": stats},
+        )
 
         return stats
 
@@ -725,21 +634,17 @@ class OneLLMService:
         #  LLM service info - add observability event
 
         # Emit stats reset event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
-                level=EventLevel.INFO,
-                message="Service statistics reset",
-                data={
-                    "service": "OneLLMService",
-                    "action": "reset_stats",
-                    "old_stats": old_stats,
-                    "new_stats": self._stats.copy()
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            level=observability.EventLevel.INFO,
+            description="Service statistics reset",
+            data={
+                "service": "OneLLMService",
+                "action": "reset_stats",
+                "old_stats": old_stats,
+                "new_stats": self._stats.copy(),
+            },
+        )
 
     def clear_cache(self) -> None:
         """Clear response cache."""
@@ -749,20 +654,16 @@ class OneLLMService:
         #  LLM service info - add observability event
 
         # Emit cache clear event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=SystemEventType.PERFORMANCE_OPTIMIZED,
-                level=EventLevel.INFO,
-                message="Response cache cleared",
-                data={
-                    "service": "OneLLMService",
-                    "action": "clear_cache",
-                    "cleared_entries": cache_size
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            level=observability.EventLevel.INFO,
+            description="Response cache cleared",
+            data={
+                "service": "OneLLMService",
+                "action": "clear_cache",
+                "cleared_entries": cache_size,
+            },
+        )
 
     def configure(
         self,
@@ -784,7 +685,7 @@ class OneLLMService:
             "default_timeout": self._default_timeout,
             "max_retries": self._max_retries,
             "retry_delay": self._retry_delay,
-            "cache_ttl": self._cache_ttl
+            "cache_ttl": self._cache_ttl,
         }
 
         if default_timeout is not None:
@@ -799,29 +700,25 @@ class OneLLMService:
         #  LLM service info - add observability event
 
         # Emit configuration update event
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.emit_event(
-                event_type=ConversationEventType.SESSION_CREATED,
-                level=EventLevel.INFO,
-                message="Service configuration updated",
-                data={
-                    "service": "OneLLMService",
-                    "action": "configure",
-                    "old_config": old_config,
-                    "new_config": {
-                        "default_timeout": self._default_timeout,
-                        "max_retries": self._max_retries,
-                        "retry_delay": self._retry_delay,
-                        "cache_ttl": self._cache_ttl
-                    },
-                    "updated_fields": {
-                        "default_timeout": default_timeout is not None,
-                        "max_retries": max_retries is not None,
-                        "retry_delay": retry_delay is not None,
-                        "cache_ttl": cache_ttl is not None
-                    }
-                }
-            )
-        except Exception as e:
-            #  LLM service warning - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEventType.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description="Service configuration updated",
+            data={
+                "service": "OneLLMService",
+                "action": "configure",
+                "old_config": old_config,
+                "new_config": {
+                    "default_timeout": self._default_timeout,
+                    "max_retries": self._max_retries,
+                    "retry_delay": self._retry_delay,
+                    "cache_ttl": self._cache_ttl,
+                },
+                "updated_fields": {
+                    "default_timeout": default_timeout is not None,
+                    "max_retries": max_retries is not None,
+                    "retry_delay": retry_delay is not None,
+                    "cache_ttl": cache_ttl is not None,
+                },
+            },
+        )

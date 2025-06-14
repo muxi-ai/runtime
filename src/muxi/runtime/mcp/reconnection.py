@@ -315,9 +315,9 @@ async def retry_async(
 
             # Log the retry attempt with details
             #  Info - add observability event
-                f"Retry {attempt}/{config.max_retries} after error: {str(e)}. "
-                f"Retrying in {delay:.2f} seconds..."
-            )
+            #     f"Retry {attempt}/{config.max_retries} after error: {str(e)}. "
+            #     f"Retrying in {delay:.2f} seconds..."
+            # )
 
             # Wait before retrying - using asyncio.sleep to not block the event loop
             # This allows other tasks to run during the delay period

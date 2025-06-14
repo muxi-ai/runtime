@@ -5,9 +5,9 @@ This module generates natural language clarifying questions for missing informat
 across different contexts and interaction styles.
 """
 
-import logging
+
 import uuid
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Any
 
 from .types import (
     ClarificationQuestion,
@@ -15,8 +15,6 @@ from .types import (
     RequestType,
     QuestionGenerationError
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ClarificationQuestionGenerator:
@@ -225,6 +223,7 @@ class ClarificationQuestionGenerator:
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
             return self._generate_template_question(request_type, info_name, info_schema, style)
 
     def _generate_template_question(
@@ -285,6 +284,7 @@ class ClarificationQuestionGenerator:
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
             return self._generate_template_reasoning_question(intent, missing_context, style)
 
     def _generate_template_reasoning_question(

@@ -5,15 +5,13 @@ This module enriches parameters using user context memory to pre-fill
 information where possible, reducing the need for clarifying questions.
 """
 
-import logging
+
 from typing import Dict, List, Optional, Any, Tuple
 
 from .types import (
     ParameterMapping,
     ContextEnrichmentError
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ContextualParameterEnricher:
@@ -148,6 +146,7 @@ class ContextualParameterEnricher:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
 
     # Private helper methods
 

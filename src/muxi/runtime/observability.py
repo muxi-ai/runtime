@@ -71,6 +71,7 @@ class SystemEventType(Enum):
     A2A_AGENT_DEREGISTERED = "a2a.agent.deregistered"
     A2A_FORMATION_SERVER_STARTED = "a2a.formation.server.started"
     A2A_FORMATION_SERVER_STOPPED = "a2a.formation.server.stopped"
+    A2A_FORMATION_SERVER_FAILED = "a2a.formation.server.failed"
     A2A_REGISTRY_HEALTH_CHECK_COMPLETED = "a2a.registry.health_check.completed"
 
     # ===================================================================
@@ -811,7 +812,7 @@ class ObservabilityManager:
 # SIMPLE HELPER FUNCTION FOR PLACEHOLDER REPLACEMENT
 # ===================================================================
 
-async def emit_observability_event(
+async def emit_event(
     event_type: str,
     level: str = "INFO",
     request_context=None,

@@ -7,7 +7,7 @@ execution order for maximum parallelization.
 """
 
 import asyncio
-import logging
+
 from typing import Dict, List, Tuple, Any
 from collections import defaultdict, deque
 
@@ -18,7 +18,7 @@ from .types import (
     BottleneckType
 )
 
-logger = logging.getLogger(__name__)
+
 
 
 class DependencyAnalyzer:

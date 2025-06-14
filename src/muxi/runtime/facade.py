@@ -51,7 +51,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
-from .observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
+from . import observability
 
 from .agent import Agent
 from .overlord import Overlord
@@ -214,6 +214,7 @@ class Muxi:
                 except Exception as e:
                     # Log the error but continue without long-term memory
                     #  Facade error - add observability event
+                    _ = e  # remove this after implementing observability
                     return None
 
             # SQLite connection string format (sqlite:///path/to/db)
@@ -227,6 +228,7 @@ class Muxi:
                 except Exception as e:
                     # Log the error but continue without long-term memory
                     #  Facade error - add observability event
+                    _ = e  # remove this after implementing observability
                     return None
 
             # Plain SQLite path
@@ -238,6 +240,7 @@ class Muxi:
                 except Exception as e:
                     # Log the error but continue without long-term memory
                     #  Facade error - add observability event
+                    _ = e  # remove this after implementing observability
                     return None
 
         # Boolean true - use connection string or default SQLite database
@@ -258,6 +261,7 @@ class Muxi:
                 except Exception as e:
                     # Log the error but fall back to SQLite
                     #  Facade error - add observability event
+                    _ = e  # remove this after implementing observability
                     pass
 
             # Fall back to SQLite
@@ -269,6 +273,7 @@ class Muxi:
             except Exception as e:
                 # Log the error but continue without long-term memory
                 #  Facade error - add observability event
+                _ = e  # remove this after implementing observability
                 return None
 
         # If we get here, we don't know how to handle the configuration
@@ -290,9 +295,9 @@ class Muxi:
         if self._credential_db_connection_string is None:
             # Try to load from encrypted secrets if not already set
             if (
-                hasattr(self, 'config_loader')
+                hasattr(self, "config_loader")
                 and self.config_loader
-                and hasattr(self.config_loader, 'secrets_manager')
+                and hasattr(self.config_loader, "secrets_manager")
             ):
                 try:
                     secrets_manager = self.config_loader.secrets_manager
@@ -426,15 +431,18 @@ class Muxi:
         max_tokens = llm_config.get("max_tokens")
 
         # Get any additional params
-        kwargs = {k: v for k, v in llm_config.items()
-                  if k not in ["model", "api_key", "temperature", "max_tokens"]}
+        kwargs = {
+            k: v
+            for k, v in llm_config.items()
+            if k not in ["model", "api_key", "temperature", "max_tokens"]
+        }
 
         return self.overlord.create_model(
             model=model_name,
             api_key=api_key,
             temperature=temperature,
             max_tokens=max_tokens,
-            **kwargs
+            **kwargs,
         )
 
     def _create_memory_systems(self, memory_config: Dict[str, Any]) -> tuple:
@@ -499,9 +507,9 @@ class Muxi:
 
                     # Try encrypted secrets if available
                     if (
-                        hasattr(self, 'config_loader')
+                        hasattr(self, "config_loader")
                         and self.config_loader
-                        and hasattr(self.config_loader, 'secrets_manager')
+                        and hasattr(self.config_loader, "secrets_manager")
                     ):
                         try:
                             # Convert to standard secret name format
@@ -517,6 +525,7 @@ class Muxi:
                         env_var = cred.get("env_fallback")
                         if env_var:
                             import os
+
                             value = os.getenv(env_var)
 
                     if value:
@@ -541,6 +550,7 @@ class Muxi:
 
                 except Exception as e:
                     #  Facade error - add observability event
+                    _ = e  # remove this after implementing observability
                     pass
             else:
                 #  Facade warning - add observability event
@@ -553,7 +563,7 @@ class Muxi:
         user_id: Optional[str] = None,
         use_async: Optional[bool] = None,
         webhook_url: Optional[str] = None,
-        threshold_seconds: Optional[float] = None
+        threshold_seconds: Optional[float] = None,
     ) -> Union[str, Dict[str, Any]]:
         """
         Send a message to an agent and get a response.
@@ -582,25 +592,19 @@ class Muxi:
             For async responses: Dict with request_id and status information.
         """
         # Emit facade request received event
-        try:
-            from .observability import ConversationEventType, EventLevel, ObservabilityManager
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.REQUEST_RECEIVED,
-                    level=EventLevel.INFO,
-                    data={
-                        "message_length": len(message),
-                        "agent_name": agent_name,
-                        "user_id": user_id,
-                        "use_async": use_async,
-                        "has_webhook_url": webhook_url is not None,
-                        "threshold_seconds": threshold_seconds,
-                    },
-                    description=f"Facade chat request received for agent: {agent_name or 'auto'}",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "message_length": len(message),
+                "agent_name": agent_name,
+                "user_id": user_id,
+                "use_async": use_async,
+                "has_webhook_url": webhook_url is not None,
+                "threshold_seconds": threshold_seconds,
+            },
+            description=f"Facade chat request received for agent: {agent_name or 'auto'}",
+        )
 
         # Process the message through the overlord with all parameters
         response = await self.overlord.chat(
@@ -609,34 +613,30 @@ class Muxi:
             user_id=user_id,
             use_async=use_async,
             webhook_url=webhook_url,
-            threshold_seconds=threshold_seconds
+            threshold_seconds=threshold_seconds,
         )
 
         # Emit facade response completion event
-        try:
-            if observability_manager:
-                is_async_response = isinstance(response, dict) and "request_id" in response
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.REQUEST_COMPLETED,
-                    level=EventLevel.INFO,
-                    data={
-                        "is_async_response": is_async_response,
-                        "response_type": type(response).__name__,
-                        "response_length": len(str(response)),
-                        "agent_name": agent_name,
-                        "user_id": user_id,
-                    },
-                    description=f"Facade chat response completed (async: {is_async_response})",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        is_async_response = isinstance(response, dict) and "request_id" in response
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={
+                "is_async_response": is_async_response,
+                "response_type": type(response).__name__,
+                "response_length": len(str(response)),
+                "agent_name": agent_name,
+                "user_id": user_id,
+            },
+            description=f"Facade chat response completed (async: {is_async_response})",
+        )
 
         # Handle async response (dict with request_id)
         if isinstance(response, dict) and "request_id" in response:
             return response
 
         # Handle sync response (MCPMessage)
-        if hasattr(response, 'content'):
+        if hasattr(response, "content"):
             if isinstance(response.content, str):
                 return response.content
             elif isinstance(response.content, dict) and "text" in response.content:

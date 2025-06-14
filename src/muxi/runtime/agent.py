@@ -43,7 +43,7 @@
 import asyncio
 import datetime
 import json
-import logging
+
 import uuid
 from typing import Any, Dict, List, Optional, Union
 from urllib.parse import urlparse
@@ -67,7 +67,7 @@ from .clarification import (
     # ProactiveRequestType
 )
 
-logger = logging.getLogger(__name__)
+from . import observability
 
 
 class Agent:
@@ -162,31 +162,18 @@ class Agent:
             self._messages.append({"role": "system", "content": self.system_message})
 
         # Emit agent initialization event
-        if hasattr(overlord, "observability_manager"):
-            try:
-                from .observability import ConversationEventType, EventLevel
-                import asyncio
-
-                # Create a task to emit the event asynchronously
-                async def emit_init_event():
-                    await overlord.observability_manager.event_logger.emit_event(
-                        ConversationEventType.AGENT_INITIALIZED,
-                        level=EventLevel.INFO,
-                        data={
-                            "agent_id": self.agent_id,
-                            "agent_name": self.name,
-                            "a2a_internal": self.a2a_internal,
-                            "a2a_external": self.a2a_external,
-                            "has_system_message": bool(self.system_message),
-                        },
-                        description=f"Agent initialized: {self.agent_id}",
-                    )
-
-                # Schedule the event emission
-                asyncio.create_task(emit_init_event())
-            except Exception as e:
-                #  Agent init event error - add observability event
-                pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.AGENT_INITIALIZED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "a2a_internal": self.a2a_internal,
+                "a2a_external": self.a2a_external,
+                "has_system_message": bool(self.system_message),
+            },
+            description=f"Agent initialized: {self.agent_id}",
+        )
 
     def _initialize_clarification_system(self):
         """
@@ -220,7 +207,8 @@ class Agent:
 
         except Exception as e:
             #  Warning - add observability event
-            pass
+            _ = e  # remove this after implementing observability
+
             # Set components to None so we can check if clarification is available
             self._clarification_analyzer = None
             self._clarification_manager = None
@@ -272,12 +260,11 @@ class Agent:
             message_obj = message
 
         # Emit agent message processing event
-        if request_context and hasattr(self.overlord, "observability_manager"):
-            from .observability import ConversationEventType, EventLevel
+        if request_context:
 
-            await self.overlord.observability_manager.event_logger.emit_event(
-                ConversationEventType.AGENT_MESSAGE_PROCESSING,
-                level=EventLevel.INFO,
+            observability.emit_event(
+                event_type=observability.ConversationEventType.AGENT_MESSAGE_PROCESSING,
+                level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
                     "agent_id": self.agent_id,
@@ -324,7 +311,7 @@ class Agent:
                 return response
         except Exception as e:
             #  Clarification handling error - add observability event
-            pass
+            _ = e  # remove this after implementing observability
 
         # Phase 4: Check for proactive clarification requests (with error handling)
         try:
@@ -349,7 +336,7 @@ class Agent:
                 return response
         except Exception as e:
             #  Debug - add observability event
-            _ = None  # remove this line when adding observability event
+            _ = e  # remove this after implementing observability
 
         # Check if the request needs clarification before processing (with error handling)
         try:
@@ -374,7 +361,7 @@ class Agent:
                 return response
         except Exception as e:
             #  Debug - add observability event
-            _ = None  # remove this line when adding observability event
+            _ = e  # remove this after implementing observability
 
         # Process the message with the model directly (existing logic)
         raw_response = await self.model.chat(self._messages)
@@ -432,12 +419,11 @@ class Agent:
         self._messages.append({"role": "assistant", "content": response.content})
 
         # Emit agent response generated event
-        if request_context and hasattr(self.overlord, "observability_manager"):
-            from .observability import ConversationEventType, EventLevel
+        if request_context:
 
-            await self.overlord.observability_manager.event_logger.emit_event(
-                ConversationEventType.AGENT_RESPONSE_GENERATED,
-                level=EventLevel.INFO,
+            observability.emit_event(
+                event_type=observability.ConversationEventType.AGENT_RESPONSE_GENERATED,
+                level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
                     "agent_id": self.agent_id,
@@ -599,12 +585,11 @@ class Agent:
             Exception: Any error from the MCP service during tool invocation
         """
         # Emit MCP tool call started event
-        if request_context and hasattr(self.overlord, "observability_manager"):
-            from .observability import ConversationEventType, EventLevel
+        if request_context:
 
-            await self.overlord.observability_manager.event_logger.emit_event(
-                ConversationEventType.MCP_TOOL_CALL_STARTED,
-                level=EventLevel.INFO,
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MCP_TOOL_CALL_STARTED,
+                level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
                     "tool_name": tool_name,
@@ -625,10 +610,10 @@ class Agent:
             )
 
             # Emit MCP tool call completed event
-            if request_context and hasattr(self.overlord, "observability_manager"):
-                await self.overlord.observability_manager.event_logger.emit_event(
-                    ConversationEventType.MCP_TOOL_CALL_COMPLETED,
-                    level=EventLevel.INFO,
+            if request_context:
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_COMPLETED,
+                    level=observability.EventLevel.INFO,
                     request_context=request_context,
                     data={
                         "tool_name": tool_name,
@@ -643,10 +628,10 @@ class Agent:
 
         except Exception as e:
             # Emit MCP tool call failed event
-            if request_context and hasattr(self.overlord, "observability_manager"):
-                await self.overlord.observability_manager.event_logger.emit_event(
-                    ConversationEventType.MCP_TOOL_CALL_FAILED,
-                    level=EventLevel.ERROR,
+            if request_context:
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_FAILED,
+                    level=observability.EventLevel.ERROR,
                     request_context=request_context,
                     data={
                         "tool_name": tool_name,
@@ -726,10 +711,9 @@ class Agent:
             # Emit clarification error event
             if hasattr(self.overlord, "observability_manager"):
                 try:
-                    from .observability import ConversationEventType, EventLevel
-                    await self.overlord.observability_manager.event_logger.emit_event(
-                        ConversationEventType.ERROR_CLARIFICATION_FAILED,
-                        level=EventLevel.ERROR,
+                    observability.emit_event(
+                        event_type=observability.ConversationEventType.ERROR_CLARIFICATION_FAILED,
+                        level=observability.EventLevel.ERROR,
                         data={
                             "agent_id": self.agent_id,
                             "user_id": str(user_id) if user_id is not None else None,
@@ -745,27 +729,19 @@ class Agent:
                 "I'm sorry, I had trouble processing your response. " "Could you please try again?"
             )
         except Exception as e:
-            #  Unexpected error - add observability event
-
             # Emit general error event
-            if hasattr(self.overlord, "observability_manager"):
-                try:
-                    from .observability import ConversationEventType, EventLevel
-                    await self.overlord.observability_manager.event_logger.emit_event(
-                        ConversationEventType.ERROR_AGENT_PROCESSING,
-                        level=EventLevel.ERROR,
-                        data={
-                            "agent_id": self.agent_id,
-                            "user_id": str(user_id) if user_id is not None else None,
-                            "error": str(e),
-                            "error_type": "UnexpectedError",
-                            "context": "clarification_handling",
-                        },
-                        description=f"Unexpected error in clarification handling: {e}",
-                    )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
-
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_AGENT_PROCESSING,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "error_type": "UnexpectedError",
+                    "context": "clarification_handling",
+                },
+                description=f"Unexpected error in clarification handling: {e}",
+            )
             return None
 
     async def _check_for_clarification_needs(
@@ -800,7 +776,7 @@ class Agent:
                     available_tools = await self._mcp_service.list_available_tools()
                 except Exception as e:
                     #  Tools availability debug - add observability event
-                    _ = None  # remove this line when adding observability event
+                    _ = e  # remove this after implementing observability
 
             # Analyze the request for missing information
             analysis = await self._clarification_analyzer.analyze_request(
@@ -845,10 +821,10 @@ class Agent:
 
         except ClarificationError as e:
             #  Clarification error - add observability event
-            _ = None  # remove this line when adding observability event
+            _ = e  # remove this after implementing observability
         except Exception as e:
             #  Unexpected error - add observability event
-            _ = None  # remove this line when adding observability event
+            _ = e  # remove this after implementing observability
 
         return None
 
@@ -909,8 +885,7 @@ class Agent:
             # If this was a tool call request, execute the tool
             if request.request_type == RequestType.TOOL_CALL and request.tool_name:
                 tool_result = await self.invoke_tool(
-                    tool_name=request.tool_name,
-                    parameters=result.complete_params or {}
+                    tool_name=request.tool_name, parameters=result.complete_params or {}
                 )
                 return (
                     f"I've completed your request. "
@@ -945,6 +920,7 @@ class Agent:
 
         except Exception as e:
             #  Agent error - add observability event
+            _ = e  # remove this after implementing observability
             return (
                 "I apologize, but I encountered an error while processing your request. "
                 "Please try again."
@@ -983,8 +959,8 @@ class Agent:
 
             # Handle different types of proactive requests
             has_plan_feedback = (
-                hasattr(proactive_request, 'request_type') and
-                proactive_request.request_type == "PLAN_FEEDBACK"
+                hasattr(proactive_request, "request_type")
+                and proactive_request.request_type == "PLAN_FEEDBACK"
             )
             if has_plan_feedback:
                 # Multi-step plan analysis
@@ -997,6 +973,7 @@ class Agent:
 
         except Exception as e:
             #  Agent error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def _handle_proactive_session_response(self, session, message: str) -> str:
@@ -1022,13 +999,14 @@ class Agent:
                 return self._format_session_completion_response(session, complete_info)
 
             # Generate next question based on session mode
-            if hasattr(session, 'mode') and session.mode == "PLAN_ANALYSIS":
+            if hasattr(session, "mode") and session.mode == "PLAN_ANALYSIS":
                 return await self._generate_next_plan_question(session, extracted_info)
             else:
                 return await self._generate_next_goal_question(session, extracted_info)
 
         except Exception as e:
             #  Agent error - add observability event
+            _ = e  # remove this after implementing observability
             return "I had trouble processing your response. Could you please continue?"
 
     async def _start_plan_analysis_session(self, proactive_request, user_id: str) -> str:
@@ -1069,6 +1047,7 @@ class Agent:
 
         except Exception as e:
             #  Agent error - add observability event
+            _ = e  # remove this after implementing observability
             return (
                 "I'd be happy to help analyze your plan! However, I had trouble processing it. "
                 "Could you break down your plan into clear steps?"
@@ -1099,6 +1078,7 @@ class Agent:
 
         except Exception as e:
             #  Agent error - add observability event
+            _ = e  # remove this after implementing observability
             return (
                 "I'd be happy to help guide you with questions! However, I had trouble "
                 "understanding your request. Could you tell me what you'd like help with?"
@@ -1108,8 +1088,7 @@ class Agent:
         """Generate next question for plan analysis mode"""
         if session.plan_analysis and session.plan_analysis.clarification_questions:
             remaining_questions = session.plan_analysis.clarification_questions[
-                session.questions_asked:
-            ]
+                session.questions_asked:]
             if remaining_questions:
                 return remaining_questions[0]
 
@@ -1138,7 +1117,7 @@ class Agent:
 
     def _format_session_completion_response(self, session, complete_info) -> str:
         """Format the final response when a proactive session is complete"""
-        if hasattr(session, 'mode') and session.mode == "PLAN_ANALYSIS":
+        if hasattr(session, "mode") and session.mode == "PLAN_ANALYSIS":
             return (
                 "Based on our discussion, I think your plan is ready to move forward! "
                 "You've addressed the key areas and have a solid approach. Good luck!"
@@ -1207,11 +1186,10 @@ class Agent:
 
         # Emit A2A message started event
         if hasattr(self.overlord, "observability_manager"):
-            from .observability import ConversationEventType, EventLevel
 
-            await self.overlord.observability_manager.event_logger.emit_event(
-                ConversationEventType.A2A_MESSAGE_SENT,
-                level=EventLevel.INFO,
+            observability.emit_event(
+                event_type=observability.ConversationEventType.A2A_MESSAGE_SENT,
+                level=observability.EventLevel.INFO,
                 data={
                     "source_agent_id": self.agent_id,
                     "target_agent_id": target_agent_id,
@@ -1614,11 +1592,10 @@ class Agent:
         """
         # Emit A2A message received event
         if hasattr(self.overlord, "observability_manager"):
-            from .observability import ConversationEventType, EventLevel
 
-            await self.overlord.observability_manager.event_logger.emit_event(
-                ConversationEventType.A2A_MESSAGE_RECEIVED,
-                level=EventLevel.INFO,
+            observability.emit_event(
+                event_type=observability.ConversationEventType.A2A_MESSAGE_RECEIVED,
+                level=observability.EventLevel.INFO,
                 data={
                     "source_agent_id": source_agent_id,
                     "target_agent_id": self.agent_id,
@@ -1750,6 +1727,7 @@ class Agent:
                     #  Response extraction debug - add observability event
                 except (KeyError, IndexError) as e:
                     #  Agent error - add observability event
+                    _ = e  # remove this after implementing observability
                     content = f"Consultation response for topic: {topic}"
             else:
                 # Unknown format
@@ -1758,6 +1736,7 @@ class Agent:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             content = f"Consultation response for topic: {topic}"
 
         # Ensure content is a valid string
@@ -1824,7 +1803,7 @@ class Agent:
                 )
             except Exception as e:
                 #  Storage warning - add observability event
-                _ = None  # remove this line when adding observability event
+                _ = e  # remove this after implementing observabilityility event
 
         return None  # Notifications don't return responses
 
@@ -2013,6 +1992,7 @@ class Agent:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def share_information(
@@ -2070,6 +2050,7 @@ class Agent:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     async def register_expertise(
@@ -2110,6 +2091,7 @@ class Agent:
             )
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     async def find_expert(
@@ -2151,6 +2133,7 @@ class Agent:
             )
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return {}
 
     async def coordinate_with_peer(
@@ -2214,4 +2197,5 @@ class Agent:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None

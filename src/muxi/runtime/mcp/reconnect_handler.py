@@ -318,6 +318,7 @@ class ReconnectingMCPHandler(MCPHandler):
             return result
         except MCPConnectionError as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             # Return empty list instead of raising to avoid breaking clients
             return []
 

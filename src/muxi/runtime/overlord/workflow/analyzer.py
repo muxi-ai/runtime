@@ -58,15 +58,16 @@ class RequestAnalyzer:
             analysis.requires_decomposition = await self.should_decompose(analysis)
 
             #  Debug - add observability event
-                f"Request analysis: complexity={analysis.complexity_score:.1f}, "
-                f"decomposition={analysis.requires_decomposition}, "
-                f"approval={analysis.requires_approval}"
-            )
+            #     f"Request analysis: complexity={analysis.complexity_score:.1f}, "
+            #     f"decomposition={analysis.requires_decomposition}, "
+            #     f"approval={analysis.requires_approval}"
+            # )
 
             return analysis
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             # Return safe fallback analysis
             return RequestAnalysis(
                 complexity_score=5.0,
@@ -306,6 +307,7 @@ class RequestAnalyzer:
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
             return self._heuristic_analyze_request(user_message)
 
     def _create_analysis_prompt(
@@ -390,6 +392,7 @@ Focus on identifying:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             # Return fallback analysis
             return RequestAnalysis(
                 complexity_score=5.0,

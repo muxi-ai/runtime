@@ -5,20 +5,15 @@ Synthesizes tool execution results into decision-relevant insights for planning 
 Converts raw data into structured options, trade-offs, and recommendations.
 """
 
-import logging
 import json
-from typing import List, Dict, Any, Optional
-from datetime import datetime
+from typing import Any, Dict, List
 
 from .types import (
     ToolExecutionResult,
     WorkflowSynthesis,
-    PlanningOption,
     PlanningWorkflowType,
-    PlanningWorkflowRequest
+    PlanningWorkflowRequest,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class WorkflowSynthesizer:
@@ -54,10 +49,9 @@ class WorkflowSynthesizer:
                 "common_trade_offs": [
                     "cost vs convenience",
                     "weather vs price",
-                    "timing vs availability"
-                ]
+                    "timing vs availability",
+                ],
             },
-
             PlanningWorkflowType.INVESTMENT_PLANNING: {
                 "key_factors": ["returns", "risk", "volatility", "market trends", "timing"],
                 "comparison_dimensions": ["ROI", "risk level", "timeframe", "liquidity"],
@@ -65,10 +59,9 @@ class WorkflowSynthesizer:
                 "common_trade_offs": [
                     "risk vs returns",
                     "liquidity vs growth",
-                    "diversification vs concentration"
-                ]
+                    "diversification vs concentration",
+                ],
             },
-
             PlanningWorkflowType.PRODUCT_SELECTION: {
                 "key_factors": ["price", "features", "quality", "reviews", "warranty"],
                 "comparison_dimensions": ["cost", "performance", "reliability", "support"],
@@ -76,10 +69,9 @@ class WorkflowSynthesizer:
                 "common_trade_offs": [
                     "price vs features",
                     "quality vs cost",
-                    "new vs proven technology"
-                ]
+                    "new vs proven technology",
+                ],
             },
-
             PlanningWorkflowType.BUSINESS_PLANNING: {
                 "key_factors": ["market size", "competition", "costs", "regulations", "timing"],
                 "comparison_dimensions": ["opportunity", "barriers", "resources", "timing"],
@@ -87,10 +79,9 @@ class WorkflowSynthesizer:
                 "common_trade_offs": [
                     "growth vs risk",
                     "market size vs competition",
-                    "speed vs thoroughness"
-                ]
+                    "speed vs thoroughness",
+                ],
             },
-
             PlanningWorkflowType.EVENT_PLANNING: {
                 "key_factors": ["venue", "catering", "cost", "availability", "capacity"],
                 "comparison_dimensions": ["price", "location", "amenities", "timing"],
@@ -98,26 +89,19 @@ class WorkflowSynthesizer:
                 "common_trade_offs": [
                     "cost vs quality",
                     "location vs price",
-                    "date vs availability"
-                ]
+                    "date vs availability",
+                ],
             },
-
             PlanningWorkflowType.GENERAL_PLANNING: {
                 "key_factors": ["cost", "time", "quality", "risk", "convenience"],
                 "comparison_dimensions": ["value", "effort", "outcome", "timing"],
                 "decision_criteria": ["priorities", "constraints", "preferences"],
-                "common_trade_offs": [
-                    "cost vs quality",
-                    "speed vs thoroughness",
-                    "risk vs reward"
-                ]
-            }
+                "common_trade_offs": ["cost vs quality", "speed vs thoroughness", "risk vs reward"],
+            },
         }
 
     async def synthesize(
-        self,
-        workflow_request: PlanningWorkflowRequest,
-        tool_results: List[ToolExecutionResult]
+        self, workflow_request: PlanningWorkflowRequest, tool_results: List[ToolExecutionResult]
     ) -> WorkflowSynthesis:
         """
         Synthesize tool results into planning insights.
@@ -140,16 +124,12 @@ class WorkflowSynthesizer:
             synthesis = self._synthesize_with_rules(workflow_request, tool_results)
 
         # Enhance with structured options
-        synthesis.options = self._create_planning_options(
-            workflow_request, tool_results, synthesis
-        )
+        synthesis.options = self._create_planning_options(workflow_request, tool_results, synthesis)
 
         return synthesis
 
     async def _synthesize_with_ai(
-        self,
-        workflow_request: PlanningWorkflowRequest,
-        tool_results: List[ToolExecutionResult]
+        self, workflow_request: PlanningWorkflowRequest, tool_results: List[ToolExecutionResult]
     ) -> WorkflowSynthesis:
         """Use AI model for intelligent synthesis"""
 
@@ -190,22 +170,23 @@ class WorkflowSynthesizer:
                 trade_offs=result.get("trade_offs", []),
                 recommendations=result.get("recommendations", []),
                 follow_up_questions=result.get("follow_up_questions", []),
-                confidence_score=result.get("confidence_score", 0.7)
+                confidence_score=result.get("confidence_score", 0.7),
             )
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
             return self._synthesize_with_rules(workflow_request, tool_results)
 
     def _synthesize_with_rules(
-        self,
-        workflow_request: PlanningWorkflowRequest,
-        tool_results: List[ToolExecutionResult]
+        self, workflow_request: PlanningWorkflowRequest, tool_results: List[ToolExecutionResult]
     ) -> WorkflowSynthesis:
         """Rule-based synthesis when AI model not available"""
 
         workflow_type = workflow_request.workflow_type
-        rules = self.synthesis_rules.get(workflow_type, self.synthesis_rules[PlanningWorkflowType.GENERAL_PLANNING])
+        rules = self.synthesis_rules.get(
+            workflow_type, self.synthesis_rules[PlanningWorkflowType.GENERAL_PLANNING]
+        )
 
         # Extract key insights from tool results
         key_insights = self._extract_key_insights(tool_results, rules["key_factors"])
@@ -229,10 +210,12 @@ class WorkflowSynthesizer:
             trade_offs=trade_offs,
             recommendations=recommendations,
             follow_up_questions=follow_up_questions,
-            confidence_score=0.8
+            confidence_score=0.8,
         )
 
-    def _extract_key_insights(self, tool_results: List[ToolExecutionResult], key_factors: List[str]) -> List[str]:
+    def _extract_key_insights(
+        self, tool_results: List[ToolExecutionResult], key_factors: List[str]
+    ) -> List[str]:
         """Extract key insights from tool results"""
         insights = []
 
@@ -258,7 +241,9 @@ class WorkflowSynthesizer:
 
         return insights[:5]  # Limit to 5 insights
 
-    def _identify_trade_offs(self, tool_results: List[ToolExecutionResult], common_trade_offs: List[str]) -> List[str]:
+    def _identify_trade_offs(
+        self, tool_results: List[ToolExecutionResult], common_trade_offs: List[str]
+    ) -> List[str]:
         """Identify trade-offs from tool results"""
         trade_offs = []
 
@@ -267,10 +252,16 @@ class WorkflowSynthesizer:
             trade_offs.extend(common_trade_offs[:3])  # Use predefined trade-offs
 
         # Add specific trade-offs based on result patterns
-        has_cost_data = any("cost" in str(r.result).lower() or "price" in str(r.result).lower()
-                           for r in tool_results if r.success)
-        has_quality_data = any("quality" in str(r.result).lower() or "rating" in str(r.result).lower()
-                              for r in tool_results if r.success)
+        has_cost_data = any(
+            "cost" in str(r.result).lower() or "price" in str(r.result).lower()
+            for r in tool_results
+            if r.success
+        )
+        has_quality_data = any(
+            "quality" in str(r.result).lower() or "rating" in str(r.result).lower()
+            for r in tool_results
+            if r.success
+        )
 
         if has_cost_data and has_quality_data:
             trade_offs.append("Consider balancing cost against quality requirements")
@@ -278,9 +269,7 @@ class WorkflowSynthesizer:
         return trade_offs[:4]  # Limit to 4 trade-offs
 
     def _generate_recommendations(
-        self,
-        tool_results: List[ToolExecutionResult],
-        workflow_type: PlanningWorkflowType
+        self, tool_results: List[ToolExecutionResult], workflow_type: PlanningWorkflowType
     ) -> List[str]:
         """Generate recommendations based on tool results"""
         recommendations = []
@@ -314,7 +303,7 @@ class WorkflowSynthesizer:
         self,
         workflow_request: PlanningWorkflowRequest,
         tool_results: List[ToolExecutionResult],
-        decision_criteria: List[str]
+        decision_criteria: List[str],
     ) -> List[str]:
         """Generate follow-up questions for planning continuation"""
 
@@ -348,7 +337,7 @@ class WorkflowSynthesizer:
         self,
         workflow_request: PlanningWorkflowRequest,
         tool_results: List[ToolExecutionResult],
-        synthesis: WorkflowSynthesis
+        synthesis: WorkflowSynthesis,
     ) -> List[Dict[str, Any]]:
         """Create structured planning options from tool results"""
 
@@ -362,7 +351,7 @@ class WorkflowSynthesizer:
                 "description": result.planning_relevance or str(result.result)[:200],
                 "source_tool": result.tool_name,
                 "data": result.result,
-                "confidence": 0.8 if result.success else 0.3
+                "confidence": 0.8 if result.success else 0.3,
             }
             options.append(option)
 
@@ -386,7 +375,9 @@ class WorkflowSynthesizer:
 
         return "\n".join(formatted_results)
 
-    def _create_empty_synthesis(self, workflow_request: PlanningWorkflowRequest) -> WorkflowSynthesis:
+    def _create_empty_synthesis(
+        self, workflow_request: PlanningWorkflowRequest
+    ) -> WorkflowSynthesis:
         """Create empty synthesis when no tool results available"""
 
         return WorkflowSynthesis(
@@ -397,5 +388,5 @@ class WorkflowSynthesizer:
             trade_offs=["Unable to analyze trade-offs without data"],
             recommendations=["Consider alternative approaches to gather information"],
             follow_up_questions=["How would you like to proceed without this data?"],
-            confidence_score=0.1
+            confidence_score=0.1,
         )

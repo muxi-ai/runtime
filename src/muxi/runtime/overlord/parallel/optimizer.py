@@ -6,7 +6,7 @@ detection to create optimized parallel execution plans for complex workflows.
 """
 
 import asyncio
-import logging
+
 import uuid
 from typing import Dict, List, Any, Optional
 
@@ -23,7 +23,7 @@ from .dependency_analyzer import DependencyAnalyzer
 from .resource_manager import ResourceManager
 from .bottleneck_detector import BottleneckDetector
 
-logger = logging.getLogger(__name__)
+
 
 
 class ParallelWorkflowOptimizer:

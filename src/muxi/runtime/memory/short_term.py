@@ -70,9 +70,11 @@ import signal
 import time
 from typing import Any, Dict, List, Optional
 
-import faiss
+from faissx import client as faiss
 import numpy as np
 import multitasking
+
+from .. import observability
 
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
@@ -188,30 +190,18 @@ class ShortTermMemory:
                 Used for namespaced ID generation. Default is "buffer".
         """
         # Emit memory storage started event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_STORE,
-                    level=EventLevel.INFO,
-                    data={
-                        "text_length": len(text),
-                        "has_metadata": metadata is not None and len(metadata) > 0,
-                        "namespace": namespace,
-                        "buffer_size": len(self.buffer),
-                        "buffer_capacity": self.buffer_size,
-                    },
-                    description="Short-term memory storage started",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_STORE,
+            level=observability.EventLevel.INFO,
+            data={
+                "text_length": len(text),
+                "has_metadata": metadata is not None and len(metadata) > 0,
+                "namespace": namespace,
+                "buffer_size": len(self.buffer),
+                "buffer_capacity": self.buffer_size,
+            },
+            description="Short-term memory storage started",
+        )
 
         # Initialize metadata dictionary if None
         if metadata is None:
@@ -244,6 +234,7 @@ class ShortTermMemory:
                 self.index_count += 1
             except Exception as e:
                 # Handle embedding generation failures gracefully
+                _ = e  # remove this after implementing observability
                 #  Embedding generation error - add observability event
                 item["embedding"] = None
         else:
@@ -321,17 +312,17 @@ class ShortTermMemory:
                 estimated_usage_mb += item_size_mb
 
             #  Debug - add observability event
-                f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
-                f"configured limit: {self.max_memory_mb}MB"
-            )
+            #     f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
+            #     f"configured limit: {self.max_memory_mb}MB"
+            # )
 
             # If we exceed the configured limit, remove oldest items
             if estimated_usage_mb > self.max_memory_mb:
                 items_to_remove = max(1, len(self.buffer) // 4)  # Remove 25% of items
                 #  Info - add observability event
-                    f"Buffer memory limit ({self.max_memory_mb}MB) exceeded. "
-                    f"Removing {items_to_remove} oldest items"
-                )
+                #     f"Buffer memory limit ({self.max_memory_mb}MB) exceeded. "
+                #     f"Removing {items_to_remove} oldest items"
+                # )
 
                 # Remove oldest items (from the left of deque)
                 for _ in range(min(items_to_remove, len(self.buffer))):
@@ -344,6 +335,7 @@ class ShortTermMemory:
 
         except Exception as e:
             #  Buffer cleanup error - add observability event
+            _ = e  # remove this after implementing observability
 
     def _recency_search(
         self,
@@ -374,7 +366,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size :]
+            recent_items = list(self.buffer)[-self.max_size:]
 
         # Apply metadata filtering if specified
         if filter_metadata:
@@ -428,32 +420,20 @@ class ShortTermMemory:
             and a score field indicating the match quality.
         """
         # Emit memory retrieval started event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_RETRIEVAL_STARTED,
-                    level=EventLevel.INFO,
-                    data={
-                        "query_length": len(query),
-                        "limit": limit,
-                        "has_filter": filter_metadata is not None,
-                        "has_query_vector": query_vector is not None,
-                        "recency_bias": recency_bias,
-                        "buffer_size": len(self.buffer),
-                        "has_vector_search": self.model is not None,
-                    },
-                    description="Short-term memory search started",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "query_length": len(query),
+                "limit": limit,
+                "has_filter": filter_metadata is not None,
+                "has_query_vector": query_vector is not None,
+                "recency_bias": recency_bias,
+                "buffer_size": len(self.buffer),
+                "has_vector_search": self.model is not None,
+            },
+            description="Short-term memory search started",
+        )
 
         # If we don't have a model, return most recent messages
         if not self.model:
@@ -461,29 +441,17 @@ class ShortTermMemory:
             recency_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Emit memory retrieval completed event for recency-only search
-            try:
-                from ..observability import (
-                    ConversationEventType,
-                    SystemEventType,
-                    EventLevel,
-                    ObservabilityManager,
-                )
-
-                observability_manager = ObservabilityManager.get_instance()
-                if observability_manager:
-                    await observability_manager.event_logger.emit_event(
-                        ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
-                        level=EventLevel.INFO,
-                        data={
-                            "results_count": len(recency_results),
-                            "search_type": "recency_only",
-                            "query_length": len(query),
-                            "buffer_size": len(self.buffer),
-                        },
-                        description="Short-term memory search completed (recency-only)",
-                    )
-            except Exception:
-                pass  # Don't let observability errors break the flow
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "results_count": len(recency_results),
+                    "search_type": "recency_only",
+                    "query_length": len(query),
+                    "buffer_size": len(self.buffer),
+                },
+                description="Short-term memory search completed (recency-only)",
+            )
 
             return recency_results
 
@@ -503,32 +471,20 @@ class ShortTermMemory:
                 )
 
                 # Emit memory retrieval completed event for embedding failure fallback
-                try:
-                    from ..observability import (
-                        ConversationEventType,
-                        SystemEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        await observability_manager.event_logger.emit_event(
-                            ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
-                            level=EventLevel.WARNING,
-                            data={
-                                "results_count": len(embedding_fallback_results),
-                                "search_type": "embedding_failure_fallback",
-                                "error": str(e),
-                                "query_length": len(query),
-                                "buffer_size": len(self.buffer),
-                            },
-                            description=(
-                                "Short-term memory search completed " "(embedding failure fallback)"
-                            ),
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "results_count": len(embedding_fallback_results),
+                        "search_type": "embedding_failure_fallback",
+                        "error": str(e),
+                        "query_length": len(query),
+                        "buffer_size": len(self.buffer),
+                    },
+                    description=(
+                        "Short-term memory search completed " "(embedding failure fallback)"
+                    ),
+                )
 
                 return embedding_fallback_results
 
@@ -591,29 +547,17 @@ class ShortTermMemory:
             final_results = results[:limit]
 
             # Emit memory retrieval completed event
-            try:
-                from ..observability import (
-                    ConversationEventType,
-                    SystemEventType,
-                    EventLevel,
-                    ObservabilityManager,
-                )
-
-                observability_manager = ObservabilityManager.get_instance()
-                if observability_manager:
-                    await observability_manager.event_logger.emit_event(
-                        ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
-                        level=EventLevel.INFO,
-                        data={
-                            "results_count": len(final_results),
-                            "search_type": "vector_hybrid",
-                            "query_length": len(query),
-                            "buffer_size": len(self.buffer),
-                        },
-                        description="Short-term memory search completed",
-                    )
-            except Exception:
-                pass  # Don't let observability errors break the flow
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "results_count": len(final_results),
+                    "search_type": "vector_hybrid",
+                    "query_length": len(query),
+                    "buffer_size": len(self.buffer),
+                },
+                description="Short-term memory search completed",
+            )
 
             return final_results
 
@@ -623,30 +567,18 @@ class ShortTermMemory:
             fallback_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Emit memory retrieval completed event for fallback
-            try:
-                from ..observability import (
-                    ConversationEventType,
-                    SystemEventType,
-                    EventLevel,
-                    ObservabilityManager,
-                )
-
-                observability_manager = ObservabilityManager.get_instance()
-                if observability_manager:
-                    await observability_manager.event_logger.emit_event(
-                        ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
-                        level=EventLevel.WARNING,
-                        data={
-                            "results_count": len(fallback_results),
-                            "search_type": "recency_fallback",
-                            "error": str(e),
-                            "query_length": len(query),
-                            "buffer_size": len(self.buffer),
-                        },
-                        description="Short-term memory search completed with fallback",
-                    )
-            except Exception:
-                pass  # Don't let observability errors break the flow
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "results_count": len(fallback_results),
+                    "search_type": "recency_fallback",
+                    "error": str(e),
+                    "query_length": len(query),
+                    "buffer_size": len(self.buffer),
+                },
+                description="Short-term memory search completed with fallback",
+            )
 
             return fallback_results
 
@@ -756,8 +688,8 @@ def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
     import time
 
     #  Info - add observability event
-        f"Starting FIFO cleanup task with {buffer_memory.fifo_interval_min} minute interval"
-    )
+    #     f"Starting FIFO cleanup task with {buffer_memory.fifo_interval_min} minute interval"
+    # )
 
     while True:
         try:
@@ -769,4 +701,5 @@ def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
 
         except Exception as e:
             #  Cleanup task error - add observability event
+            _ = e  # remove this after implementing observability
             time.sleep(60)  # Wait a minute before retrying

@@ -23,11 +23,13 @@ class OneLLMError(Exception):
 
 class OneLLMConnectionError(OneLLMError):
     """Raised when connection to LLM provider fails."""
+
     pass
 
 
 class OneLLMAuthenticationError(OneLLMError):
     """Raised when authentication with LLM provider fails."""
+
     pass
 
 
@@ -41,19 +43,23 @@ class OneLLMRateLimitError(OneLLMError):
 
 class OneLLMTimeoutError(OneLLMError):
     """Raised when request times out."""
+
     pass
 
 
 class OneLLMModelNotFoundError(OneLLMError):
     """Raised when specified model is not available."""
+
     pass
 
 
 class OneLLMValidationError(OneLLMError):
     """Raised when input validation fails."""
+
     pass
 
 
 class OneLLMServiceError(OneLLMError):
     """Raised when service-level operations fail."""
+
     pass

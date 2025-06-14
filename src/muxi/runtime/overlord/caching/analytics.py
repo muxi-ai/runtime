@@ -7,7 +7,7 @@ and optimization opportunities for the multi-layer caching system.
 
 import asyncio
 import json
-import logging
+
 import time
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
@@ -17,7 +17,7 @@ import statistics
 from .cache_types import CacheType, CacheStatistics
 
 
-logger = logging.getLogger(__name__)
+
 
 
 @dataclass

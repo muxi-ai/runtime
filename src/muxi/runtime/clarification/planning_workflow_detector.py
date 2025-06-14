@@ -6,16 +6,9 @@ Identifies scenarios where users want to make decisions but need data first.
 Uses pure LLM detection for multilingual support.
 """
 
-import logging
 from typing import Optional
 
-from .types import (
-    PlanningWorkflowRequest,
-    PlanningWorkflowType,
-    ClarificationContext
-)
-
-logger = logging.getLogger(__name__)
+from .types import PlanningWorkflowRequest, PlanningWorkflowType, ClarificationContext
 
 
 class PlanningWorkflowDetector:
@@ -41,14 +34,13 @@ class PlanningWorkflowDetector:
         self.model = model
         if not model:
             #  Warning - add observability event
-                "PlanningWorkflowDetector initialized without model - "
-                "all detection will fail"
-            )
+            _ = None  # remove this after implementing observability
+            #     "PlanningWorkflowDetector initialized without model - "
+            #     "all detection will fail"
+            # )
 
     async def detect(
-        self,
-        message: str,
-        context: Optional[ClarificationContext] = None
+        self, message: str, context: Optional[ClarificationContext] = None
     ) -> Optional[PlanningWorkflowRequest]:
         """
         Detect if a message contains a planning workflow request using LLM analysis.
@@ -72,20 +64,20 @@ class PlanningWorkflowDetector:
 
             if workflow_request:
                 #  Info - add observability event
-                    f"Detected planning workflow: {workflow_request.workflow_type} "
-                    f"(confidence: {workflow_request.confidence})"
-                )
+                _ = None  # remove this after implementing observability
+                #     f"Detected planning workflow: {workflow_request.workflow_type} "
+                #     f"(confidence: {workflow_request.confidence})"
+                # )
 
             return workflow_request
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def _detect_with_llm(
-        self,
-        message: str,
-        context: Optional[ClarificationContext] = None
+        self, message: str, context: Optional[ClarificationContext] = None
     ) -> Optional[PlanningWorkflowRequest]:
         """Use LLM model for comprehensive planning workflow detection"""
 
@@ -143,6 +135,7 @@ class PlanningWorkflowDetector:
 
             # Parse LLM response
             import json
+
             result = json.loads(response.strip())
 
             if result.get("is_planning_workflow") and result.get("confidence", 0) >= 0.6:
@@ -152,12 +145,11 @@ class PlanningWorkflowDetector:
                     "business_planning": PlanningWorkflowType.BUSINESS_PLANNING,
                     "product_selection": PlanningWorkflowType.PRODUCT_SELECTION,
                     "event_planning": PlanningWorkflowType.EVENT_PLANNING,
-                    "general_planning": PlanningWorkflowType.GENERAL_PLANNING
+                    "general_planning": PlanningWorkflowType.GENERAL_PLANNING,
                 }
 
                 workflow_type = workflow_type_map.get(
-                    result.get("workflow_type"),
-                    PlanningWorkflowType.GENERAL_PLANNING
+                    result.get("workflow_type"), PlanningWorkflowType.GENERAL_PLANNING
                 )
 
                 return PlanningWorkflowRequest(
@@ -167,15 +159,17 @@ class PlanningWorkflowDetector:
                     original_message=message,
                     detected_tools=result.get("detected_tools", []),
                     context_hints=result.get("context_hints", {}),
-                    confidence=result.get("confidence", 0.6)
+                    confidence=result.get("confidence", 0.6),
                 )
             else:
                 #  Debug - add observability event
-                    f"Planning workflow not detected. "
-                    f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
-                )
+                _ = None  # remove this after implementing observability
+                #     f"Planning workflow not detected. "
+                #     f"Reasoning: {result.get('reasoning', 'No reasoning provided')}"
+                # )
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
 
         return None

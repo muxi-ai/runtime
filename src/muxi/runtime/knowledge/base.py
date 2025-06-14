@@ -136,21 +136,34 @@ class FileKnowledge(KnowledgeSource):
     # Extended list of supported file extensions via markitdown
     _MARKITDOWN_EXTENSIONS = [
         # Office documents
-        ".docx", ".pptx", ".xlsx", ".xls",
+        ".docx",
+        ".pptx",
+        ".xlsx",
+        ".xls",
         # PDFs
         ".pdf",
         # Images (with OCR support)
-        ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".tiff", ".tif",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".gif",
+        ".bmp",
+        ".tiff",
+        ".tif",
         # Audio (with transcription support)
-        ".wav", ".mp3",
+        ".wav",
+        ".mp3",
         # Web content
-        ".html", ".htm",
+        ".html",
+        ".htm",
         # Data formats
-        ".csv", ".json", ".xml",
+        ".csv",
+        ".json",
+        ".xml",
         # Archives
         ".zip",
         # E-books
-        ".epub"
+        ".epub",
     ]
 
     # Traditional text extensions (processed directly)
@@ -195,9 +208,7 @@ class FileKnowledge(KnowledgeSource):
 
         # Set default allowed extensions to include all supported formats
         if allowed_extensions is None:
-            self.allowed_extensions = (
-                self._TEXT_EXTENSIONS + self._MARKITDOWN_EXTENSIONS
-            )
+            self.allowed_extensions = self._TEXT_EXTENSIONS + self._MARKITDOWN_EXTENSIONS
         else:
             self.allowed_extensions = allowed_extensions
 
@@ -310,9 +321,8 @@ class FileKnowledge(KnowledgeSource):
         unique_files = sorted(list(set(files)))
 
         if len(unique_files) > self.max_files:
-            print(f"Limiting to first {self.max_files} files "
-                  f"(found {len(unique_files)} total)")
-            unique_files = unique_files[:self.max_files]
+            print(f"Limiting to first {self.max_files} files " f"(found {len(unique_files)} total)")
+            unique_files = unique_files[: self.max_files]
 
         # Cache the discovered files
         self._files = unique_files
@@ -348,8 +358,10 @@ class FileKnowledge(KnowledgeSource):
                 # Check file size before reading
                 file_size = os.path.getsize(file_path)
                 if file_size > self.max_file_size:
-                    print(f"Skipping large file: {file_path} "
-                          f"({file_size} bytes > {self.max_file_size})")
+                    print(
+                        f"Skipping large file: {file_path} "
+                        f"({file_size} bytes > {self.max_file_size})"
+                    )
                     continue
 
                 print(f"Processing file {i+1}/{min(len(files), limit)}: {file_path}")
@@ -378,9 +390,7 @@ class FileKnowledge(KnowledgeSource):
                             "base_path": self.path,
                             "extension": os.path.splitext(file_path)[1],
                             "processing_method": processing_method,
-                            "markitdown_supported": self._is_markitdown_supported(
-                                file_path
-                            ),
+                            "markitdown_supported": self._is_markitdown_supported(file_path),
                         },
                     }
                 )
@@ -391,7 +401,7 @@ class FileKnowledge(KnowledgeSource):
         return results
 
     @classmethod
-    def from_config(cls, config: Dict[str, Any]) -> 'FileKnowledge':
+    def from_config(cls, config: Dict[str, Any]) -> "FileKnowledge":
         """
         Create FileKnowledge instance from configuration dictionary.
 
@@ -402,14 +412,14 @@ class FileKnowledge(KnowledgeSource):
             FileKnowledge instance
         """
         return cls(
-            path=config['path'],
-            description=config.get('description'),
-            recursive=config.get('recursive', True),
-            allowed_extensions=config.get('allowed_extensions'),
-            name=config.get('name'),
-            max_files=config.get('max_files', 50),
-            max_file_size=config.get('max_file_size', 1024 * 1024),
-            enable_markitdown=config.get('enable_markitdown', True),
+            path=config["path"],
+            description=config.get("description"),
+            recursive=config.get("recursive", True),
+            allowed_extensions=config.get("allowed_extensions"),
+            name=config.get("name"),
+            max_files=config.get("max_files", 50),
+            max_file_size=config.get("max_file_size", 1024 * 1024),
+            enable_markitdown=config.get("enable_markitdown", True),
         )
 
 

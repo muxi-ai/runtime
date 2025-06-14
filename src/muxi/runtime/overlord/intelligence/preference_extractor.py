@@ -29,8 +29,8 @@ class PreferenceExtractor:
         self.model = model
         if not model:
             # Warn that preference extraction will be limited without LLM
-            import logging
-            logger = logging.getLogger(__name__)
+
+
             #  Warning - add observability event
                 "PreferenceExtractor initialized without model - "
                 "preference extraction will be disabled"
@@ -165,8 +165,8 @@ class PreferenceExtractor:
 
         except Exception as e:
             # Log error but continue
-            import logging
-            logger = logging.getLogger(__name__)
+
+
             #  Error - add observability event
 
         return preferences

@@ -5,7 +5,7 @@ This module detects and analyzes bottlenecks in workflow execution to identify
 performance constraints and suggest optimizations for parallel execution.
 """
 
-import logging
+
 import time
 from datetime import datetime
 from typing import Dict, List, Any, Tuple
@@ -21,7 +21,7 @@ from .types import (
     ParallelExecutionResult
 )
 
-logger = logging.getLogger(__name__)
+
 
 
 class BottleneckDetector:

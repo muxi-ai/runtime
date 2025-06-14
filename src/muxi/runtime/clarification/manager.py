@@ -5,7 +5,7 @@ This module manages active clarification requests and coordinates the
 clarification process across multiple conversation turns.
 """
 
-import logging
+
 import time
 from typing import Dict, Optional, Any
 
@@ -16,8 +16,6 @@ from .types import (
     RequestType,
     ClarificationError
 )
-
-logger = logging.getLogger(__name__)
 
 
 class ClarificationManager:
@@ -245,6 +243,7 @@ class ClarificationManager:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     # Private helper methods

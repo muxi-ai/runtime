@@ -9,7 +9,7 @@ import asyncio
 from typing import Type, Dict
 
 from ..types.errors import ERROR_CODE_REGISTRY
-from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
+from .. import observability
 
 
 # Exception type to error code mapping
@@ -23,13 +23,11 @@ EXCEPTION_TO_ERROR_CODE: Dict[Type[Exception], str] = {
     ConnectionError: "CONNECTION_ERROR",
     TimeoutError: "TIMEOUT",
     asyncio.TimeoutError: "TIMEOUT",
-
     # HTTP-related exceptions (if using requests/aiohttp)
     # ConnectionRefusedError: "CONNECTION_ERROR",
     # ConnectionResetError: "CONNECTION_ERROR",
-
     # Default fallback
-    Exception: "INTERNAL_ERROR"
+    Exception: "INTERNAL_ERROR",
 }
 
 
@@ -43,22 +41,17 @@ def classify_error_code(exception: Exception) -> str:
     Returns:
         Error code string from the error registry
     """
-    try:
-        observability = ObservabilityManager.get_instance()
-        observability.emit_event(
-            event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-            level=EventLevel.WARNING,
-            message=f"Error classified: {type(exception).__name__}",
-            data={
-                "exception_type": type(exception).__name__,
-                "exception_message": str(exception),
-                "source": "error_classifier",
-                "operation": "classify_error_code"
-            }
-        )
-    except Exception:
-        # Don't let observability failures break error classification
-        pass
+    observability.emit_event(
+        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+        level=observability.EventLevel.WARNING,
+        description=f"Error classified: {type(exception).__name__}",
+        data={
+            "exception_type": type(exception).__name__,
+            "exception_message": str(exception),
+            "source": "error_classifier",
+            "operation": "classify_error_code",
+        },
+    )
 
     # Check for specific exception types first
     for exc_type, error_code in EXCEPTION_TO_ERROR_CODE.items():
@@ -116,7 +109,7 @@ def is_retryable_error(error_code: str) -> bool:
         "NETWORK_ERROR",
         "SYSTEM_OVERLOAD",
         "RATE_LIMITED",
-        "LLM_RATE_LIMITED"
+        "LLM_RATE_LIMITED",
     }
 
     return error_code in retryable_codes

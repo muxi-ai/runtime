@@ -5,13 +5,11 @@ This module provides enhanced tool call processing that integrates with the
 intelligent clarification system to handle incomplete or unclear tool calls.
 """
 
-import logging
+
 from typing import Dict, List, Any, Optional, Tuple
 
 from ..mcp.parser import ToolParser, ToolCall
 from .types import ToolInformationAnalysis
-
-logger = logging.getLogger(__name__)
 
 
 class EnhancedToolProcessor:
@@ -118,6 +116,7 @@ class EnhancedToolProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             # Fall back to original text without processing
             return text, [], None
 
@@ -147,14 +146,15 @@ class EnhancedToolProcessor:
                     available_tools = await self.agent._mcp_service.list_available_tools()
                 except Exception as e:
                     #  Debug - add observability event
+                    _ = e  # remove this after implementing observability
 
-            # Analyze the tool call for missing information
-            analysis = await self.clarification_analyzer.analyze_tool_call(
-                tool_name=tool_call.tool_name,
-                provided_params=tool_call.parameters,
-                available_tools=available_tools,
-                user_context=user_context
-            )
+                # Analyze the tool call for missing information
+                analysis = await self.clarification_analyzer.analyze_tool_call(
+                    tool_name=tool_call.tool_name,
+                    provided_params=tool_call.parameters,
+                    available_tools=available_tools,
+                    user_context=user_context
+                )
 
             # If analysis shows we can proceed, enrich parameters
             if analysis.can_proceed:
@@ -193,6 +193,7 @@ class EnhancedToolProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             # On error, assume tool call is valid as-is
             return {
                 "needs_clarification": False,
@@ -273,6 +274,7 @@ class EnhancedToolProcessor:
 
         except Exception as e:
             #  Error - add observability event
+            _ = e  # remove this after implementing observability
             return None
 
     async def handle_clarified_tool_execution(

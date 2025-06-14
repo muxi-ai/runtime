@@ -35,17 +35,11 @@
 # =============================================================================
 
 import socket
+
 # Loguru import removed - add observability import
 
 # Observability imports
-try:
-    from muxi.runtime.observability.manager import ObservabilityManager
-    from muxi.runtime.observability.events import ConversationEventType, EventLevel, SystemEventType
-except ImportError:
-    # Graceful fallback if observability is not available
-    ObservabilityManager = None
-    ConversationEventType = None
-    EventLevel = None
+from . import observability
 
 
 def is_port_in_use(port):
@@ -63,17 +57,12 @@ def is_port_in_use(port):
         bool: True if the port is in use (unavailable), False if the port is free.
     """
     # Log port check attempt
-    if ObservabilityManager and ConversationEventType:
-        try:
-            obs = ObservabilityManager.get_instance()
-            obs.log_event(
-                SystemEventType.RESOURCE_ALLOCATED,
-                EventLevel.DEBUG,
-                "Port availability check initiated",
-                data={"port": port, "operation": "port_check"}
-            )
-        except Exception:
-            pass  # Don't let observability failures break port checking
+    observability.emit_event(
+        event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+        level=observability.EventLevel.DEBUG,
+        description="Port availability check initiated",
+        data={"port": port, "operation": "port_check"},
+    )
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         # connect_ex returns 0 if the connection succeeds (port is in use)
@@ -81,17 +70,16 @@ def is_port_in_use(port):
         result = s.connect_ex(("localhost", port)) == 0
 
         # Log port check result
-        if ObservabilityManager and ConversationEventType:
-            try:
-                obs = ObservabilityManager.get_instance()
-                obs.log_event(
-                    SystemEventType.RESOURCE_ALLOCATED if not result else SystemEventType.ERROR_RETRY_ATTEMPTED,
-                    EventLevel.INFO if not result else EventLevel.WARNING,
-                    f"Port {port} {'in use' if result else 'available'}",
-                    data={"port": port, "in_use": result, "operation": "port_check_result"}
-                )
-            except Exception:
-                pass  # Don't let observability failures break port checking
+        observability.emit_event(
+            event_type=(
+                observability.SystemEventType.RESOURCE_ALLOCATED
+                if not result
+                else observability.SystemEventType.ERROR_RETRY_ATTEMPTED
+            ),
+            level=observability.EventLevel.INFO if not result else observability.EventLevel.WARNING,
+            description=f"Port {port} {'in use' if result else 'available'}",
+            data={"port": port, "in_use": result, "operation": "port_check_result"},
+        )
 
         return result
 
@@ -122,23 +110,18 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             to determine if startup succeeded in programmatic contexts.
     """
     # Log server startup attempt
-    if ObservabilityManager and ConversationEventType:
-        try:
-            obs = ObservabilityManager.get_instance()
-            obs.log_event(
-                ConversationEventType.SESSION_CREATED,
-                EventLevel.INFO,
-                "Server startup initiated",
-                data={
-                    "host": host,
-                    "port": port,
-                    "reload": reload,
-                    "mcp": mcp,
-                    "operation": "server_startup"
-                }
-            )
-        except Exception:
-            pass  # Don't let observability failures break server startup
+    observability.emit_event(
+        event_type=observability.SystemEventType.SESSION_CREATED,
+        level=observability.EventLevel.INFO,
+        description="Server startup initiated",
+        data={
+            "host": host,
+            "port": port,
+            "reload": reload,
+            "mcp": mcp,
+            "operation": "server_startup",
+        },
+    )
 
     try:
         # Check if port is already in use before attempting to start the server
@@ -147,22 +130,17 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             msg = f"Port {port} is already in use. MUXI server cannot start."
 
             # Log port conflict error
-            if ObservabilityManager and ConversationEventType:
-                try:
-                    obs = ObservabilityManager.get_instance()
-                    obs.log_event(
-                        SystemEventType.ERROR_RETRY_ATTEMPTED,
-                        EventLevel.ERROR,
-                        "Server startup failed due to port conflict",
-                        data={
-                            "port": port,
-                            "host": host,
-                            "error": "port_in_use",
-                            "operation": "server_startup_failed"
-                        }
-                    )
-                except Exception:
-                    pass  # Don't let observability failures break error handling
+            observability.emit_event(
+                event_type=observability.SystemEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Server startup failed due to port conflict",
+                data={
+                    "port": port,
+                    "host": host,
+                    "error": "port_in_use",
+                    "operation": "server_startup_failed",
+                },
+            )
 
             # Log the error to the application logs
             #  Error - add observability event
@@ -174,51 +152,41 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         # For now, we'll just log that we would have started a server
         # This will be replaced with actual implementation later
         #  Info - add observability event
-            f"[PLACEHOLDER] Starting MUXI server on {host}:{port} " f"(reload={reload}, mcp={mcp})"
-        )
+        #     f"[PLACEHOLDER] Starting MUXI server on {host}:{port} " f"(reload={reload}, mcp={mcp})"
+        # )
         print(f"[PLACEHOLDER] MUXI server would start on {host}:{port}")
         print("This is a placeholder until the MUXI API server is implemented.")
 
         # Log successful server startup (placeholder)
-        if ObservabilityManager and ConversationEventType:
-            try:
-                obs = ObservabilityManager.get_instance()
-                obs.log_event(
-                    ConversationEventType.SESSION_CREATED,
-                    EventLevel.INFO,
-                    "Server startup completed (placeholder)",
-                    data={
-                        "host": host,
-                        "port": port,
-                        "reload": reload,
-                        "mcp": mcp,
-                        "operation": "server_startup_success",
-                        "placeholder": True
-                    }
-                )
-            except Exception:
-                pass  # Don't let observability failures break server startup
+        observability.emit_event(
+            event_type=observability.SystemEventType.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description="Server startup completed (placeholder)",
+            data={
+                "host": host,
+                "port": port,
+                "reload": reload,
+                "mcp": mcp,
+                "operation": "server_startup_success",
+                "placeholder": True,
+            },
+        )
 
         return True
     except Exception as e:
         # Log server startup exception
-        if ObservabilityManager and ConversationEventType:
-            try:
-                obs = ObservabilityManager.get_instance()
-                obs.log_event(
-                    SystemEventType.ERROR_RETRY_ATTEMPTED,
-                    EventLevel.ERROR,
-                    "Server startup failed with exception",
-                    data={
-                        "host": host,
-                        "port": port,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                        "operation": "server_startup_exception"
-                    }
-                )
-            except Exception:
-                pass  # Don't let observability failures break error handling
+        observability.emit_event(
+            event_type=observability.SystemEventType.ERROR_RETRY_ATTEMPTED,
+            level=observability.EventLevel.ERROR,
+            description="Server startup failed with exception",
+            data={
+                "host": host,
+                "port": port,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "operation": "server_startup_exception",
+            },
+        )
 
         # Catch any unexpected exceptions during server startup
         # Log the error with detailed information for debugging

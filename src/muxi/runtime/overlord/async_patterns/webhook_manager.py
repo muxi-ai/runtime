@@ -10,7 +10,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional, Any, Dict, List
 import aiohttp
-import logging
+
 
 # Import unified response types
 from ...types.response import (
@@ -21,7 +21,7 @@ from ...types.response import (
 from ...utils.response_converter import create_unified_response
 
 
-logger = logging.getLogger(__name__)
+
 
 
 @dataclass

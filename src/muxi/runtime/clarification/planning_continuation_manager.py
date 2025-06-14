@@ -5,9 +5,8 @@ Manages the transition from information gathering to collaborative planning.
 Tracks workflow state and generates contextual follow-up interactions.
 """
 
-import logging
 import time
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 from datetime import datetime
 
 from .types import (
@@ -15,10 +14,8 @@ from .types import (
     PlanningWorkflowRequest,
     ToolExecutionResult,
     WorkflowState,
-    WorkflowSynthesis
+    WorkflowSynthesis,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class PlanningContinuationManager:
@@ -39,10 +36,7 @@ class PlanningContinuationManager:
         self.default_timeout = 1800  # 30 minutes
 
     def create_session(
-        self,
-        user_id: str,
-        agent_id: str,
-        workflow_request: PlanningWorkflowRequest
+        self, user_id: str, agent_id: str, workflow_request: PlanningWorkflowRequest
     ) -> PlanningWorkflowSession:
         """
         Create a new planning workflow session.
@@ -60,7 +54,7 @@ class PlanningContinuationManager:
             user_id=user_id,
             agent_id=agent_id,
             workflow_request=workflow_request,
-            current_state=WorkflowState.INFORMATION_GATHERING
+            current_state=WorkflowState.INFORMATION_GATHERING,
         )
 
         self.active_sessions[session.session_id] = session
@@ -74,11 +68,7 @@ class PlanningContinuationManager:
         """Get an active planning session by ID."""
         return self.active_sessions.get(session_id)
 
-    def add_tool_result(
-        self,
-        session_id: str,
-        tool_result: ToolExecutionResult
-    ) -> bool:
+    def add_tool_result(self, session_id: str, tool_result: ToolExecutionResult) -> bool:
         """
         Add a tool execution result to a planning session.
 
@@ -108,11 +98,7 @@ class PlanningContinuationManager:
 
         return True
 
-    def update_synthesis(
-        self,
-        session_id: str,
-        synthesis: WorkflowSynthesis
-    ) -> bool:
+    def update_synthesis(self, session_id: str, synthesis: WorkflowSynthesis) -> bool:
         """
         Update planning session with synthesis results.
 
@@ -209,13 +195,17 @@ class PlanningContinuationManager:
         successful_tools = [r for r in session.executed_tools if r.success]
 
         if not successful_tools:
-            return (f"I wasn't able to retrieve the information needed for your {session.workflow_request.planning_goal}. "
-                   f"Would you like to try alternative approaches or proceed with what we know?")
+            return (
+                f"I wasn't able to retrieve the information needed for your {session.workflow_request.planning_goal}. "
+                f"Would you like to try alternative approaches or proceed with what we know?"
+            )
 
         tool_names = [r.tool_name for r in successful_tools]
-        return (f"I've gathered information from {len(successful_tools)} sources ({', '.join(tool_names)}) "
-               f"for your {session.workflow_request.planning_goal}. "
-               f"Let me analyze this data and present your options...")
+        return (
+            f"I've gathered information from {len(successful_tools)} sources ({', '.join(tool_names)}) "
+            f"for your {session.workflow_request.planning_goal}. "
+            f"Let me analyze this data and present your options..."
+        )
 
     def _generate_options_response(self, session: PlanningWorkflowSession) -> str:
         """Generate response for option presentation state."""
@@ -237,7 +227,9 @@ class PlanningContinuationManager:
         if session.synthesis.options:
             response_parts.append("**Your Options:**")
             for i, option in enumerate(session.synthesis.options[:3], 1):
-                response_parts.append(f"{i}. {option.get('title', 'Option')}: {option.get('description', '')}")
+                response_parts.append(
+                    f"{i}. {option.get('title', 'Option')}: {option.get('description', '')}"
+                )
             response_parts.append("")
 
         # Add trade-offs
@@ -257,8 +249,10 @@ class PlanningContinuationManager:
 
     def _generate_refinement_response(self, session: PlanningWorkflowSession) -> str:
         """Generate response for decision refinement state."""
-        return (f"I'm here to help you refine your decision for {session.workflow_request.planning_goal}. "
-               f"What aspects would you like to explore further, or do you have specific questions about the options?")
+        return (
+            f"I'm here to help you refine your decision for {session.workflow_request.planning_goal}. "
+            f"What aspects would you like to explore further, or do you have specific questions about the options?"
+        )
 
     def cleanup_session(self, session_id: str) -> None:
         """Clean up expired or completed session."""
@@ -273,7 +267,8 @@ class PlanningContinuationManager:
         """Clean up all expired sessions."""
         current_time = time.time()
         expired_sessions = [
-            session_id for session_id, timeout_time in self.session_timeouts.items()
+            session_id
+            for session_id, timeout_time in self.session_timeouts.items()
             if current_time > timeout_time
         ]
 
@@ -282,6 +277,7 @@ class PlanningContinuationManager:
 
         if expired_sessions:
             #  Info - add observability event
+            _ = None  # remove this after implementing observability
 
     def get_session_summary(self, session_id: str) -> Optional[Dict]:
         """Get summary of planning session state."""
@@ -298,5 +294,5 @@ class PlanningContinuationManager:
             "successful_tools": len([r for r in session.executed_tools if r.success]),
             "has_synthesis": session.synthesis is not None,
             "created_at": datetime.fromtimestamp(session.created_at).isoformat(),
-            "updated_at": datetime.fromtimestamp(session.updated_at).isoformat()
+            "updated_at": datetime.fromtimestamp(session.updated_at).isoformat(),
         }

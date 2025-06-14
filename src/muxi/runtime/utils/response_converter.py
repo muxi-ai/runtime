@@ -17,7 +17,7 @@ from ..types.response import (
 )
 from ..types.errors import get_error_info
 from ..utils.error_classifier import classify_error_code
-from ..observability import ObservabilityManager, ConversationEventType, SystemEventType, EventLevel
+from .. import observability
 
 
 def convert_onellm_to_muxi_content(
@@ -33,8 +33,8 @@ def convert_onellm_to_muxi_content(
         List of MUXI ContentItem objects
     """
     try:
-        observability = ObservabilityManager.get_instance()
-        observability.log_event(
+
+        observability.emit_event(
             ConversationEventType.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Starting OneLLM to MUXI content conversion",
@@ -67,9 +67,7 @@ def convert_onellm_to_muxi_content(
                     }
                 })
 
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "OneLLM to MUXI content conversion completed",
@@ -79,15 +77,11 @@ def convert_onellm_to_muxi_content(
                     "conversion_type": "onellm_to_muxi"
                 }
             )
-        except Exception:
-            pass
 
         return muxi_content
 
     except Exception as e:
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"OneLLM to MUXI content conversion failed: {str(e)}",
@@ -97,8 +91,6 @@ def convert_onellm_to_muxi_content(
                     "input_items_count": len(onellm_content)
                 }
             )
-        except Exception:
-            pass
         raise
 
 
@@ -115,7 +107,7 @@ def extract_user_content(
         List of user-facing MUXI ContentItem objects
     """
     try:
-        observability = ObservabilityManager.get_instance()
+
         content_type = "string" if isinstance(mcp_message_content, str) else "list"
         content_length = (
             len(mcp_message_content)
@@ -123,7 +115,7 @@ def extract_user_content(
             else 0
         )
 
-        observability.log_event(
+        observability.emit_event(
             ConversationEventType.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Starting MCP message content extraction",
@@ -147,9 +139,7 @@ def extract_user_content(
                 "file": None
             })
 
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
+            observability.emit_event(
                     ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
                     EventLevel.DEBUG,
                     "MCP string content extraction completed",
@@ -159,8 +149,6 @@ def extract_user_content(
                         "conversion_type": "mcp_to_user_content"
                     }
                 )
-            except Exception:
-                pass
 
             return user_content
 
@@ -194,9 +182,7 @@ def extract_user_content(
                     }
                 })
 
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "MCP list content extraction completed",
@@ -208,15 +194,11 @@ def extract_user_content(
                     "conversion_type": "mcp_to_user_content"
                 }
             )
-        except Exception:
-            pass
 
         return user_content
 
     except Exception as e:
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"MCP content extraction failed: {str(e)}",
@@ -226,8 +208,6 @@ def extract_user_content(
                     "content_type": "string" if isinstance(mcp_message_content, str) else "list"
                 }
             )
-        except Exception:
-            pass
         raise
 
 
@@ -260,8 +240,8 @@ def create_unified_response(
         MuxiUnifiedResponse object
     """
     try:
-        observability = ObservabilityManager.get_instance()
-        observability.log_event(
+
+        observability.emit_event(
             ConversationEventType.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Creating unified response object",
@@ -293,9 +273,7 @@ def create_unified_response(
             "response": content
         }
 
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "Unified response object created successfully",
@@ -309,15 +287,11 @@ def create_unified_response(
                     "conversion_type": "unified_response_creation"
                 }
             )
-        except Exception:
-            pass
 
         return response
 
     except Exception as e:
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"Unified response creation failed: {str(e)}",
@@ -328,8 +302,6 @@ def create_unified_response(
                     "conversion_type": "unified_response_creation"
                 }
             )
-        except Exception:
-            pass
         raise
 
 
@@ -348,8 +320,8 @@ def create_error_response(
         MuxiErrorDetails object
     """
     try:
-        observability = ObservabilityManager.get_instance()
-        observability.log_event(
+
+        observability.emit_event(
             ConversationEventType.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Creating error response details",
@@ -372,9 +344,7 @@ def create_error_response(
             "trace": traceback.format_exc() if include_trace else None
         }
 
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "Error response details created successfully",
@@ -386,15 +356,11 @@ def create_error_response(
                     "conversion_type": "error_response_creation"
                 }
             )
-        except Exception:
-            pass
 
         return error_details
 
     except Exception as e:
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
+        observability.emit_event(
                 ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"Error response creation failed: {str(e)}",
@@ -404,6 +370,4 @@ def create_error_response(
                     "conversion_type": "error_response_creation"
                 }
             )
-        except Exception:
-            pass
         raise

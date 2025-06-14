@@ -14,6 +14,7 @@ import uuid
 
 class ClarificationStatus(Enum):
     """Status of a clarification request"""
+
     CLARIFYING = "clarifying"
     READY = "ready"
     FAILED = "failed"
@@ -22,6 +23,7 @@ class ClarificationStatus(Enum):
 
 class RequestType(Enum):
     """Type of clarification request"""
+
     TOOL_CALL = "tool_call"
     REASONING = "reasoning"
     MIXED = "mixed"
@@ -29,6 +31,7 @@ class RequestType(Enum):
 
 class QuestionStyle(Enum):
     """Style of clarification questions"""
+
     CONVERSATIONAL = "conversational"
     FORMAL = "formal"
     BRIEF = "brief"
@@ -36,6 +39,7 @@ class QuestionStyle(Enum):
 
 class ClarificationMode(Enum):
     """Mode of clarification conversation"""
+
     REACTIVE = "reactive"  # Traditional: detect missing info and ask
     PROACTIVE_QUESTIONING = "proactive_questioning"  # User requests guided questions
     PLAN_ANALYSIS = "plan_analysis"  # Analyze multi-step user plans
@@ -45,6 +49,7 @@ class ClarificationMode(Enum):
 
 class ProactiveRequestType(Enum):
     """Type of proactive clarification request"""
+
     GUIDED_QUESTIONING = "guided_questioning"  # "Ask me questions until..."
     PLAN_FEEDBACK = "plan_feedback"  # "I want to do A-B-C, what do you think?"
     CONTEXT_FIRST = "context_first"  # "Understand my situation first"
@@ -54,6 +59,7 @@ class ProactiveRequestType(Enum):
 
 class PlanningWorkflowType(Enum):
     """Type of planning workflow detected"""
+
     TRAVEL_PLANNING = "travel_planning"  # Trip booking with research
     INVESTMENT_PLANNING = "investment_planning"  # Investment decisions with analysis
     BUSINESS_PLANNING = "business_planning"  # Business decisions with research
@@ -64,6 +70,7 @@ class PlanningWorkflowType(Enum):
 
 class WorkflowState(Enum):
     """State of a planning workflow"""
+
     INFORMATION_GATHERING = "information_gathering"  # Collecting data via tools
     DATA_SYNTHESIS = "data_synthesis"  # Processing and analyzing collected data
     OPTION_PRESENTATION = "option_presentation"  # Presenting choices to user
@@ -74,6 +81,7 @@ class WorkflowState(Enum):
 @dataclass
 class ClarificationQuestion:
     """A single clarification question"""
+
     question_id: str
     question_text: str
     parameter_name: str
@@ -92,6 +100,7 @@ class ClarificationQuestion:
 @dataclass
 class ToolCall:
     """Represents a tool call extracted from model response"""
+
     name: str
     parameters: Dict[str, Any]
     call_id: Optional[str] = None
@@ -104,6 +113,7 @@ class ToolCall:
 @dataclass
 class ToolCallResult:
     """Result of a tool call execution"""
+
     call_id: str
     success: bool
     result: Any = None
@@ -114,6 +124,7 @@ class ToolCallResult:
 @dataclass
 class InformationAnalysis:
     """Result of analyzing information requirements"""
+
     missing_info: List[str]
     available_info: Dict[str, Any]
     confidence_scores: Dict[str, float]
@@ -125,6 +136,7 @@ class InformationAnalysis:
 @dataclass
 class ToolInformationAnalysis(InformationAnalysis):
     """Tool-specific information analysis"""
+
     tool_name: str = ""
     tool_schema: Dict[str, Any] = field(default_factory=dict)
     missing_required_params: List[str] = field(default_factory=list)
@@ -135,6 +147,7 @@ class ToolInformationAnalysis(InformationAnalysis):
 @dataclass
 class ReasoningInformationAnalysis(InformationAnalysis):
     """Reasoning-specific information analysis"""
+
     intent: str = ""
     context_gaps: List[str] = field(default_factory=list)
     user_background_needed: List[str] = field(default_factory=list)
@@ -144,6 +157,7 @@ class ReasoningInformationAnalysis(InformationAnalysis):
 @dataclass
 class ClarificationContext:
     """Context information for clarification operations"""
+
     user_context: Optional[Dict[str, Any]] = None
     conversation_history: Optional[List[str]] = None
     session_data: Optional[Dict[str, Any]] = None
@@ -152,6 +166,7 @@ class ClarificationContext:
 @dataclass
 class ContextAnalysis:
     """Analysis of reasoning context needs"""
+
     needs_more_info: bool
     missing_context: List[str]
     intent: str
@@ -162,6 +177,7 @@ class ContextAnalysis:
 @dataclass
 class ClarificationRequest:
     """Tracks a multi-turn clarification request"""
+
     request_id: str
     user_id: str
     agent_id: str
@@ -185,6 +201,7 @@ class ClarificationRequest:
 @dataclass
 class ClarificationResult:
     """Result of processing a clarification response"""
+
     status: str  # "complete", "continue", "error"
     complete_params: Optional[Dict[str, Any]] = None
     next_question: Optional[str] = None
@@ -196,6 +213,7 @@ class ClarificationResult:
 @dataclass
 class ParameterMapping:
     """Mapping between user context keys and parameter names"""
+
     parameter_name: str
     context_keys: List[str]
     transformation_function: Optional[str] = None
@@ -205,6 +223,7 @@ class ParameterMapping:
 @dataclass
 class ClarificationConfig:
     """Configuration for the clarification system"""
+
     max_questions: int = 5
     style: QuestionStyle = QuestionStyle.CONVERSATIONAL
     persist_learned_info: bool = False
@@ -215,32 +234,38 @@ class ClarificationConfig:
 
 class ClarificationError(Exception):
     """Base exception for clarification system errors"""
+
     pass
 
 
 class InformationAnalysisError(ClarificationError):
     """Error during information analysis"""
+
     pass
 
 
 class QuestionGenerationError(ClarificationError):
     """Error during question generation"""
+
     pass
 
 
 class ParameterExtractionError(ClarificationError):
     """Error during parameter extraction from user response"""
+
     pass
 
 
 class ContextEnrichmentError(ClarificationError):
     """Error during context enrichment"""
+
     pass
 
 
 @dataclass
 class ProactiveRequest:
     """A request for proactive clarification/questioning"""
+
     request_type: ProactiveRequestType
     goal: str  # What the user wants to achieve
     original_message: str
@@ -253,6 +278,7 @@ class ProactiveRequest:
 @dataclass
 class MultiStepPlan:
     """A multi-step plan submitted by user for analysis"""
+
     steps: List[str]
     goal: str
     original_message: str
@@ -264,6 +290,7 @@ class MultiStepPlan:
 @dataclass
 class PlanStepAnalysis:
     """Analysis of a single plan step"""
+
     step_index: int
     step_text: str
     feasibility_score: float  # 0.0-1.0
@@ -277,6 +304,7 @@ class PlanStepAnalysis:
 @dataclass
 class PlanAnalysis:
     """Complete analysis of a multi-step plan"""
+
     plan: MultiStepPlan
     overall_feasibility: float
     step_analyses: List[PlanStepAnalysis]
@@ -289,6 +317,7 @@ class PlanAnalysis:
 @dataclass
 class GoalContext:
     """Context for achieving a specific information goal"""
+
     goal: str
     goal_type: str  # e.g., "investment_advice", "business_planning", "technical_guidance"
     required_info_areas: List[str]
@@ -300,6 +329,7 @@ class GoalContext:
 @dataclass
 class ClarificationSession:
     """Extended session for proactive clarification"""
+
     session_id: str
     user_id: str
     agent_id: str
@@ -321,6 +351,7 @@ class ClarificationSession:
 @dataclass
 class PlanningWorkflowRequest:
     """A request that involves planning workflow with information gathering"""
+
     workflow_type: PlanningWorkflowType
     planning_goal: str  # e.g., "book a trip to NYC"
     information_requests: List[str]  # e.g., ["check weather", "find fares"]
@@ -333,6 +364,7 @@ class PlanningWorkflowRequest:
 @dataclass
 class ToolExecutionResult:
     """Result from executing a tool in a planning workflow"""
+
     tool_name: str
     parameters: Dict[str, Any]
     result: Any
@@ -345,6 +377,7 @@ class ToolExecutionResult:
 @dataclass
 class WorkflowSynthesis:
     """Synthesized insights from multiple tool results for planning"""
+
     planning_goal: str
     tool_results: List[ToolExecutionResult]
     key_insights: List[str]  # Main takeaways from the data
@@ -358,6 +391,7 @@ class WorkflowSynthesis:
 @dataclass
 class PlanningWorkflowSession:
     """Active planning workflow session"""
+
     session_id: str
     user_id: str
     agent_id: str
@@ -379,6 +413,7 @@ class PlanningWorkflowSession:
 @dataclass
 class PlanningOption:
     """A specific option presented to user for decision-making"""
+
     option_id: str
     title: str
     description: str

@@ -5,17 +5,9 @@ This module analyzes multi-step plans provided by users, evaluating
 feasibility, identifying gaps, and generating clarification questions.
 """
 
-import logging
-from typing import List, Dict, Optional
+from typing import List, Optional
 
-from .types import (
-    MultiStepPlan,
-    PlanAnalysis,
-    PlanStepAnalysis,
-    ClarificationError
-)
-
-logger = logging.getLogger(__name__)
+from .types import MultiStepPlan, PlanAnalysis, PlanStepAnalysis, ClarificationError
 
 
 class PlanAnalyzer:
@@ -75,7 +67,7 @@ class PlanAnalyzer:
                 missing_steps=missing_steps,
                 suggested_reordering=suggested_reordering,
                 clarification_questions=clarification_questions,
-                recommendations=recommendations
+                recommendations=recommendations,
             )
 
             #  Info - add observability event
@@ -106,11 +98,13 @@ class PlanAnalyzer:
                 requirements=requirements,
                 potential_issues=potential_issues,
                 suggested_clarifications=suggested_clarifications,
-                dependencies=dependencies
+                dependencies=dependencies,
             )
 
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
+
             # Return basic analysis on error
             return PlanStepAnalysis(
                 step_index=index,
@@ -120,7 +114,7 @@ class PlanAnalyzer:
                 requirements=[],
                 potential_issues=["Analysis incomplete"],
                 suggested_clarifications=[],
-                dependencies=[]
+                dependencies=[],
             )
 
     def _assess_step_feasibility(self, step: str, goal: str) -> float:
@@ -330,10 +324,7 @@ class PlanAnalyzer:
         return missing_steps
 
     def _generate_clarification_questions(
-        self,
-        plan: MultiStepPlan,
-        step_analyses: List[PlanStepAnalysis],
-        missing_steps: List[str]
+        self, plan: MultiStepPlan, step_analyses: List[PlanStepAnalysis], missing_steps: List[str]
     ) -> List[str]:
         """Generate questions to clarify the plan"""
         questions = []
@@ -355,9 +346,7 @@ class PlanAnalyzer:
             )
 
         # Questions about feasibility concerns
-        low_feasibility_steps = [
-            a for a in step_analyses if a.feasibility_score < 0.6
-        ]
+        low_feasibility_steps = [a for a in step_analyses if a.feasibility_score < 0.6]
         if low_feasibility_steps:
             questions.append(
                 "Some steps may be challenging. Do you have experience with similar tasks?"
@@ -370,7 +359,7 @@ class PlanAnalyzer:
         plan: MultiStepPlan,
         step_analyses: List[PlanStepAnalysis],
         missing_steps: List[str],
-        overall_feasibility: float
+        overall_feasibility: float,
     ) -> List[str]:
         """Generate recommendations for improving the plan"""
         recommendations = []
@@ -395,14 +384,10 @@ class PlanAnalyzer:
 
         # Missing steps recommendations
         if missing_steps:
-            recommendations.append(
-                f"Consider adding: {', '.join(missing_steps[:2])}"
-            )
+            recommendations.append(f"Consider adding: {', '.join(missing_steps[:2])}")
 
         # Dependency recommendations
-        complex_dependencies = any(
-            len(a.dependencies) > 2 for a in step_analyses
-        )
+        complex_dependencies = any(len(a.dependencies) > 2 for a in step_analyses)
         if complex_dependencies:
             recommendations.append("Review step dependencies to optimize the sequence")
 

@@ -6,7 +6,7 @@ load balancing, and adaptive execution strategies.
 """
 
 import asyncio
-import logging
+
 import time
 from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
@@ -20,7 +20,7 @@ from .types import (
     ParallelGroup
 )
 
-logger = logging.getLogger(__name__)
+
 
 
 @dataclass

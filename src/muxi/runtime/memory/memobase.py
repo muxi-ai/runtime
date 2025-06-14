@@ -35,7 +35,7 @@ import time
 from typing import Any, Dict, List, Optional, Union
 
 from .long_term import LongTermMemory
-from ..observability import ConversationEventType, SystemEventType, EventLevel, ObservabilityManager
+from .. import observability
 
 
 class Memobase:
@@ -66,19 +66,15 @@ class Memobase:
         self.long_term_memory = long_term_memory
 
         # Log initialization
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.SESSION_CREATED,
-                level=EventLevel.INFO,
-                message="Memobase initialized",
-                data={
-                    "default_user_id": default_user_id,
-                    "long_term_memory_type": type(long_term_memory).__name__
-                }
-            )
-        except Exception:
-            pass  # Don't let observability failures break initialization
+        observability.emit_event(
+            event_type=observability.ConversationEventType.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description="Memobase initialized",
+            data={
+                "default_user_id": default_user_id,
+                "long_term_memory_type": type(long_term_memory).__name__,
+            },
+        )  # Don't let observability failures break initialization
 
     async def add(
         self,
@@ -110,36 +106,28 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log memory store start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.REQUEST_PROCESSING,
-                level=EventLevel.INFO,
-                message="Starting memory store operation",
-                data={
-                    "user_id": user_id,
-                    "content_length": len(content) if content else 0,
-                    "has_embedding": embedding is not None,
-                    "collection": collection,
-                    "metadata_keys": list(metadata.keys()) if metadata else []
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            description="Starting memory store operation",
+            data={
+                "user_id": user_id,
+                "content_length": len(content) if content else 0,
+                "has_embedding": embedding is not None,
+                "collection": collection,
+                "metadata_keys": list(metadata.keys()) if metadata else [],
+            },
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.DEBUG,
-                    message="Skipping memory store for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping memory store for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return dummy ID for anonymous users
             return 0
 
@@ -174,41 +162,33 @@ class Memobase:
             )
 
             # Log successful memory store
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.INFO,
-                    message="Memory store completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "memory_id": memory_id,
-                        "collection": collection,
-                        "content_length": len(content) if content else 0
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+                level=observability.EventLevel.INFO,
+                description="Memory store completed successfully",
+                data={
+                    "user_id": user_id,
+                    "memory_id": memory_id,
+                    "collection": collection,
+                    "content_length": len(content) if content else 0,
+                },
+            )
 
             return memory_id
 
         except Exception as e:
             # Log memory store error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="Memory store operation failed",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Memory store operation failed",
+                data={
+                    "user_id": user_id,
+                    "collection": collection,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def search(
@@ -243,41 +223,29 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log memory retrieval start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.REQUEST_PROCESSING,
-                level=EventLevel.INFO,
-                message="Starting memory search operation",
-                data={
-                    "user_id": user_id,
-                    "query_length": len(query) if query else 0,
-                    "limit": limit,
-                    "collection": collection,
-                    "has_query_embedding": query_embedding is not None,
-                    "filter_keys": (
-                        list(additional_filter.keys())
-                        if additional_filter
-                        else []
-                    )
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            description="Starting memory search operation",
+            data={
+                "user_id": user_id,
+                "query_length": len(query) if query else 0,
+                "limit": limit,
+                "collection": collection,
+                "has_query_embedding": query_embedding is not None,
+                "filter_keys": (list(additional_filter.keys()) if additional_filter else []),
+            },
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.DEBUG,
-                    message="Skipping memory search for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping memory search for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return empty results for anonymous users
             return []
 
@@ -316,42 +284,34 @@ class Memobase:
                 )
 
             # Log successful memory retrieval
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
-                    level=EventLevel.INFO,
-                    message="Memory search completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection,
-                        "results_count": len(results),
-                        "query_length": len(query) if query else 0
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
+                level=observability.EventLevel.INFO,
+                description="Memory search completed successfully",
+                data={
+                    "user_id": user_id,
+                    "collection": collection,
+                    "results_count": len(results),
+                    "query_length": len(query) if query else 0,
+                },
+            )
 
             return results
 
         except Exception as e:
             # Log memory retrieval error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="Memory search operation failed",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection,
-                        "query": query,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Memory search operation failed",
+                data={
+                    "user_id": user_id,
+                    "collection": collection,
+                    "query": query,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def delete(
@@ -376,33 +336,22 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log memory deletion start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.REQUEST_PROCESSING,
-                level=EventLevel.INFO,
-                message="Starting memory deletion operation",
-                data={
-                    "user_id": user_id,
-                    "memory_id": memory_id
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            description="Starting memory deletion operation",
+            data={"user_id": user_id, "memory_id": memory_id},
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.DEBUG,
-                    message="Skipping memory deletion for anonymous user",
-                    data={"user_id": user_id, "memory_id": memory_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping memory deletion for anonymous user",
+                data={"user_id": user_id, "memory_id": memory_id},
+            )
             # Return success for anonymous users (no-op)
             return True
 
@@ -414,40 +363,28 @@ class Memobase:
             )
 
             # Log successful memory deletion
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.INFO,
-                    message="Memory deletion completed",
-                    data={
-                        "user_id": user_id,
-                        "memory_id": memory_id,
-                        "success": success
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+                level=observability.EventLevel.INFO,
+                description="Memory deletion completed",
+                data={"user_id": user_id, "memory_id": memory_id, "success": success},
+            )
 
             return success
 
         except Exception as e:
             # Log memory deletion error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="Memory deletion operation failed",
-                    data={
-                        "user_id": user_id,
-                        "memory_id": memory_id,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Memory deletion operation failed",
+                data={
+                    "user_id": user_id,
+                    "memory_id": memory_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     def clear_user_memory(self, user_id: Optional[int] = None) -> None:
@@ -464,30 +401,22 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log memory clear start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=SystemEventType.MEMORY_CLEAR,
-                level=EventLevel.INFO,
-                message="Starting user memory clear operation",
-                data={"user_id": user_id}
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.MEMORY_CLEAR,
+            level=observability.EventLevel.INFO,
+            description="Starting user memory clear operation",
+            data={"user_id": user_id},
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=SystemEventType.MEMORY_CLEAR,
-                    level=EventLevel.DEBUG,
-                    message="Skipping memory clear for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.MEMORY_CLEAR,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping memory clear for anonymous user",
+                data={"user_id": user_id},
+            )
             # No-op for anonymous users
             return
 
@@ -506,37 +435,26 @@ class Memobase:
             )
 
             # Log successful memory clear
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=SystemEventType.MEMORY_CLEAR,
-                    level=EventLevel.INFO,
-                    message="User memory clear completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.MEMORY_CLEAR,
+                level=observability.EventLevel.INFO,
+                description="User memory clear completed successfully",
+                data={"user_id": user_id, "collection": collection},
+            )
 
         except Exception as e:
             # Log memory clear error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User memory clear operation failed",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User memory clear operation failed",
+                data={
+                    "user_id": user_id,
+                    "collection": collection,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     def get_user_memories(
@@ -567,36 +485,28 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log memory retrieval start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.REQUEST_PROCESSING,
-                level=EventLevel.INFO,
-                message="Starting user memories retrieval",
-                data={
-                    "user_id": user_id,
-                    "limit": limit,
-                    "offset": offset,
-                    "sort_by": sort_by,
-                    "ascending": ascending
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            description="Starting user memories retrieval",
+            data={
+                "user_id": user_id,
+                "limit": limit,
+                "offset": offset,
+                "sort_by": sort_by,
+                "ascending": ascending,
+            },
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.DEBUG,
-                    message="Skipping user memories retrieval for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping user memories retrieval for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return empty list for anonymous users
             return []
 
@@ -619,41 +529,33 @@ class Memobase:
             ]
 
             # Log successful memory retrieval
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
-                    level=EventLevel.INFO,
-                    message="User memories retrieval completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection,
-                        "results_count": len(results),
-                        "limit": limit
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
+                level=observability.EventLevel.INFO,
+                description="User memories retrieval completed successfully",
+                data={
+                    "user_id": user_id,
+                    "collection": collection,
+                    "results_count": len(results),
+                    "limit": limit,
+                },
+            )
 
             return results
 
         except Exception as e:
             # Log memory retrieval error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User memories retrieval operation failed",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User memories retrieval operation failed",
+                data={
+                    "user_id": user_id,
+                    "collection": collection,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def add_user_context_memory(
@@ -684,35 +586,27 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log context memory addition start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
-                level=EventLevel.INFO,
-                message="Starting user context memory addition",
-                data={
-                    "user_id": user_id,
-                    "knowledge_keys": list(knowledge.keys()) if knowledge else [],
-                    "source": source,
-                    "importance": importance
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_CONTEXT_UPDATED,
+            level=observability.EventLevel.INFO,
+            description="Starting user context memory addition",
+            data={
+                "user_id": user_id,
+                "knowledge_keys": list(knowledge.keys()) if knowledge else [],
+                "source": source,
+                "importance": importance,
+            },
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
-                    level=EventLevel.DEBUG,
-                    message="Skipping context memory addition for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_CONTEXT_UPDATED,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping context memory addition for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return empty list for anonymous users
             return []
 
@@ -760,41 +654,33 @@ class Memobase:
                 memory_ids.append(memory_id)
 
             # Log successful context memory addition
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
-                    level=EventLevel.INFO,
-                    message="User context memory addition completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection_name,
-                        "memory_ids": memory_ids,
-                        "knowledge_count": len(knowledge)
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_CONTEXT_UPDATED,
+                level=observability.EventLevel.INFO,
+                description="User context memory addition completed successfully",
+                data={
+                    "user_id": user_id,
+                    "collection": collection_name,
+                    "memory_ids": memory_ids,
+                    "knowledge_count": len(knowledge),
+                },
+            )
 
             return memory_ids
 
         except Exception as e:
             # Log context memory addition error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User context memory addition operation failed",
-                    data={
-                        "user_id": user_id,
-                        "source": source,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User context memory addition operation failed",
+                data={
+                    "user_id": user_id,
+                    "source": source,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def get_user_context_memory(
@@ -822,34 +708,22 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log context memory retrieval start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
-                level=EventLevel.INFO,
-                message="Starting user context memory retrieval",
-                data={
-                    "user_id": user_id,
-                    "keys": keys,
-                    "limit": limit
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
+            level=observability.EventLevel.INFO,
+            description="Starting user context memory retrieval",
+            data={"user_id": user_id, "keys": keys, "limit": limit},
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
-                    level=EventLevel.DEBUG,
-                    message="Skipping context memory retrieval for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping context memory retrieval for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return empty dictionary for anonymous users
             return {}
 
@@ -861,19 +735,12 @@ class Memobase:
                 self.long_term_memory._ensure_collection_exists(None, collection_name)
             except Exception:
                 # Collection doesn't exist, return empty dict
-                try:
-                    observability = ObservabilityManager.get_instance()
-                    observability.log_event(
-                        event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
-                        level=EventLevel.DEBUG,
-                        message="Context memory collection does not exist",
-                        data={
-                            "user_id": user_id,
-                            "collection": collection_name
-                        }
-                    )
-                except Exception:
-                    pass
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
+                    level=observability.EventLevel.DEBUG,
+                    description="Context memory collection does not exist",
+                    data={"user_id": user_id, "collection": collection_name},
+                )
                 return {}
 
             # Prepare filter
@@ -933,41 +800,33 @@ class Memobase:
                     knowledge[key.strip()] = value
 
             # Log successful context memory retrieval
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
-                    level=EventLevel.INFO,
-                    message="User context memory retrieval completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection_name,
-                        "knowledge_keys": list(knowledge.keys()),
-                        "results_count": len(results)
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_CONTEXT_RETRIEVED,
+                level=observability.EventLevel.INFO,
+                description="User context memory retrieval completed successfully",
+                data={
+                    "user_id": user_id,
+                    "collection": collection_name,
+                    "knowledge_keys": list(knowledge.keys()),
+                    "results_count": len(results),
+                },
+            )
 
             return knowledge
 
         except Exception as e:
             # Log context memory retrieval error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User context memory retrieval operation failed",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection_name,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User context memory retrieval operation failed",
+                data={
+                    "user_id": user_id,
+                    "collection": collection_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def import_user_context_memory(
@@ -1000,36 +859,28 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log context memory import start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.CONTENT_PROCESSED,
-                level=EventLevel.INFO,
-                message="Starting user context memory import",
-                data={
-                    "user_id": user_id,
-                    "data_source_type": type(data_source).__name__,
-                    "format": format,
-                    "source": source,
-                    "importance": importance
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+            level=observability.EventLevel.INFO,
+            description="Starting user context memory import",
+            data={
+                "user_id": user_id,
+                "data_source_type": type(data_source).__name__,
+                "format": format,
+                "source": source,
+                "importance": importance,
+            },
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.CONTENT_PROCESSED,
-                    level=EventLevel.DEBUG,
-                    message="Skipping context memory import for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping context memory import for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return empty list for anonymous users
             return []
 
@@ -1055,42 +906,34 @@ class Memobase:
             )
 
             # Log successful context memory import
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.CONTENT_PROCESSED,
-                    level=EventLevel.INFO,
-                    message="User context memory import completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "memory_ids": memory_ids,
-                        "knowledge_count": len(data) if isinstance(data, dict) else 0,
-                        "format": format
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                level=observability.EventLevel.INFO,
+                description="User context memory import completed successfully",
+                data={
+                    "user_id": user_id,
+                    "memory_ids": memory_ids,
+                    "knowledge_count": len(data) if isinstance(data, dict) else 0,
+                    "format": format,
+                },
+            )
 
             return memory_ids
 
         except Exception as e:
             # Log context memory import error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User context memory import operation failed",
-                    data={
-                        "user_id": user_id,
-                        "format": format,
-                        "source": source,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User context memory import operation failed",
+                data={
+                    "user_id": user_id,
+                    "format": format,
+                    "source": source,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def clear_user_context_memory(
@@ -1115,34 +958,22 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log context memory clear start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=SystemEventType.MEMORY_CONTEXT_CLEARED,
-                level=EventLevel.INFO,
-                message="Starting user context memory clear",
-                data={
-                    "user_id": user_id,
-                    "keys": keys,
-                    "clear_all": keys is None
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.MEMORY_CONTEXT_CLEARED,
+            level=observability.EventLevel.INFO,
+            description="Starting user context memory clear",
+            data={"user_id": user_id, "keys": keys, "clear_all": keys is None},
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=SystemEventType.MEMORY_CONTEXT_CLEARED,
-                    level=EventLevel.DEBUG,
-                    message="Skipping context memory clear for anonymous user",
-                    data={"user_id": user_id}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.MEMORY_CONTEXT_CLEARED,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping context memory clear for anonymous user",
+                data={"user_id": user_id},
+            )
             # Return success for anonymous users (no-op)
             return True
 
@@ -1183,58 +1014,43 @@ class Memobase:
                     )
                 except Exception:
                     # Log successful context memory clear
-                    try:
-                        observability = ObservabilityManager.get_instance()
-                        observability.log_event(
-                            event_type=SystemEventType.MEMORY_CONTEXT_CLEARED,
-                            level=EventLevel.ERROR,
-                            message="Failed to clear context memory collection",
-                            data={
-                                "user_id": user_id,
-                                "collection": collection_name
-                            }
-                        )
-                    except Exception:
-                        pass
+                    observability.emit_event(
+                        event_type=observability.SystemEventType.MEMORY_CONTEXT_CLEARED,
+                        level=observability.EventLevel.ERROR,
+                        description="Failed to clear context memory collection",
+                        data={"user_id": user_id, "collection": collection_name},
+                    )
                     return False
 
             # Log successful context memory clear
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=SystemEventType.MEMORY_CONTEXT_CLEARED,
-                    level=EventLevel.INFO,
-                    message="User context memory clear completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection_name,
-                        "keys": keys,
-                        "clear_all": keys is None
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.MEMORY_CONTEXT_CLEARED,
+                level=observability.EventLevel.INFO,
+                description="User context memory clear completed successfully",
+                data={
+                    "user_id": user_id,
+                    "collection": collection_name,
+                    "keys": keys,
+                    "clear_all": keys is None,
+                },
+            )
 
             return True
 
         except Exception as e:
             # Log context memory clear error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User context memory clear operation failed",
-                    data={
-                        "user_id": user_id,
-                        "collection": collection_name,
-                        "keys": keys,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User context memory clear operation failed",
+                data={
+                    "user_id": user_id,
+                    "collection": collection_name,
+                    "keys": keys,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise
 
     async def update_user_context_memory(
@@ -1265,35 +1081,22 @@ class Memobase:
         user_id = user_id if user_id is not None else self.default_user_id
 
         # Log context memory update start
-        try:
-            observability = ObservabilityManager.get_instance()
-            observability.log_event(
-                event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
-                level=EventLevel.INFO,
-                message="Starting user context memory update",
-                data={
-                    "user_id": user_id,
-                    "key": key,
-                    "source": source,
-                    "importance": importance
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_CONTEXT_UPDATED,
+            level=observability.EventLevel.INFO,
+            description="Starting user context memory update",
+            data={"user_id": user_id, "key": key, "source": source, "importance": importance},
+        )
 
         # Skip memory operations for anonymous users (user_id=0)
         if user_id == 0:
             # Log anonymous user skip
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
-                    level=EventLevel.DEBUG,
-                    message="Skipping context memory update for anonymous user",
-                    data={"user_id": user_id, "key": key}
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_CONTEXT_UPDATED,
+                level=observability.EventLevel.DEBUG,
+                description="Skipping context memory update for anonymous user",
+                data={"user_id": user_id, "key": key},
+            )
             # Return 0 for anonymous users
             return 0
 
@@ -1315,40 +1118,27 @@ class Memobase:
             memory_id = memory_ids[0] if memory_ids else 0
 
             # Log successful context memory update
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.MEMORY_CONTEXT_UPDATED,
-                    level=EventLevel.INFO,
-                    message="User context memory update completed successfully",
-                    data={
-                        "user_id": user_id,
-                        "key": key,
-                        "memory_id": memory_id,
-                        "source": source
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_CONTEXT_UPDATED,
+                level=observability.EventLevel.INFO,
+                description="User context memory update completed successfully",
+                data={"user_id": user_id, "key": key, "memory_id": memory_id, "source": source},
+            )
 
             return memory_id
 
         except Exception as e:
             # Log context memory update error
-            try:
-                observability = ObservabilityManager.get_instance()
-                observability.log_event(
-                    event_type=ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                    level=EventLevel.ERROR,
-                    message="User context memory update operation failed",
-                    data={
-                        "user_id": user_id,
-                        "key": key,
-                        "source": source,
-                        "error": str(e),
-                        "error_type": type(e).__name__
-                    }
-                )
-            except Exception:
-                pass
+            observability.emit_event(
+                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="User context memory update operation failed",
+                data={
+                    "user_id": user_id,
+                    "key": key,
+                    "source": source,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             raise

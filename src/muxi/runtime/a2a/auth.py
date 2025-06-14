@@ -12,7 +12,6 @@ Supports multiple authentication types as defined in the A2A protocol:
 Now integrated with formation-level encrypted secrets management.
 """
 
-
 import os
 import time
 import hmac
@@ -28,6 +27,7 @@ import base64
 try:
     import jwt
     from cryptography.hazmat.primitives import serialization
+
     JWT_AVAILABLE = True
 except ImportError:
     JWT_AVAILABLE = False
@@ -37,8 +37,6 @@ if TYPE_CHECKING:
     from runtime.src.muxi.runtime.secrets_manager import SecretsManager
 
 from .. import observability
-
-
 
 
 class AuthType(str, Enum):
@@ -66,11 +64,11 @@ class AuthCredentials:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_AUTH_VALIDATION,
             level=observability.EventLevel.DEBUG,
-            message="Validating A2A authentication credentials",
+            description="Validating A2A authentication credentials",
             data={
                 "auth_type": self.auth_type.value,
-                "credential_keys": list(self.credentials.keys())
-            }
+                "credential_keys": list(self.credentials.keys()),
+            },
         )
 
         if self.auth_type == AuthType.API_KEY:
@@ -79,49 +77,38 @@ class AuthCredentials:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="API key authentication validation failed",
-                    data={
-                        "auth_type": self.auth_type.value,
-                        "missing_credential": "api_key"
-                    }
+                    description="API key authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credential": "api_key"},
                 )
-                raise ValueError(
-                    "API key authentication requires 'api_key' credential"
-                )
+                raise ValueError("API key authentication requires 'api_key' credential")
         elif self.auth_type == AuthType.BEARER:
             if "token" not in self.credentials:
                 # Log validation error
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="Bearer authentication validation failed",
-                    data={
-                        "auth_type": self.auth_type.value,
-                        "missing_credential": "token"
-                    }
+                    description="Bearer authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credential": "token"},
                 )
-                raise ValueError(
-                    "Bearer authentication requires 'token' credential"
-                )
+                raise ValueError("Bearer authentication requires 'token' credential")
         elif self.auth_type == AuthType.BASIC:
-            if ("username" not in self.credentials or
-                    "password" not in self.credentials):
+            if "username" not in self.credentials or "password" not in self.credentials:
                 # Log validation error
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="Basic authentication validation failed",
+                    description="Basic authentication validation failed",
                     data={
                         "auth_type": self.auth_type.value,
                         "missing_credentials": [
-                            cred for cred in ["username", "password"]
+                            cred
+                            for cred in ["username", "password"]
                             if cred not in self.credentials
-                        ]
-                    }
+                        ],
+                    },
                 )
                 raise ValueError(
-                    "Basic authentication requires 'username' and 'password' "
-                    "credentials"
+                    "Basic authentication requires 'username' and 'password' " "credentials"
                 )
         elif self.auth_type == AuthType.OAUTH2:
             required = ["client_id", "client_secret"]
@@ -131,11 +118,8 @@ class AuthCredentials:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="OAuth2 authentication validation failed",
-                    data={
-                        "auth_type": self.auth_type.value,
-                        "missing_credentials": missing
-                    }
+                    description="OAuth2 authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credentials": missing},
                 )
                 raise ValueError(f"OAuth2 authentication requires: {missing}")
         elif self.auth_type == AuthType.HMAC:
@@ -144,54 +128,40 @@ class AuthCredentials:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="HMAC authentication validation failed",
-                    data={
-                        "auth_type": self.auth_type.value,
-                        "missing_credential": "secret"
-                    }
+                    description="HMAC authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credential": "secret"},
                 )
-                raise ValueError(
-                    "HMAC authentication requires 'secret' credential"
-                )
+                raise ValueError("HMAC authentication requires 'secret' credential")
         elif self.auth_type == AuthType.JWT:
             if "private_key" not in self.credentials:
                 # Log validation error
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="JWT authentication validation failed",
-                    data={
-                        "auth_type": self.auth_type.value,
-                        "missing_credential": "private_key"
-                    }
+                    description="JWT authentication validation failed",
+                    data={"auth_type": self.auth_type.value, "missing_credential": "private_key"},
                 )
-                raise ValueError(
-                    "JWT authentication requires 'private_key' credential"
-                )
+                raise ValueError("JWT authentication requires 'private_key' credential")
             if not JWT_AVAILABLE:
                 # Log validation error
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="JWT authentication dependencies not available",
+                    description="JWT authentication dependencies not available",
                     data={
                         "auth_type": self.auth_type.value,
-                    }
+                    },
                 )
                 raise ValueError(
-                    "JWT authentication requires 'PyJWT' and 'cryptography' "
-                    "packages"
+                    "JWT authentication requires 'PyJWT' and 'cryptography' " "packages"
                 )
 
         # Log successful validation
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_AUTH_VALIDATION,
             level=observability.EventLevel.INFO,
-            message="A2A authentication credentials validated successfully",
-            data={
-                "auth_type": self.auth_type.value,
-                "credential_count": len(self.credentials)
-            }
+            description="A2A authentication credentials validated successfully",
+            data={"auth_type": self.auth_type.value, "credential_count": len(self.credentials)},
         )
 
 
@@ -224,11 +194,11 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_AUTH_INITIALIZED,
             level=observability.EventLevel.INFO,
-            message="A2A authentication manager initialized",
+            description="A2A authentication manager initialized",
             data={
                 "secrets_manager_type": type(secrets_manager).__name__,
-                "credentials_loaded": self._credentials_loaded
-            }
+                "credentials_loaded": self._credentials_loaded,
+            },
         )
 
     async def ensure_credentials_loaded(self):
@@ -237,11 +207,11 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.DEBUG,
-            message="Checking if A2A credentials need loading",
+            description="Checking if A2A credentials need loading",
             data={
                 "credentials_loaded": self._credentials_loaded,
-                "current_credentials_count": len(self._credentials)
-            }
+                "current_credentials_count": len(self._credentials),
+            },
         )
 
         if not self._credentials_loaded:
@@ -252,11 +222,11 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
                 level=observability.EventLevel.INFO,
-                message="A2A credentials loaded successfully",
+                description="A2A credentials loaded successfully",
                 data={
                     "credentials_count": len(self._credentials),
-                    "service_ids": list(self._credentials.keys())
-                }
+                    "service_ids": list(self._credentials.keys()),
+                },
             )
 
     async def _load_default_credentials(self):
@@ -265,8 +235,8 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.INFO,
-            message="Starting A2A default credentials loading",
-            data={"source": "secrets_manager"}
+            description="Starting A2A default credentials loading",
+            data={"source": "secrets_manager"},
         )
 
         # Define credential mappings: service_id -> secret configurations
@@ -274,35 +244,28 @@ class A2AAuthManager:
             # API Key services
             "external-billing-service": {
                 "auth_type": AuthType.API_KEY,
-                "secret_name": "BILLING_API_KEY"
+                "secret_name": "BILLING_API_KEY",
             },
             "document-processor": {
                 "auth_type": AuthType.API_KEY,
-                "secret_name": "DOCUMENT_API_KEY"
+                "secret_name": "DOCUMENT_API_KEY",
             },
-
             # Bearer token services
-            "analytics-engine": {
-                "auth_type": AuthType.BEARER,
-                "secret_name": "ANALYTICS_TOKEN"
-            },
-
+            "analytics-engine": {"auth_type": AuthType.BEARER, "secret_name": "ANALYTICS_TOKEN"},
             # OAuth2 services
             "notification-hub": {
                 "auth_type": AuthType.OAUTH2,
                 "secret_names": {
                     "client_id": "NOTIFICATION_CLIENT_ID",
                     "client_secret": "NOTIFICATION_CLIENT_SECRET",
-                    "token_url": "NOTIFICATION_TOKEN_URL"
-                }
+                    "token_url": "NOTIFICATION_TOKEN_URL",
+                },
             },
-
             # HMAC services
             "secure-messaging": {
                 "auth_type": AuthType.HMAC,
-                "secret_name": "SECURE_MESSAGING_SECRET"
+                "secret_name": "SECURE_MESSAGING_SECRET",
             },
-
             # JWT services
             "auth-service": {
                 "auth_type": AuthType.JWT,
@@ -310,9 +273,9 @@ class A2AAuthManager:
                 "extra_config": {
                     "algorithm": "RS256",
                     "issuer": "muxi-a2a",
-                    "audience": "a2a-network"
-                }
-            }
+                    "audience": "a2a-network",
+                },
+            },
         }
 
         # Load credentials for each service
@@ -341,28 +304,15 @@ class A2AAuthManager:
                     observability.emit_event(
                         event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
                         level=observability.EventLevel.DEBUG,
-                        message="A2A service credentials loaded",
+                        description="A2A service credentials loaded",
                         data={
                             "service_id": service_id,
                             "auth_type": auth_type.value,
-                            "credential_keys": list(credentials.keys())
-                        }
+                            "credential_keys": list(credentials.keys()),
+                        },
                     )
                 else:
                     failed_count += 1
-
-                    # Log credential loading error
-                    observability.emit_event(
-                        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
-                        level=observability.EventLevel.ERROR,
-                        message="Failed to load A2A service credentials",
-                        data={
-                            "service_id": service_id,
-                            "auth_type": config.get("auth_type", "unknown"),
-                            "error": str(e),
-                            "error_type": type(e).__name__
-                        }
-                    )
 
             except Exception as e:
                 failed_count += 1
@@ -371,26 +321,26 @@ class A2AAuthManager:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="Failed to load A2A service credentials",
+                    description="Failed to load A2A service credentials",
                     data={
                         "service_id": service_id,
                         "auth_type": config.get("auth_type", "unknown"),
                         "error": str(e),
-                        "error_type": type(e).__name__
-                    }
+                        "error_type": type(e).__name__,
+                    },
                 )
 
         # Log overall credential loading results
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.INFO,
-            message="A2A default credentials loading completed",
+            description="A2A default credentials loading completed",
             data={
                 "total_services": len(credential_configs),
                 "loaded_count": loaded_count,
                 "failed_count": failed_count,
-                "loaded_services": list(self._credentials.keys())
-            }
+                "loaded_services": list(self._credentials.keys()),
+            },
         )
 
     async def _load_single_credential(
@@ -403,12 +353,12 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.DEBUG,
-            message="Loading single A2A credential",
+            description="Loading single A2A credential",
             data={
                 "service_id": service_id,
                 "secret_name": secret_name,
-                "auth_type": config["auth_type"].value
-            }
+                "auth_type": config["auth_type"].value,
+            },
         )
 
         try:
@@ -426,24 +376,24 @@ class A2AAuthManager:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
                     level=observability.EventLevel.DEBUG,
-                    message="Single A2A credential loaded successfully",
+                    description="Single A2A credential loaded successfully",
                     data={
                         "service_id": service_id,
                         "secret_name": secret_name,
-                        "auth_type": auth_type.value
-                    }
+                        "auth_type": auth_type.value,
+                    },
                 )
             else:
                 # Log missing credential
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.WARNING,
-                    message="A2A credential not found in secrets",
+                    description="A2A credential not found in secrets",
                     data={
                         "service_id": service_id,
                         "secret_name": secret_name,
-                        "auth_type": config["auth_type"].value
-                    }
+                        "auth_type": config["auth_type"].value,
+                    },
                 )
 
         except Exception as e:
@@ -451,14 +401,14 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
-                message="Failed to load single A2A credential",
+                description="Failed to load single A2A credential",
                 data={
                     "service_id": service_id,
                     "secret_name": secret_name,
                     "auth_type": config["auth_type"].value,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
 
         return None
@@ -473,12 +423,12 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.DEBUG,
-            message="Loading OAuth2 A2A credentials",
+            description="Loading OAuth2 A2A credentials",
             data={
                 "service_id": service_id,
                 "secret_names": list(secret_names.keys()),
-                "auth_type": "oauth2"
-            }
+                "auth_type": "oauth2",
+            },
         )
 
         credentials = {}
@@ -493,6 +443,7 @@ class A2AAuthManager:
                     missing_secrets.append(secret_name)
             except Exception as e:
                 #  A2A auth warning - add observability event
+                _ = e  # remove this after implementing observability
                 missing_secrets.append(secret_name)
 
         if missing_secrets:
@@ -500,29 +451,26 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.WARNING,
-                message="Missing OAuth2 A2A credentials",
+                description="Missing OAuth2 A2A credentials",
                 data={
                     "service_id": service_id,
                     "missing_secrets": missing_secrets,
-                    "loaded_credentials": list(credentials.keys())
-                }
+                    "loaded_credentials": list(credentials.keys()),
+                },
             )
             return None
 
         # Log successful OAuth2 credential load
-        try:
-            observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
-                level=observability.EventLevel.DEBUG,
-                message="OAuth2 A2A credentials loaded successfully",
-                data={
-                    "service_id": service_id,
-                    "credential_count": len(credentials),
-                    "credential_keys": list(credentials.keys())
-                }
-            )
-        except Exception:
-            pass
+        observability.emit_event(
+            event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
+            level=observability.EventLevel.DEBUG,
+            description="OAuth2 A2A credentials loaded successfully",
+            data={
+                "service_id": service_id,
+                "credential_count": len(credentials),
+                "credential_keys": list(credentials.keys()),
+            },
+        )
 
         return credentials
 
@@ -537,13 +485,13 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
             level=observability.EventLevel.DEBUG,
-            message="Loading JWT A2A credentials",
+            description="Loading JWT A2A credentials",
             data={
                 "service_id": service_id,
                 "secret_name": secret_name,
                 "auth_type": "jwt",
-                "extra_config_keys": list(extra_config.keys())
-            }
+                "extra_config_keys": list(extra_config.keys()),
+            },
         )
 
         try:
@@ -556,12 +504,12 @@ class A2AAuthManager:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.A2A_CREDENTIAL_LOADED,
                     level=observability.EventLevel.DEBUG,
-                    message="JWT A2A credentials loaded successfully",
+                    description="JWT A2A credentials loaded successfully",
                     data={
                         "service_id": service_id,
                         "secret_name": secret_name,
-                        "credential_keys": list(credentials.keys())
-                    }
+                        "credential_keys": list(credentials.keys()),
+                    },
                 )
 
                 return credentials
@@ -570,11 +518,8 @@ class A2AAuthManager:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.WARNING,
-                    message="JWT A2A credential not found in secrets",
-                    data={
-                        "service_id": service_id,
-                        "secret_name": secret_name
-                    }
+                    description="JWT A2A credential not found in secrets",
+                    data={"service_id": service_id, "secret_name": secret_name},
                 )
 
         except Exception as e:
@@ -582,13 +527,13 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
-                message="Failed to load JWT A2A credential",
+                description="Failed to load JWT A2A credential",
                 data={
                     "service_id": service_id,
                     "secret_name": secret_name,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
 
         return None
@@ -660,10 +605,9 @@ class A2AAuthManager:
                         username = await self.secrets_manager.interpolate_secrets(username)
                         password = await self.secrets_manager.interpolate_secrets(password)
                         if username and password:
-                            self.add_credentials(service_id, auth_type, {
-                                "username": username,
-                                "password": password
-                            })
+                            self.add_credentials(
+                                service_id, auth_type, {"username": username, "password": password}
+                            )
 
                 # Add more auth types as needed...
 
@@ -671,6 +615,7 @@ class A2AAuthManager:
 
             except Exception as e:
                 #  A2A auth warning - add observability event
+                _ = e  # remove this after implementing observability
 
     def add_credentials(self, agent_id: str, auth_type: AuthType, credentials: Dict[str, Any]):
         """
@@ -686,6 +631,7 @@ class A2AAuthManager:
             #  A2A auth info - add observability event
         except ValueError as e:
             #  A2A auth error - add observability event
+            _ = e  # remove this after implementing observability
             raise
 
     def get_credentials(self, agent_id: str) -> Optional[AuthCredentials]:
@@ -737,8 +683,8 @@ class A2AAuthManager:
         # Verify credential type matches requirement
         if creds.auth_type != auth_type:
             #  A2A auth error - add observability event
-                f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
-            )
+            #  f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
+            # )
             if required:
                 return False, headers
             else:
@@ -787,9 +733,9 @@ class A2AAuthManager:
                 # HMAC signature authentication - need URL, method, and payload
                 # This will be handled by the new method with additional parameters
                 #  A2A auth error - add observability event
-                    "HMAC authentication requires URL, method, and payload"
-                    " - use apply_authentication_with_context instead"
-                )
+                #     "HMAC authentication requires URL, method, and payload"
+                #     " - use apply_authentication_with_context instead"
+                # )
                 return False, headers
 
             elif auth_type == AuthType.JWT:
@@ -806,6 +752,7 @@ class A2AAuthManager:
 
         except Exception as e:
             #  A2A auth error - add observability event
+            _ = e  # remove this after implementing observability
             return False, headers
 
     async def apply_authentication_with_context(
@@ -851,8 +798,8 @@ class A2AAuthManager:
         # Verify credential type matches requirement
         if creds.auth_type != auth_type:
             #  A2A auth error - add observability event
-                f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
-            )
+            #  f"Credential type mismatch for {agent_id}: have {creds.auth_type}, need {auth_type}"
+            # )
             if required:
                 return False, headers
             else:
@@ -887,6 +834,7 @@ class A2AAuthManager:
 
         except Exception as e:
             #  A2A auth error - add observability event
+            _ = e  # remove this after implementing observability
             return False, headers
 
     def _apply_hmac_auth(
@@ -928,6 +876,7 @@ class A2AAuthManager:
 
         except Exception as e:
             #  A2A auth error - add observability event
+            _ = e  # remove this after implementing observability
             return False
 
     def _create_jwt_token(self, credentials: Dict[str, Any], agent_id: str) -> Optional[str]:
@@ -977,7 +926,8 @@ class A2AAuthManager:
 
         except Exception as e:
             #  A2A auth error - add observability event
-            return None
+            _ = e  # remove this after implementing observability
+            return None  # remove this after implementing observability
 
     async def _get_oauth2_token(
         self, service_id: str, credentials: AuthCredentials
@@ -987,11 +937,8 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
             level=observability.EventLevel.DEBUG,
-            message="Requesting OAuth2 token for A2A authentication",
-            data={
-                "service_id": service_id,
-                "auth_type": "oauth2"
-            }
+            description="Requesting OAuth2 token for A2A authentication",
+            data={"service_id": service_id, "auth_type": "oauth2"},
         )
 
         # Check if we have a cached token that's still valid
@@ -1001,12 +948,12 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
                 level=observability.EventLevel.DEBUG,
-                message="Using cached OAuth2 token for A2A authentication",
+                description="Using cached OAuth2 token for A2A authentication",
                 data={
                     "service_id": service_id,
                     "expires_at": cached_token["expires_at"],
-                    "time_remaining": cached_token["expires_at"] - time.time()
-                }
+                    "time_remaining": cached_token["expires_at"] - time.time(),
+                },
             )
             return cached_token["access_token"]
 
@@ -1023,18 +970,19 @@ class A2AAuthManager:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="Missing OAuth2 configuration for A2A authentication",
+                    description="Missing OAuth2 configuration for A2A authentication",
                     data={
                         "service_id": service_id,
                         "has_token_url": bool(token_url),
                         "has_client_id": bool(client_id),
-                        "has_client_secret": bool(client_secret)
-                    }
+                        "has_client_secret": bool(client_secret),
+                    },
                 )
                 return None
 
             # Make token request
             import aiohttp
+
             async with aiohttp.ClientSession() as session:
                 data = {
                     "grant_type": "client_credentials",
@@ -1061,15 +1009,14 @@ class A2AAuthManager:
                             observability.emit_event(
                                 event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
                                 level=observability.EventLevel.INFO,
-                                message=(
-                                    "OAuth2 token acquired successfully "
-                                    "for A2A authentication"
+                                description=(
+                                    "OAuth2 token acquired successfully " "for A2A authentication"
                                 ),
                                 data={
                                     "service_id": service_id,
                                     "expires_in": expires_in,
-                                    "token_url": token_url
-                                }
+                                    "token_url": token_url,
+                                },
                             )
 
                             return access_token
@@ -1078,59 +1025,48 @@ class A2AAuthManager:
                             observability.emit_event(
                                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                                 level=observability.EventLevel.ERROR,
-                                message="OAuth2 response missing access token",
+                                description="OAuth2 response missing access token",
                                 data={
                                     "service_id": service_id,
                                     "token_url": token_url,
-                                    "response_keys": list(token_data.keys())
-                                }
+                                    "response_keys": list(token_data.keys()),
+                                },
                             )
                     else:
                         # Log OAuth2 request failure
                         observability.emit_event(
                             event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                             level=observability.EventLevel.ERROR,
-                            message="OAuth2 token request failed",
+                            description="OAuth2 token request failed",
                             data={
                                 "service_id": service_id,
                                 "token_url": token_url,
                                 "status_code": response.status,
-                                "response_text": await response.text()
-                            }
+                                "response_text": await response.text(),
+                            },
                         )
 
                 return None
-
 
         except Exception as e:
             # Log OAuth2 token request error
             observability.emit_event(
                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
-                message="Exception during OAuth2 token request",
-                data={
-                    "service_id": service_id,
-                    "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                description="Exception during OAuth2 token request",
+                data={"service_id": service_id, "error": str(e), "error_type": type(e).__name__},
             )
 
         return None
 
-    def _generate_hmac_signature(
-        self, secret: str, method: str, url: str, body: str
-    ) -> str:
+    def _generate_hmac_signature(self, secret: str, method: str, url: str, body: str) -> str:
         """Generate HMAC signature for request."""
         # Log HMAC signature generation
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
             level=observability.EventLevel.DEBUG,
-            message="Generating HMAC signature for A2A authentication",
-            data={
-                "method": method,
-                "url": url,
-                "body_length": len(body)
-            }
+            description="Generating HMAC signature for A2A authentication",
+            data={"method": method, "url": url, "body_length": len(body)},
         )
 
         try:
@@ -1145,13 +1081,13 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
                 level=observability.EventLevel.DEBUG,
-                message="HMAC signature generated successfully",
+                description="HMAC signature generated successfully",
                 data={
                     "method": method,
                     "url": url,
                     "timestamp": timestamp,
-                    "signature_length": len(signature)
-                }
+                    "signature_length": len(signature),
+                },
             )
 
             return signature
@@ -1161,13 +1097,13 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
-                message="Failed to generate HMAC signature",
+                description="Failed to generate HMAC signature",
                 data={
                     "method": method,
                     "url": url,
                     "error": str(e),
-                    "error_type": type(e).__name__
-                }
+                    "error_type": type(e).__name__,
+                },
             )
             return ""
 
@@ -1177,10 +1113,8 @@ class A2AAuthManager:
         observability.emit_event(
             event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
             level=observability.EventLevel.DEBUG,
-            message="Generating JWT token for A2A authentication",
-            data={
-                "credential_keys": list(credentials.credentials.keys())
-            }
+            description="Generating JWT token for A2A authentication",
+            data={"credential_keys": list(credentials.credentials.keys())},
         )
 
         try:
@@ -1199,13 +1133,13 @@ class A2AAuthManager:
                 observability.emit_event(
                     event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
-                    message="Missing private key for JWT token generation",
+                    description="Missing private key for JWT token generation",
                     data={
                         "algorithm": algorithm,
                         "has_issuer": bool(issuer),
                         "has_subject": bool(subject),
-                        "has_audience": bool(audience)
-                    }
+                        "has_audience": bool(audience),
+                    },
                 )
                 return None
 
@@ -1230,15 +1164,15 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.A2A_AUTH_APPLIED,
                 level=observability.EventLevel.INFO,
-                message="JWT token generated successfully",
+                description="JWT token generated successfully",
                 data={
                     "algorithm": algorithm,
                     "expires_in": expires_in,
                     "has_issuer": bool(issuer),
                     "has_subject": bool(subject),
                     "has_audience": bool(audience),
-                    "token_length": len(token)
-                }
+                    "token_length": len(token),
+                },
             )
 
             return token
@@ -1248,15 +1182,14 @@ class A2AAuthManager:
             observability.emit_event(
                 event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
-                message="Failed to generate JWT token",
+                description="Failed to generate JWT token",
                 data={
                     "error": str(e),
                     "error_type": type(e).__name__,
                     "algorithm": (
-                        creds.get("algorithm", "RS256")
-                        if 'creds' in locals() else "unknown"
-                    )
-                }
+                        creds.get("algorithm", "RS256") if "creds" in locals() else "unknown"
+                    ),
+                },
             )
 
         return None

@@ -42,6 +42,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 # Note: No longer importing global config - values passed as parameters
 from ..utils.id_generator import get_default_nanoid
 from ..llm import LLM
+from .. import observability
 
 # Create SQLAlchemy Base
 Base = declarative_base()
@@ -145,6 +146,7 @@ class LongTermMemory:
             #  Database initialization - add observability event
         except Exception as e:
             #  Database creation error - add observability event
+            _ = e  # remove this after implementing observability
             raise
 
     def _create_default_collection(self) -> None:
@@ -189,29 +191,17 @@ class LongTermMemory:
             The ID of the newly created memory entry.
         """
         # Emit memory storage started event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_LONG_TERM_STORED,
-                    level=EventLevel.INFO,
-                    data={
-                        "content_length": len(content),
-                        "has_metadata": metadata is not None,
-                        "has_embedding": embedding is not None,
-                        "collection": self.default_collection,
-                    },
-                    description="Long-term memory storage started",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_LONG_TERM_STORED,
+            level=observability.EventLevel.INFO,
+            data={
+                "content_length": len(content),
+                "has_metadata": metadata is not None,
+                "has_embedding": embedding is not None,
+                "collection": self.default_collection,
+            },
+            description="Long-term memory storage started",
+        )
 
         if metadata is None:
             metadata = {}
@@ -224,21 +214,16 @@ class LongTermMemory:
         memory_id = self._add_internal(content, embedding, metadata, self.default_collection)
 
         # Emit memory storage completed event
-        try:
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.INFO,
-                    data={
-                        "memory_id": memory_id,
-                        "content_length": len(content),
-                        "collection": self.default_collection,
-                    },
-                    description="Long-term memory storage completed",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
-
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            data={
+                "memory_id": memory_id,
+                "content_length": len(content),
+                "collection": self.default_collection,
+            },
+            description="Long-term memory storage completed",
+        )
         return memory_id
 
     def _add_internal(
@@ -341,30 +326,18 @@ class LongTermMemory:
             A list of dictionaries containing the search results, ordered by relevance.
         """
         # Emit memory search started event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.INFO,
-                    data={
-                        "query_length": len(query),
-                        "limit": limit,
-                        "has_query_embedding": query_embedding is not None,
-                        "collection": collection or self.default_collection,
-                        "has_metadata_filter": filter_metadata is not None,
-                    },
-                    description="Long-term memory search started",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            data={
+                "query_length": len(query),
+                "limit": limit,
+                "has_query_embedding": query_embedding is not None,
+                "collection": collection or self.default_collection,
+                "has_metadata_filter": filter_metadata is not None,
+            },
+            description="Long-term memory search started",
+        )
 
         # Generate embedding if not provided
         if query_embedding is None:
@@ -390,29 +363,17 @@ class LongTermMemory:
             )
 
         # Emit memory search completed event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                await observability_manager.event_logger.emit_event(
-                    ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
-                    level=EventLevel.INFO,
-                    data={
-                        "query_length": len(query),
-                        "results_count": len(formatted_results),
-                        "collection": collection,
-                        "limit": limit,
-                    },
-                    description="Long-term memory search completed",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "query_length": len(query),
+                "results_count": len(formatted_results),
+                "collection": collection,
+                "limit": limit,
+            },
+            description="Long-term memory search completed",
+        )
 
         return formatted_results
 
@@ -537,56 +498,32 @@ class LongTermMemory:
             True if the update was successful, False otherwise.
         """
         # Emit memory update started event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                observability_manager.event_logger.emit_event_sync(
-                    ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.INFO,
-                    data={
-                        "memory_id": memory_id,
-                        "has_text_update": text is not None,
-                        "has_embedding_update": embedding is not None,
-                        "has_metadata_update": metadata is not None,
-                    },
-                    description="Long-term memory update started",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            data={
+                "memory_id": memory_id,
+                "has_text_update": text is not None,
+                "has_embedding_update": embedding is not None,
+                "has_metadata_update": metadata is not None,
+            },
+            description="Long-term memory update started",
+        )
 
         with self.Session() as session:
             memory = session.query(Memory).filter_by(id=memory_id).first()
 
             if not memory:
                 # Emit memory update failed event
-                try:
-                    from ..observability import (
-                        ConversationEventType,
-                        SystemEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        observability_manager.event_logger.emit_event_sync(
-                            ConversationEventType.MEMORY_LONG_TERM_UPDATE_FAILED,
-                            level=EventLevel.WARNING,
-                            data={
-                                "memory_id": memory_id,
-                                "error": "Memory not found",
-                            },
-                            description="Long-term memory update failed - memory not found",
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MEMORY_LONG_TERM_UPDATE_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "memory_id": memory_id,
+                        "error": "Memory not found",
+                    },
+                    description="Long-term memory update failed - memory not found",
+                )
                 return False
 
             if text is not None:
@@ -606,29 +543,17 @@ class LongTermMemory:
             session.commit()
 
             # Emit memory update completed event
-            try:
-                from ..observability import (
-                    ConversationEventType,
-                    SystemEventType,
-                    EventLevel,
-                    ObservabilityManager,
-                )
-
-                observability_manager = ObservabilityManager.get_instance()
-                if observability_manager:
-                    observability_manager.event_logger.emit_event_sync(
-                        ConversationEventType.MEMORY_LONG_TERM_UPDATED,
-                        level=EventLevel.INFO,
-                        data={
-                            "memory_id": memory_id,
-                            "updated_text": text is not None,
-                            "updated_embedding": embedding is not None,
-                            "updated_metadata": metadata is not None,
-                        },
-                        description="Long-term memory update completed",
-                    )
-            except Exception:
-                pass  # Don't let observability errors break the flow
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_LONG_TERM_UPDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "memory_id": memory_id,
+                    "updated_text": text is not None,
+                    "updated_embedding": embedding is not None,
+                    "updated_metadata": metadata is not None,
+                },
+                description="Long-term memory update completed",
+            )
 
             return True
 
@@ -645,75 +570,39 @@ class LongTermMemory:
             True if the deletion was successful, False otherwise.
         """
         # Emit memory deletion started event
-        try:
-            from ..observability import (
-                ConversationEventType,
-                SystemEventType,
-                EventLevel,
-                ObservabilityManager,
-            )
-
-            observability_manager = ObservabilityManager.get_instance()
-            if observability_manager:
-                observability_manager.event_logger.emit_event_sync(
-                    ConversationEventType.REQUEST_PROCESSING,
-                    level=EventLevel.INFO,
-                    data={"memory_id": memory_id},
-                    description="Long-term memory deletion started",
-                )
-        except Exception:
-            pass  # Don't let observability errors break the flow
+        observability.emit_event(
+            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            level=observability.EventLevel.INFO,
+            data={"memory_id": memory_id},
+            description="Long-term memory deletion started",
+        )
 
         with self.Session() as session:
             memory = session.query(Memory).filter_by(id=memory_id).first()
 
             if not memory:
                 # Emit memory deletion failed event
-                try:
-                    from ..observability import (
-                        ConversationEventType,
-                        SystemEventType,
-                        EventLevel,
-                        ObservabilityManager,
-                    )
-
-                    observability_manager = ObservabilityManager.get_instance()
-                    if observability_manager:
-                        observability_manager.event_logger.emit_event_sync(
-                            ConversationEventType.MEMORY_LONG_TERM_DELETION_FAILED,
-                            level=EventLevel.WARNING,
-                            data={
-                                "memory_id": memory_id,
-                                "error": "Memory not found",
-                            },
-                            description="Long-term memory deletion failed - memory not found",
-                        )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
+                observability.emit_event(
+                    event_type=observability.ConversationEventType.MEMORY_LONG_TERM_DELETION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "memory_id": memory_id,
+                        "error": "Memory not found",
+                    },
+                    description="Long-term memory deletion failed - memory not found",
+                )
                 return False
 
             session.delete(memory)
             session.commit()
 
             # Emit memory deletion completed event
-            try:
-                from ..observability import (
-                    ConversationEventType,
-                    SystemEventType,
-                    EventLevel,
-                    ObservabilityManager,
-                )
-
-                observability_manager = ObservabilityManager.get_instance()
-                if observability_manager:
-                    observability_manager.event_logger.emit_event_sync(
-                        SystemEventType.MEMORY_DELETION_COMPLETED,
-                        level=EventLevel.INFO,
-                        data={"memory_id": memory_id},
-                        description="Long-term memory deletion completed",
-                    )
-            except Exception:
-                pass  # Don't let observability errors break the flow
+            observability.emit_event(
+                event_type=observability.ConversationEventType.MEMORY_LONG_TERM_DELETED,
+                level=observability.EventLevel.INFO,
+                data={"memory_id": memory_id},
+                description="Long-term memory deletion completed",
+            )
 
             return True
 

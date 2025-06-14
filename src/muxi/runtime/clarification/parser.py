@@ -6,16 +6,11 @@ extracts structured parameter values.
 """
 
 import re
-import logging
+
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timedelta
 
-from .types import (
-    ClarificationQuestion,
-    ParameterExtractionError
-)
-
-logger = logging.getLogger(__name__)
+from .types import ClarificationQuestion, ParameterExtractionError
 
 
 class ClarificationResponseParser:
@@ -34,10 +29,7 @@ class ClarificationResponseParser:
         self._number_patterns = self._compile_number_patterns()
 
     async def parse_response(
-        self,
-        user_response: str,
-        question: ClarificationQuestion,
-        context: Dict[str, Any] = None
+        self, user_response: str, question: ClarificationQuestion, context: Dict[str, Any] = None
     ) -> Tuple[Any, float]:
         """
         Parse user response and extract the requested parameter value
@@ -80,9 +72,7 @@ class ClarificationResponseParser:
             raise ParameterExtractionError(f"Failed to parse response: {e}")
 
     async def extract_multiple_parameters(
-        self,
-        user_response: str,
-        questions: List[ClarificationQuestion]
+        self, user_response: str, questions: List[ClarificationQuestion]
     ) -> Dict[str, Tuple[Any, float]]:
         """
         Extract multiple parameters from a single response
@@ -98,9 +88,7 @@ class ClarificationResponseParser:
             extracted = {}
 
             for question in questions:
-                value, confidence = await self.parse_response(
-                    user_response, question
-                )
+                value, confidence = await self.parse_response(user_response, question)
                 if value is not None:
                     extracted[question.parameter_name] = (value, confidence)
 
@@ -113,9 +101,7 @@ class ClarificationResponseParser:
     # Private parsing methods
 
     async def _parse_string_response(
-        self,
-        response: str,
-        question: ClarificationQuestion
+        self, response: str, question: ClarificationQuestion
     ) -> Tuple[Optional[str], float]:
         """Parse string parameter from response"""
 
@@ -139,14 +125,12 @@ class ClarificationResponseParser:
             return cleaned, 0.8
 
     async def _parse_number_response(
-        self,
-        response: str,
-        question: ClarificationQuestion
+        self, response: str, question: ClarificationQuestion
     ) -> Tuple[Optional[int], float]:
         """Parse numeric parameter from response"""
 
         # Try to extract numbers from the response
-        numbers = re.findall(r'\d+', response)
+        numbers = re.findall(r"\d+", response)
 
         if not numbers:
             # Try to parse written numbers
@@ -176,9 +160,7 @@ class ClarificationResponseParser:
         return number, confidence
 
     async def _parse_boolean_response(
-        self,
-        response: str,
-        question: ClarificationQuestion
+        self, response: str, question: ClarificationQuestion
     ) -> Tuple[Optional[bool], float]:
         """Parse boolean parameter from response"""
 
@@ -200,9 +182,7 @@ class ClarificationResponseParser:
             return None, 0.0
 
     async def _parse_date_response(
-        self,
-        response: str,
-        question: ClarificationQuestion
+        self, response: str, question: ClarificationQuestion
     ) -> Tuple[Optional[str], float]:
         """Parse date parameter from response"""
 
@@ -226,9 +206,7 @@ class ClarificationResponseParser:
         return None, 0.0
 
     async def _parse_time_response(
-        self,
-        response: str,
-        question: ClarificationQuestion
+        self, response: str, question: ClarificationQuestion
     ) -> Tuple[Optional[str], float]:
         """Parse time parameter from response"""
 
@@ -251,9 +229,7 @@ class ClarificationResponseParser:
         return None, 0.0
 
     async def _parse_array_response(
-        self,
-        response: str,
-        question: ClarificationQuestion
+        self, response: str, question: ClarificationQuestion
     ) -> Tuple[Optional[List[str]], float]:
         """Parse array parameter from response"""
 
@@ -280,16 +256,16 @@ class ClarificationResponseParser:
     def _clean_response(self, response: str) -> str:
         """Clean and normalize user response"""
         # Remove extra whitespace
-        cleaned = re.sub(r'\s+', ' ', response.strip())
+        cleaned = re.sub(r"\s+", " ", response.strip())
 
         # Remove common filler words at the start
         filler_patterns = [
-            r'^(well|so|um|uh|hmm|let me see|i think|maybe|probably)\s*,?\s*',
-            r'^(yes|ok|sure)\s*,?\s*'
+            r"^(well|so|um|uh|hmm|let me see|i think|maybe|probably)\s*,?\s*",
+            r"^(yes|ok|sure)\s*,?\s*",
         ]
 
         for pattern in filler_patterns:
-            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE)
 
         return cleaned.strip()
 
@@ -321,7 +297,7 @@ class ClarificationResponseParser:
             "french": "French",
             "pizza": "Italian",
             "sushi": "Japanese",
-            "tacos": "Mexican"
+            "tacos": "Mexican",
         }
 
         response_lower = response.lower()
@@ -340,10 +316,27 @@ class ClarificationResponseParser:
     def _parse_written_numbers(self, response: str) -> List[int]:
         """Parse written numbers like 'two', 'three'"""
         number_words = {
-            'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-            'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14, 'fifteen': 15,
-            'sixteen': 16, 'seventeen': 17, 'eighteen': 18, 'nineteen': 19, 'twenty': 20
+            "zero": 0,
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+            "twenty": 20,
         }
 
         numbers = []
@@ -373,7 +366,7 @@ class ClarificationResponseParser:
             return [next_week.strftime("%Y-%m-%d")]
 
         # Try to parse "in X days"
-        days_match = re.search(r'in (\d+) days?', response_lower)
+        days_match = re.search(r"in (\d+) days?", response_lower)
         if days_match:
             days = int(days_match.group(1))
             future_date = today + timedelta(days=days)
@@ -394,7 +387,7 @@ class ClarificationResponseParser:
             "midnight": "00:00",
             "breakfast": "08:00",
             "lunch": "12:00",
-            "dinner": "19:00"
+            "dinner": "19:00",
         }
 
         for phrase, time in time_mappings.items():
@@ -406,26 +399,26 @@ class ClarificationResponseParser:
     def _compile_date_patterns(self) -> List[Tuple[re.Pattern, str]]:
         """Compile regex patterns for date parsing"""
         patterns = [
-            (re.compile(r'\d{4}-\d{2}-\d{2}'), "%Y-%m-%d"),
-            (re.compile(r'\d{1,2}/\d{1,2}/\d{4}'), "%m/%d/%Y"),
-            (re.compile(r'\d{1,2}-\d{1,2}-\d{4}'), "%m-%d-%Y"),
-            (re.compile(r'\d{1,2}/\d{1,2}'), "%m/%d"),
+            (re.compile(r"\d{4}-\d{2}-\d{2}"), "%Y-%m-%d"),
+            (re.compile(r"\d{1,2}/\d{1,2}/\d{4}"), "%m/%d/%Y"),
+            (re.compile(r"\d{1,2}-\d{1,2}-\d{4}"), "%m-%d-%Y"),
+            (re.compile(r"\d{1,2}/\d{1,2}"), "%m/%d"),
         ]
         return patterns
 
     def _compile_time_patterns(self) -> List[Tuple[re.Pattern, str]]:
         """Compile regex patterns for time parsing"""
         patterns = [
-            (re.compile(r'\d{1,2}:\d{2}\s*(?:AM|PM)', re.IGNORECASE), "%I:%M %p"),
-            (re.compile(r'\d{1,2}:\d{2}'), "%H:%M"),
-            (re.compile(r'\d{1,2}\s*(?:AM|PM)', re.IGNORECASE), "%I %p"),
+            (re.compile(r"\d{1,2}:\d{2}\s*(?:AM|PM)", re.IGNORECASE), "%I:%M %p"),
+            (re.compile(r"\d{1,2}:\d{2}"), "%H:%M"),
+            (re.compile(r"\d{1,2}\s*(?:AM|PM)", re.IGNORECASE), "%I %p"),
         ]
         return patterns
 
     def _compile_number_patterns(self) -> List[re.Pattern]:
         """Compile regex patterns for number extraction"""
         patterns = [
-            re.compile(r'\b\d+\b'),
-            re.compile(r'\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\b', re.IGNORECASE)
+            re.compile(r"\b\d+\b"),
+            re.compile(r"\b(?:one|two|three|four|five|six|seven|eight|nine|ten)\b", re.IGNORECASE),
         ]
         return patterns

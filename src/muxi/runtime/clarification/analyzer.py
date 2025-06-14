@@ -5,19 +5,14 @@ This module analyzes requests and detects missing information for both tools and
 as specified in the intelligent parameter collection implementation plan.
 """
 
-import json
-import logging
 from typing import Dict, List, Optional, Any
 
 from .types import (
     InformationAnalysis,
     ToolInformationAnalysis,
     ReasoningInformationAnalysis,
-    ContextAnalysis,
-    InformationAnalysisError
+    InformationAnalysisError,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class InformationAnalyzer:
@@ -38,7 +33,7 @@ class InformationAnalyzer:
         user_message: str,
         intent: str,
         available_tools: List[str],
-        user_context: Dict[str, Any]
+        user_context: Dict[str, Any],
     ) -> InformationAnalysis:
         """
         Analyze request for missing information needs
@@ -82,13 +77,10 @@ class InformationAnalyzer:
                 available_info.update(reasoning_analysis.available_info)
                 confidence_scores.update(reasoning_analysis.confidence_scores)
                 suggestions.extend(reasoning_analysis.suggestions)
-                reasoning_context_needed = (
-                    reasoning_analysis.reasoning_context_needed
-                )
+                reasoning_context_needed = reasoning_analysis.reasoning_context_needed
 
             can_proceed = len(missing_info) == 0 or all(
-                confidence_scores.get(info, 0.0) > 0.7
-                for info in missing_info
+                confidence_scores.get(info, 0.0) > 0.7 for info in missing_info
             )
 
             return InformationAnalysis(
@@ -97,7 +89,7 @@ class InformationAnalyzer:
                 confidence_scores=confidence_scores,
                 suggestions=suggestions,
                 can_proceed=can_proceed,
-                reasoning_context_needed=reasoning_context_needed
+                reasoning_context_needed=reasoning_context_needed,
             )
 
         except Exception as e:
@@ -105,10 +97,7 @@ class InformationAnalyzer:
             raise InformationAnalysisError(f"Failed to analyze request: {e}")
 
     async def analyze_tool_requirements(
-        self,
-        tool_name: str,
-        provided_params: Dict[str, Any],
-        user_context: Dict[str, Any]
+        self, tool_name: str, provided_params: Dict[str, Any], user_context: Dict[str, Any]
     ) -> ToolInformationAnalysis:
         """
         Analyze tool-specific parameter requirements
@@ -168,7 +157,7 @@ class InformationAnalyzer:
                 available_info=available_info,
                 confidence_scores=parameter_confidence,
                 suggestions=suggestions,
-                can_proceed=len(missing_required) == 0
+                can_proceed=len(missing_required) == 0,
             )
 
         except Exception as e:
@@ -176,10 +165,7 @@ class InformationAnalyzer:
             raise InformationAnalysisError(f"Failed to analyze tool requirements: {e}")
 
     async def analyze_reasoning_requirements(
-        self,
-        intent: str,
-        user_message: str,
-        user_context: Dict[str, Any]
+        self, intent: str, user_message: str, user_context: Dict[str, Any]
     ) -> ReasoningInformationAnalysis:
         """
         Analyze information needed for effective reasoning/advice
@@ -204,10 +190,14 @@ class InformationAnalyzer:
                 context_gaps, user_background_needed = self._analyze_financial_intent(user_context)
                 complexity_level = "complex"
             elif "technical" in intent.lower() or "explain" in intent.lower():
-                context_gaps, user_background_needed = self._analyze_explanation_intent(user_message, user_context)
+                context_gaps, user_background_needed = self._analyze_explanation_intent(
+                    user_message, user_context
+                )
                 complexity_level = "moderate"
             elif "recommendation" in intent.lower() or "advice" in intent.lower():
-                context_gaps, user_background_needed = self._analyze_advice_intent(user_message, user_context)
+                context_gaps, user_background_needed = self._analyze_advice_intent(
+                    user_message, user_context
+                )
                 complexity_level = "moderate"
             else:
                 # Generic analysis
@@ -228,7 +218,7 @@ class InformationAnalyzer:
                 confidence_scores=confidence_scores,
                 suggestions=suggestions,
                 can_proceed=len(context_gaps) == 0,
-                reasoning_context_needed=f"Need context for {intent} advice"
+                reasoning_context_needed=f"Need context for {intent} advice",
             )
 
         except Exception as e:
@@ -236,9 +226,7 @@ class InformationAnalyzer:
             raise InformationAnalysisError(f"Failed to analyze reasoning requirements: {e}")
 
     async def enrich_with_context(
-        self,
-        missing_info: List[str],
-        user_context: Dict[str, Any]
+        self, missing_info: List[str], user_context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Fill missing information from user context where possible
@@ -261,7 +249,9 @@ class InformationAnalyzer:
 
     # Private helper methods
 
-    async def _identify_potential_tool(self, user_message: str, available_tools: List[str]) -> Optional[str]:
+    async def _identify_potential_tool(
+        self, user_message: str, available_tools: List[str]
+    ) -> Optional[str]:
         """Identify if the message suggests using a specific tool"""
         message_lower = user_message.lower()
 
@@ -271,7 +261,7 @@ class InformationAnalyzer:
             "search": ["search", "find", "lookup"],
             "weather": ["weather", "forecast", "temperature"],
             "calendar": ["calendar", "meeting", "appointment"],
-            "email": ["email", "send", "message"]
+            "email": ["email", "send", "message"],
         }
 
         for tool in available_tools:
@@ -296,9 +286,9 @@ class InformationAnalyzer:
                     "date": {"type": "string", "description": "Date for reservation"},
                     "time": {"type": "string", "description": "Time for reservation"},
                     "party_size": {"type": "integer", "description": "Number of people"},
-                    "cuisine": {"type": "string", "description": "Type of cuisine"}
+                    "cuisine": {"type": "string", "description": "Type of cuisine"},
                 },
-                "required": ["location", "date", "time", "party_size"]
+                "required": ["location", "date", "time", "party_size"],
             },
             "book_flight": {
                 "properties": {
@@ -306,10 +296,10 @@ class InformationAnalyzer:
                     "destination": {"type": "string", "description": "Destination location"},
                     "departure_date": {"type": "string", "description": "Departure date"},
                     "return_date": {"type": "string", "description": "Return date"},
-                    "passengers": {"type": "integer", "description": "Number of passengers"}
+                    "passengers": {"type": "integer", "description": "Number of passengers"},
                 },
-                "required": ["departure", "destination", "departure_date", "passengers"]
-            }
+                "required": ["departure", "destination", "departure_date", "passengers"],
+            },
         }
 
         return schemas.get(tool_name, {"properties": {}, "required": []})
@@ -326,7 +316,7 @@ class InformationAnalyzer:
             "date": ["preferred_date", "date", "when"],
             "time": ["preferred_time", "time", "when"],
             "party_size": ["group_size", "people", "party_size"],
-            "cuisine": ["favorite_cuisine", "cuisine_preference", "food_preference"]
+            "cuisine": ["favorite_cuisine", "cuisine_preference", "food_preference"],
         }
 
         possible_keys = mappings.get(param_name, [param_name])
@@ -388,7 +378,9 @@ class InformationAnalyzer:
 
         return context_gaps, background_needed
 
-    def _analyze_generic_context_needs(self, user_message: str, user_context: Dict[str, Any]) -> List[str]:
+    def _analyze_generic_context_needs(
+        self, user_message: str, user_context: Dict[str, Any]
+    ) -> List[str]:
         """Analyze generic context needs"""
         # Basic analysis for generic requests
         context_gaps = []
@@ -398,7 +390,9 @@ class InformationAnalyzer:
 
         return context_gaps
 
-    def _extract_available_context(self, user_context: Dict[str, Any], context_gaps: List[str]) -> Dict[str, Any]:
+    def _extract_available_context(
+        self, user_context: Dict[str, Any], context_gaps: List[str]
+    ) -> Dict[str, Any]:
         """Extract available context information"""
         available = {}
         for gap in context_gaps:
@@ -426,7 +420,7 @@ class InformationAnalyzer:
         tool_name: str,
         provided_params: Dict[str, Any],
         available_tools: List[Dict[str, Any]],
-        user_context: Dict[str, Any]
+        user_context: Dict[str, Any],
     ) -> ToolInformationAnalysis:
         """
         Analyze a specific tool call for missing information.
@@ -459,7 +453,7 @@ class InformationAnalyzer:
                 tool_schema={},
                 missing_required_params=[],
                 missing_optional_params=[],
-                parameter_confidence={}
+                parameter_confidence={},
             )
 
         # Get tool requirements
@@ -506,5 +500,5 @@ class InformationAnalyzer:
             tool_schema=tool_schema,
             missing_required_params=missing_required,
             missing_optional_params=missing_optional,
-            parameter_confidence=parameter_confidence
+            parameter_confidence=parameter_confidence,
         )

@@ -5,18 +5,14 @@ This module provides tools for validating formation configurations,
 detecting common issues, and ensuring configurations are well-formed.
 """
 
-import logging
 from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 import yaml
 import json
 
-logger = logging.getLogger(__name__)
-
 
 class ValidationError(Exception):
     """Raised when formation validation fails."""
-
     pass
 
 
@@ -1299,11 +1295,7 @@ class FormationValidator:
                 self._validate_buffer_memory_config(buffer_config)
         else:
             # Ensure buffer memory is always available with default settings
-            memory_config["buffer"] = {
-                "size": 10,
-                "multiplier": 10,
-                "vector_search": True
-            }
+            memory_config["buffer"] = {"size": 10, "multiplier": 10, "vector_search": True}
 
         # Legacy short_term configuration is no longer supported
         if "short_term" in memory_config:
@@ -1333,7 +1325,7 @@ class FormationValidator:
             "max_memory_mb": "auto",
             "vector_dimension": 1536,
             "mode": "local",
-            "fifo_interval_min": 5
+            "fifo_interval_min": 5,
         }
 
     def _validate_working_memory_config(self, working_config: Dict[str, Any]) -> None:
@@ -1371,17 +1363,13 @@ class FormationValidator:
         if "vector_dimension" in working_config:
             dimension = working_config["vector_dimension"]
             if not isinstance(dimension, int) or dimension <= 0:
-                self.result.add_error(
-                    "Working memory vector_dimension must be a positive integer"
-                )
+                self.result.add_error("Working memory vector_dimension must be a positive integer")
 
         # Validate fifo_interval_min
         if "fifo_interval_min" in working_config:
             interval = working_config["fifo_interval_min"]
             if not isinstance(interval, int) or interval <= 0:
-                self.result.add_error(
-                    "Working memory fifo_interval_min must be a positive integer"
-                )
+                self.result.add_error("Working memory fifo_interval_min must be a positive integer")
 
         # Validate remote configuration if mode is remote
         if working_config.get("mode") == "remote" and "remote" in working_config:
@@ -1404,15 +1392,11 @@ class FormationValidator:
         # Validate size and multiplier
         size = buffer_config["size"]
         if not isinstance(size, int) or size <= 0:
-            self.result.add_error(
-                "Buffer memory size must be a positive integer"
-            )
+            self.result.add_error("Buffer memory size must be a positive integer")
 
         multiplier = buffer_config["multiplier"]
         if not isinstance(multiplier, int) or multiplier <= 0:
-            self.result.add_error(
-                "Buffer memory multiplier must be a positive integer"
-            )
+            self.result.add_error("Buffer memory multiplier must be a positive integer")
 
         # Validate vector search settings
         vector_search = buffer_config["vector_search"]
@@ -1564,9 +1548,7 @@ class FormationValidator:
         # Validate sentence_transformer
         sentence_transformer = models_config["sentence_transformer"]
         if not isinstance(sentence_transformer, str) or not sentence_transformer.strip():
-            self.result.add_error(
-                "Document models sentence_transformer must be a non-empty string"
-            )
+            self.result.add_error("Document models sentence_transformer must be a non-empty string")
 
     def _validate_logging_config(self, logging_config: Dict[str, Any]) -> None:
         """Validate logging configuration according to multi-stream schema."""
@@ -1631,9 +1613,16 @@ class FormationValidator:
         if "format" in stream:
             format_value = stream["format"]
             valid_formats = [
-                "jsonl", "text", "msgpack", "protobuf",
-                "datadog_json", "splunk_hec", "elastic_bulk",
-                "grafana_loki", "newrelic_json", "opentelemetry"
+                "jsonl",
+                "text",
+                "msgpack",
+                "protobuf",
+                "datadog_json",
+                "splunk_hec",
+                "elastic_bulk",
+                "grafana_loki",
+                "newrelic_json",
+                "opentelemetry",
             ]
             if format_value not in valid_formats:
                 self.result.add_error(
@@ -1686,9 +1675,7 @@ class FormationValidator:
 
         destination = stream["destination"]
         if not isinstance(destination, str) or not destination.strip():
-            self.result.add_error(
-                f"Logging stream {index} destination must be a non-empty string"
-            )
+            self.result.add_error(f"Logging stream {index} destination must be a non-empty string")
             return
 
         # Validate protocol (optional, auto-detected if not specified)
@@ -2147,9 +2134,7 @@ class FormationValidator:
         # Validate type-specific auth requirements
         if auth_type == "api_key":
             if "api_key" not in auth_config:
-                self.result.add_error(
-                    f"{service_identifier} api_key auth requires 'api_key' field"
-                )
+                self.result.add_error(f"{service_identifier} api_key auth requires 'api_key' field")
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"{service_identifier} auth header must be a string")
 
@@ -2167,9 +2152,7 @@ class FormationValidator:
 
         elif auth_type == "custom":
             if "headers" not in auth_config:
-                self.result.add_error(
-                    f"{service_identifier} custom auth requires 'headers' field"
-                )
+                self.result.add_error(f"{service_identifier} custom auth requires 'headers' field")
             elif not isinstance(auth_config["headers"], dict):
                 self.result.add_error(
                     f"{service_identifier} custom auth headers must be a dictionary"

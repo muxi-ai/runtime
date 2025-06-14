@@ -6,7 +6,7 @@ handles load balancing, and manages resource constraints in parallel execution.
 """
 
 import asyncio
-import logging
+
 import uuid
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
@@ -20,7 +20,7 @@ from .types import (
     BottleneckType
 )
 
-logger = logging.getLogger(__name__)
+
 
 
 @dataclass

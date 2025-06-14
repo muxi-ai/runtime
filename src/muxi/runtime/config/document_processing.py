@@ -1,9 +1,9 @@
 """Document processing configuration for MUXI runtime."""
 
-import logging
+
 from typing import Any, Dict, List, Tuple
 
-logger = logging.getLogger(__name__)
+
 
 
 class DocumentProcessingConfig:

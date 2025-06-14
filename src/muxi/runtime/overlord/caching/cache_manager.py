@@ -9,7 +9,7 @@ memory optimization.
 import asyncio
 import hashlib
 import json
-import logging
+
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,7 +19,7 @@ from .analytics import CacheHitAnalyzer
 from .memory_optimizer import MemoryOptimizer
 
 
-logger = logging.getLogger(__name__)
+
 
 
 class IntelligentCacheManager:

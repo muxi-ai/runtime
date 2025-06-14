@@ -13,15 +13,7 @@ from pathlib import Path
 from cryptography.fernet import Fernet
 
 # Import observability components with graceful fallback
-try:
-    from .observability import (
-        ObservabilityManager,
-        SystemEventType,
-        EventLevel
-    )
-    OBSERVABILITY_AVAILABLE = True
-except ImportError:
-    OBSERVABILITY_AVAILABLE = False
+from . import observability
 
 
 class SecretsManager:
@@ -54,67 +46,51 @@ class SecretsManager:
 
         # Regex pattern for secrets interpolation (whitespace tolerant)
         # Matches: ${{ secrets.SECRET_NAME }} with flexible whitespace
-        self._secrets_pattern = re.compile(
-            r'\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}',
-            re.IGNORECASE
-        )
+        self._secrets_pattern = re.compile(r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}", re.IGNORECASE)
 
     async def initialize_encryption(self) -> None:
         """Initialize encryption for formation (creates master key if needed)."""
         # Observability: Encryption initialization started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.ENCRYPTION_STARTED,
-                    level=EventLevel.INFO,
-                    message="Starting secrets manager encryption initialization",
-                    data={
-                        "formation_dir": str(self.formation_dir),
-                        "master_key_exists": self.master_key_path.exists(),
-                        "secrets_file_exists": self.secrets_file_path.exists()
-                    }
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.ENCRYPTION_STARTED,
+            level=observability.EventLevel.INFO,
+            description="Starting secrets manager encryption initialization",
+            data={
+                "formation_dir": str(self.formation_dir),
+                "master_key_exists": self.master_key_path.exists(),
+                "secrets_file_exists": self.secrets_file_path.exists(),
+            },
+        )
 
         try:
             await self._ensure_formation_dir()
             await self._load_or_create_master_key()
 
             # Observability: Encryption initialization completed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.ENCRYPTION_COMPLETED,
-                        level=EventLevel.INFO,
-                        message="Secrets manager encryption initialization completed",
-                        data={
-                            "formation_dir": str(self.formation_dir),
-                            "encryption_ready": self._fernet is not None,
-                            "success": True
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.ENCRYPTION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                description="Secrets manager encryption initialization completed",
+                data={
+                    "formation_dir": str(self.formation_dir),
+                    "encryption_ready": self._fernet is not None,
+                    "success": True,
+                },
+            )
 
         except Exception as e:
             # Observability: Encryption initialization failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.ENCRYPTION_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secrets manager encryption initialization failed: {str(e)}",
-                        data={
-                            "formation_dir": str(self.formation_dir),
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.ENCRYPTION_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secrets manager encryption initialization failed: {str(e)}",
+                data={
+                    "formation_dir": str(self.formation_dir),
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             raise
 
     async def _ensure_formation_dir(self) -> None:
@@ -151,11 +127,11 @@ class SecretsManager:
             "MySecret123" -> "MYSECRET123"
         """
         # Convert to uppercase and replace invalid chars with underscores
-        normalized = re.sub(r'[^A-Z0-9_]', '_', name.upper())
+        normalized = re.sub(r"[^A-Z0-9_]", "_", name.upper())
         # Remove multiple consecutive underscores
-        normalized = re.sub(r'_+', '_', normalized)
+        normalized = re.sub(r"_+", "_", normalized)
         # Remove leading/trailing underscores
-        return normalized.strip('_')
+        return normalized.strip("_")
 
     async def _load_secrets_from_file(self) -> Dict[str, Any]:
         """Load and decrypt secrets from file."""
@@ -164,12 +140,12 @@ class SecretsManager:
 
         encrypted_data = self.secrets_file_path.read_bytes()
         decrypted_data = self._fernet.decrypt(encrypted_data)
-        return json.loads(decrypted_data.decode('utf-8'))
+        return json.loads(decrypted_data.decode("utf-8"))
 
     async def _save_secrets_to_file(self, secrets: Dict[str, Any]) -> None:
         """Encrypt and save secrets to file."""
         data = json.dumps(secrets, indent=2)
-        encrypted_data = self._fernet.encrypt(data.encode('utf-8'))
+        encrypted_data = self._fernet.encrypt(data.encode("utf-8"))
         self.secrets_file_path.write_bytes(encrypted_data)
         # Set restrictive permissions
         os.chmod(self.secrets_file_path, 0o600)
@@ -180,12 +156,7 @@ class SecretsManager:
             self._secrets_cache = await self._load_secrets_from_file()
         return self._secrets_cache
 
-    async def store_secret(
-        self,
-        name: str,
-        value: Any,
-        overwrite: bool = False
-    ) -> None:
+    async def store_secret(self, name: str, value: Any, overwrite: bool = False) -> None:
         """
         Store encrypted secret with auto-normalized name.
 
@@ -195,22 +166,17 @@ class SecretsManager:
             overwrite: Whether to overwrite existing secret
         """
         # Observability: Secret storage started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_STORAGE_STARTED,
-                    level=EventLevel.INFO,
-                    message=f"Starting secret storage for: {name}",
-                    data={
-                        "secret_name": name,
-                        "normalized_name": self._normalize_secret_name(name),
-                        "overwrite": overwrite,
-                        "value_type": type(value).__name__
-                    }
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_STORAGE_STARTED,
+            level=observability.EventLevel.INFO,
+            description=f"Starting secret storage for: {name}",
+            data={
+                "secret_name": name,
+                "normalized_name": self._normalize_secret_name(name),
+                "overwrite": overwrite,
+                "value_type": type(value).__name__,
+            },
+        )
 
         try:
             if not self._fernet:
@@ -222,26 +188,24 @@ class SecretsManager:
                 secrets = await self._get_secrets_cache()
 
                 if normalized_name in secrets and not overwrite:
-                    error_msg = (f"Secret '{normalized_name}' already exists. "
-                                 f"Use overwrite=True to replace.")
+                    error_msg = (
+                        f"Secret '{normalized_name}' already exists. "
+                        f"Use overwrite=True to replace."
+                    )
 
                     # Observability: Secret storage failed (already exists)
-                    if OBSERVABILITY_AVAILABLE:
-                        try:
-                            obs_manager.log_event(
-                                event_type=SystemEventType.SECRET_STORAGE_COMPLETED,
-                                level=EventLevel.ERROR,
-                                message=f"Secret storage failed for {name}: {error_msg}",
-                                data={
-                                    "secret_name": name,
-                                    "normalized_name": normalized_name,
-                                    "error": error_msg,
-                                    "error_type": "ValueError",
-                                    "success": False
-                                }
-                            )
-                        except Exception:
-                            pass
+                    observability.emit_event(
+                        event_type=observability.SystemEventType.SECRET_STORAGE_COMPLETED,
+                        level=observability.EventLevel.ERROR,
+                        description=f"Secret storage failed for {name}: {error_msg}",
+                        data={
+                            "secret_name": name,
+                            "normalized_name": normalized_name,
+                            "error": error_msg,
+                            "error_type": "ValueError",
+                            "success": False,
+                        },
+                    )
 
                     raise ValueError(error_msg)
 
@@ -250,40 +214,32 @@ class SecretsManager:
                 self._secrets_cache = secrets
 
                 # Observability: Secret storage completed successfully
-                if OBSERVABILITY_AVAILABLE:
-                    try:
-                        obs_manager.log_event(
-                            event_type=SystemEventType.SECRET_STORAGE_COMPLETED,
-                            level=EventLevel.INFO,
-                            message=f"Secret storage completed for: {name}",
-                            data={
-                                "secret_name": name,
-                                "normalized_name": normalized_name,
-                                "overwrite": overwrite,
-                                "total_secrets": len(secrets),
-                                "success": True
-                            }
-                        )
-                    except Exception:
-                        pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.SECRET_STORAGE_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Secret storage completed for: {name}",
+                    data={
+                        "secret_name": name,
+                        "normalized_name": normalized_name,
+                        "overwrite": overwrite,
+                        "total_secrets": len(secrets),
+                        "success": True,
+                    },
+                )
 
         except Exception as e:
             # Observability: Secret storage failed with exception
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_STORAGE_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret storage failed for {name}: {str(e)}",
-                        data={
-                            "secret_name": name,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_STORAGE_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret storage failed for {name}: {str(e)}",
+                data={
+                    "secret_name": name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             raise
 
     async def get_secret(self, name: str) -> Optional[Any]:
@@ -297,20 +253,12 @@ class SecretsManager:
             Secret value or None if not found
         """
         # Observability: Secret retrieval started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_RETRIEVAL_STARTED,
-                    level=EventLevel.DEBUG,
-                    message=f"Starting secret retrieval for: {name}",
-                    data={
-                        "secret_name": name,
-                        "normalized_name": self._normalize_secret_name(name)
-                    }
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_RETRIEVAL_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description=f"Starting secret retrieval for: {name}",
+            data={"secret_name": name, "normalized_name": self._normalize_secret_name(name)},
+        )
 
         try:
             if not self._fernet:
@@ -324,43 +272,33 @@ class SecretsManager:
                 found = secret_value is not None
 
                 # Observability: Secret retrieval completed
-                if OBSERVABILITY_AVAILABLE:
-                    try:
-                        obs_manager.log_event(
-                            event_type=SystemEventType.SECRET_RETRIEVAL_COMPLETED,
-                            level=EventLevel.DEBUG,
-                            message=(f"Secret retrieval completed for {name}, "
-                                     f"found: {found}"),
-                            data={
-                                "secret_name": name,
-                                "normalized_name": normalized_name,
-                                "found": found,
-                                "value_type": type(secret_value).__name__ if found else None,
-                                "success": True
-                            }
-                        )
-                    except Exception:
-                        pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.SECRET_RETRIEVAL_COMPLETED,
+                    level=observability.EventLevel.DEBUG,
+                    description=(f"Secret retrieval completed for {name}, " f"found: {found}"),
+                    data={
+                        "secret_name": name,
+                        "normalized_name": normalized_name,
+                        "found": found,
+                        "value_type": type(secret_value).__name__ if found else None,
+                        "success": True,
+                    },
+                )
 
                 return secret_value
 
         except Exception as e:
-            # Observability: Secret retrieval failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_RETRIEVAL_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret retrieval failed for {name}: {str(e)}",
-                        data={
-                            "secret_name": name,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_RETRIEVAL_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret retrieval failed for {name}: {str(e)}",
+                data={
+                    "secret_name": name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             raise
 
     async def delete_secret(self, name: str) -> bool:
@@ -374,20 +312,12 @@ class SecretsManager:
             True if secret was deleted, False if not found
         """
         # Observability: Secret deletion started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_DELETION_STARTED,
-                    level=EventLevel.INFO,
-                    message=f"Starting secret deletion for: {name}",
-                    data={
-                        "secret_name": name,
-                        "normalized_name": self._normalize_secret_name(name)
-                    }
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_DELETION_STARTED,
+            level=observability.EventLevel.INFO,
+            description=f"Starting secret deletion for: {name}",
+            data={"secret_name": name, "normalized_name": self._normalize_secret_name(name)},
+        )
 
         try:
             if not self._fernet:
@@ -399,23 +329,18 @@ class SecretsManager:
                 secrets = await self._get_secrets_cache()
 
                 if normalized_name not in secrets:
-                    # Observability: Secret deletion completed (not found)
-                    if OBSERVABILITY_AVAILABLE:
-                        try:
-                            obs_manager.log_event(
-                                event_type=SystemEventType.SECRET_DELETION_COMPLETED,
-                                level=EventLevel.DEBUG,
-                                message=f"Secret deletion completed for {name}: not found",
-                                data={
-                                    "secret_name": name,
-                                    "normalized_name": normalized_name,
-                                    "found": False,
-                                    "deleted": False,
-                                    "success": True
-                                }
-                            )
-                        except Exception:
-                            pass
+                    observability.emit_event(
+                        event_type=observability.SystemEventType.SECRET_DELETION_COMPLETED,
+                        level=observability.EventLevel.DEBUG,
+                        description=f"Secret deletion completed for {name}: not found",
+                        data={
+                            "secret_name": name,
+                            "normalized_name": normalized_name,
+                            "found": False,
+                            "deleted": False,
+                            "success": True,
+                        },
+                    )
                     return False
 
                 del secrets[normalized_name]
@@ -423,43 +348,35 @@ class SecretsManager:
                 self._secrets_cache = secrets
 
                 # Observability: Secret deletion completed successfully
-                if OBSERVABILITY_AVAILABLE:
-                    try:
-                        obs_manager.log_event(
-                            event_type=SystemEventType.SECRET_DELETION_COMPLETED,
-                            level=EventLevel.INFO,
-                            message=f"Secret deletion completed for: {name}",
-                            data={
-                                "secret_name": name,
-                                "normalized_name": normalized_name,
-                                "found": True,
-                                "deleted": True,
-                                "remaining_secrets": len(secrets),
-                                "success": True
-                            }
-                        )
-                    except Exception:
-                        pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.SECRET_DELETION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Secret deletion completed for: {name}",
+                    data={
+                        "secret_name": name,
+                        "normalized_name": normalized_name,
+                        "found": True,
+                        "deleted": True,
+                        "remaining_secrets": len(secrets),
+                        "success": True,
+                    },
+                )
 
                 return True
 
         except Exception as e:
             # Observability: Secret deletion failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_DELETION_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret deletion failed for {name}: {str(e)}",
-                        data={
-                            "secret_name": name,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_DELETION_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret deletion failed for {name}: {str(e)}",
+                data={
+                    "secret_name": name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             raise
 
     async def list_secrets(self) -> List[str]:
@@ -470,17 +387,12 @@ class SecretsManager:
             List of all stored secret names
         """
         # Observability: Secret listing started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_LISTING_STARTED,
-                    level=EventLevel.DEBUG,
-                    message="Starting secret listing",
-                    data={}
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_LISTING_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description="Starting secret listing",
+            data={},
+        )
 
         try:
             if not self._fernet:
@@ -491,39 +403,27 @@ class SecretsManager:
                 secret_names = list(secrets.keys())
 
                 # Observability: Secret listing completed
-                if OBSERVABILITY_AVAILABLE:
-                    try:
-                        obs_manager.log_event(
-                            event_type=SystemEventType.SECRET_LISTING_COMPLETED,
-                            level=EventLevel.DEBUG,
-                            message=f"Secret listing completed, found {len(secret_names)} secrets",
-                            data={
-                                "secret_count": len(secret_names),
-                                "secret_names": secret_names,
-                                "success": True
-                            }
-                        )
-                    except Exception:
-                        pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.SECRET_LISTING_COMPLETED,
+                    level=observability.EventLevel.DEBUG,
+                    description=f"Secret listing completed, found {len(secret_names)} secrets",
+                    data={
+                        "secret_count": len(secret_names),
+                        "secret_names": secret_names,
+                        "success": True,
+                    },
+                )
 
                 return secret_names
 
         except Exception as e:
             # Observability: Secret listing failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_LISTING_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret listing failed: {str(e)}",
-                        data={
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_LISTING_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret listing failed: {str(e)}",
+                data={"error": str(e), "error_type": type(e).__name__, "success": False},
+            )
             raise
 
     async def secret_exists(self, name: str) -> bool:
@@ -546,22 +446,17 @@ class SecretsManager:
             ValueError: If referenced secret doesn't exist
         """
         # Observability: Secret interpolation started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_INTERPOLATION_STARTED,
-                    level=EventLevel.DEBUG,
-                    message="Starting secret interpolation",
-                    data={
-                        "value_type": type(value).__name__,
-                        "is_string": isinstance(value, str),
-                        "is_dict": isinstance(value, dict),
-                        "is_list": isinstance(value, list)
-                    }
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_INTERPOLATION_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description="Starting secret interpolation",
+            data={
+                "value_type": type(value).__name__,
+                "is_string": isinstance(value, str),
+                "is_dict": isinstance(value, dict),
+                "is_list": isinstance(value, list),
+            },
+        )
 
         try:
             if not self._fernet:
@@ -570,40 +465,32 @@ class SecretsManager:
             result = await self._interpolate_recursive(value)
 
             # Observability: Secret interpolation completed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_INTERPOLATION_COMPLETED,
-                        level=EventLevel.DEBUG,
-                        message="Secret interpolation completed successfully",
-                        data={
-                            "value_type": type(value).__name__,
-                            "result_type": type(result).__name__,
-                            "success": True
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_INTERPOLATION_COMPLETED,
+                level=observability.EventLevel.DEBUG,
+                description="Secret interpolation completed successfully",
+                data={
+                    "value_type": type(value).__name__,
+                    "result_type": type(result).__name__,
+                    "success": True,
+                },
+            )
 
             return result
 
         except Exception as e:
             # Observability: Secret interpolation failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_INTERPOLATION_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret interpolation failed: {str(e)}",
-                        data={
-                            "value_type": type(value).__name__,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_INTERPOLATION_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret interpolation failed: {str(e)}",
+                data={
+                    "value_type": type(value).__name__,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             raise
 
     async def _interpolate_recursive(self, value: Any) -> Any:
@@ -626,6 +513,7 @@ class SecretsManager:
         - "${{ secrets.API_KEY }}" -> "sk-1234567890abcdef"
         - "Bearer ${{ secrets.TOKEN }}" -> "Bearer sk-1234567890abcdef"
         """
+
         def replace_secret(match):
             secret_name = match.group(1)
             secret_value = secrets.get(secret_name)
@@ -639,17 +527,12 @@ class SecretsManager:
     async def clear_all_secrets(self) -> None:
         """Clear all secrets (use with caution)."""
         # Observability: Secret clearing started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_CLEARING_STARTED,
-                    level=EventLevel.WARNING,
-                    message="Starting to clear all secrets",
-                    data={}
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_CLEARING_STARTED,
+            level=observability.EventLevel.WARNING,
+            description="Starting to clear all secrets",
+            data={},
+        )
 
         try:
             if not self._fernet:
@@ -661,43 +544,24 @@ class SecretsManager:
                 self._secrets_cache = {}
 
                 # Observability: Secret clearing completed
-                if OBSERVABILITY_AVAILABLE:
-                    try:
-                        obs_manager.log_event(
-                            event_type=SystemEventType.SECRET_CLEARING_COMPLETED,
-                            level=EventLevel.WARNING,
-                            message="All secrets cleared successfully",
-                            data={
-                                "cleared_count": current_count,
-                                "success": True
-                            }
-                        )
-                    except Exception:
-                        pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.SECRET_CLEARING_COMPLETED,
+                    level=observability.EventLevel.WARNING,
+                    description="All secrets cleared successfully",
+                    data={"cleared_count": current_count, "success": True},
+                )
 
         except Exception as e:
             # Observability: Secret clearing failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_CLEARING_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret clearing failed: {str(e)}",
-                        data={
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_CLEARING_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret clearing failed: {str(e)}",
+                data={"error": str(e), "error_type": type(e).__name__, "success": False},
+            )
             raise
 
-    async def import_secrets(
-        self,
-        secrets: Dict[str, Any],
-        overwrite: bool = False
-    ) -> None:
+    async def import_secrets(self, secrets: Dict[str, Any], overwrite: bool = False) -> None:
         """
         Import multiple secrets from a dictionary.
 
@@ -706,21 +570,16 @@ class SecretsManager:
             overwrite: Whether to overwrite existing secrets
         """
         # Observability: Secret import started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_IMPORT_STARTED,
-                    level=EventLevel.INFO,
-                    message=f"Starting secret import of {len(secrets)} secrets",
-                    data={
-                        "secret_count": len(secrets),
-                        "secret_names": list(secrets.keys()),
-                        "overwrite": overwrite
-                    }
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_IMPORT_STARTED,
+            level=observability.EventLevel.INFO,
+            description=f"Starting secret import of {len(secrets)} secrets",
+            data={
+                "secret_count": len(secrets),
+                "secret_names": list(secrets.keys()),
+                "overwrite": overwrite,
+            },
+        )
 
         try:
             imported_count = 0
@@ -736,44 +595,37 @@ class SecretsManager:
                     errors.append({"name": name, "error": str(e)})
 
             # Observability: Secret import completed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_IMPORT_COMPLETED,
-                        level=EventLevel.INFO if failed_count == 0 else EventLevel.WARNING,
-                        message=(f"Secret import completed: {imported_count} imported, "
-                                 f"{failed_count} failed"),
-                        data={
-                            "total_secrets": len(secrets),
-                            "imported_count": imported_count,
-                            "failed_count": failed_count,
-                            "errors": errors,
-                            "success": failed_count == 0
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_IMPORT_COMPLETED,
+                level=observability.EventLevel.INFO if failed_count == 0 else observability.EventLevel.WARNING,
+                description=(
+                    f"Secret import completed: {imported_count} imported, " f"{failed_count} failed"
+                ),
+                data={
+                    "total_secrets": len(secrets),
+                    "imported_count": imported_count,
+                    "failed_count": failed_count,
+                    "errors": errors,
+                    "success": failed_count == 0,
+                },
+            )
 
             if failed_count > 0:
                 raise ValueError(f"Failed to import {failed_count} secrets: {errors}")
 
         except Exception as e:
             # Observability: Secret import failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_IMPORT_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret import failed: {str(e)}",
-                        data={
-                            "secret_count": len(secrets),
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_IMPORT_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret import failed: {str(e)}",
+                data={
+                    "secret_count": len(secrets),
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             raise
 
     async def export_secrets(self) -> Dict[str, Any]:
@@ -784,17 +636,12 @@ class SecretsManager:
             Dictionary of all secrets (decrypted)
         """
         # Observability: Secret export started
-        if OBSERVABILITY_AVAILABLE:
-            try:
-                obs_manager = ObservabilityManager.get_instance()
-                obs_manager.log_event(
-                    event_type=SystemEventType.SECRET_EXPORT_STARTED,
-                    level=EventLevel.INFO,
-                    message="Starting secret export",
-                    data={}
-                )
-            except Exception:
-                pass
+        observability.emit_event(
+            event_type=observability.SystemEventType.SECRET_EXPORT_STARTED,
+            level=observability.EventLevel.INFO,
+            description="Starting secret export",
+            data={},
+        )
 
         try:
             if not self._fernet:
@@ -804,37 +651,25 @@ class SecretsManager:
                 secrets = await self._get_secrets_cache()
 
                 # Observability: Secret export completed
-                if OBSERVABILITY_AVAILABLE:
-                    try:
-                        obs_manager.log_event(
-                            event_type=SystemEventType.SECRET_EXPORT_COMPLETED,
-                            level=EventLevel.INFO,
-                            message=f"Secret export completed, exported {len(secrets)} secrets",
-                            data={
-                                "secret_count": len(secrets),
-                                "secret_names": list(secrets.keys()),
-                                "success": True
-                            }
-                        )
-                    except Exception:
-                        pass
+                observability.emit_event(
+                    event_type=observability.SystemEventType.SECRET_EXPORT_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Secret export completed, exported {len(secrets)} secrets",
+                    data={
+                        "secret_count": len(secrets),
+                        "secret_names": list(secrets.keys()),
+                        "success": True,
+                    },
+                )
 
                 return secrets
 
         except Exception as e:
             # Observability: Secret export failed
-            if OBSERVABILITY_AVAILABLE:
-                try:
-                    obs_manager.log_event(
-                        event_type=SystemEventType.SECRET_EXPORT_COMPLETED,
-                        level=EventLevel.ERROR,
-                        message=f"Secret export failed: {str(e)}",
-                        data={
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                            "success": False
-                        }
-                    )
-                except Exception:
-                    pass
+            observability.emit_event(
+                event_type=observability.SystemEventType.SECRET_EXPORT_COMPLETED,
+                level=observability.EventLevel.ERROR,
+                description=f"Secret export failed: {str(e)}",
+                data={"error": str(e), "error_type": type(e).__name__, "success": False},
+            )
             raise

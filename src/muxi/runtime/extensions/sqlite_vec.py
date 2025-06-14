@@ -160,6 +160,7 @@ class SQLiteVecExtension(Extension):
                 path = cls._get_platform_extension_path()
             except ImportError as e:
                 #  Error - add observability event
+                _ = e  # remove this after implementing observability
                 # Will try fallbacks in load_extension
 
         # Store the initialization info for later connections
@@ -193,6 +194,7 @@ class SQLiteVecExtension(Extension):
         if cls._init_path:
             if not os.path.exists(cls._init_path):
                 #  Warning - add observability event
+                _ = None  # remove this after implementing observability
                 # Will try fallbacks below
             else:
                 try:
@@ -201,6 +203,7 @@ class SQLiteVecExtension(Extension):
                     return
                 except Exception as e:
                     #  Warning - add observability event
+                    _ = e  # remove this after implementing observability
                     # Will try fallbacks below
 
         # Try to use the platform-specific extension
@@ -212,9 +215,10 @@ class SQLiteVecExtension(Extension):
                 return
             else:
                 #  Warning - add observability event
-                #  Warning - add observability event
+                _ = None  # remove this after implementing observability
         except Exception as e:
             #  Warning - add observability event
+            _ = e  # remove this after implementing observability
 
         # Otherwise try to use the Python package
         try:
