@@ -501,6 +501,7 @@ class Overlord:
                 #  Cache manager startup - add observability event
 
             # Start observability system
+            self.observability_manager = observability.ObservabilityManager.get_instance()
             await self.observability_manager.start()
             #  Observability startup - add observability event
 
@@ -663,7 +664,7 @@ class Overlord:
 
             # Emit formation loading failed event
             observability.emit_event(
-                event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
+                event_type=observability.ErrorEvents.TIMEOUT_DETECTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation_path": formation_path,
