@@ -98,7 +98,7 @@ class A2AFormationServer:
 
             # Emit A2A formation server initialization event
             observability.emit_event(
-                event_type=observability.SystemEventType.A2A_FORMATION_SERVER_STARTED,
+                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation_name": formation_name,
@@ -112,7 +112,7 @@ class A2AFormationServer:
         except Exception as e:
             # Emit error event for initialization failure
             observability.emit_event(
-                event_type=observability.SystemEventType.A2A_FORMATION_SERVER_FAILED,
+                event_type=observability.SystemEvents.A2A_SERVER_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"formation_name": formation_name, "port": port, "error": str(e)},
                 description=f"Failed to initialize A2A Formation Server: {str(e)}",
@@ -138,7 +138,7 @@ class A2AFormationServer:
                 try:
                     # Emit health check event
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.A2A_HEALTH_CHECK,
+                        event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                         level=observability.EventLevel.DEBUG,
                         data={
                             "formation": self.formation_name,
@@ -155,7 +155,7 @@ class A2AFormationServer:
                     }
                 except Exception as e:
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                         level=observability.EventLevel.ERROR,
                         data={"formation": self.formation_name, "error": str(e)},
                         description=f"A2A health check failed: {str(e)}",
@@ -182,7 +182,7 @@ class A2AFormationServer:
 
                     # Emit formation info request event
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.A2A_DISCOVERY_COMPLETED,
+                        event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
                         level=observability.EventLevel.INFO,
                         data={
                             "formation": self.formation_name,
@@ -200,7 +200,7 @@ class A2AFormationServer:
                     }
                 except Exception as e:
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                         level=observability.EventLevel.ERROR,
                         data={"formation": self.formation_name, "error": str(e)},
                         description=f"A2A formation info request failed: {str(e)}",
@@ -221,7 +221,7 @@ class A2AFormationServer:
 
                     # Emit agent discovery event
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.A2A_DISCOVERY_COMPLETED,
+                        event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
                         level=observability.EventLevel.INFO,
                         data={
                             "formation": self.formation_name,
@@ -234,7 +234,7 @@ class A2AFormationServer:
                     return {"agents": agent_cards, "formation": self.formation_name}
                 except Exception as e:
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                         level=observability.EventLevel.ERROR,
                         data={"formation": self.formation_name, "error": str(e)},
                         description=f"A2A agent discovery failed: {str(e)}",
@@ -268,7 +268,7 @@ class A2AFormationServer:
 
             # Emit app creation event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_SERVER_STARTED,
+                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation": self.formation_name,
@@ -280,7 +280,7 @@ class A2AFormationServer:
 
         except Exception as e:
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,
@@ -306,7 +306,7 @@ class A2AFormationServer:
         try:
             # Emit message received event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_MESSAGE_RECEIVED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": agent_id,
@@ -327,7 +327,7 @@ class A2AFormationServer:
                 if not authenticated:
                     # Emit authentication failure event
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.A2A_AUTH_VALIDATION,
+                        event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={
                             "agent_id": agent_id,
@@ -346,7 +346,7 @@ class A2AFormationServer:
 
                 # Emit successful authentication event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_AUTH_VALIDATION,
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATED,
                     level=observability.EventLevel.INFO,
                     data={
                         "agent_id": agent_id,
@@ -367,7 +367,7 @@ class A2AFormationServer:
             if self.trusted_endpoints and client_host not in self.trusted_endpoints:
                 # Emit untrusted client event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_AUTH_VALIDATION,
+                    event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": agent_id,
@@ -386,7 +386,7 @@ class A2AFormationServer:
             if not self.overlord or agent_id not in self.overlord.agents:
                 # Emit agent not found event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_MESSAGE_FAILED,
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": agent_id,
@@ -413,7 +413,7 @@ class A2AFormationServer:
             if not getattr(agent, "a2a_external", True):
                 # Emit agent not configured for external A2A event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_MESSAGE_FAILED,
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": agent_id,
@@ -439,7 +439,7 @@ class A2AFormationServer:
 
             # Emit message routing event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_MESSAGE_ROUTED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_ROUTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": agent_id,
@@ -468,7 +468,7 @@ class A2AFormationServer:
 
                 # Emit successful message processing event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_MESSAGE_SENT,
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                     level=observability.EventLevel.INFO,
                     data={
                         "agent_id": agent_id,
@@ -488,7 +488,7 @@ class A2AFormationServer:
             else:
                 # Handle case where agent doesn't return a response (e.g., notifications)
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_MESSAGE_SENT,
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                     level=observability.EventLevel.INFO,
                     data={
                         "agent_id": agent_id,
@@ -510,7 +510,7 @@ class A2AFormationServer:
         except Exception as e:
             # Emit error event for message handling failure
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_MESSAGE_FAILED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": agent_id,
@@ -556,7 +556,7 @@ class A2AFormationServer:
 
             # Emit agent card creation event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_DISCOVERY_COMPLETED,
+                event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "agent_id": agent_id,
@@ -570,7 +570,7 @@ class A2AFormationServer:
 
         except Exception as e:
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": agent_id,
@@ -591,7 +591,7 @@ class A2AFormationServer:
 
             # Emit port discovery event
             observability.emit_event(
-                event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                 level=observability.EventLevel.INFO,
                 data={"formation": self.formation_name, "port": port, "original_port": self.port},
                 description=f"Free port found for A2A Formation Server: {port}",
@@ -601,7 +601,7 @@ class A2AFormationServer:
 
         except Exception as e:
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,
@@ -622,7 +622,7 @@ class A2AFormationServer:
             if self.is_running:
                 # Emit already running event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_SERVER_STARTED,
+                    event_type=observability.SystemEvents.A2A_SERVER_STARTED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "formation": self.formation_name,
@@ -637,7 +637,7 @@ class A2AFormationServer:
 
             # Emit server starting event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_SERVER_STARTED,
+                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation": self.formation_name,
@@ -658,7 +658,7 @@ class A2AFormationServer:
                 except OSError:
                     # Emit port unavailable event
                     observability.emit_event(
-                        event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                         level=observability.EventLevel.WARNING,
                         data={"formation": self.formation_name, "original_port": self.port},
                         description=f"Port {self.port} unavailable, finding alternative",
@@ -679,7 +679,7 @@ class A2AFormationServer:
 
             # Emit successful server start event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_SERVER_STARTED,
+                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation": self.formation_name,
@@ -711,7 +711,7 @@ class A2AFormationServer:
         except Exception as e:
             # Emit server start failure event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_SERVER_STOPPED,
+                event_type=observability.SystemEvents.A2A_SERVER_STOPPED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,
@@ -736,7 +736,7 @@ class A2AFormationServer:
             if not self.is_running:
                 # Emit not running event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_SERVER_STOPPED,
+                    event_type=observability.SystemEvents.A2A_SERVER_STOPPED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "formation": self.formation_name,
@@ -750,7 +750,7 @@ class A2AFormationServer:
 
             # Emit server stopping event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_SERVER_STOPPED,
+                event_type=observability.SystemEvents.A2A_SERVER_STOPPED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation": self.formation_name,
@@ -770,7 +770,7 @@ class A2AFormationServer:
 
             # Emit successful server stop event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_SERVER_STOPPED,
+                event_type=observability.SystemEvents.A2A_SERVER_STOPPED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation": self.formation_name,
@@ -786,7 +786,7 @@ class A2AFormationServer:
         except Exception as e:
             # Emit server stop failure event
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,
@@ -815,7 +815,7 @@ class A2AFormationServer:
 
             # Emit status check event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "formation": self.formation_name,
@@ -829,7 +829,7 @@ class A2AFormationServer:
 
         except Exception as e:
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,
@@ -845,7 +845,7 @@ class A2AFormationServer:
             if not self.is_running:
                 # Emit health check failure event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_HEALTH_CHECK,
+                    event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                     level=observability.EventLevel.WARNING,
                     data={
                         "formation": self.formation_name,
@@ -863,7 +863,7 @@ class A2AFormationServer:
 
             # Emit health check result event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=(
                     observability.EventLevel.INFO
                     if is_healthy
@@ -885,7 +885,7 @@ class A2AFormationServer:
         except Exception as e:
             # Emit health check error event
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation": self.formation_name,

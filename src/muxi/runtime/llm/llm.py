@@ -766,7 +766,7 @@ class LLM:
         # Emit LLM request started event
         try:
             observability.emit_event(
-                event_type=observability.ConversationEventType.LLM_REQUEST_STARTED,
+                event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "model": self.model_name,

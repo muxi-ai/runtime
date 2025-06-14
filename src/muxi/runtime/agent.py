@@ -163,7 +163,7 @@ class Agent:
 
         # Emit agent initialization event
         observability.emit_event(
-            event_type=observability.ConversationEventType.AGENT_INITIALIZED,
+            event_type=observability.ConversationEvents.AGENT_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
                 "agent_id": self.agent_id,
@@ -263,7 +263,7 @@ class Agent:
         if request_context:
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.AGENT_MESSAGE_PROCESSING,
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
                 level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -422,7 +422,7 @@ class Agent:
         if request_context:
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.AGENT_RESPONSE_GENERATED,
+                event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
                 level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -588,7 +588,7 @@ class Agent:
         if request_context:
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.MCP_TOOL_CALL_STARTED,
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -612,7 +612,7 @@ class Agent:
             # Emit MCP tool call completed event
             if request_context:
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_COMPLETED,
+                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
                     level=observability.EventLevel.INFO,
                     request_context=request_context,
                     data={
@@ -630,7 +630,7 @@ class Agent:
             # Emit MCP tool call failed event
             if request_context:
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_FAILED,
+                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
                     level=observability.EventLevel.ERROR,
                     request_context=request_context,
                     data={
@@ -712,7 +712,7 @@ class Agent:
             if hasattr(self.overlord, "observability_manager"):
                 try:
                     observability.emit_event(
-                        event_type=observability.ConversationEventType.ERROR_CLARIFICATION_FAILED,
+                        event_type=observability.ErrorEvents.CLARIFICATION_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={
                             "agent_id": self.agent_id,
@@ -731,7 +731,7 @@ class Agent:
         except Exception as e:
             # Emit general error event
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_AGENT_PROCESSING,
+                event_type=observability.ErrorEvents.AGENT_PROCESSING,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,
@@ -1188,7 +1188,7 @@ class Agent:
         if hasattr(self.overlord, "observability_manager"):
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_MESSAGE_SENT,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "source_agent_id": self.agent_id,
@@ -1594,7 +1594,7 @@ class Agent:
         if hasattr(self.overlord, "observability_manager"):
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_MESSAGE_RECEIVED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "source_agent_id": source_agent_id,

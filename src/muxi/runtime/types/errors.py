@@ -236,7 +236,7 @@ ERROR_CODE_REGISTRY: Dict[str, ErrorCodeInfo] = {
 def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     """Get error information for a given error code."""
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_STARTED,
+        event_type=observability.SystemEvents.UTILITY_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting error info lookup",
         data={"operation": "get_error_info", "error_code": code, "utility": "error_registry"},
@@ -245,7 +245,7 @@ def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     error_info = ERROR_CODE_REGISTRY.get(code)
 
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_COMPLETED,
+        event_type=observability.SystemEvents.UTILITY_COMPLETED,
         level=observability.EventLevel.DEBUG,
         description="Error info lookup completed",
         data={
@@ -264,7 +264,7 @@ def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
 def get_error_message(code: str, default: str = "An error occurred") -> str:
     """Get the standard message for an error code."""
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_STARTED,
+        event_type=observability.SystemEvents.UTILITY_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting error message lookup",
         data={
@@ -279,7 +279,7 @@ def get_error_message(code: str, default: str = "An error occurred") -> str:
     message = error_info.message if error_info else default
 
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_COMPLETED,
+        event_type=observability.SystemEvents.UTILITY_COMPLETED,
         level=observability.EventLevel.DEBUG,
         description="Error message lookup completed",
         data={
@@ -297,7 +297,7 @@ def get_error_message(code: str, default: str = "An error occurred") -> str:
 def get_http_status(code: str, default: int = 500) -> int:
     """Get the HTTP status code for an error code."""
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_STARTED,
+        event_type=observability.SystemEvents.UTILITY_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting HTTP status lookup",
         data={
@@ -312,7 +312,7 @@ def get_http_status(code: str, default: int = 500) -> int:
     status = error_info.http_status if error_info else default
 
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_COMPLETED,
+        event_type=observability.SystemEvents.UTILITY_COMPLETED,
         level=observability.EventLevel.DEBUG,
         description="HTTP status lookup completed",
         data={
@@ -332,7 +332,7 @@ def create_error_details(
 ) -> Dict[str, str]:
     """Create standardized error details."""
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_STARTED,
+        event_type=observability.SystemEvents.UTILITY_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting error details creation",
         data={
@@ -356,7 +356,7 @@ def create_error_details(
         details = {"code": code, "message": custom_message or error_info.message, "trace": trace}
 
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_COMPLETED,
+        event_type=observability.SystemEvents.UTILITY_COMPLETED,
         level=observability.EventLevel.DEBUG,
         description="Error details creation completed",
         data={

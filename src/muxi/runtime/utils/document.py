@@ -22,7 +22,7 @@ def load_document(file_path: str) -> str:
         The document content as a string
     """
     observability.emit_event(
-        event_type=observability.ConversationEventType.DOCUMENT_PROCESSING_STARTED,
+        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting document loading",
         data={
@@ -35,7 +35,7 @@ def load_document(file_path: str) -> str:
     try:
         if not os.path.exists(file_path):
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description="Document loading failed - file not found",
                 data={
@@ -51,7 +51,7 @@ def load_document(file_path: str) -> str:
             content = f.read()
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.DOCUMENT_PROCESSING_COMPLETED,
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
             level=observability.EventLevel.DEBUG,
             description="Document loading completed successfully",
             data={
@@ -66,7 +66,7 @@ def load_document(file_path: str) -> str:
 
     except Exception as e:
         observability.emit_event(
-            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Document loading failed with error",
             data={
@@ -92,7 +92,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
         List of text chunks
     """
     observability.emit_event(
-        event_type=observability.ConversationEventType.DOCUMENT_PROCESSING_STARTED,
+        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting text chunking",
         data={
@@ -107,7 +107,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
     try:
         if not text:
             observability.emit_event(
-                event_type=observability.ConversationEventType.DOCUMENT_PROCESSING_COMPLETED,
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description="Text chunking completed - empty text",
                 data={
@@ -147,7 +147,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
             start = max(start, end - overlap)  # Ensure we move forward
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.DOCUMENT_PROCESSING_COMPLETED,
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
             level=observability.EventLevel.DEBUG,
             description="Text chunking completed successfully",
             data={
@@ -168,7 +168,7 @@ def chunk_text(text: str, chunk_size: int = 1000, overlap: int = 200) -> List[st
 
     except Exception as e:
         observability.emit_event(
-            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Text chunking failed with error",
             data={

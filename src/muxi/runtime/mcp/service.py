@@ -120,7 +120,7 @@ class MCPService:
         # This is just a placeholder implementation
         # Emit system event for server registration
         observability.emit_event(
-            event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_COMPLETED,
+            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
             level=observability.EventLevel.INFO,
             data={
                 "server_id": server_id,
@@ -176,7 +176,7 @@ class MCPService:
 
         # Emit MCP server registration started event
         observability.emit_event(
-            event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_STARTED,
+            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
             level=observability.EventLevel.INFO,
             data={
                 "server_id": server_id,
@@ -226,7 +226,7 @@ class MCPService:
                     }
                     # Emit tool discovery completed event
                     observability.emit_event(
-                        event_type=observability.SystemEventType.MCP_TOOL_DISCOVERY_COMPLETED,
+                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
                         level=observability.EventLevel.INFO,
                         data={
                             "server_id": server_id,
@@ -240,7 +240,7 @@ class MCPService:
                 except Exception as e:
                     # Emit tool discovery failed event
                     observability.emit_event(
-                        event_type=observability.SystemEventType.MCP_TOOL_DISCOVERY_COMPLETED,
+                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
                         level=observability.EventLevel.WARNING,
                         data={"server_id": server_id, "error": str(e), "tools_count": 0},
                         description=f"Unable to discover tools from MCP server {server_id}: {str(e)}",
@@ -249,7 +249,7 @@ class MCPService:
 
                 # Emit MCP server registration completed event
                 observability.emit_event(
-                    event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_COMPLETED,
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
                     data={
                         "server_id": server_id,
@@ -265,7 +265,7 @@ class MCPService:
             except Exception as e:
                 # Emit MCP server registration failed event
                 observability.emit_event(
-                    event_type=observability.SystemEventType.MCP_SERVER_REGISTRATION_FAILED,
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "server_id": server_id,
@@ -315,7 +315,7 @@ class MCPService:
         try:
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.MCP_TOOL_CALL_STARTED,
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "server_id": server_id,
@@ -361,7 +361,7 @@ class MCPService:
 
                 # Emit MCP tool invocation completed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_COMPLETED,
+                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
                     level=observability.EventLevel.INFO,
                     data={
                         "server_id": server_id,
@@ -377,7 +377,7 @@ class MCPService:
             except Exception as e:
                 # Emit MCP tool invocation failed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MCP_TOOL_CALL_FAILED,
+                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "server_id": server_id,
@@ -428,7 +428,7 @@ class MCPService:
 
                 # Emit disconnection success event
                 observability.emit_event(
-                    event_type=observability.SystemEventType.MCP_SERVER_DISCONNECTED,
+                    event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
                     level=observability.EventLevel.INFO,
                     data={"server_id": server_id},
                     description=f"Disconnected from MCP server: {server_id}",
@@ -438,7 +438,7 @@ class MCPService:
             except Exception as e:
                 # Emit disconnection error event
                 observability.emit_event(
-                    event_type=observability.SystemEventType.MCP_SERVER_DISCONNECTED,
+                    event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
                     level=observability.EventLevel.ERROR,
                     data={"server_id": server_id, "error": str(e)},
                     description=f"Error disconnecting from MCP server {server_id}: {str(e)}",

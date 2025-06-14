@@ -593,7 +593,7 @@ class Muxi:
         """
         # Emit facade request received event
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_RECEIVED,
+            event_type=observability.ConversationEvents.REQUEST_RECEIVED,
             level=observability.EventLevel.INFO,
             data={
                 "message_length": len(message),
@@ -619,7 +619,7 @@ class Muxi:
         # Emit facade response completion event
         is_async_response = isinstance(response, dict) and "request_id" in response
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_COMPLETED,
+            event_type=observability.ConversationEvents.REQUEST_COMPLETED,
             level=observability.EventLevel.INFO,
             data={
                 "is_async_response": is_async_response,

@@ -58,7 +58,7 @@ def is_port_in_use(port):
     """
     # Log port check attempt
     observability.emit_event(
-        event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
         level=observability.EventLevel.DEBUG,
         description="Port availability check initiated",
         data={"port": port, "operation": "port_check"},
@@ -72,9 +72,9 @@ def is_port_in_use(port):
         # Log port check result
         observability.emit_event(
             event_type=(
-                observability.SystemEventType.RESOURCE_ALLOCATED
+                observability.SystemEvents.RESOURCE_ALLOCATED
                 if not result
-                else observability.SystemEventType.ERROR_RETRY_ATTEMPTED
+                else observability.ErrorEvents.RETRY_ATTEMPTED
             ),
             level=observability.EventLevel.INFO if not result else observability.EventLevel.WARNING,
             description=f"Port {port} {'in use' if result else 'available'}",
@@ -111,7 +111,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
     """
     # Log server startup attempt
     observability.emit_event(
-        event_type=observability.SystemEventType.SESSION_CREATED,
+        event_type=observability.SystemEvents.SESSION_CREATED,
         level=observability.EventLevel.INFO,
         description="Server startup initiated",
         data={
@@ -131,7 +131,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
 
             # Log port conflict error
             observability.emit_event(
-                event_type=observability.SystemEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description="Server startup failed due to port conflict",
                 data={
@@ -159,7 +159,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
 
         # Log successful server startup (placeholder)
         observability.emit_event(
-            event_type=observability.SystemEventType.SESSION_CREATED,
+            event_type=observability.SystemEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Server startup completed (placeholder)",
             data={
@@ -176,7 +176,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
     except Exception as e:
         # Log server startup exception
         observability.emit_event(
-            event_type=observability.SystemEventType.ERROR_RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Server startup failed with exception",
             data={

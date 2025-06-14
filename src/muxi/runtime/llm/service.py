@@ -101,7 +101,7 @@ class OneLLMService:
 
         # Emit service initialization event
         observability.emit_event(
-            event_type=observability.ConversationEventType.SESSION_CREATED,
+            event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="OneLLMService singleton initialized",
             data={
@@ -129,7 +129,7 @@ class OneLLMService:
 
                     # Emit singleton access event
                     observability.emit_event(
-                        event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                         level=observability.EventLevel.INFO,
                         description="OneLLMService singleton instance created",
                         data={"service": "OneLLMService", "action": "singleton_created"},
@@ -152,7 +152,7 @@ class OneLLMService:
 
         # Emit API key configuration event
         observability.emit_event(
-            event_type=observability.ConversationEventType.SESSION_CREATED,
+            event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description=f"API key configured for provider: {provider}",
             data={
@@ -177,7 +177,7 @@ class OneLLMService:
 
         # Emit API key access event
         observability.emit_event(
-            event_type=observability.ConversationEventType.SESSION_CREATED,
+            event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.DEBUG,
             description=f"API key accessed for provider: {provider}",
             data={
@@ -255,7 +255,7 @@ class OneLLMService:
 
             # Emit cache hit event
             observability.emit_event(
-                event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+                event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
                 level=observability.EventLevel.DEBUG,
                 description="Cache hit for LLM request",
                 data={
@@ -272,7 +272,7 @@ class OneLLMService:
 
         # Emit cache miss event
         observability.emit_event(
-            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.DEBUG,
             description="Cache miss for LLM request",
             data={
@@ -298,7 +298,7 @@ class OneLLMService:
 
         # Emit cache store event
         observability.emit_event(
-            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.DEBUG,
             description="Response cached for LLM request",
             data={
@@ -342,7 +342,7 @@ class OneLLMService:
 
         # Emit chat request start event
         observability.emit_event(
-            event_type=observability.ConversationEventType.MODEL_REQUEST_STARTED,
+            event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
             level=observability.EventLevel.INFO,
             description=f"Chat completion request started for {model}",
             data={
@@ -374,7 +374,7 @@ class OneLLMService:
             if cached_response:
                 # Emit cache hit completion event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                    event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                     level=observability.EventLevel.INFO,
                     description=f"Chat completion served from cache for {model}",
                     data={
@@ -414,7 +414,7 @@ class OneLLMService:
 
             # Emit successful completion event
             observability.emit_event(
-                event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Chat completion successful for {model}",
                 data={
@@ -437,7 +437,7 @@ class OneLLMService:
 
             # Emit error event
             observability.emit_event(
-                event_type=observability.conversationeventtype.error_retry_attempted,
+                event_type=observability.ErrorEvents.retry_attempted,
                 level=observability.eventlevel.error,
                 description=f"chat completion failed for {model}: {str(e)}",
                 data={
@@ -500,7 +500,7 @@ class OneLLMService:
 
         # Emit embedding request start event
         observability.emit_event(
-            event_type=observability.ConversationEventType.MODEL_REQUEST_STARTED,
+            event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
             level=observability.EventLevel.INFO,
             description=f"Embedding request started for {model}",
             data={
@@ -523,7 +523,7 @@ class OneLLMService:
             if cached_response:
                 # Emit cache hit completion event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                    event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                     level=observability.EventLevel.INFO,
                     description=f"Embedding served from cache for {model}",
                     data={
@@ -555,7 +555,7 @@ class OneLLMService:
 
             # Emit successful completion event
             observability.emit_event(
-                event_type=observability.ConversationEventType.MODEL_REQUEST_COMPLETED,
+                event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Embedding successful for {model}",
                 data={
@@ -576,7 +576,7 @@ class OneLLMService:
             self._stats["failed_requests"] += 1
             # Emit error event
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Embedding failed for {model}: {str(e)}",
                 data={
@@ -618,7 +618,7 @@ class OneLLMService:
 
         # Emit stats access event
         observability.emit_event(
-            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.DEBUG,
             description="Service statistics accessed",
             data={"service": "OneLLMService", "action": "get_stats", "stats": stats},
@@ -635,7 +635,7 @@ class OneLLMService:
 
         # Emit stats reset event
         observability.emit_event(
-            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.INFO,
             description="Service statistics reset",
             data={
@@ -655,7 +655,7 @@ class OneLLMService:
 
         # Emit cache clear event
         observability.emit_event(
-            event_type=observability.SystemEventType.PERFORMANCE_OPTIMIZED,
+            event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.INFO,
             description="Response cache cleared",
             data={
@@ -701,7 +701,7 @@ class OneLLMService:
 
         # Emit configuration update event
         observability.emit_event(
-            event_type=observability.ConversationEventType.SESSION_CREATED,
+            event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Service configuration updated",
             data={

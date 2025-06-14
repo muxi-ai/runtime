@@ -22,7 +22,7 @@ def generate_nanoid(size: int = 21) -> str:
         A new Nano ID string.
     """
     observability.emit_event(
-        event_type=observability.SystemEventType.ID_GENERATION_STARTED,
+        event_type=observability.SystemEvents.ID_GENERATION_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting Nano ID generation",
         data={
@@ -37,7 +37,7 @@ def generate_nanoid(size: int = 21) -> str:
         nano_id = generate(alphabet, size)
 
         observability.emit_event(
-            event_type=observability.SystemEventType.ID_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.ID_GENERATION_COMPLETED,
             level=observability.EventLevel.DEBUG,
             description="Nano ID generation completed successfully",
             data={
@@ -52,7 +52,7 @@ def generate_nanoid(size: int = 21) -> str:
 
     except Exception as e:
         observability.emit_event(
-            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Nano ID generation failed with error",
             data={
@@ -75,7 +75,7 @@ def get_default_nanoid() -> str:
         A new Nano ID string of standard length.
     """
     observability.emit_event(
-        event_type=observability.SystemEventType.ID_GENERATION_STARTED,
+        event_type=observability.SystemEvents.ID_GENERATION_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting default Nano ID generation",
         data={
@@ -89,7 +89,7 @@ def get_default_nanoid() -> str:
         nano_id = generate_nanoid()
 
         observability.emit_event(
-            event_type=observability.SystemEventType.ID_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.ID_GENERATION_COMPLETED,
             level=observability.EventLevel.DEBUG,
             description="Default Nano ID generation completed successfully",
             data={
@@ -104,7 +104,7 @@ def get_default_nanoid() -> str:
 
     except Exception as e:
         observability.emit_event(
-            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Default Nano ID generation failed with error",
             data={

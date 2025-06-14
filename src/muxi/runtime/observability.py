@@ -2,19 +2,19 @@
 MUXI Observability System - Phase 1 Implementation
 
 This module provides the dual logging architecture for MUXI runtime:
-1. SystemEventType: Infrastructure events, startup, MCP/A2A operations (always stdout)
-2. ConversationEventType: User request lifecycle tracking (configurable output)
+1. SystemEvents: Infrastructure events, startup, MCP/A2A operations (always stdout)
+2. ConversationEvents: User request lifecycle tracking (configurable output)
 
 Key Components:
 - EventLogger: Central component for event emission with intelligent routing
-- SystemEventType: Enum for system infrastructure events (routed to stdout)
-- ConversationEventType: Enum for conversation lifecycle events (routed to configured output)
+- SystemEvents: Enum for system infrastructure events (routed to stdout)
+- ConversationEvents: Enum for conversation lifecycle events (routed to configured output)
 - RequestContextManager: In-memory request tracking with automatic cleanup
 - Event structures with JSON-L formatting for external tool consumption
 
 Event Routing:
-- SystemEventType events → Always stdout (for server monitoring)
-- ConversationEventType events → Configured output (stdout/file/stream/trail for observability)
+- SystemEvents events → Always stdout (for server monitoring)
+- ConversationEvents events → Configured output (stdout/file/stream/trail for observability)
 
 Note: This implementation follows Task 5 Phase 1 specification with dual event architecture.
 """
@@ -38,12 +38,14 @@ class EventLevel(Enum):
     ERROR = "error"
 
 
-class SystemEventType(Enum):
+class SystemEvents(Enum):
     """System infrastructure events for server monitoring and operations (routed to stdout)."""
 
     # ===================================================================
     # MCP SYSTEM EVENTS
     # ===================================================================
+    MCP_SERVER_PROCESS_STARTED = "mcp.server.process.started"
+    MCP_SERVER_PROCESS_FAILED = "mcp.server.process.failed"
     MCP_SERVER_CONNECTING = "mcp.server.connecting"
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
@@ -51,54 +53,89 @@ class SystemEventType(Enum):
     MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
     MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
-    MCP_SERVER_PROCESS_STARTED = "mcp.server.process.started"
-    MCP_SERVER_PROCESS_FAILED = "mcp.server.process.failed"
 
     # ===================================================================
     # A2A SYSTEM EVENTS
     # ===================================================================
+    # Configuration & Initialization
+    A2A_CONFIG_LOAD_STARTED = "a2a.config.load.started"
+    A2A_CONFIG_LOAD_COMPLETED = "a2a.config.load.completed"
+    A2A_CREDENTIAL_LOADED = "a2a.credential.loaded"
+    A2A_CREDENTIALS_LOAD_FAILED = "a2a.credentials.load_failed"
+    A2A_CARD_GENERATOR_INITIALIZED = "a2a.card.generator.initialized"
+
+    # Authentication
+    A2A_AUTH_INITIALIZED = "a2a.auth.initialized"
+    A2A_AUTH_VALIDATING = "a2a.auth.validating"
+    A2A_AUTH_VALIDATED = "a2a.auth.validated"
+    A2A_AUTH_VALIDATION_FAILED = "a2a.auth.validation_failed"
+
+    # Registry Operations
     A2A_REGISTRY_CLIENT_INITIALIZED = "a2a.registry.client.initialized"
     A2A_REGISTRY_CONNECTED = "a2a.registry.connected"
     A2A_REGISTRY_DISCONNECTED = "a2a.registry.disconnected"
-    A2A_HEALTH_CHECK = "a2a.health.check"
+    A2A_REGISTRY_HEALTH_CHECK_COMPLETED = "a2a.registry.health_check.completed"
+
+    # Health Checks
+    A2A_HEALTH_CHECK_STARTED = "a2a.health.check.started"
+    A2A_HEALTH_CHECK_COMPLETED = "a2a.health.check.completed"
+    A2A_HEALTH_CHECK_FAILED = "a2a.health.check.failed"
+
+    # Registration & Deregistration
     A2A_REGISTRATION_STARTED = "a2a.registration.started"
     A2A_REGISTRATION_COMPLETED = "a2a.registration.completed"
     A2A_REGISTRATION_FAILED = "a2a.registration.failed"
+    A2A_DEREGISTRATION_STARTED = "a2a.deregistration.started"
+    A2A_DEREGISTRATION_COMPLETED = "a2a.deregistration.completed"
+    A2A_DEREGISTRATION_FAILED = "a2a.deregistration.failed"
+
+    # Server Operations
+    A2A_SERVER_STARTED = "a2a.server.started"
+    A2A_SERVER_STOPPED = "a2a.server.stopped"
+    A2A_SERVER_FAILED = "a2a.server.failed"
+
+    # Discovery & Agent Management
     A2A_DISCOVERY_STARTED = "a2a.discovery.started"
+    A2A_DISCOVERY_STOPPED = "a2a.discovery.stopped"
     A2A_DISCOVERY_COMPLETED = "a2a.discovery.completed"
     A2A_DISCOVERY_FAILED = "a2a.discovery.failed"
     A2A_AGENT_REGISTERED = "a2a.agent.registered"
     A2A_AGENT_DEREGISTERED = "a2a.agent.deregistered"
-    A2A_FORMATION_SERVER_STARTED = "a2a.formation.server.started"
-    A2A_FORMATION_SERVER_STOPPED = "a2a.formation.server.stopped"
-    A2A_FORMATION_SERVER_FAILED = "a2a.formation.server.failed"
-    A2A_REGISTRY_HEALTH_CHECK_COMPLETED = "a2a.registry.health_check.completed"
+
+    # Card Operations
+    A2A_CARD_GENERATING = "a2a.card.generating"
+    A2A_CARD_GENERATED = "a2a.card.generated"
+    A2A_CARD_EXPORTING = "a2a.card.exporting"
+    A2A_CARD_EXPORTED = "a2a.card.exported"
 
     # ===================================================================
     # CONFIGURATION & STARTUP EVENTS
     # ===================================================================
-    FORMATION_CONFIG_LOADED = "formation.config.loaded"
-    AGENT_CONFIG_LOADED = "agent.config.loaded"
-    MCP_CONFIG_LOADED = "mcp.config.loaded"
-    A2A_CONFIG_LOADED = "a2a.config.loaded"
-    OVERLORD_SERVICES_STARTED = "overlord.services.started"
-    OVERLORD_INITIALIZATION_STARTED = "overlord.initialization.started"
-    OVERLORD_INITIALIZATION_COMPLETED = "overlord.initialization.completed"
+    # Configuration Loading
+    CONFIG_FORMATION_LOADED = "config.formation.loaded"
+    CONFIG_AGENT_LOADED = "config.agent.loaded"
+    CONFIG_MCP_LOADED = "config.mcp.loaded"
+    CONFIG_A2A_LOADED = "config.a2a.loaded"
+
+    # Overlord Initialization
+    OVERLORD_INITIALIZING = "overlord.initializing"
+    OVERLORD_STARTED = "overlord.started"
+
+    # Overlord Operations
     OVERLORD_ROUTING_STARTED = "overlord.routing.started"
     OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
-    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection.started"
-    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection.completed"
+    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection_started"
+    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection_completed"
+
+    # System Services
     CACHE_MANAGER_STARTED = "cache.manager.started"
     MEMORY_OPTIMIZER_STARTED = "memory.optimizer.started"
 
     # ===================================================================
     # AUTHENTICATION & SECURITY EVENTS
     # ===================================================================
-    CREDENTIALS_LOADED = "credentials.loaded"
     AUTH_MANAGER_INITIALIZED = "auth.manager.initialized"
     INBOUND_AUTH_INITIALIZED = "inbound.auth.initialized"
-    SECRET_LOADING_COMPLETED = "secret.loading.completed"
-    SECRET_LOADING_FAILED = "secret.loading.failed"
 
     # ===================================================================
     # EXTENSION & KNOWLEDGE SYSTEM EVENTS
@@ -108,12 +145,10 @@ class SystemEventType(Enum):
     KNOWLEDGE_SOURCE_FAILED = "knowledge.source.failed"
 
     # ===================================================================
-    # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTTYPE)
+    # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTs)
     # ===================================================================
     RESOURCE_USAGE_MEASURED = "resource.usage.measured"
     RESOURCE_ALLOCATED = "resource.allocated"
-    ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
-    OVERLORD_INITIALIZED = "overlord.initialized"
 
     # ===================================================================
     # ENCRYPTION & SECURITY OPERATIONS
@@ -124,27 +159,30 @@ class SystemEventType(Enum):
     # ===================================================================
     # EXTENSION MANAGEMENT
     # ===================================================================
+    # Extension Lifecycle Events
     EXTENSION_INITIALIZATION_STARTED = "extension.initialization.started"
     EXTENSION_INITIALIZATION_COMPLETED = "extension.initialization.completed"
-    EXTENSION_LISTING_STARTED = "extension.listing.started"
-    EXTENSION_LISTING_COMPLETED = "extension.listing.completed"
-    EXTENSION_LOOKUP_STARTED = "extension.lookup.started"
-    EXTENSION_LOOKUP_COMPLETED = "extension.lookup.completed"
     EXTENSION_REGISTRATION_STARTED = "extension.registration.started"
     EXTENSION_REGISTRATION_COMPLETED = "extension.registration.completed"
+    EXTENSION_LOOKUP_STARTED = "extension.lookup.started"
+    EXTENSION_LOOKUP_COMPLETED = "extension.lookup.completed"
+    EXTENSION_LISTING_STARTED = "extension.listing.started"
+    EXTENSION_LISTING_COMPLETED = "extension.listing.completed"
 
     # ===================================================================
     # ID GENERATION UTILITIES
     # ===================================================================
     ID_GENERATION_STARTED = "id.generation.started"
     ID_GENERATION_COMPLETED = "id.generation.completed"
+    ID_GENERATION_FAILED = "id.generation.failed"
 
     # ===================================================================
     # MEMORY SYSTEM OPERATIONS
     # ===================================================================
-    MEMORY_CLEAR = "memory.clear"
+    MEMORY_CLEAR = "memory.clear"  # separate from memory.context.cleared
     MEMORY_CONTEXT_CLEARED = "memory.context.cleared"
     MEMORY_DELETION_COMPLETED = "memory.deletion.completed"
+    MEMORY_DELETION_FAILED = "memory.deletion.failed"
 
     # ===================================================================
     # PERFORMANCE MONITORING
@@ -155,22 +193,29 @@ class SystemEventType(Enum):
     # ===================================================================
     # SECRET MANAGEMENT OPERATIONS
     # ===================================================================
+    # Storage Operations
+    SECRET_STORAGE_STARTED = "secret.storage.started"
+    SECRET_STORAGE_COMPLETED = "secret.storage.completed"
+    SECRET_RETRIEVAL_STARTED = "secret.retrieval.started"
+    SECRET_RETRIEVAL_COMPLETED = "secret.retrieval.completed"
+
+    # Import/Export Operations
+    SECRET_IMPORT_STARTED = "secret.import.started"
+    SECRET_IMPORT_COMPLETED = "secret.import.completed"
+    SECRET_EXPORT_STARTED = "secret.export.started"
+    SECRET_EXPORT_COMPLETED = "secret.export.completed"
+
+    # Management Operations
+    SECRET_LISTING_STARTED = "secret.listing.started"
+    SECRET_LISTING_COMPLETED = "secret.listing.completed"
+    SECRET_INTERPOLATION_STARTED = "secret.interpolation.started"
+    SECRET_INTERPOLATION_COMPLETED = "secret.interpolation.completed"
+
+    # Cleanup Operations
     SECRET_CLEARING_STARTED = "secret.clearing.started"
     SECRET_CLEARING_COMPLETED = "secret.clearing.completed"
     SECRET_DELETION_STARTED = "secret.deletion.started"
     SECRET_DELETION_COMPLETED = "secret.deletion.completed"
-    SECRET_EXPORT_STARTED = "secret.export.started"
-    SECRET_EXPORT_COMPLETED = "secret.export.completed"
-    SECRET_IMPORT_STARTED = "secret.import.started"
-    SECRET_IMPORT_COMPLETED = "secret.import.completed"
-    SECRET_INTERPOLATION_STARTED = "secret.interpolation.started"
-    SECRET_INTERPOLATION_COMPLETED = "secret.interpolation.completed"
-    SECRET_LISTING_STARTED = "secret.listing.started"
-    SECRET_LISTING_COMPLETED = "secret.listing.completed"
-    SECRET_RETRIEVAL_STARTED = "secret.retrieval.started"
-    SECRET_RETRIEVAL_COMPLETED = "secret.retrieval.completed"
-    SECRET_STORAGE_STARTED = "secret.storage.started"
-    SECRET_STORAGE_COMPLETED = "secret.storage.completed"
 
     # ===================================================================
     # UTILITY OPERATIONS
@@ -179,118 +224,154 @@ class SystemEventType(Enum):
     UTILITY_COMPLETED = "utility.completed"
 
 
-class ConversationEventType(Enum):
+class ConversationEvents(Enum):
     """Comprehensive event types for MUXI observability covering complete request lifecycle."""
 
     # ===================================================================
     # REQUEST INGESTION & VALIDATION
     # ===================================================================
-    REQUEST_RECEIVED = "request.received"
-    REQUEST_DENIED_AUTH = "request.denied.auth"
-    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"
-    REQUEST_DENIED_VALIDATION = "request.denied.validation"
-    REQUEST_VALIDATED = "request.validated"
+    REQUEST_RECEIVED = "request.received"      # Initial event
+    REQUEST_PROCESSING = "request.processing"  # Processing state
+    REQUEST_VALIDATED = "request.validated"    # Validation success
+    REQUEST_DENIED_AUTH = "request.denied.auth"           # Auth failure
+    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"    # Rate limit failure
+    REQUEST_DENIED_VALIDATION = "request.denied.validation"    # Validation failure
+    REQUEST_FAILED = "request.failed"         # Error state
+    REQUEST_COMPLETED = "request.completed"   # Success state
+
 
     # ===================================================================
     # MULTI-MODAL CONTENT PROCESSING
     # ===================================================================
+    # Document Processing
+    DOCUMENT_PROCESSING_STARTED = "document.processing.started"
+    DOCUMENT_PROCESSING_COMPLETED = "document.processing.completed"
     CONTENT_DOCUMENT_PARSED = "content.document.parsed"
-    CONTENT_IMAGE_ANALYZED = "content.image.analyzed"
-    CONTENT_AUDIO_TRANSCRIBED = "content.audio.transcribed"
+
+    # Content Processing
     CONTENT_EXTRACTION_STARTED = "content.extraction.started"
     CONTENT_EXTRACTION_COMPLETED = "content.extraction.completed"
     CONTENT_EXTRACTION_FAILED = "content.extraction.failed"
     CONTENT_PROCESSED = "content.processed"
     CONTENT_RETRIEVED = "content.retrieved"
-    DOCUMENT_PROCESSING_STARTED = "document.processing.started"
-    DOCUMENT_PROCESSING_COMPLETED = "document.processing.completed"
+
+    # Media Analysis
+    CONTENT_IMAGE_ANALYZED = "content.image.analyzed"
+    CONTENT_AUDIO_TRANSCRIBED = "content.audio.transcribed"
 
     # ===================================================================
     # OVERLORD ORCHESTRATION
     # ===================================================================
+    OVERLORD_AGENT_NOTFOUND = "overlord.agent.not_found"
     OVERLORD_ROUTING_FAILED = "overlord.routing.failed"
     OVERLORD_AGENT_SELECTED = "overlord.agent.selected"
-    OVERLORD_AGENT_NOTFOUND = "overlord.agent.not_found"
     OVERLORD_TASK_DECOMPOSED = "overlord.task.decomposed"
 
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
-    MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
-    MEMORY_LONG_TERM_RETRIEVED = "memory.long_term.retrieved"
-    MEMORY_SHORT_TERM_STORED = "memory.short_term.stored"
-    MEMORY_LONG_TERM_STORED = "memory.long_term.stored"
+    # Memory extraction and context operations
     MEMORY_EXTRACTION_STARTED = "memory.extraction.started"
     MEMORY_CONTEXT_ENHANCED = "memory.context.enhanced"
     MEMORY_CONTEXT_RETRIEVED = "memory.context.retrieved"
     MEMORY_CONTEXT_UPDATED = "memory.context.updated"
 
-    # Memory operation results
-    MEMORY_LONG_TERM_UPDATED = "memory.long_term.updated"
+    # Short-term memory operations
+    MEMORY_SHORT_TERM_LOOKUP = "memory.short_term.lookup"
+    MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
+    MEMORY_SHORT_TERM_STORED = "memory.short_term.stored"
     MEMORY_SHORT_TERM_UPDATED = "memory.short_term.updated"
 
-    # Memory error events
-    MEMORY_LONG_TERM_STORE_FAILED = "memory.long_term.store_failed"
+    # Long-term memory operations
+    MEMORY_LONG_TERM_LOOKUP = "memory.long_term.lookup"
+    MEMORY_LONG_TERM_RETRIEVED = "memory.long_term.retrieved"
+    MEMORY_LONG_TERM_STORED = "memory.long_term.stored"
+    MEMORY_LONG_TERM_UPDATED = "memory.long_term.updated"
+
+    # Memory error events - Short-term
     MEMORY_SHORT_TERM_STORE_FAILED = "memory.short_term.store_failed"
-    MEMORY_LONG_TERM_DELETION_FAILED = "memory.long_term.deletion_failed"
     MEMORY_SHORT_TERM_DELETION_FAILED = "memory.short_term.deletion_failed"
-    MEMORY_LONG_TERM_UPDATE_FAILED = "memory.long_term.update_failed"
     MEMORY_SHORT_TERM_UPDATE_FAILED = "memory.short_term.update_failed"
-    MEMORY_LONG_TERM_RETRIEVAL_FAILED = "memory.long_term.retrieval_failed"
     MEMORY_SHORT_TERM_RETRIEVAL_FAILED = "memory.short_term.retrieval_failed"
+
+    # Memory error events - Long-term
+    MEMORY_LONG_TERM_STORE_FAILED = "memory.long_term.store_failed"
+    MEMORY_LONG_TERM_DELETION_FAILED = "memory.long_term.deletion_failed"
+    MEMORY_LONG_TERM_UPDATE_FAILED = "memory.long_term.update_failed"
+    MEMORY_LONG_TERM_RETRIEVAL_FAILED = "memory.long_term.retrieval_failed"
 
     # ===================================================================
     # AGENT PROCESSING
     # ===================================================================
+    # Agent lifecycle events
     AGENT_SELECTED = "agent.selected"
     AGENT_INITIALIZED = "agent.initialized"
+
+    # Agent thinking and planning
     AGENT_THINKING_STARTED = "agent.thinking.started"
     AGENT_THINKING_COMPLETED = "agent.thinking.completed"
     AGENT_PLANNING_CREATED = "agent.planning.created"
     AGENT_CONTEXT_APPLIED = "agent.context.applied"
+
+    # Message processing
     AGENT_MESSAGE_PROCESSING = "agent.message.processing"
     AGENT_MESSAGE_COMPLETED = "agent.message.completed"
     AGENT_MESSAGE_FAILED = "agent.message.failed"
+
+    # Response generation
     AGENT_RESPONSE_GENERATED = "agent.response.generated"
 
     # ===================================================================
     # MODEL OPERATIONS
     # ===================================================================
     MODEL_REQUEST_STARTED = "model.request.started"
-    MODEL_REQUEST_COMPLETED = "model.request.completed"
     MODEL_STREAMING_STARTED = "model.streaming.started"
+    MODEL_REQUEST_COMPLETED = "model.request.completed"
 
     # ===================================================================
     # TOOL & MCP OPERATIONS
     # ===================================================================
+    # Server connection events
+    MCP_SERVER_CONNECTED = "mcp.server.connected"
+    MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
     MCP_CONNECTION_ESTABLISHED = "mcp.connection.established"
+
+    # Tool discovery and usage
     MCP_TOOL_DISCOVERED = "mcp.tool.discovered"
     MCP_TOOL_CALLED = "mcp.tool.called"
-
     MCP_TOOL_CALL_STARTED = "mcp.tool.call_started"
     MCP_TOOL_CALL_COMPLETED = "mcp.tool.call_completed"
     MCP_TOOL_CALL_FAILED = "mcp.tool.call_failed"
-    MCP_SERVER_CONNECTED = "mcp.server.connected"
-    MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
 
     # ===================================================================
     # A2A & COLLABORATION
     # ===================================================================
     # external agent collaboration
-    A2A_DISCOVERY_STARTED = "a2a.discovery.started"
-    A2A_REQUEST_SENT = "a2a.request.sent"  # outbound
-    A2A_REQUEST_RECEIVED = "a2a.request.received"  # inbound
-    A2A_RESPONSE_RECEIVED = "a2a.response.received"  # inbound
-    A2A_RESPONSE_SENT = "a2a.response.sent"  # outbound
+    # Message routing and delivery
+    A2A_MESSAGE_ROUTED = "a2a.message.routed"
     A2A_MESSAGE_SENT = "a2a.message.sent"
     A2A_MESSAGE_RECEIVED = "a2a.message.received"
+    A2A_MESSAGE_FAILED = "a2a.message.failed"
+
+    # Request/response flow
+    A2A_REQUEST_SENT = "a2a.request.sent"  # outbound
+    A2A_REQUEST_RECEIVED = "a2a.request.received"  # inbound
+    A2A_RESPONSE_SENT = "a2a.response.sent"  # outbound
+    A2A_RESPONSE_RECEIVED = "a2a.response.received"  # inbound
 
     # internal agent collaboration
+    # Discovery
     COLAB_DISCOVERY_STARTED = "colab.discovery.started"
+
+    # Request flow
     COLAB_REQUEST_SENT = "colab.request.sent"  # outbound
     COLAB_REQUEST_RECEIVED = "colab.request.received"  # inbound
-    COLAB_RESPONSE_RECEIVED = "colab.response.received"  # inbound
+
+    # Response flow
     COLAB_RESPONSE_SENT = "colab.response.sent"  # outbound
+    COLAB_RESPONSE_RECEIVED = "colab.response.received"  # inbound
+
+    # Message flow
     COLAB_MESSAGE_SENT = "colab.message.sent"
     COLAB_MESSAGE_RECEIVED = "colab.message.received"
 
@@ -298,19 +379,25 @@ class ConversationEventType(Enum):
     # RESPONSE GENERATION
     # ===================================================================
     RESPONSE_GENERATION_STARTED = "response.generation.started"
+    RESPONSE_FORMATTED = "response.formatted"
     RESPONSE_MULTIMODAL_CREATED = "response.multimodal.created"
     RESPONSE_VALIDATION_COMPLETED = "response.validation.completed"
-    RESPONSE_FORMATTED = "response.formatted"
     RESPONSE_CONVERSION_STARTED = "response.conversion.started"
     RESPONSE_CONVERSION_COMPLETED = "response.conversion.completed"
 
     # ===================================================================
     # ASYNC & DELIVERY
     # ===================================================================
+    # Async processing lifecycle
     ASYNC_THRESHOLD_DETECTED = "async.threshold.detected"
     ASYNC_PROCESSING_STARTED = "async.processing.started"
-    RESPONSE_WEBHOOK_SENT = "response.webhook.sent"
+    ASYNC_PROCESSING_COMPLETED = "async.processing.completed"
+    ASYNC_PROCESSING_FAILED = "async.processing.failed"
+
+    # Response delivery lifecycle
     RESPONSE_DELIVERED = "response.delivered"
+    RESPONSE_WEBHOOK_SENT = "response.webhook.sent"
+    RESPONSE_WEBHOOK_FAILED = "response.webhook.failed"
 
     # ===================================================================
     # CLARIFICATION HANDLING
@@ -319,27 +406,22 @@ class ConversationEventType(Enum):
     CLARIFICATION_RESPONSE_RECEIVED = "clarification.response.received"
 
     # ===================================================================
-    # ERROR HANDLING & RECOVERY
-    # ===================================================================
-    ERROR_TIMEOUT_DETECTED = "error.timeout.detected"
-    ERROR_FALLBACK_ACTIVATED = "error.fallback.activated"
-    ERROR_RECOVERY_COMPLETED = "error.recovery.completed"
-    ERROR_CLARIFICATION_FAILED = "error.clarification.failed"
-    ERROR_AGENT_PROCESSING = "error.agent.processing"
-    ERROR_RETRY_ATTEMPTED = "error.retry.attempted"
-
-    # ===================================================================
     # SESSION MANAGEMENT
     # ===================================================================
     SESSION_CREATED = "session.created"
     SESSION_CONTEXT_UPDATED = "session.context.updated"
 
+
+class ErrorEvents(Enum):
     # ===================================================================
-    # REQUEST LIFECYCLE (LEGACY COMPATIBILITY)
+    # ERROR HANDLING & RECOVERY
     # ===================================================================
-    REQUEST_PROCESSING = "request.processing"
-    REQUEST_COMPLETED = "request.completed"
-    REQUEST_FAILED = "request.failed"
+    TIMEOUT_DETECTED = "error.timeout.detected"
+    FALLBACK_ACTIVATED = "error.fallback.activated"
+    RECOVERY_COMPLETED = "error.recovery.completed"
+    CLARIFICATION_FAILED = "error.clarification.failed"
+    AGENT_PROCESSING = "error.agent.processing"
+    RETRY_ATTEMPTED = "error.retry.attempted"
 
 
 @dataclass
@@ -525,7 +607,7 @@ class EventLogger:
 
     async def emit_event(
         self,
-        event_type: Union[ConversationEventType, SystemEventType, str],
+        event_type: Union[ConversationEvents, SystemEvents, str],
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
@@ -534,7 +616,7 @@ class EventLogger:
     ) -> str:
         """Emit an observability event with structured data."""
         # Handle different event types
-        if isinstance(event_type, (ConversationEventType, SystemEventType)):
+        if isinstance(event_type, (ConversationEvents, SystemEvents)):
             event_type_str = event_type.value
         else:
             event_type_str = event_type
@@ -591,19 +673,19 @@ class EventLogger:
     async def _emit_to_output(
         self,
         event: Dict[str, Any],
-        event_type: Union[ConversationEventType, SystemEventType, str]
+        event_type: Union[ConversationEvents, SystemEvents, str]
     ) -> None:
         """Emit event to the configured output destination."""
         try:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(',', ':'))
 
-            # Route SystemEventType to stdout only, regardless of configuration
-            if isinstance(event_type, SystemEventType):
+            # Route SystemEvents to stdout only, regardless of configuration
+            if isinstance(event_type, SystemEvents):
                 print(event_line, flush=True)
                 return
 
-            # Route ConversationEventType to configured output
+            # Route ConversationEvents to configured output
             if self.output == "stdout":
                 print(event_line, flush=True)
             elif self.output == "file":
@@ -743,7 +825,7 @@ class ObservabilityManager:
         ) as context:
             # Emit request received event
             await self.event_logger.emit_event(
-                ConversationEventType.REQUEST_RECEIVED,
+                ConversationEvents.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=context,
                 description=f"Request {context.id} received"
@@ -754,7 +836,7 @@ class ObservabilityManager:
 
                 # Emit request completed event
                 await self.event_logger.emit_event(
-                    ConversationEventType.REQUEST_COMPLETED,
+                    ConversationEvents.REQUEST_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=context,
                     description=f"Request {context.id} completed in {context.duration_ms}ms"
@@ -763,7 +845,7 @@ class ObservabilityManager:
             except Exception as e:
                 # Emit request failed event
                 await self.event_logger.emit_event(
-                    ConversationEventType.REQUEST_FAILED,
+                    ConversationEvents.REQUEST_FAILED,
                     level=EventLevel.ERROR,
                     request_context=context,
                     data={"error": str(e)},
@@ -773,7 +855,7 @@ class ObservabilityManager:
 
     async def emit_conversation_event(
         self,
-        event_type: ConversationEventType,
+        event_type: ConversationEvents,
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
@@ -792,7 +874,7 @@ class ObservabilityManager:
 
     async def emit_system_event(
         self,
-        event_type: SystemEventType,
+        event_type: SystemEvents,
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         description: Optional[str] = None
@@ -826,7 +908,7 @@ async def emit_event(
     Uses direct access to ObservabilityManager singleton instead of requiring overlord reference.
 
     Args:
-        event_type: ConversationEventType enum name (e.g., "AGENT_MESSAGE_PROCESSING")
+        event_type: ConversationEvents enum name (e.g., "AGENT_MESSAGE_PROCESSING")
         level: EventLevel name (e.g., "INFO", "ERROR", "DEBUG")
         request_context: Request context for event correlation
         data: Additional event data dictionary
@@ -842,7 +924,7 @@ async def emit_event(
             return
 
         # Convert string names to enum values
-        event_enum = getattr(ConversationEventType, event_type)
+        event_enum = getattr(ConversationEvents, event_type)
         level_enum = getattr(EventLevel, level)
 
         # Emit event directly through observability manager

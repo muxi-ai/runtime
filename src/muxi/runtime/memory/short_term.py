@@ -189,20 +189,6 @@ class ShortTermMemory:
             namespace: Namespace for organizing items (e.g., "buffer", "doc").
                 Used for namespaced ID generation. Default is "buffer".
         """
-        # Emit memory storage started event
-        observability.emit_event(
-            event_type=observability.ConversationEventType.MEMORY_STORE,
-            level=observability.EventLevel.INFO,
-            data={
-                "text_length": len(text),
-                "has_metadata": metadata is not None and len(metadata) > 0,
-                "namespace": namespace,
-                "buffer_size": len(self.buffer),
-                "buffer_capacity": self.buffer_size,
-            },
-            description="Short-term memory storage started",
-        )
-
         # Initialize metadata dictionary if None
         if metadata is None:
             metadata = {}
@@ -421,7 +407,7 @@ class ShortTermMemory:
         """
         # Emit memory retrieval started event
         observability.emit_event(
-            event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_STARTED,
+            event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
             level=observability.EventLevel.INFO,
             data={
                 "query_length": len(query),
@@ -442,7 +428,7 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event for recency-only search
             observability.emit_event(
-                event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "results_count": len(recency_results),
@@ -472,7 +458,7 @@ class ShortTermMemory:
 
                 # Emit memory retrieval completed event for embedding failure fallback
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "results_count": len(embedding_fallback_results),
@@ -548,7 +534,7 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event
             observability.emit_event(
-                event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "results_count": len(final_results),
@@ -568,7 +554,7 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event for fallback
             observability.emit_event(
-                event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_COMPLETED,
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "results_count": len(fallback_results),

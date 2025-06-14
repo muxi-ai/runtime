@@ -134,7 +134,7 @@ class KnowledgeHandler:
 
         # Log initialization
         observability.emit_event(
-                event_type=observability.ConversationEventType.SESSION_CREATED,
+                event_type=observability.ConversationEvents.SESSION_CREATED,
                 level=observability.EventLevel.INFO,
                 description="KnowledgeHandler initialized",
                 data={
@@ -165,7 +165,7 @@ class KnowledgeHandler:
 
                 # Log cache load
                 observability.emit_event(
-                        event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                         level=observability.EventLevel.INFO,
                         description="Knowledge cache loaded successfully",
                         data={
@@ -183,7 +183,7 @@ class KnowledgeHandler:
 
                 # Log cache load error
                 observability.emit_event(
-                        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                         level=observability.EventLevel.ERROR,
                         description="Failed to load knowledge cache",
                         data={
@@ -205,7 +205,7 @@ class KnowledgeHandler:
 
             # Log cache save
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                     level=observability.EventLevel.INFO,
                     description="Knowledge cache saved successfully",
                     data={
@@ -220,7 +220,7 @@ class KnowledgeHandler:
 
             # Log cache save error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to save knowledge cache",
                     data={
@@ -247,7 +247,7 @@ class KnowledgeHandler:
 
             # Log FAISSx setup
             observability.emit_event(
-                    event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                    event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                     level=observability.EventLevel.INFO,
                     description="FAISSx setup completed",
                     data={
@@ -262,7 +262,7 @@ class KnowledgeHandler:
 
             # Log FAISSx setup error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to setup FAISSx",
                     data={"error": str(e), "error_type": type(e).__name__, "mode": self.mode},
@@ -273,7 +273,7 @@ class KnowledgeHandler:
         """Add a knowledge source and process its content with performance limits."""
         # Log knowledge source addition start
         observability.emit_event(
-                event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                 level=observability.EventLevel.INFO,
                 description="Starting knowledge source addition",
                 data={
@@ -289,7 +289,7 @@ class KnowledgeHandler:
 
             # Log source limit reached
             observability.emit_event(
-                    event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                    event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                     level=observability.EventLevel.WARNING,
                     description="Knowledge source limit reached",
                     data={
@@ -307,7 +307,7 @@ class KnowledgeHandler:
 
             # Log no embedding function
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                     level=observability.EventLevel.DEBUG,
                     description="No embedding function provided for knowledge source",
                     data={
@@ -326,7 +326,7 @@ class KnowledgeHandler:
 
             # Log files discovery
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                     level=observability.EventLevel.INFO,
                     description="Files discovered for knowledge source",
                     data={
@@ -390,7 +390,7 @@ class KnowledgeHandler:
 
                         # Log successful embedding generation
                         observability.emit_event(
-                                event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                                 level=observability.EventLevel.INFO,
                                 description="Knowledge source embeddings generated successfully",
                                 data={
@@ -406,7 +406,7 @@ class KnowledgeHandler:
 
                     # Log embedding generation error
                     observability.emit_event(
-                            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                             level=observability.EventLevel.ERROR,
                             description="Failed to generate embeddings for knowledge source",
                             data={
@@ -419,7 +419,7 @@ class KnowledgeHandler:
 
             # Log successful knowledge source addition
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                     level=observability.EventLevel.INFO,
                     description="Knowledge source addition completed",
                     data={
@@ -435,7 +435,7 @@ class KnowledgeHandler:
 
             # Log knowledge source addition error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to add knowledge source",
                     data={
@@ -451,7 +451,7 @@ class KnowledgeHandler:
         """Search across all knowledge sources."""
         # Log search start
         observability.emit_event(
-                event_type=observability.ConversationEventType.CONTENT_RETRIEVED,
+                event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 description="Starting knowledge search",
                 data={
@@ -465,7 +465,7 @@ class KnowledgeHandler:
         if not self.documents:
             # Log empty documents
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_RETRIEVED,
+                    event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     description="No documents available for knowledge search",
                     data={"query": query, "top_k": top_k},
@@ -490,7 +490,7 @@ class KnowledgeHandler:
 
             # Log text search results
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_RETRIEVED,
+                    event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
                     level=observability.EventLevel.INFO,
                     descriptiontion="Knowledge text search completed",
                     data={
@@ -518,7 +518,7 @@ class KnowledgeHandler:
 
             # Log successful search
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_RETRIEVED,
+                    event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
                     level=observability.EventLevel.INFO,
                     description="Knowledge semantic search completed successfully",
                     data={
@@ -536,7 +536,7 @@ class KnowledgeHandler:
 
             # Log search error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Knowledge search operation failed",
                     data={
@@ -559,7 +559,7 @@ class KnowledgeHandler:
         """Create KnowledgeHandler from agent configuration with performance optimizations."""
         # Log configuration loading start
         observability.emit_event(
-                event_type=observability.ConversationEventType.SESSION_CREATED,
+                event_type=observability.ConversationEvents.SESSION_CREATED,
                 level=observability.EventLevel.INFO,
                 description="Starting KnowledgeHandler creation from agent config",
                 data={
@@ -576,7 +576,7 @@ class KnowledgeHandler:
 
             # Log knowledge disabled
             observability.emit_event(
-                    event_type=observability.ConversationEventType.SESSION_CREATED,
+                    event_type=observability.ConversationEvents.SESSION_CREATED,
                     level=observability.EventLevel.DEBUG,
                     description="Knowledge disabled for agent",
                     data={"agent_id": agent_id},
@@ -589,7 +589,7 @@ class KnowledgeHandler:
 
             # Log no sources
             observability.emit_event(
-                    event_type=observability.ConversationEventType.SESSION_CREATED,
+                    event_type=observability.ConversationEvents.SESSION_CREATED,
                     level=observability.EventLevel.WARNING,
                     description="No knowledge sources configured for agent",
                     data={"agent_id": agent_id},
@@ -618,7 +618,7 @@ class KnowledgeHandler:
 
                     # Log source limit
                     observability.emit_event(
-                            event_type=observability.SystemEventType.RESOURCE_ALLOCATED,
+                            event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                             level=observability.EventLevel.WARNING,
                             description="Knowledge sources limited for performance",
                             data={
@@ -649,7 +649,7 @@ class KnowledgeHandler:
 
                     # Log source loading error
                     observability.emit_event(
-                            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                             level=observability.EventLevel.ERROR,
                             description="Failed to load knowledge source from config",
                             data={
@@ -669,7 +669,7 @@ class KnowledgeHandler:
 
             # Log successful handler creation
             observability.emit_event(
-                    event_type=observability.ConversationEventType.SESSION_CREATED,
+                    event_type=observability.ConversationEvents.SESSION_CREATED,
                     level=observability.EventLevel.INFO,
                     description="KnowledgeHandler created successfully from agent config",
                     data={
@@ -685,7 +685,7 @@ class KnowledgeHandler:
         except Exception as e:
             # Log handler creation error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to create KnowledgeHandler from agent config",
                     data={"agent_id": agent_id, "error": str(e), "error_type": type(e).__name__},
@@ -716,7 +716,7 @@ class KnowledgeHandler:
 
         # Log file addition start
         observability.emit_event(
-                event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                 level=observability.EventLevel.INFO,
                 description="Starting knowledge file addition",
                 data={
@@ -734,7 +734,7 @@ class KnowledgeHandler:
 
             # Log file not found
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Knowledge file not found",
                     data={"file_path": file_path, "error": "FileNotFoundError"},
@@ -749,7 +749,7 @@ class KnowledgeHandler:
 
                 # Log file already processed
                 observability.emit_event(
-                        event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                         level=observability.EventLevel.DEBUG,
                         description="Knowledge file already processed and unchanged",
                         data={"file_path": file_path, "file_mtime": file_mtime},
@@ -766,7 +766,7 @@ class KnowledgeHandler:
 
                 # Log no content
                 observability.emit_event(
-                        event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                         level=observability.EventLevel.WARNING,
                         description="No content found in knowledge file",
                         data={
@@ -805,7 +805,7 @@ class KnowledgeHandler:
 
             # Log successful file addition
             observability.emit_event(
-                    event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                     level=observability.EventLevel.INFO,
                     description="Knowledge file added successfully",
                     data={
@@ -823,7 +823,7 @@ class KnowledgeHandler:
 
             # Log file addition error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to add knowledge file",
                     data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
@@ -847,7 +847,7 @@ class KnowledgeHandler:
         """
         # Log file removal start
         observability.emit_event(
-                event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                 level=observability.EventLevel.INFO,
                 description="Starting knowledge file removal",
                 data={"file_path": file_path, "current_documents": len(self.documents)},
@@ -871,7 +871,7 @@ class KnowledgeHandler:
 
                 # Log successful file removal
                 observability.emit_event(
-                        event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                         level=observability.EventLevel.INFO,
                         description="Knowledge file removed successfully",
                         data={
@@ -885,7 +885,7 @@ class KnowledgeHandler:
             else:
                 # Log file not found for removal
                 observability.emit_event(
-                        event_type=observability.ConversationEventType.CONTENT_PROCESSED,
+                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                         level=observability.EventLevel.WARNING,
                         description="Knowledge file not found for removal",
                         data={"file_path": file_path, "current_documents": len(self.documents)},
@@ -896,7 +896,7 @@ class KnowledgeHandler:
         except Exception as e:
             # Log file removal error
             observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to remove knowledge file",
                     data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},

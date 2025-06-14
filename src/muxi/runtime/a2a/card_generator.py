@@ -42,7 +42,7 @@ class AgentCardGenerator:
 
         # Initialize observability
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATOR_INITIALIZED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATOR_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
                 "cache_manager_type": type(self.cache_manager).__name__,
@@ -63,7 +63,7 @@ class AgentCardGenerator:
         """
         try:
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_CONFIG_LOAD_STARTED,
+                event_type=observability.SystemEvents.A2A_CONFIG_LOAD_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"config_path": str(config_path), "file_exists": config_path.exists()},
                 description=f"Loading agent configuration from {config_path}",
@@ -77,7 +77,7 @@ class AgentCardGenerator:
 
             try:
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_CONFIG_LOAD_COMPLETED,
+                    event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
                     level=observability.EventLevel.INFO,
                     data={
                         "config_path": str(config_path),
@@ -96,7 +96,7 @@ class AgentCardGenerator:
         except Exception as e:
             try:
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "config_path": str(config_path),
@@ -131,7 +131,7 @@ class AgentCardGenerator:
         """
         try:
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_CARD_GENERATION_STARTED,
+                event_type=observability.SystemEvents.A2A_CARD_GENERATING,
                 level=observability.EventLevel.INFO,
                 data={
                     "config_path": str(config_path),
@@ -157,7 +157,7 @@ class AgentCardGenerator:
             cached_card = self.cache_manager.get_cached_card(agent_id)
             if cached_card:
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+                    event_type=observability.SystemEvents.A2A_CARD_GENERATED,
                     level=observability.EventLevel.INFO,
                     data={
                         "agent_id": agent_id,
@@ -172,7 +172,7 @@ class AgentCardGenerator:
 
         # Generate new card
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_STARTED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATING,
             level=observability.EventLevel.INFO,
             data={"agent_id": agent_id, "source": "generation", "config_hash": config_hash},
             description=f"Generating new agent card for {agent_id}",
@@ -189,7 +189,7 @@ class AgentCardGenerator:
         self.cache_manager.cache_card(agent_id, card, config_hash)
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.INFO,
             data={
                 "agent_id": agent_id,
@@ -216,7 +216,7 @@ class AgentCardGenerator:
             agent_id = config_path.stem
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CONFIG_LOAD_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
             level=observability.EventLevel.DEBUG,
             data={
                 "agent_id": agent_id,
@@ -269,7 +269,7 @@ class AgentCardGenerator:
         self._add_metadata_from_config(card, config)
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
                 "agent_id": agent_id,
@@ -380,7 +380,7 @@ class AgentCardGenerator:
                 capabilities_added.append(cap_name)
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
                 "capabilities_added": capabilities_added,
@@ -410,7 +410,7 @@ class AgentCardGenerator:
             )
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+                event_type=observability.SystemEvents.A2A_CARD_GENERATED,
                 level=observability.EventLevel.DEBUG,
                 data={"mcp_servers": mcp_servers, "total_servers": len(mcp_servers)},
                 description="Added MCP capabilities to agent card",
@@ -455,7 +455,7 @@ class AgentCardGenerator:
         endpoints_added.append("agent_card")
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
                 "base_url": base_url,
@@ -487,7 +487,7 @@ class AgentCardGenerator:
             )
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+                event_type=observability.SystemEvents.A2A_CARD_GENERATED,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "auth_type": auth_type,
@@ -529,7 +529,7 @@ class AgentCardGenerator:
         card.metadata = metadata
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
                 "metadata_keys": list(metadata.keys()),
@@ -557,7 +557,7 @@ class AgentCardGenerator:
             Dictionary mapping agent IDs to their agent cards
         """
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_STARTED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATING,
             level=observability.EventLevel.INFO,
             data={
                 "config_dir": str(config_dir),
@@ -574,7 +574,7 @@ class AgentCardGenerator:
         config_files = list(config_dir.glob("*.yaml")) + list(config_dir.glob("*.yml"))
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CONFIG_LOAD_STARTED,
+            event_type=observability.SystemEvents.A2A_CONFIG_LOAD_STARTED,
             level=observability.EventLevel.INFO,
             data={
                 "config_files_count": len(config_files),
@@ -604,7 +604,7 @@ class AgentCardGenerator:
             except Exception as e:
                 failed_cards += 1
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "config_file": str(config_file),
@@ -616,7 +616,7 @@ class AgentCardGenerator:
                 continue
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_GENERATION_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.INFO,
             data={
                 "formation_name": formation_name,
@@ -640,7 +640,7 @@ class AgentCardGenerator:
             output_dir: Directory to write card files
         """
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_EXPORT_STARTED,
+            event_type=observability.SystemEvents.A2A_CARD_EXPORTING,
             level=observability.EventLevel.INFO,
             data={
                 "output_dir": str(output_dir),
@@ -665,7 +665,7 @@ class AgentCardGenerator:
             except Exception as e:
                 failed_exports += 1
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "agent_id": agent_id,
@@ -677,7 +677,7 @@ class AgentCardGenerator:
                 )
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.A2A_CARD_EXPORT_COMPLETED,
+            event_type=observability.SystemEvents.A2A_CARD_EXPORTED,
             level=observability.EventLevel.INFO,
             data={
                 "output_dir": str(output_dir),

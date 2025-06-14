@@ -42,7 +42,7 @@ def classify_error_code(exception: Exception) -> str:
         Error code string from the error registry
     """
     observability.emit_event(
-        event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
         level=observability.EventLevel.WARNING,
         description=f"Error classified: {type(exception).__name__}",
         data={

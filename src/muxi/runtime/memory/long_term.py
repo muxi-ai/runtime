@@ -192,7 +192,7 @@ class LongTermMemory:
         """
         # Emit memory storage started event
         observability.emit_event(
-            event_type=observability.ConversationEventType.MEMORY_LONG_TERM_STORED,
+            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_STORED,
             level=observability.EventLevel.INFO,
             data={
                 "content_length": len(content),
@@ -215,7 +215,7 @@ class LongTermMemory:
 
         # Emit memory storage completed event
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
                 "memory_id": memory_id,
@@ -327,7 +327,7 @@ class LongTermMemory:
         """
         # Emit memory search started event
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
                 "query_length": len(query),
@@ -364,7 +364,7 @@ class LongTermMemory:
 
         # Emit memory search completed event
         observability.emit_event(
-            event_type=observability.ConversationEventType.MEMORY_LONG_TERM_RETRIEVED,
+            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
             level=observability.EventLevel.INFO,
             data={
                 "query_length": len(query),
@@ -499,7 +499,7 @@ class LongTermMemory:
         """
         # Emit memory update started event
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
                 "memory_id": memory_id,
@@ -516,7 +516,7 @@ class LongTermMemory:
             if not memory:
                 # Emit memory update failed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_LONG_TERM_UPDATE_FAILED,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "memory_id": memory_id,
@@ -544,7 +544,7 @@ class LongTermMemory:
 
             # Emit memory update completed event
             observability.emit_event(
-                event_type=observability.ConversationEventType.MEMORY_LONG_TERM_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 data={
                     "memory_id": memory_id,
@@ -571,7 +571,7 @@ class LongTermMemory:
         """
         # Emit memory deletion started event
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={"memory_id": memory_id},
             description="Long-term memory deletion started",
@@ -583,7 +583,7 @@ class LongTermMemory:
             if not memory:
                 # Emit memory deletion failed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_LONG_TERM_DELETION_FAILED,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_DELETION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "memory_id": memory_id,
@@ -598,10 +598,10 @@ class LongTermMemory:
 
             # Emit memory deletion completed event
             observability.emit_event(
-                event_type=observability.ConversationEventType.MEMORY_LONG_TERM_DELETED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 data={"memory_id": memory_id},
-                description="Long-term memory deletion completed",
+                description="Long-term memory item deleted",
             )
 
             return True

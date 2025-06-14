@@ -96,7 +96,7 @@ class Extension:
         """
         # Observability: Extension registration started
         observability.emit_event(
-            event_type=observability.SystemEventType.EXTENSION_REGISTRATION_STARTED,
+            event_type=observability.SystemEvents.EXTENSION_REGISTRATION_STARTED,
             level=observability.EventLevel.INFO,
             description=(f"Starting extension registration for " f"{extension_cls.__name__}"),
             data={
@@ -112,7 +112,7 @@ class Extension:
 
                 # Observability: Extension registration failed
                 observability.emit_event(
-                    event_type=observability.SystemEventType.EXTENSION_REGISTRATION_COMPLETED,
+                    event_type=observability.SystemEvents.EXTENSION_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.ERROR,
                     description=(
                         f"Extension registration failed for "
@@ -131,7 +131,7 @@ class Extension:
 
             # Observability: Extension registration completed successfully
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_REGISTRATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_REGISTRATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Extension registration completed for {extension_cls.__name__}",
                 data={
@@ -147,7 +147,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension registration failed with exception
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_REGISTRATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_REGISTRATION_COMPLETED,
                 level=observability.EventLevel.ERROR,
                 description=(
                     f"Extension registration failed for " f"{extension_cls.__name__}: {str(e)}"
@@ -179,7 +179,7 @@ class Extension:
         """
         # Observability: Extension retrieval started
         observability.emit_event(
-            event_type=observability.SystemEventType.EXTENSION_LOOKUP_STARTED,
+            event_type=observability.SystemEvents.EXTENSION_LOOKUP_STARTED,
             level=observability.EventLevel.DEBUG,
             description=f"Starting extension lookup for name: {name}",
             data={
@@ -195,7 +195,7 @@ class Extension:
 
             # Observability: Extension retrieval completed
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_LOOKUP_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LOOKUP_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description=(f"Extension lookup completed for name: {name}, " f"found: {found}"),
                 data={
@@ -211,7 +211,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension retrieval failed
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_LOOKUP_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LOOKUP_COMPLETED,
                 level=observability.EventLevel.ERROR,
                 description=f"Extension lookup failed for name: {name}: {str(e)}",
                 data={
@@ -238,7 +238,7 @@ class Extension:
         """
         # Observability: Extension listing started
         observability.emit_event(
-            event_type=observability.SystemEventType.EXTENSION_LISTING_STARTED,
+            event_type=observability.SystemEvents.EXTENSION_LISTING_STARTED,
             level=observability.EventLevel.DEBUG,
             description="Starting extension listing",
             data={"registry_size": len(cls._registry)},
@@ -249,7 +249,7 @@ class Extension:
 
             # Observability: Extension listing completed
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_LISTING_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LISTING_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description=(
                     f"Extension listing completed, found " f"{len(extension_names)} extensions"
@@ -264,7 +264,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension listing failed
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_LISTING_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LISTING_COMPLETED,
                 level=observability.EventLevel.ERROR,
                 description=f"Extension listing failed: {str(e)}",
                 data={"error": str(e), "error_type": type(e).__name__, "success": False},
@@ -291,7 +291,7 @@ class Extension:
         """
         # Observability: Extension initialization started
         observability.emit_event(
-            event_type=observability.SystemEventType.EXTENSION_INITIALIZATION_STARTED,
+            event_type=observability.SystemEvents.EXTENSION_INITIALIZATION_STARTED,
             level=observability.EventLevel.INFO,
             description=f"Starting extension initialization for {cls.__name__}",
             data={
@@ -307,7 +307,7 @@ class Extension:
 
             # Observability: Extension initialization failed (not implemented)
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_INITIALIZATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_INITIALIZATION_COMPLETED,
                 level=observability.EventLevel.ERROR,
                 description=(f"Extension initialization failed for " f"{cls.__name__}: {error_msg}"),
                 data={
@@ -324,7 +324,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension initialization failed with exception
             observability.emit_event(
-                event_type=observability.SystemEventType.EXTENSION_INITIALIZATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_INITIALIZATION_COMPLETED,
                 level=observability.EventLevel.ERROR,
                 description=(f"Extension initialization failed for " f"{cls.__name__}: {str(e)}"),
                 data={

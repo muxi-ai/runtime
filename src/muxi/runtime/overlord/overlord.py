@@ -601,7 +601,7 @@ class Overlord:
         try:
             # Emit formation loading started event
             observability.emit_event(
-                event_type=observability.SystemEventType.OVERLORD_INITIALIZATION_STARTED,
+                event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
                 level=observability.EventLevel.INFO,
                 data={"formation_path": formation_path},
                 description=f"Starting formation loading from {formation_path}",
@@ -643,7 +643,7 @@ class Overlord:
 
             # Emit formation loading completed event
             observability.emit_event(
-                event_type=observability.SystemEventType.OVERLORD_INITIALIZATION_COMPLETED,
+                event_type=observability.SystemEvents.OVERLORD_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation_id": formation_config.get("id", "unnamed"),
@@ -663,7 +663,7 @@ class Overlord:
 
             # Emit formation loading failed event
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_TIMEOUT_DETECTED,
+                event_type=observability.ErrorEvents.TIMEOUT_DETECTED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation_path": formation_path,
@@ -1965,20 +1965,6 @@ class Overlord:
         if agent_id:
             full_metadata["agent_id"] = agent_id
 
-        # Emit memory storage started event
-        observability.emit_event(
-            event_type=observability.ConversationEventType.MEMORY_STORE,
-            level=observability.EventLevel.DEBUG,
-            data={
-                "content_length": len(content),
-                "memory_type": "long_term",
-                "agent_id": agent_id,
-                "user_id": str(user_id) if user_id is not None else None,
-                "has_embedding": embedding is not None,
-            },
-            description="Starting long-term memory storage",
-        )
-
         # Handle multi-user case with Memobase
         if self.is_multi_user and user_id is not None:
             try:
@@ -1993,7 +1979,7 @@ class Overlord:
 
                 # Emit memory storage completed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_STORAGE_LONG_TERM,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_STORED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "memory_id": memory_id,
@@ -2008,7 +1994,7 @@ class Overlord:
                 #  Memobase add error - add observability event
                 # Emit memory storage failed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.ERROR_MEMORY_STORAGE,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_STORE_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "memory_type": "long_term",
@@ -2028,7 +2014,7 @@ class Overlord:
 
             # Emit memory storage completed event
             observability.emit_event(
-                event_type=observability.ConversationEventType.MEMORY_STORAGE_LONG_TERM,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_STORED,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "memory_id": memory_id,
@@ -2043,7 +2029,7 @@ class Overlord:
             #  Long-term memory add error - add observability event
             # Emit memory storage failed event
             observability.emit_event(
-                event_type=observability.ConversationEventType.ERROR_MEMORY_STORAGE,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_STORE_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "memory_type": "long_term",
@@ -2105,7 +2091,7 @@ class Overlord:
             try:
                 # Emit memory search started event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_STARTED,
+                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "query": query[:100],
@@ -2123,7 +2109,7 @@ class Overlord:
 
                 # Emit memory search completed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_SHORT_TERM,
+                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "query": query[:100],
@@ -2152,7 +2138,7 @@ class Overlord:
             try:
                 # Emit memory search started event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_STARTED,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_LOOKUP,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "query": query[:100],
@@ -2179,7 +2165,7 @@ class Overlord:
 
                 # Emit memory search completed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.MEMORY_RETRIEVAL_LONG_TERM,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "query": query[:100],
@@ -3764,7 +3750,7 @@ class Overlord:
         ) as request_context:
             # Emit request received event
             observability.emit_event(
-                event_type=observability.ConversationEventType.REQUEST_RECEIVED,
+                event_type=observability.ConversationEvents.REQUEST_RECEIVED,
                 level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -3779,7 +3765,7 @@ class Overlord:
 
             # Emit request validation event (basic validation)
             observability.emit_event(
-                event_type=observability.ConversationEventType.REQUEST_VALIDATED,
+                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
                 level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={
@@ -3791,7 +3777,7 @@ class Overlord:
 
             # Emit routing started event
             observability.emit_event(
-                event_type=observability.SystemEventType.OVERLORD_ROUTING_STARTED,
+                event_type=observability.SystemEvents.OVERLORD_ROUTING_STARTED,
                 level=observability.EventLevel.INFO,
                 request_context=request_context,
                 data={"message": message[:200], "agent_name": agent_name},
@@ -3869,7 +3855,7 @@ class Overlord:
 
                 # Emit performance monitoring started event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.PERFORMANCE_DURATION_RECORDED,
+                    event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
                     level=observability.EventLevel.DEBUG,
                     request_context=request_context,
                     data={
@@ -3887,7 +3873,7 @@ class Overlord:
 
                 # Emit performance monitoring completed event
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.PERFORMANCE_DURATION_RECORDED,
+                    event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
                     level=observability.EventLevel.DEBUG,
                     request_context=request_context,
                     data={
@@ -3906,7 +3892,7 @@ class Overlord:
 
                 # Emit routing completed event
                 observability.emit_event(
-                    event_type=observability.SystemEventType.OVERLORD_ROUTING_COMPLETED,
+                    event_type=observability.SystemEvents.OVERLORD_ROUTING_COMPLETED,
                     level=observability.EventLevel.INFO,
                     request_context=request_context,
                     data={"processing_time": processing_time, "mode": "sync"},
@@ -4077,7 +4063,7 @@ class Overlord:
             # Emit agent selection started event
             if request_context:
                 observability.emit_event(
-                    event_type=observability.SystemEventType.OVERLORD_AGENT_SELECTION_STARTED,
+                    event_type=observability.SystemEvents.OVERLORD_AGENT_SELECTION_STARTED,
                     level=observability.EventLevel.INFO,
                     request_context=request_context,
                     data={"message": message[:200]},
@@ -4089,7 +4075,7 @@ class Overlord:
             # Emit agent selection completed event
             if request_context:
                 observability.emit_event(
-                    event_type=observability.SystemEventType.OVERLORD_AGENT_SELECTION_COMPLETED,
+                    event_type=observability.SystemEvents.OVERLORD_AGENT_SELECTION_COMPLETED,
                     level=observability.EventLevel.INFO,
                     request_context=request_context,
                     data={"selected_agent": agent_name},

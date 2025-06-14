@@ -18,7 +18,7 @@ def get_version() -> str:
         The version string
     """
     observability.emit_event(
-        event_type=observability.SystemEventType.UTILITY_STARTED,
+        event_type=observability.SystemEvents.UTILITY_STARTED,
         level=observability.EventLevel.DEBUG,
         description="Starting version retrieval",
         data={"operation": "get_version", "utility": "version"},
@@ -32,7 +32,7 @@ def get_version() -> str:
         version_file = os.path.join(os.path.dirname(__file__), "..", "..", ".version")
 
         observability.emit_event(
-            event_type=observability.ConversationEventType.REQUEST_PROCESSING,
+            event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.DEBUG,
             description="Checking for version file",
             data={
@@ -48,7 +48,7 @@ def get_version() -> str:
                 version = f.read().strip()
 
             observability.emit_event(
-                event_type=observability.ConversationEventType.REQUEST_COMPLETED,
+                event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description="Version file read successfully",
                 data={
@@ -60,7 +60,7 @@ def get_version() -> str:
             )
 
             observability.emit_event(
-                event_type=observability.SystemEventType.UTILITY_COMPLETED,
+                event_type=observability.SystemEvents.UTILITY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description="Version retrieval completed successfully",
                 data={
@@ -74,7 +74,7 @@ def get_version() -> str:
             return version
         else:
             observability.emit_event(
-                event_type=observability.SystemEventType.UTILITY_COMPLETED,
+                event_type=observability.SystemEvents.UTILITY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description="Version retrieval completed using default version",
                 data={
@@ -90,7 +90,7 @@ def get_version() -> str:
 
     except Exception as e:
         observability.emit_event(
-            event_type=observability.ConversationEventType.ERROR_RETRY_ATTEMPTED,
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Version retrieval failed, using default version",
             data={

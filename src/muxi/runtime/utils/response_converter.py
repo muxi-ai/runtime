@@ -35,7 +35,7 @@ def convert_onellm_to_muxi_content(
     try:
 
         observability.emit_event(
-            ConversationEventType.RESPONSE_CONVERSION_STARTED,
+            ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Starting OneLLM to MUXI content conversion",
             data={
@@ -68,7 +68,7 @@ def convert_onellm_to_muxi_content(
                 })
 
         observability.emit_event(
-                ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
+                ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "OneLLM to MUXI content conversion completed",
                 data={
@@ -82,7 +82,7 @@ def convert_onellm_to_muxi_content(
 
     except Exception as e:
         observability.emit_event(
-                ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"OneLLM to MUXI content conversion failed: {str(e)}",
                 data={
@@ -116,7 +116,7 @@ def extract_user_content(
         )
 
         observability.emit_event(
-            ConversationEventType.RESPONSE_CONVERSION_STARTED,
+            ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Starting MCP message content extraction",
             data={
@@ -140,7 +140,7 @@ def extract_user_content(
             })
 
             observability.emit_event(
-                    ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
+                    ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                     EventLevel.DEBUG,
                     "MCP string content extraction completed",
                     data={
@@ -183,7 +183,7 @@ def extract_user_content(
                 })
 
         observability.emit_event(
-                ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
+                ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "MCP list content extraction completed",
                 data={
@@ -199,7 +199,7 @@ def extract_user_content(
 
     except Exception as e:
         observability.emit_event(
-                ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"MCP content extraction failed: {str(e)}",
                 data={
@@ -242,7 +242,7 @@ def create_unified_response(
     try:
 
         observability.emit_event(
-            ConversationEventType.RESPONSE_CONVERSION_STARTED,
+            ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Creating unified response object",
             data={
@@ -274,7 +274,7 @@ def create_unified_response(
         }
 
         observability.emit_event(
-                ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
+                ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "Unified response object created successfully",
                 data={
@@ -292,7 +292,7 @@ def create_unified_response(
 
     except Exception as e:
         observability.emit_event(
-                ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"Unified response creation failed: {str(e)}",
                 data={
@@ -322,7 +322,7 @@ def create_error_response(
     try:
 
         observability.emit_event(
-            ConversationEventType.RESPONSE_CONVERSION_STARTED,
+            ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Creating error response details",
             data={
@@ -345,7 +345,7 @@ def create_error_response(
         }
 
         observability.emit_event(
-                ConversationEventType.RESPONSE_CONVERSION_COMPLETED,
+                ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "Error response details created successfully",
                 data={
@@ -361,7 +361,7 @@ def create_error_response(
 
     except Exception as e:
         observability.emit_event(
-                ConversationEventType.ERROR_RETRY_ATTEMPTED,
+                ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"Error response creation failed: {str(e)}",
                 data={
