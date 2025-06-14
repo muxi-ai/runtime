@@ -1180,20 +1180,18 @@ class Agent:
         message_id = str(uuid.uuid4())
 
         # Emit A2A message started event
-        if hasattr(self.overlord, "observability_manager"):
-
-            observability.emit_event(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
-                level=observability.EventLevel.INFO,
-                data={
-                    "source_agent_id": self.agent_id,
-                    "target_agent_id": target_agent_id,
-                    "message_type": message_type,
-                    "message_id": message_id,
-                    "wait_for_response": wait_for_response,
-                },
-                description=f"A2A message sent: {self.agent_id} -> {target_agent_id}",
-            )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+            level=observability.EventLevel.INFO,
+            data={
+                "source_agent_id": self.agent_id,
+                "target_agent_id": target_agent_id,
+                "message_type": message_type,
+                "message_id": message_id,
+                "wait_for_response": wait_for_response,
+            },
+            description=f"A2A message sent: {self.agent_id} -> {target_agent_id}",
+        )
 
         # First, try to find the target agent locally
         if target_agent_id in self.overlord.agents:
@@ -1586,20 +1584,18 @@ class Agent:
             Response data if this is a "request" message, otherwise None
         """
         # Emit A2A message received event
-        if hasattr(self.overlord, "observability_manager"):
-
-            observability.emit_event(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "source_agent_id": source_agent_id,
-                    "target_agent_id": self.agent_id,
-                    "message_type": message_type,
-                    "message_id": message_id,
-                    "collaboration_type": context.get("collaboration_type") if context else None,
-                },
-                description=f"A2A message received: {source_agent_id} -> {self.agent_id}",
-            )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "source_agent_id": source_agent_id,
+                "target_agent_id": self.agent_id,
+                "message_type": message_type,
+                "message_id": message_id,
+                "collaboration_type": context.get("collaboration_type") if context else None,
+            },
+            description=f"A2A message received: {source_agent_id} -> {self.agent_id}",
+        )
 
         # Check if this is a collaboration message with special handling
         collaboration_type = None
