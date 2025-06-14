@@ -437,7 +437,7 @@ class OneLLMService:
 
             # Emit error event
             observability.emit_event(
-                event_type=observability.ErrorEvents.retry_attempted,
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.eventlevel.error,
                 description=f"chat completion failed for {model}: {str(e)}",
                 data={
