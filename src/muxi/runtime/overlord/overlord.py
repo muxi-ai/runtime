@@ -1115,7 +1115,7 @@ class Overlord:
             elif max_questions > 20:
                 _ = None  # remove this after implementing observability
                 #  Warning - add observability event
-                #     f"max_questions '{max_questions}' is very high, consider reducing for better UX"
+                #   f"max_questions '{max_questions}' is very high, consider reducing for better UX"
                 # )
 
             # Update the overlord's clarification configuration
