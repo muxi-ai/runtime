@@ -172,7 +172,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension retrieval failed
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_LOOKUP_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LISTING_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Extension lookup failed for name: {name}: {str(e)}",
                 data={

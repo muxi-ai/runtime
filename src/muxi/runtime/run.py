@@ -111,7 +111,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
     """
     # Log server startup attempt
     observability.emit_event(
-        event_type=observability.SystemEvents.SESSION_CREATED,
+        event_type=observability.ConversationEvents.SESSION_CREATED,
         level=observability.EventLevel.INFO,
         description="Server startup initiated",
         data={
@@ -159,7 +159,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
 
         # Log successful server startup (placeholder)
         observability.emit_event(
-            event_type=observability.SystemEvents.SESSION_CREATED,
+            event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Server startup completed (placeholder)",
             data={

@@ -601,7 +601,7 @@ class Overlord:
         try:
             # Emit formation loading started event
             observability.emit_event(
-                event_type=observability.ConversationEvents.OVERLORD_INITIALIZING,
+                event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
                 level=observability.EventLevel.INFO,
                 data={"formation_path": formation_path},
                 description=f"Starting formation loading from {formation_path}",
@@ -643,7 +643,7 @@ class Overlord:
 
             # Emit formation loading completed event
             observability.emit_event(
-                event_type=observability.ConversationEvents.OVERLORD_STARTED,
+                event_type=observability.SystemEvents.OVERLORD_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "formation_id": formation_config.get("id", "unnamed"),
@@ -663,7 +663,7 @@ class Overlord:
 
             # Emit formation loading failed event
             observability.emit_event(
-                event_type=observability.ErrorEvents.TIMEOUT_DETECTED,
+                event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
                 level=observability.EventLevel.ERROR,
                 data={
                     "formation_path": formation_path,

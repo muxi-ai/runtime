@@ -67,7 +67,7 @@ class Memobase:
 
         # Log initialization
         observability.emit_event(
-            event_type=observability.SystemEvents.SESSION_CREATED,
+            event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Memobase initialized",
             data={
@@ -959,7 +959,7 @@ class Memobase:
 
         # Log context memory clear start
         observability.emit_event(
-            event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
+            event_type=observability.SystemEvents.MEMORY_CLEAR,
             level=observability.EventLevel.INFO,
             description="Starting user context memory clear",
             data={"user_id": user_id, "keys": keys, "clear_all": keys is None},
@@ -969,7 +969,7 @@ class Memobase:
         if user_id == 0:
             # Log anonymous user skip
             observability.emit_event(
-                event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
+                event_type=observability.SystemEvents.MEMORY_CLEAR,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory clear for anonymous user",
                 data={"user_id": user_id},
@@ -1015,7 +1015,7 @@ class Memobase:
                 except Exception:
                     # Log successful context memory clear
                     observability.emit_event(
-                        event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
+                        event_type=observability.SystemEvents.MEMORY_CLEAR,
                         level=observability.EventLevel.ERROR,
                         description="Failed to clear context memory collection",
                         data={"user_id": user_id, "collection": collection_name},
@@ -1024,7 +1024,7 @@ class Memobase:
 
             # Log successful context memory clear
             observability.emit_event(
-                event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
+                event_type=observability.SystemEvents.MEMORY_CLEAR,
                 level=observability.EventLevel.INFO,
                 description="User context memory clear completed successfully",
                 data={

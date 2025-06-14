@@ -57,9 +57,6 @@ class SystemEvents(Enum):
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     # When MCP server connection is established
 
-    MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
-    # When MCP server connection is lost or closed
-
     MCP_SERVER_REGISTRATION_STARTED = "mcp.server.registration.started"
     # When beginning MCP server registration process
 
@@ -638,6 +635,9 @@ class ConversationEvents(Enum):
     CLARIFICATION_REQUEST_SENT = "clarification.request.sent"
     # When clarification request is sent to user
 
+    CLARIFICATION_FAILED = "clarification.failed"
+    # When clarification fails
+
     CLARIFICATION_RESPONSE_RECEIVED = "clarification.response.received"
     # When clarification response is received from user
 
@@ -744,6 +744,9 @@ class ErrorEvents(Enum):
 
     ENCODING_ERROR = "encoding.error"
     # When character encoding/decoding fails
+
+    RETRY_ATTEMPTED = "retry.attempted"
+    # When a retry is attempted
 
 
 @dataclass

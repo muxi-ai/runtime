@@ -709,29 +709,24 @@ class Agent:
             #  Clarification error - add observability event
 
             # Emit clarification error event
-            if hasattr(self.overlord, "observability_manager"):
-                try:
-                    observability.emit_event(
-                        event_type=observability.ErrorEvents.CLARIFICATION_FAILED,
-                        level=observability.EventLevel.ERROR,
-                        data={
-                            "agent_id": self.agent_id,
-                            "user_id": str(user_id) if user_id is not None else None,
-                            "error": str(e),
-                            "error_type": "ClarificationError",
-                        },
-                        description=f"Clarification processing failed: {e}",
-                    )
-                except Exception:
-                    pass  # Don't let observability errors break the flow
-
+            observability.emit_event(
+                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "error_type": "ClarificationError",
+                },
+                description=f"Clarification processing failed: {e}",
+            )
             return (
                 "I'm sorry, I had trouble processing your response. " "Could you please try again?"
             )
         except Exception as e:
             # Emit general error event
             observability.emit_event(
-                event_type=observability.ErrorEvents.AGENT_PROCESSING,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,
