@@ -314,7 +314,7 @@ class LocalDiscoveryService:
                     self._save_registry()
 
                 observability.emit_event(
-                    event_type=observability.ConversationEventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                    event_type=observability.ConversationEventType.A2A_AGENT_UNREGISTRATION_COMPLETED,  # noqa: E501
                     level=observability.EventLevel.INFO,
                     data={"agent_id": agent_id, "result": "success"},
                     description="A2A agent unregistration completed",
@@ -717,7 +717,7 @@ class LocalDiscoveryService:
                             cleaned_up_agents += 1
 
                             observability.emit_event(
-                                event_type=observability.ConversationEventType.A2A_AGENT_UNREGISTRATION_COMPLETED,
+                                event_type=observability.ConversationEventType.A2A_AGENT_UNREGISTRATION_COMPLETED,  # noqa: E501
                                 level=observability.EventLevel.INFO,
                                 data={
                                     "agent_id": agent_id,

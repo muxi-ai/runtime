@@ -495,7 +495,7 @@ class A2AInboundAuthenticator:
                     if authenticated
                     else observability.EventLevel.WARNING
                 ),
-                description=f"A2A inbound authentication {'successful' if authenticated else 'failed'}",
+                description=f"A2A inbound authentication {'successful' if authenticated else 'failed'}",  # noqa: E501
                 data={
                     "auth_mode": self.auth_mode.value,
                     "authenticated": authenticated,

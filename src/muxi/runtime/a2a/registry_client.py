@@ -82,7 +82,7 @@ class A2ARegistryClient:
             observability.emit_event(
                 event_type=observability.SystemEventType.A2A_REGISTRY_CONNECTED,
                 level=observability.EventLevel.INFO,
-                description=f"A2A Registry Client initialized with {len(self.registries)} registries",
+                description=f"A2A Registry Client initialized with {len(self.registries)} registries",  # noqa: E501
                 data={
                     "registries_count": len(self.registries),
                     "registries": self.registries,
@@ -118,7 +118,9 @@ class A2ARegistryClient:
                 description="A2A Registry Client closed",
                 data={
                     "registries_count": len(self.registries),
-                    "total_registered_agents": sum(len(agents) for agents in self.registered_agents.values())
+                    "total_registered_agents": sum(
+                        len(agents) for agents in self.registered_agents.values()
+                    ),
                 }
             )
 
@@ -257,8 +259,12 @@ class A2ARegistryClient:
             # Emit health check result event
             observability.emit_event(
                 event_type=observability.SystemEventType.A2A_HEALTH_CHECK,
-                level=observability.EventLevel.INFO if is_healthy else observability.EventLevel.WARNING,
-                description=f"Registry health check {'passed' if is_healthy else 'failed'}: {registry_url}",
+                level=(
+                    observability.EventLevel.INFO
+                    if is_healthy
+                    else observability.EventLevel.WARNING
+                ),
+                description=f"Registry health check {'passed' if is_healthy else 'failed'}: {registry_url}",  # noqa: E501
                 data={
                     "registry_url": registry_url,
                     "healthy": is_healthy,
@@ -425,7 +431,7 @@ class A2ARegistryClient:
                 observability.emit_event(
                     event_type=observability.SystemEventType.A2A_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
-                    description=f"Agent {agent_card.name} registered successfully with {registry_url}",
+                    description=f"Agent {agent_card.name} registered successfully with {registry_url}",  # noqa: E501
                     data={
                         "agent_name": agent_card.name,
                         "agent_url": agent_card.url,
@@ -450,7 +456,7 @@ class A2ARegistryClient:
                 observability.emit_event(
                     event_type=observability.SystemEventType.A2A_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
-                    description=f"Agent registration failed for {agent_card.name} on {registry_url}",
+                    description=f"Agent registration failed for {agent_card.name} on {registry_url}",  # noqa: E501
                     data={
                         "agent_name": agent_card.name,
                         "agent_url": agent_card.url,
@@ -476,7 +482,7 @@ class A2ARegistryClient:
             observability.emit_event(
                 event_type=observability.SystemEventType.A2A_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
-                description=f"Agent registration error for {agent_card.name} on {registry_url}",
+                description=f"Agent registration error for {agent_card.name} on {registry_url}",  # noqa: E501
                 data={
                     "agent_name": agent_card.name,
                     "agent_url": agent_card.url,
@@ -514,7 +520,7 @@ class A2ARegistryClient:
             observability.emit_event(
                 event_type=observability.SystemEventType.A2A_REGISTRATION_STARTED,
                 level=observability.EventLevel.INFO,
-                description=f"Registering agent {agent_card.name} with all {len(self.registries)} registries",
+                description=f"Registering agent {agent_card.name} with all {len(self.registries)} registries",  # noqa: E501
                 data={
                     "agent_name": agent_card.name,
                     "agent_url": agent_card.url,
@@ -566,7 +572,7 @@ class A2ARegistryClient:
             observability.emit_event(
                 event_type=observability.SystemEventType.ERROR_RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
-                description=f"Failed to register agent {agent_card.name} with all registries: {str(e)}",
+                description=f"Failed to register agent {agent_card.name} with all registries: {str(e)}",  # noqa: E501
                 data={
                     "agent_name": agent_card.name,
                     "agent_url": agent_card.url,
@@ -999,7 +1005,8 @@ class A2ARegistryClient:
                 "total_registries": len(self.registries),
                 "healthy_registries": healthy_registries,
                 "unhealthy_registries": len(self.registries) - healthy_registries,
-                "total_registered_agents": sum(len(agents) for agents in self.registered_agents.values()),
+                "total_registered_agents": sum(
+                    len(agents) for agents in self.registered_agents.values()),
                 "registrations_per_registry": {
                     registry: len(agents) for registry, agents in self.registered_agents.items()
                 },

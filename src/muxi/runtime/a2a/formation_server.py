@@ -106,7 +106,7 @@ class A2AFormationServer:
                     "host": self.host,
                     "auth_mode": self.auth_mode if self.auth else "none",
                 },
-                description=f"Initialized A2A Formation Server for '{formation_name}' on port {port}",
+                description=f"Initialized A2A Formation Server for '{formation_name}' on port {port}",  # noqa: E501
             )
 
         except Exception as e:
@@ -865,7 +865,9 @@ class A2AFormationServer:
             observability.emit_event(
                 event_type=observability.ConversationEventType.A2A_HEALTH_CHECK,
                 level=(
-                    observability.EventLevel.INFO if is_healthy else observability.EventLevel.WARNING
+                    observability.EventLevel.INFO
+                    if is_healthy
+                    else observability.EventLevel.WARNING
                 ),
                 data={
                     "formation": self.formation_name,
