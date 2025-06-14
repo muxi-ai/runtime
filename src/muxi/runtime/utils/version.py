@@ -17,13 +17,6 @@ def get_version() -> str:
     Returns:
         The version string
     """
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting version retrieval",
-        data={"operation": "get_version", "utility": "version"},
-    )
-
     # Default version
     default_version = "0.1.0"
 
@@ -59,33 +52,8 @@ def get_version() -> str:
                 },
             )
 
-            observability.emit_event(
-                event_type=observability.SystemEvents.UTILITY_COMPLETED,
-                level=observability.EventLevel.DEBUG,
-                description="Version retrieval completed successfully",
-                data={
-                    "operation": "get_version",
-                    "version": version,
-                    "source": "version_file",
-                    "utility": "version",
-                },
-            )
-
             return version
         else:
-            observability.emit_event(
-                event_type=observability.SystemEvents.UTILITY_COMPLETED,
-                level=observability.EventLevel.DEBUG,
-                description="Version retrieval completed using default version",
-                data={
-                    "operation": "get_version",
-                    "version": default_version,
-                    "source": "default",
-                    "utility": "version",
-                    "reason": "version_file_not_found",
-                },
-            )
-
             return default_version
 
     except Exception as e:

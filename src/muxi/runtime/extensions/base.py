@@ -94,25 +94,13 @@ class Extension:
         Raises:
             ValueError: If the extension class doesn't define a 'name' attribute.
         """
-        # Observability: Extension registration started
-        observability.emit_event(
-            event_type=observability.SystemEvents.EXTENSION_REGISTRATION_STARTED,
-            level=observability.EventLevel.INFO,
-            description=(f"Starting extension registration for " f"{extension_cls.__name__}"),
-            data={
-                "extension_class": extension_cls.__name__,
-                "extension_name": getattr(extension_cls, "name", None),
-                "registry_size_before": len(cls._registry),
-            },
-        )
-
         try:
             if not extension_cls.name:
                 error_msg = "Extension must define a 'name' class attribute"
 
                 # Observability: Extension registration failed
                 observability.emit_event(
-                    event_type=observability.SystemEvents.EXTENSION_REGISTRATION_COMPLETED,
+                    event_type=observability.SystemEvents.EXTENSION_LOADED,
                     level=observability.EventLevel.ERROR,
                     description=(
                         f"Extension registration failed for "
@@ -131,7 +119,7 @@ class Extension:
 
             # Observability: Extension registration completed successfully
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_REGISTRATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.INFO,
                 description=f"Extension registration completed for {extension_cls.__name__}",
                 data={
@@ -147,7 +135,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension registration failed with exception
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_REGISTRATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.ERROR,
                 description=(
                     f"Extension registration failed for " f"{extension_cls.__name__}: {str(e)}"
@@ -177,35 +165,8 @@ class Extension:
             The extension class if found, or None if no extension with the
             specified name is registered.
         """
-        # Observability: Extension retrieval started
-        observability.emit_event(
-            event_type=observability.SystemEvents.EXTENSION_LOOKUP_STARTED,
-            level=observability.EventLevel.DEBUG,
-            description=f"Starting extension lookup for name: {name}",
-            data={
-                "extension_name": name,
-                "registry_size": len(cls._registry),
-                "available_extensions": list(cls._registry.keys()),
-            },
-        )
-
         try:
             extension_cls = cls._registry.get(name)
-            found = extension_cls is not None
-
-            # Observability: Extension retrieval completed
-            observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_LOOKUP_COMPLETED,
-                level=observability.EventLevel.DEBUG,
-                description=(f"Extension lookup completed for name: {name}, " f"found: {found}"),
-                data={
-                    "extension_name": name,
-                    "found": found,
-                    "extension_class": extension_cls.__name__ if extension_cls else None,
-                    "success": True,
-                },
-            )
-
             return extension_cls
 
         except Exception as e:
@@ -236,20 +197,12 @@ class Extension:
             These names can be used with the get() method to retrieve the
             corresponding extension classes.
         """
-        # Observability: Extension listing started
-        observability.emit_event(
-            event_type=observability.SystemEvents.EXTENSION_LISTING_STARTED,
-            level=observability.EventLevel.DEBUG,
-            description="Starting extension listing",
-            data={"registry_size": len(cls._registry)},
-        )
-
         try:
             extension_names = list(cls._registry.keys())
 
             # Observability: Extension listing completed
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_LISTING_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LISTED,
                 level=observability.EventLevel.DEBUG,
                 description=(
                     f"Extension listing completed, found " f"{len(extension_names)} extensions"
@@ -264,7 +217,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension listing failed
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_LISTING_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LISTING_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Extension listing failed: {str(e)}",
                 data={"error": str(e), "error_type": type(e).__name__, "success": False},
@@ -289,25 +242,12 @@ class Extension:
         Raises:
             NotImplementedError: If the extension subclass does not implement this method.
         """
-        # Observability: Extension initialization started
-        observability.emit_event(
-            event_type=observability.SystemEvents.EXTENSION_INITIALIZATION_STARTED,
-            level=observability.EventLevel.INFO,
-            description=f"Starting extension initialization for {cls.__name__}",
-            data={
-                "extension_class": cls.__name__,
-                "extension_name": getattr(cls, "name", None),
-                "kwargs_keys": list(kwargs.keys()),
-                "kwargs_count": len(kwargs),
-            },
-        )
-
         try:
             error_msg = f"Extension {cls.__name__} does not implement the init method"
 
             # Observability: Extension initialization failed (not implemented)
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_INITIALIZATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.ERROR,
                 description=(f"Extension initialization failed for " f"{cls.__name__}: {error_msg}"),
                 data={
@@ -324,7 +264,7 @@ class Extension:
         except Exception as e:
             # Observability: Extension initialization failed with exception
             observability.emit_event(
-                event_type=observability.SystemEvents.EXTENSION_INITIALIZATION_COMPLETED,
+                event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.ERROR,
                 description=(f"Extension initialization failed for " f"{cls.__name__}: {str(e)}"),
                 data={

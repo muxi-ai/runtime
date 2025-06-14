@@ -235,95 +235,22 @@ ERROR_CODE_REGISTRY: Dict[str, ErrorCodeInfo] = {
 
 def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     """Get error information for a given error code."""
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting error info lookup",
-        data={"operation": "get_error_info", "error_code": code, "utility": "error_registry"},
-    )
-
     error_info = ERROR_CODE_REGISTRY.get(code)
-
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_COMPLETED,
-        level=observability.EventLevel.DEBUG,
-        description="Error info lookup completed",
-        data={
-            "operation": "get_error_info",
-            "error_code": code,
-            "found": error_info is not None,
-            "category": error_info.category if error_info else None,
-            "http_status": error_info.http_status if error_info else None,
-            "utility": "error_registry",
-        },
-    )
-
     return error_info
 
 
 def get_error_message(code: str, default: str = "An error occurred") -> str:
     """Get the standard message for an error code."""
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting error message lookup",
-        data={
-            "operation": "get_error_message",
-            "error_code": code,
-            "default_message": default,
-            "utility": "error_registry",
-        },
-    )
-
     error_info = get_error_info(code)
     message = error_info.message if error_info else default
-
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_COMPLETED,
-        level=observability.EventLevel.DEBUG,
-        description="Error message lookup completed",
-        data={
-            "operation": "get_error_message",
-            "error_code": code,
-            "message": message,
-            "used_default": error_info is None,
-            "utility": "error_registry",
-        },
-    )
 
     return message
 
 
 def get_http_status(code: str, default: int = 500) -> int:
     """Get the HTTP status code for an error code."""
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting HTTP status lookup",
-        data={
-            "operation": "get_http_status",
-            "error_code": code,
-            "default_status": default,
-            "utility": "error_registry",
-        },
-    )
-
     error_info = get_error_info(code)
     status = error_info.http_status if error_info else default
-
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_COMPLETED,
-        level=observability.EventLevel.DEBUG,
-        description="HTTP status lookup completed",
-        data={
-            "operation": "get_http_status",
-            "error_code": code,
-            "http_status": status,
-            "used_default": error_info is None,
-            "utility": "error_registry",
-        },
-    )
-
     return status
 
 
@@ -331,19 +258,6 @@ def create_error_details(
     code: str, custom_message: Optional[str] = None, trace: Optional[str] = None
 ) -> Dict[str, str]:
     """Create standardized error details."""
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting error details creation",
-        data={
-            "operation": "create_error_details",
-            "error_code": code,
-            "has_custom_message": custom_message is not None,
-            "has_trace": trace is not None,
-            "utility": "error_registry",
-        },
-    )
-
     error_info = get_error_info(code)
 
     if not error_info:
@@ -354,19 +268,5 @@ def create_error_details(
         }
     else:
         details = {"code": code, "message": custom_message or error_info.message, "trace": trace}
-
-    observability.emit_event(
-        event_type=observability.SystemEvents.UTILITY_COMPLETED,
-        level=observability.EventLevel.DEBUG,
-        description="Error details creation completed",
-        data={
-            "operation": "create_error_details",
-            "error_code": code,
-            "found_error_info": error_info is not None,
-            "final_message": details["message"],
-            "has_trace": details.get("trace") is not None,
-            "utility": "error_registry",
-        },
-    )
 
     return details

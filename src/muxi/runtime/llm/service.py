@@ -101,7 +101,7 @@ class OneLLMService:
 
         # Emit service initialization event
         observability.emit_event(
-            event_type=observability.ConversationEvents.SESSION_CREATED,
+            event_type=observability.SystemEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="OneLLMService singleton initialized",
             data={
@@ -152,7 +152,7 @@ class OneLLMService:
 
         # Emit API key configuration event
         observability.emit_event(
-            event_type=observability.ConversationEvents.SESSION_CREATED,
+            event_type=observability.SystemEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description=f"API key configured for provider: {provider}",
             data={
@@ -177,7 +177,7 @@ class OneLLMService:
 
         # Emit API key access event
         observability.emit_event(
-            event_type=observability.ConversationEvents.SESSION_CREATED,
+            event_type=observability.SystemEvents.SESSION_CREATED,
             level=observability.EventLevel.DEBUG,
             description=f"API key accessed for provider: {provider}",
             data={
@@ -701,7 +701,7 @@ class OneLLMService:
 
         # Emit configuration update event
         observability.emit_event(
-            event_type=observability.ConversationEvents.SESSION_CREATED,
+            event_type=observability.SystemEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Service configuration updated",
             data={

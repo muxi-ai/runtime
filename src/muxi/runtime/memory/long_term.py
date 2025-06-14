@@ -192,7 +192,7 @@ class LongTermMemory:
         """
         # Emit memory storage started event
         observability.emit_event(
-            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_STORED,
+            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
             level=observability.EventLevel.INFO,
             data={
                 "content_length": len(content),

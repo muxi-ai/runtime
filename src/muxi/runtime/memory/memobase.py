@@ -67,7 +67,7 @@ class Memobase:
 
         # Log initialization
         observability.emit_event(
-            event_type=observability.ConversationEvents.SESSION_CREATED,
+            event_type=observability.SystemEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Memobase initialized",
             data={
@@ -587,7 +587,7 @@ class Memobase:
 
         # Log context memory addition start
         observability.emit_event(
-            event_type=observability.ConversationEvents.MEMORY_CONTEXT_UPDATED,
+            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory addition",
             data={
@@ -602,7 +602,7 @@ class Memobase:
         if user_id == 0:
             # Log anonymous user skip
             observability.emit_event(
-                event_type=observability.ConversationEvents.MEMORY_CONTEXT_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory addition for anonymous user",
                 data={"user_id": user_id},
@@ -655,7 +655,7 @@ class Memobase:
 
             # Log successful context memory addition
             observability.emit_event(
-                event_type=observability.ConversationEvents.MEMORY_CONTEXT_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 description="User context memory addition completed successfully",
                 data={
@@ -709,7 +709,7 @@ class Memobase:
 
         # Log context memory retrieval start
         observability.emit_event(
-            event_type=observability.ConversationEvents.MEMORY_CONTEXT_RETRIEVED,
+            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory retrieval",
             data={"user_id": user_id, "keys": keys, "limit": limit},
@@ -719,7 +719,7 @@ class Memobase:
         if user_id == 0:
             # Log anonymous user skip
             observability.emit_event(
-                event_type=observability.ConversationEvents.MEMORY_CONTEXT_RETRIEVED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory retrieval for anonymous user",
                 data={"user_id": user_id},
@@ -736,7 +736,7 @@ class Memobase:
             except Exception:
                 # Collection doesn't exist, return empty dict
                 observability.emit_event(
-                    event_type=observability.ConversationEvents.MEMORY_CONTEXT_RETRIEVED,
+                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     description="Context memory collection does not exist",
                     data={"user_id": user_id, "collection": collection_name},
@@ -801,7 +801,7 @@ class Memobase:
 
             # Log successful context memory retrieval
             observability.emit_event(
-                event_type=observability.ConversationEvents.MEMORY_CONTEXT_RETRIEVED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 description="User context memory retrieval completed successfully",
                 data={
@@ -959,7 +959,7 @@ class Memobase:
 
         # Log context memory clear start
         observability.emit_event(
-            event_type=observability.SystemEvents.MEMORY_CONTEXT_CLEARED,
+            event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory clear",
             data={"user_id": user_id, "keys": keys, "clear_all": keys is None},
@@ -969,7 +969,7 @@ class Memobase:
         if user_id == 0:
             # Log anonymous user skip
             observability.emit_event(
-                event_type=observability.SystemEvents.MEMORY_CONTEXT_CLEARED,
+                event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory clear for anonymous user",
                 data={"user_id": user_id},
@@ -1015,7 +1015,7 @@ class Memobase:
                 except Exception:
                     # Log successful context memory clear
                     observability.emit_event(
-                        event_type=observability.SystemEvents.MEMORY_CONTEXT_CLEARED,
+                        event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
                         level=observability.EventLevel.ERROR,
                         description="Failed to clear context memory collection",
                         data={"user_id": user_id, "collection": collection_name},
@@ -1024,7 +1024,7 @@ class Memobase:
 
             # Log successful context memory clear
             observability.emit_event(
-                event_type=observability.SystemEvents.MEMORY_CONTEXT_CLEARED,
+                event_type=observability.SystemEvents.MEMORY_LONG_TERM_CLEARED,
                 level=observability.EventLevel.INFO,
                 description="User context memory clear completed successfully",
                 data={
@@ -1082,7 +1082,7 @@ class Memobase:
 
         # Log context memory update start
         observability.emit_event(
-            event_type=observability.ConversationEvents.MEMORY_CONTEXT_UPDATED,
+            event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory update",
             data={"user_id": user_id, "key": key, "source": source, "importance": importance},
@@ -1092,7 +1092,7 @@ class Memobase:
         if user_id == 0:
             # Log anonymous user skip
             observability.emit_event(
-                event_type=observability.ConversationEvents.MEMORY_CONTEXT_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory update for anonymous user",
                 data={"user_id": user_id, "key": key},
@@ -1119,7 +1119,7 @@ class Memobase:
 
             # Log successful context memory update
             observability.emit_event(
-                event_type=observability.ConversationEvents.MEMORY_CONTEXT_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 description="User context memory update completed successfully",
                 data={"user_id": user_id, "key": key, "memory_id": memory_id, "source": source},

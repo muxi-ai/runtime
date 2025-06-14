@@ -399,9 +399,8 @@ class CredentialManager:
         """
         # Emit MCP credential resolution start event
         try:
-
             event_id = observability.emit_event(
-                event_type=observability.ConversationEvents.MCP_CONNECTION_ESTABLISHED,
+                event_type=observability.ConversationEvents.MCP_SERVER_CONNECTING,
                 level=observability.EventLevel.INFO,
                 data={
                     'component': 'credential_manager',
@@ -565,7 +564,7 @@ class CredentialManager:
             batch_desc = (f'Starting batch MCP credential resolution for '
                           f'{len(mcp_configs)} configurations')
             event_id = observability.emit_event(
-                event_type=observability.ConversationEvents.MCP_CONNECTION_ESTABLISHED,
+                event_type=observability.ConversationEvents.MCP_SERVER_CONNECTING,
                 level=observability.EventLevel.INFO,
                 data={
                     'component': 'credential_manager',

@@ -32,6 +32,7 @@ from .utils.id_generator import generate_nanoid as generate_id
 
 class EventLevel(Enum):
     """Event severity levels for observability events."""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -53,6 +54,11 @@ class SystemEvents(Enum):
     MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
     MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
+
+    # ===================================================================
+    # AGENT SYSTEM EVENTS
+    # ===================================================================
+    AGENT_INITIALIZED = "agent.initialized"
 
     # ===================================================================
     # A2A SYSTEM EVENTS
@@ -121,12 +127,6 @@ class SystemEvents(Enum):
     OVERLORD_INITIALIZING = "overlord.initializing"
     OVERLORD_STARTED = "overlord.started"
 
-    # Overlord Operations
-    OVERLORD_ROUTING_STARTED = "overlord.routing.started"
-    OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
-    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection_started"
-    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection_completed"
-
     # System Services
     CACHE_MANAGER_STARTED = "cache.manager.started"
     MEMORY_OPTIMIZER_STARTED = "memory.optimizer.started"
@@ -138,9 +138,8 @@ class SystemEvents(Enum):
     INBOUND_AUTH_INITIALIZED = "inbound.auth.initialized"
 
     # ===================================================================
-    # EXTENSION & KNOWLEDGE SYSTEM EVENTS
+    # EKNOWLEDGE SYSTEM EVENTS
     # ===================================================================
-    SQLITE_EXTENSION_INITIALIZED = "sqlite.extension.initialized"
     KNOWLEDGE_SOURCE_LOADED = "knowledge.source.loaded"
     KNOWLEDGE_SOURCE_FAILED = "knowledge.source.failed"
 
@@ -160,27 +159,15 @@ class SystemEvents(Enum):
     # EXTENSION MANAGEMENT
     # ===================================================================
     # Extension Lifecycle Events
-    EXTENSION_INITIALIZATION_STARTED = "extension.initialization.started"
-    EXTENSION_INITIALIZATION_COMPLETED = "extension.initialization.completed"
-    EXTENSION_REGISTRATION_STARTED = "extension.registration.started"
-    EXTENSION_REGISTRATION_COMPLETED = "extension.registration.completed"
-    EXTENSION_LOOKUP_STARTED = "extension.lookup.started"
-    EXTENSION_LOOKUP_COMPLETED = "extension.lookup.completed"
-    EXTENSION_LISTING_STARTED = "extension.listing.started"
-    EXTENSION_LISTING_COMPLETED = "extension.listing.completed"
-
-    # ===================================================================
-    # ID GENERATION UTILITIES
-    # ===================================================================
-    ID_GENERATION_STARTED = "id.generation.started"
-    ID_GENERATION_COMPLETED = "id.generation.completed"
-    ID_GENERATION_FAILED = "id.generation.failed"
+    EXTENSION_LOADED = "extension.loaded"
+    EXTENSION_FAILED = "extension.failed"
+    EXTENSION_LISTED = "extension.listed"
+    EXTENSION_LISTING_FAILED = "extension.listing.failed"
 
     # ===================================================================
     # MEMORY SYSTEM OPERATIONS
     # ===================================================================
-    MEMORY_CLEAR = "memory.clear"  # separate from memory.context.cleared
-    MEMORY_CONTEXT_CLEARED = "memory.context.cleared"
+    MEMORY_CLEAR = "memory.clear"
     MEMORY_DELETION_COMPLETED = "memory.deletion.completed"
     MEMORY_DELETION_FAILED = "memory.deletion.failed"
 
@@ -193,52 +180,45 @@ class SystemEvents(Enum):
     # ===================================================================
     # SECRET MANAGEMENT OPERATIONS
     # ===================================================================
-    # Storage Operations
-    SECRET_STORAGE_STARTED = "secret.storage.started"
-    SECRET_STORAGE_COMPLETED = "secret.storage.completed"
-    SECRET_RETRIEVAL_STARTED = "secret.retrieval.started"
-    SECRET_RETRIEVAL_COMPLETED = "secret.retrieval.completed"
-
-    # Import/Export Operations
-    SECRET_IMPORT_STARTED = "secret.import.started"
-    SECRET_IMPORT_COMPLETED = "secret.import.completed"
-    SECRET_EXPORT_STARTED = "secret.export.started"
-    SECRET_EXPORT_COMPLETED = "secret.export.completed"
-
-    # Management Operations
-    SECRET_LISTING_STARTED = "secret.listing.started"
+    SECRET_OPERATION_COMPLETED = "secret.operation.completed"
+    SECRET_OPERATION_FAILED = "secret.operation.failed"
     SECRET_LISTING_COMPLETED = "secret.listing.completed"
-    SECRET_INTERPOLATION_STARTED = "secret.interpolation.started"
-    SECRET_INTERPOLATION_COMPLETED = "secret.interpolation.completed"
-
-    # Cleanup Operations
-    SECRET_CLEARING_STARTED = "secret.clearing.started"
-    SECRET_CLEARING_COMPLETED = "secret.clearing.completed"
-    SECRET_DELETION_STARTED = "secret.deletion.started"
-    SECRET_DELETION_COMPLETED = "secret.deletion.completed"
+    SECRET_LISTING_FAILED = "secret.listing.failed"
 
     # ===================================================================
-    # UTILITY OPERATIONS
+    # DATABASE/STORAGE OPERATIONS
     # ===================================================================
-    UTILITY_STARTED = "utility.started"
-    UTILITY_COMPLETED = "utility.completed"
+    DB_CONNECTION_STARTED = "db.connection.started"
+    DB_CONNECTION_FAILED = "db.connection.failed"
+
+    # ===================================================================
+    # NETWORK/COMMUNICATION INFRASTRUCTURE
+    # ===================================================================
+    NETWORK_INTERFACE_INITIALIZED = "network.interface.initialized"
+    NETWORK_INTERFACE_FAILED = "network.interface.failed"
 
 
 class ConversationEvents(Enum):
     """Comprehensive event types for MUXI observability covering complete request lifecycle."""
 
     # ===================================================================
+    # SESSION MANAGEMENT
+    # ===================================================================
+    SESSION_CREATED = "session.created"
+    SESSION_ENDED = "session.ended"
+    SESSION_TIMEOUT = "session.timeout"
+
+    # ===================================================================
     # REQUEST INGESTION & VALIDATION
     # ===================================================================
-    REQUEST_RECEIVED = "request.received"      # Initial event
+    REQUEST_RECEIVED = "request.received"  # Initial event
     REQUEST_PROCESSING = "request.processing"  # Processing state
-    REQUEST_VALIDATED = "request.validated"    # Validation success
-    REQUEST_DENIED_AUTH = "request.denied.auth"           # Auth failure
-    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"    # Rate limit failure
-    REQUEST_DENIED_VALIDATION = "request.denied.validation"    # Validation failure
-    REQUEST_FAILED = "request.failed"         # Error state
-    REQUEST_COMPLETED = "request.completed"   # Success state
-
+    REQUEST_VALIDATED = "request.validated"  # Validation success
+    REQUEST_DENIED_AUTH = "request.denied.auth"  # Auth failure
+    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"  # Rate limit failure
+    REQUEST_DENIED_VALIDATION = "request.denied.validation"  # Validation failure
+    REQUEST_FAILED = "request.failed"  # Error state
+    REQUEST_COMPLETED = "request.completed"  # Success state
 
     # ===================================================================
     # MULTI-MODAL CONTENT PROCESSING
@@ -246,7 +226,7 @@ class ConversationEvents(Enum):
     # Document Processing
     DOCUMENT_PROCESSING_STARTED = "document.processing.started"
     DOCUMENT_PROCESSING_COMPLETED = "document.processing.completed"
-    CONTENT_DOCUMENT_PARSED = "content.document.parsed"
+    DOCUMENT_PROCESSING_FAILED = "document.processing.failed"
 
     # Content Processing
     CONTENT_EXTRACTION_STARTED = "content.extraction.started"
@@ -262,6 +242,12 @@ class ConversationEvents(Enum):
     # ===================================================================
     # OVERLORD ORCHESTRATION
     # ===================================================================
+    # Overlord Operations
+    OVERLORD_ROUTING_STARTED = "overlord.routing.started"
+    OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
+    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection_started"
+    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection_completed"
+
     OVERLORD_AGENT_NOTFOUND = "overlord.agent.not_found"
     OVERLORD_ROUTING_FAILED = "overlord.routing.failed"
     OVERLORD_AGENT_SELECTED = "overlord.agent.selected"
@@ -270,32 +256,26 @@ class ConversationEvents(Enum):
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
-    # Memory extraction and context operations
-    MEMORY_EXTRACTION_STARTED = "memory.extraction.started"
-    MEMORY_CONTEXT_ENHANCED = "memory.context.enhanced"
-    MEMORY_CONTEXT_RETRIEVED = "memory.context.retrieved"
-    MEMORY_CONTEXT_UPDATED = "memory.context.updated"
-
     # Short-term memory operations
     MEMORY_SHORT_TERM_LOOKUP = "memory.short_term.lookup"
     MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
-    MEMORY_SHORT_TERM_STORED = "memory.short_term.stored"
+    MEMORY_SHORT_TERM_ENHANCED = "memory.short_term.enhanced"
     MEMORY_SHORT_TERM_UPDATED = "memory.short_term.updated"
 
     # Long-term memory operations
     MEMORY_LONG_TERM_LOOKUP = "memory.long_term.lookup"
     MEMORY_LONG_TERM_RETRIEVED = "memory.long_term.retrieved"
-    MEMORY_LONG_TERM_STORED = "memory.long_term.stored"
+    MEMORY_LONG_TERM_ENHANCED = "memory.long_term.enhanced"
     MEMORY_LONG_TERM_UPDATED = "memory.long_term.updated"
 
     # Memory error events - Short-term
-    MEMORY_SHORT_TERM_STORE_FAILED = "memory.short_term.store_failed"
+    MEMORY_SHORT_TERM_ENHANCEMENT_FAILED = "memory.short_term.enhancement_failed"
     MEMORY_SHORT_TERM_DELETION_FAILED = "memory.short_term.deletion_failed"
     MEMORY_SHORT_TERM_UPDATE_FAILED = "memory.short_term.update_failed"
     MEMORY_SHORT_TERM_RETRIEVAL_FAILED = "memory.short_term.retrieval_failed"
 
     # Memory error events - Long-term
-    MEMORY_LONG_TERM_STORE_FAILED = "memory.long_term.store_failed"
+    MEMORY_LONG_TERM_ENHANCEMENT_FAILED = "memory.long_term.enhancement_failed"
     MEMORY_LONG_TERM_DELETION_FAILED = "memory.long_term.deletion_failed"
     MEMORY_LONG_TERM_UPDATE_FAILED = "memory.long_term.update_failed"
     MEMORY_LONG_TERM_RETRIEVAL_FAILED = "memory.long_term.retrieval_failed"
@@ -303,20 +283,20 @@ class ConversationEvents(Enum):
     # ===================================================================
     # AGENT PROCESSING
     # ===================================================================
-    # Agent lifecycle events
-    AGENT_SELECTED = "agent.selected"
-    AGENT_INITIALIZED = "agent.initialized"
-
-    # Agent thinking and planning
-    AGENT_THINKING_STARTED = "agent.thinking.started"
-    AGENT_THINKING_COMPLETED = "agent.thinking.completed"
-    AGENT_PLANNING_CREATED = "agent.planning.created"
-    AGENT_CONTEXT_APPLIED = "agent.context.applied"
-
     # Message processing
     AGENT_MESSAGE_PROCESSING = "agent.message.processing"
     AGENT_MESSAGE_COMPLETED = "agent.message.completed"
     AGENT_MESSAGE_FAILED = "agent.message.failed"
+
+    # Thinking
+    AGENT_THINKING_STARTED = "agent.thinking.started"
+    AGENT_THINKING_COMPLETED = "agent.thinking.completed"
+    AGENT_THINKING_FAILED = "agent.thinking.failed"
+
+    # Planning
+    AGENT_PLANNING_STARTED = "agent.planning.started"
+    AGENT_PLANNING_COMPLETED = "agent.planning.completed"
+    AGENT_PLANNING_FAILED = "agent.planning.failed"
 
     # Response generation
     AGENT_RESPONSE_GENERATED = "agent.response.generated"
@@ -325,18 +305,24 @@ class ConversationEvents(Enum):
     # MODEL OPERATIONS
     # ===================================================================
     MODEL_REQUEST_STARTED = "model.request.started"
-    MODEL_STREAMING_STARTED = "model.streaming.started"
     MODEL_REQUEST_COMPLETED = "model.request.completed"
+    MODEL_REQUEST_FAILED = "model.request.failed"
+    MODEL_STREAMING_STARTED = "model.streaming.started"
+    MODEL_STREAMING_COMPLETED = "model.streaming.completed"
 
     # ===================================================================
     # TOOL & MCP OPERATIONS
     # ===================================================================
     # Server connection events
+    MCP_SERVER_CONNECTING = "mcp.server.connecting"
     MCP_SERVER_CONNECTED = "mcp.server.connected"
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
-    MCP_CONNECTION_ESTABLISHED = "mcp.connection.established"
+    MCP_SERVER_CONNECTION_FAILED = "mcp.server.connection_failed"
 
     # Tool discovery and usage
+    MCP_TOOL_DISCOVERY_STARTED = "mcp.tool.discovery_started"
+    MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery_completed"
+    MCP_TOOL_DISCOVERY_FAILED = "mcp.tool.discovery_failed"
     MCP_TOOL_DISCOVERED = "mcp.tool.discovered"
     MCP_TOOL_CALLED = "mcp.tool.called"
     MCP_TOOL_CALL_STARTED = "mcp.tool.call_started"
@@ -380,10 +366,12 @@ class ConversationEvents(Enum):
     # ===================================================================
     RESPONSE_GENERATION_STARTED = "response.generation.started"
     RESPONSE_FORMATTED = "response.formatted"
-    RESPONSE_MULTIMODAL_CREATED = "response.multimodal.created"
     RESPONSE_VALIDATION_COMPLETED = "response.validation.completed"
     RESPONSE_CONVERSION_STARTED = "response.conversion.started"
     RESPONSE_CONVERSION_COMPLETED = "response.conversion.completed"
+    RESPONSE_DELIVERY_STARTED = "response.delivery.started"
+    RESPONSE_DELIVERY_FAILED = "response.delivery.failed"
+    RESPONSE_DELIVERED = "response.delivered"
 
     # ===================================================================
     # ASYNC & DELIVERY
@@ -395,21 +383,14 @@ class ConversationEvents(Enum):
     ASYNC_PROCESSING_FAILED = "async.processing.failed"
 
     # Response delivery lifecycle
-    RESPONSE_DELIVERED = "response.delivered"
-    RESPONSE_WEBHOOK_SENT = "response.webhook.sent"
-    RESPONSE_WEBHOOK_FAILED = "response.webhook.failed"
+    WEBHOOK_SENT = "webhook.sent"
+    WEBHOOK_FAILED = "webhook.failed"
 
     # ===================================================================
     # CLARIFICATION HANDLING
     # ===================================================================
     CLARIFICATION_REQUEST_SENT = "clarification.request.sent"
     CLARIFICATION_RESPONSE_RECEIVED = "clarification.response.received"
-
-    # ===================================================================
-    # SESSION MANAGEMENT
-    # ===================================================================
-    SESSION_CREATED = "session.created"
-    SESSION_CONTEXT_UPDATED = "session.context.updated"
 
 
 class ErrorEvents(Enum):
@@ -422,11 +403,17 @@ class ErrorEvents(Enum):
     CLARIFICATION_FAILED = "error.clarification.failed"
     AGENT_PROCESSING = "error.agent.processing"
     RETRY_ATTEMPTED = "error.retry.attempted"
+    VALIDATION_FAILED = "error.validation.failed"
+    AUTHENTICATION_FAILED = "error.authentication.failed"
+    AUTHORIZATION_FAILED = "error.authorization.failed"
+    RATE_LIMIT_EXCEEDED = "error.rate_limit.exceeded"
+    RESOURCE_EXHAUSTED = "error.resource.exhausted"
 
 
 @dataclass
 class TokenUsage:
     """Token usage tracking for LLM operations."""
+
     total: int = 0
     breakdown: Dict[str, int] = field(default_factory=dict)
 
@@ -439,6 +426,7 @@ class TokenUsage:
 @dataclass
 class RequestContext:
     """Request context tracking for complete lifecycle."""
+
     id: str
     status: str = "processing"
     started: float = field(default_factory=lambda: time.time() * 1000)  # milliseconds
@@ -506,8 +494,7 @@ class RequestContextManager:
 
         async with self._lock:
             to_remove = [
-                req_id for req_id, ctx in self._contexts.items()
-                if ctx.started < cutoff_time
+                req_id for req_id, ctx in self._contexts.items() if ctx.started < cutoff_time
             ]
             for req_id in to_remove:
                 del self._contexts[req_id]
@@ -517,17 +504,13 @@ class RequestContextManager:
         self,
         request_id: Optional[str] = None,
         formation_id: Optional[str] = None,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ):
         """Context manager for request tracking with automatic cleanup."""
         if request_id is None:
             request_id = generate_id()
 
-        context = RequestContext(
-            id=request_id,
-            formation_id=formation_id,
-            user_id=user_id
-        )
+        context = RequestContext(id=request_id, formation_id=formation_id, user_id=user_id)
 
         async with self._lock:
             self._contexts[request_id] = context
@@ -547,11 +530,7 @@ class RequestContextManager:
         async with self._lock:
             return self._contexts.get(request_id)
 
-    async def update_context(
-        self,
-        request_id: str,
-        **updates
-    ) -> None:
+    async def update_context(self, request_id: str, **updates) -> None:
         """Update request context with new information."""
         async with self._lock:
             if context := self._contexts.get(request_id):
@@ -569,7 +548,7 @@ class EventLogger:
         output: str = "stdout",
         output_config: Optional[Dict[str, Any]] = None,
         events: Optional[List[str]] = None,
-        muxi_version: str = "1.0.0"
+        muxi_version: str = "1.0.0",
     ):
         self.level = level
         self.output = output
@@ -581,6 +560,7 @@ class EventLogger:
     def _get_server_id(self) -> str:
         """Get server identifier for event tracking."""
         import socket
+
         try:
             return socket.gethostname()
         except Exception:
@@ -593,7 +573,7 @@ class EventLogger:
             EventLevel.DEBUG: 0,
             EventLevel.INFO: 1,
             EventLevel.WARNING: 2,
-            EventLevel.ERROR: 3
+            EventLevel.ERROR: 3,
         }
 
         if level_priority[level] < level_priority[self.level]:
@@ -612,7 +592,7 @@ class EventLogger:
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
         parent_event_id: Optional[str] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> str:
         """Emit an observability event with structured data."""
         # Handle different event types
@@ -634,7 +614,7 @@ class EventLogger:
             "level": level.value,
             "muxi_version": self.muxi_version,
             "server": self._server_id,
-            "event": event_type_str
+            "event": event_type_str,
         }
 
         # Add parent event relationship
@@ -652,8 +632,8 @@ class EventLogger:
                 "user_id": request_context.user_id,
                 "tokens": {
                     "total": request_context.tokens.total,
-                    "breakdown": request_context.tokens.breakdown
-                }
+                    "breakdown": request_context.tokens.breakdown,
+                },
             }
 
             # Track parent relationship
@@ -671,14 +651,12 @@ class EventLogger:
         return event_id
 
     async def _emit_to_output(
-        self,
-        event: Dict[str, Any],
-        event_type: Union[ConversationEvents, SystemEvents, str]
+        self, event: Dict[str, Any], event_type: Union[ConversationEvents, SystemEvents, str]
     ) -> None:
         """Emit event to the configured output destination."""
         try:
             # JSON-L format for easy parsing
-            event_line = json.dumps(event, separators=(',', ':'))
+            event_line = json.dumps(event, separators=(",", ":"))
 
             # Route SystemEvents to stdout only, regardless of configuration
             if isinstance(event_type, SystemEvents):
@@ -704,6 +682,7 @@ class EventLogger:
         file_path = self.output_config.get("path", "muxi_events.jsonl")
         try:
             import aiofiles
+
             async with aiofiles.open(file_path, "a") as f:
                 await f.write(event_line + "\n")
         except ImportError:
@@ -719,12 +698,13 @@ class EventLogger:
 
         try:
             import aiohttp
+
             async with aiohttp.ClientSession() as session:
                 await session.post(
                     stream_url,
                     data=event_line + "\n",
                     headers={"Content-Type": "application/x-ndjson"},
-                    timeout=aiohttp.ClientTimeout(total=5)
+                    timeout=aiohttp.ClientTimeout(total=5),
                 )
         except Exception:
             # Silent failure for external stream connectivity issues
@@ -740,6 +720,7 @@ class EventLogger:
 
         try:
             import aiohttp
+
             headers = {"Content-Type": "application/x-ndjson"}
 
             # Add authentication if configured
@@ -751,7 +732,7 @@ class EventLogger:
                     trail_url,
                     data=event_line + "\n",
                     headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10)
+                    timeout=aiohttp.ClientTimeout(total=10),
                 )
         except Exception:
             # Silent failure for external trail connectivity issues
@@ -788,7 +769,7 @@ class ObservabilityManager:
         elif output == "trail":
             output_config["trail"] = {
                 "url": logging_config.get("trail_url", ""),
-                "api_key": logging_config.get("trail_api_key", "")
+                "api_key": logging_config.get("trail_api_key", ""),
             }
 
         # Parse event filters
@@ -799,7 +780,7 @@ class ObservabilityManager:
             output=output,
             output_config=output_config,
             events=events,
-            muxi_version=self.config.get("muxi_version", "1.0.0")
+            muxi_version=self.config.get("muxi_version", "1.0.0"),
         )
 
     async def start(self) -> None:
@@ -815,20 +796,18 @@ class ObservabilityManager:
         self,
         request_id: Optional[str] = None,
         formation_id: Optional[str] = None,
-        user_id: Optional[str] = None
+        user_id: Optional[str] = None,
     ):
         """Context manager for request tracking."""
         async with self.request_manager.track_request(
-            request_id=request_id,
-            formation_id=formation_id,
-            user_id=user_id
+            request_id=request_id, formation_id=formation_id, user_id=user_id
         ) as context:
             # Emit request received event
             await self.event_logger.emit_event(
                 ConversationEvents.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=context,
-                description=f"Request {context.id} received"
+                description=f"Request {context.id} received",
             )
 
             try:
@@ -839,7 +818,7 @@ class ObservabilityManager:
                     ConversationEvents.REQUEST_COMPLETED,
                     level=EventLevel.INFO,
                     request_context=context,
-                    description=f"Request {context.id} completed in {context.duration_ms}ms"
+                    description=f"Request {context.id} completed in {context.duration_ms}ms",
                 )
 
             except Exception as e:
@@ -849,7 +828,7 @@ class ObservabilityManager:
                     level=EventLevel.ERROR,
                     request_context=context,
                     data={"error": str(e)},
-                    description=f"Request {context.id} failed: {str(e)}"
+                    description=f"Request {context.id} failed: {str(e)}",
                 )
                 raise
 
@@ -860,7 +839,7 @@ class ObservabilityManager:
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
         parent_event_id: Optional[str] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> str:
         """Emit a conversation lifecycle event (routed to configured output)."""
         return await self.event_logger.emit_event(
@@ -869,7 +848,7 @@ class ObservabilityManager:
             data=data,
             request_context=request_context,
             parent_event_id=parent_event_id,
-            description=description
+            description=description,
         )
 
     async def emit_system_event(
@@ -877,7 +856,7 @@ class ObservabilityManager:
         event_type: SystemEvents,
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
-        description: Optional[str] = None
+        description: Optional[str] = None,
     ) -> str:
         """Emit a system infrastructure event (always routed to stdout)."""
         return await self.event_logger.emit_event(
@@ -886,7 +865,7 @@ class ObservabilityManager:
             data=data,
             request_context=None,  # System events don't have request context
             parent_event_id=None,
-            description=description
+            description=description,
         )
 
 
@@ -894,12 +873,13 @@ class ObservabilityManager:
 # SIMPLE HELPER FUNCTION FOR PLACEHOLDER REPLACEMENT
 # ===================================================================
 
+
 async def emit_event(
     event_type: str,
     level: str = "INFO",
     request_context=None,
     data: dict = None,
-    description: str = ""
+    description: str = "",
 ):
     """
     Emit an observability event with direct access to observability system.
@@ -933,7 +913,7 @@ async def emit_event(
             level=level_enum,
             request_context=request_context,
             data=data or {},
-            description=description
+            description=description,
         )
     except (ImportError, AttributeError):
         # Silently fail if observability not available

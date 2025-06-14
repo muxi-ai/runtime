@@ -21,33 +21,10 @@ def generate_nanoid(size: int = 21) -> str:
     Returns:
         A new Nano ID string.
     """
-    observability.emit_event(
-        event_type=observability.SystemEvents.ID_GENERATION_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting Nano ID generation",
-        data={
-            "operation": "generate_nanoid",
-            "size": size,
-            "alphabet_length": 64,  # Length of our custom alphabet
-        },
-    )
 
     try:
         alphabet = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
         nano_id = generate(alphabet, size)
-
-        observability.emit_event(
-            event_type=observability.SystemEvents.ID_GENERATION_COMPLETED,
-            level=observability.EventLevel.DEBUG,
-            description="Nano ID generation completed successfully",
-            data={
-                "operation": "generate_nanoid",
-                "size": size,
-                "generated_id_length": len(nano_id),
-                "alphabet_length": len(alphabet),
-            },
-        )
-
         return nano_id
 
     except Exception as e:
@@ -74,32 +51,8 @@ def get_default_nanoid() -> str:
     Returns:
         A new Nano ID string of standard length.
     """
-    observability.emit_event(
-        event_type=observability.SystemEvents.ID_GENERATION_STARTED,
-        level=observability.EventLevel.DEBUG,
-        description="Starting default Nano ID generation",
-        data={
-            "operation": "get_default_nanoid",
-            "size": 21,  # Default size
-            "use_case": "sqlalchemy_default",
-        },
-    )
-
     try:
         nano_id = generate_nanoid()
-
-        observability.emit_event(
-            event_type=observability.SystemEvents.ID_GENERATION_COMPLETED,
-            level=observability.EventLevel.DEBUG,
-            description="Default Nano ID generation completed successfully",
-            data={
-                "operation": "get_default_nanoid",
-                "size": 21,
-                "generated_id_length": len(nano_id),
-                "use_case": "sqlalchemy_default",
-            },
-        )
-
         return nano_id
 
     except Exception as e:

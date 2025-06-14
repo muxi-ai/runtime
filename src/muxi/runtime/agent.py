@@ -163,7 +163,7 @@ class Agent:
 
         # Emit agent initialization event
         observability.emit_event(
-            event_type=observability.ConversationEvents.AGENT_INITIALIZED,
+            event_type=observability.SystemEvents.AGENT_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
                 "agent_id": self.agent_id,

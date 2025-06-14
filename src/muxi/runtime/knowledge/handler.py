@@ -134,7 +134,7 @@ class KnowledgeHandler:
 
         # Log initialization
         observability.emit_event(
-                event_type=observability.ConversationEvents.SESSION_CREATED,
+                event_type=observability.SystemEvents.SESSION_CREATED,
                 level=observability.EventLevel.INFO,
                 description="KnowledgeHandler initialized",
                 data={
@@ -559,7 +559,7 @@ class KnowledgeHandler:
         """Create KnowledgeHandler from agent configuration with performance optimizations."""
         # Log configuration loading start
         observability.emit_event(
-                event_type=observability.ConversationEvents.SESSION_CREATED,
+                event_type=observability.SystemEvents.SESSION_CREATED,
                 level=observability.EventLevel.INFO,
                 description="Starting KnowledgeHandler creation from agent config",
                 data={
@@ -576,7 +576,7 @@ class KnowledgeHandler:
 
             # Log knowledge disabled
             observability.emit_event(
-                    event_type=observability.ConversationEvents.SESSION_CREATED,
+                    event_type=observability.SystemEvents.SESSION_CREATED,
                     level=observability.EventLevel.DEBUG,
                     description="Knowledge disabled for agent",
                     data={"agent_id": agent_id},
@@ -589,7 +589,7 @@ class KnowledgeHandler:
 
             # Log no sources
             observability.emit_event(
-                    event_type=observability.ConversationEvents.SESSION_CREATED,
+                    event_type=observability.SystemEvents.SESSION_CREATED,
                     level=observability.EventLevel.WARNING,
                     description="No knowledge sources configured for agent",
                     data={"agent_id": agent_id},
@@ -669,7 +669,7 @@ class KnowledgeHandler:
 
             # Log successful handler creation
             observability.emit_event(
-                    event_type=observability.ConversationEvents.SESSION_CREATED,
+                    event_type=observability.SystemEvents.SESSION_CREATED,
                     level=observability.EventLevel.INFO,
                     description="KnowledgeHandler created successfully from agent config",
                     data={
