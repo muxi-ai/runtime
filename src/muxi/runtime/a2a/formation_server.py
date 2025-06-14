@@ -432,14 +432,9 @@ class A2AFormationServer:
                     "message_id": message_id,
                 }
 
-            # Log the incoming A2A message
-            #  Info - add observability event
-            #     f"A2A Message: external -> {agent_id} ({request.message_type}, id: {message_id})"
-            # )
-
             # Emit message routing event
             observability.emit_event(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_ROUTED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": agent_id,
@@ -447,7 +442,7 @@ class A2AFormationServer:
                     "message_type": request.message_type,
                     "formation": self.formation_name,
                 },
-                description=f"A2A message routed to agent {agent_id}",
+                description=f"A2A message sent to agent {agent_id}",
             )
 
             # Route message directly to the agent

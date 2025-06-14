@@ -52,10 +52,11 @@ class SecretsManager:
         """Initialize encryption for formation (creates master key if needed)."""
         # Observability: Encryption initialization started
         observability.emit_event(
-            event_type=observability.SystemEvents.ENCRYPTION_STARTED,
+            event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
             level=observability.EventLevel.INFO,
             description="Starting secrets manager encryption initialization",
             data={
+                "operation_type": "encryption",
                 "formation_dir": str(self.formation_dir),
                 "master_key_exists": self.master_key_path.exists(),
                 "secrets_file_exists": self.secrets_file_path.exists(),
@@ -68,10 +69,11 @@ class SecretsManager:
 
             # Observability: Encryption initialization completed
             observability.emit_event(
-                event_type=observability.SystemEvents.ENCRYPTION_COMPLETED,
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
                 level=observability.EventLevel.INFO,
                 description="Secrets manager encryption initialization completed",
                 data={
+                    "operation_type": "encryption",
                     "formation_dir": str(self.formation_dir),
                     "encryption_ready": self._fernet is not None,
                     "success": True,
@@ -287,6 +289,7 @@ class SecretsManager:
                 level=observability.EventLevel.ERROR,
                 description=f"Secret retrieval failed for {name}: {str(e)}",
                 data={
+                    "operation_type": "retrieval",
                     "secret_name": name,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -359,6 +362,7 @@ class SecretsManager:
                 level=observability.EventLevel.ERROR,
                 description=f"Secret deletion failed for {name}: {str(e)}",
                 data={
+                    "operation_type": "deletion",
                     "secret_name": name,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -454,6 +458,7 @@ class SecretsManager:
                 level=observability.EventLevel.ERROR,
                 description=f"Secret interpolation failed: {str(e)}",
                 data={
+                    "operation_type": "interpolation",
                     "value_type": type(value).__name__,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -522,7 +527,12 @@ class SecretsManager:
                 event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Secret clearing failed: {str(e)}",
-                data={"error": str(e), "error_type": type(e).__name__, "success": False},
+                data={
+                    "operation_type": "clearing",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
             )
             raise
 
@@ -579,6 +589,7 @@ class SecretsManager:
                 level=observability.EventLevel.ERROR,
                 description=f"Secret import failed: {str(e)}",
                 data={
+                    "operation_type": "import",
                     "secret_count": len(secrets),
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -623,6 +634,11 @@ class SecretsManager:
                 event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Secret export failed: {str(e)}",
-                data={"error": str(e), "error_type": type(e).__name__, "success": False},
+                data={
+                    "operation_type": "export",
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
             )
             raise

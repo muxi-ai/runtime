@@ -46,156 +46,269 @@ class SystemEvents(Enum):
     # MCP SYSTEM EVENTS
     # ===================================================================
     MCP_SERVER_PROCESS_STARTED = "mcp.server.process.started"
+    # When MCP server subprocess is launched
+
     MCP_SERVER_PROCESS_FAILED = "mcp.server.process.failed"
+    # When MCP server subprocess fails to start or crashes
+
     MCP_SERVER_CONNECTING = "mcp.server.connecting"
+    # When initiating connection to MCP server
+
     MCP_SERVER_CONNECTED = "mcp.server.connected"
+    # When MCP server connection is established
+
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
+    # When MCP server connection is lost or closed
+
     MCP_SERVER_REGISTRATION_STARTED = "mcp.server.registration.started"
+    # When beginning MCP server registration process
+
     MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
+    # When MCP server is successfully registered
+
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
+    # When MCP server registration fails
+
     MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
+    # When MCP server tool discovery finishes
 
     # ===================================================================
     # AGENT SYSTEM EVENTS
     # ===================================================================
     AGENT_INITIALIZED = "agent.initialized"
+    # When agent instance is created and configured
 
     # ===================================================================
     # A2A SYSTEM EVENTS
     # ===================================================================
-    # Configuration & Initialization
     A2A_CONFIG_LOAD_STARTED = "a2a.config.load.started"
+    # When starting to load A2A configuration
+
     A2A_CONFIG_LOAD_COMPLETED = "a2a.config.load.completed"
+    # When A2A configuration is successfully loaded
+
     A2A_CREDENTIAL_LOADED = "a2a.credential.loaded"
+    # When A2A credentials are loaded from storage
+
     A2A_CREDENTIALS_LOAD_FAILED = "a2a.credentials.load_failed"
+    # When A2A credential loading fails
+
     A2A_CARD_GENERATOR_INITIALIZED = "a2a.card.generator.initialized"
+    # When A2A agent card generator is set up
 
-    # Authentication
     A2A_AUTH_INITIALIZED = "a2a.auth.initialized"
+    # When A2A authentication system is initialized
+
     A2A_AUTH_VALIDATING = "a2a.auth.validating"
+    # When validating A2A authentication credentials
+
     A2A_AUTH_VALIDATED = "a2a.auth.validated"
+    # When A2A authentication is successful
+
     A2A_AUTH_VALIDATION_FAILED = "a2a.auth.validation_failed"
+    # When A2A authentication fails
 
-    # Registry Operations
     A2A_REGISTRY_CLIENT_INITIALIZED = "a2a.registry.client.initialized"
+    # When A2A registry client is created
+
     A2A_REGISTRY_CONNECTED = "a2a.registry.connected"
+    # When connection to A2A registry is established
+
     A2A_REGISTRY_DISCONNECTED = "a2a.registry.disconnected"
+    # When A2A registry connection is lost
+
     A2A_REGISTRY_HEALTH_CHECK_COMPLETED = "a2a.registry.health_check.completed"
+    # When A2A registry health check finishes
 
-    # Health Checks
     A2A_HEALTH_CHECK_STARTED = "a2a.health.check.started"
+    # When starting A2A system health check
+
     A2A_HEALTH_CHECK_COMPLETED = "a2a.health.check.completed"
+    # When A2A health check completes successfully
+
     A2A_HEALTH_CHECK_FAILED = "a2a.health.check.failed"
+    # When A2A health check fails
 
-    # Registration & Deregistration
     A2A_REGISTRATION_STARTED = "a2a.registration.started"
+    # When starting agent registration with A2A registry
+
     A2A_REGISTRATION_COMPLETED = "a2a.registration.completed"
+    # When agent is successfully registered with A2A registry
+
     A2A_REGISTRATION_FAILED = "a2a.registration.failed"
+    # When agent registration with A2A registry fails
+
     A2A_DEREGISTRATION_STARTED = "a2a.deregistration.started"
+    # When starting agent deregistration from A2A registry
+
     A2A_DEREGISTRATION_COMPLETED = "a2a.deregistration.completed"
+    # When agent is successfully deregistered from A2A registry
+
     A2A_DEREGISTRATION_FAILED = "a2a.deregistration.failed"
+    # When agent deregistration from A2A registry fails
 
-    # Server Operations
     A2A_SERVER_STARTED = "a2a.server.started"
+    # When A2A server component starts
+
     A2A_SERVER_STOPPED = "a2a.server.stopped"
+    # When A2A server component stops
+
     A2A_SERVER_FAILED = "a2a.server.failed"
+    # When A2A server component fails
 
-    # Discovery & Agent Management
     A2A_DISCOVERY_STARTED = "a2a.discovery.started"
-    A2A_DISCOVERY_STOPPED = "a2a.discovery.stopped"
-    A2A_DISCOVERY_COMPLETED = "a2a.discovery.completed"
-    A2A_DISCOVERY_FAILED = "a2a.discovery.failed"
-    A2A_AGENT_REGISTERED = "a2a.agent.registered"
-    A2A_AGENT_DEREGISTERED = "a2a.agent.deregistered"
+    # When starting A2A agent discovery process
 
-    # Card Operations
+    A2A_DISCOVERY_STOPPED = "a2a.discovery.stopped"
+    # When A2A agent discovery process stops
+
+    A2A_DISCOVERY_COMPLETED = "a2a.discovery.completed"
+    # When A2A agent discovery process completes
+
+    A2A_DISCOVERY_FAILED = "a2a.discovery.failed"
+    # When A2A agent discovery process fails
+
+    A2A_AGENT_REGISTERED = "a2a.agent.registered"
+    # When external agent registers with our A2A system
+
+    A2A_AGENT_DEREGISTERED = "a2a.agent.deregistered"
+    # When external agent deregisters from our A2A system
+
     A2A_CARD_GENERATING = "a2a.card.generating"
+    # When starting to generate A2A agent card
+
     A2A_CARD_GENERATED = "a2a.card.generated"
+    # When A2A agent card generation completes
+
     A2A_CARD_EXPORTING = "a2a.card.exporting"
+    # When starting to export A2A agent card
+
     A2A_CARD_EXPORTED = "a2a.card.exported"
+    # When A2A agent card export completes
 
     # ===================================================================
     # CONFIGURATION & STARTUP EVENTS
     # ===================================================================
-    # Configuration Loading
     CONFIG_FORMATION_LOADED = "config.formation.loaded"
+    # When formation configuration file is loaded
+
     CONFIG_AGENT_LOADED = "config.agent.loaded"
+    # When agent configuration is loaded
+
     CONFIG_MCP_LOADED = "config.mcp.loaded"
+    # When MCP server configuration is loaded
+
     CONFIG_A2A_LOADED = "config.a2a.loaded"
+    # When A2A configuration is loaded
 
-    # Overlord Initialization
     OVERLORD_INITIALIZING = "overlord.initializing"
-    OVERLORD_STARTED = "overlord.started"
+    # When overlord component starts initialization
 
-    # System Services
+    OVERLORD_STARTED = "overlord.started"
+    # When overlord component is fully initialized and ready
+
     CACHE_MANAGER_STARTED = "cache.manager.started"
+    # When cache management system starts
+
     MEMORY_OPTIMIZER_STARTED = "memory.optimizer.started"
+    # When memory optimization system starts
 
     # ===================================================================
     # AUTHENTICATION & SECURITY EVENTS
     # ===================================================================
     AUTH_MANAGER_INITIALIZED = "auth.manager.initialized"
+    # When authentication manager is initialized
+
     INBOUND_AUTH_INITIALIZED = "inbound.auth.initialized"
+    # When inbound authentication system is initialized
 
     # ===================================================================
     # EKNOWLEDGE SYSTEM EVENTS
     # ===================================================================
     KNOWLEDGE_SOURCE_LOADED = "knowledge.source.loaded"
+    # When knowledge source is successfully loaded
+
     KNOWLEDGE_SOURCE_FAILED = "knowledge.source.failed"
+    # When knowledge source loading fails
 
     # ===================================================================
     # INFRASTRUCTURE MONITORING (MOVED FROM CONVERSATIONEVENTs)
     # ===================================================================
     RESOURCE_USAGE_MEASURED = "resource.usage.measured"
-    RESOURCE_ALLOCATED = "resource.allocated"
+    # When system resource usage is measured
 
-    # ===================================================================
-    # ENCRYPTION & SECURITY OPERATIONS
-    # ===================================================================
-    ENCRYPTION_STARTED = "encryption.started"
-    ENCRYPTION_COMPLETED = "encryption.completed"
+    RESOURCE_ALLOCATED = "resource.allocated"
+    # When system resources are allocated
 
     # ===================================================================
     # EXTENSION MANAGEMENT
     # ===================================================================
-    # Extension Lifecycle Events
     EXTENSION_LOADED = "extension.loaded"
+    # When extension is successfully loaded
+
     EXTENSION_FAILED = "extension.failed"
+    # When extension loading or operation fails
+
     EXTENSION_LISTED = "extension.listed"
+    # When extension listing operation completes
+
     EXTENSION_LISTING_FAILED = "extension.listing.failed"
+    # When extension listing operation fails
 
     # ===================================================================
     # MEMORY SYSTEM OPERATIONS
     # ===================================================================
     MEMORY_CLEAR = "memory.clear"
+    # When memory system is cleared
+
     MEMORY_DELETION_COMPLETED = "memory.deletion.completed"
+    # When memory deletion operation completes
+
     MEMORY_DELETION_FAILED = "memory.deletion.failed"
+    # When memory deletion operation fails
 
     # ===================================================================
     # PERFORMANCE MONITORING
     # ===================================================================
     PERFORMANCE_DURATION_RECORDED = "performance.duration.recorded"
+    # When performance timing is recorded
+
     PERFORMANCE_OPTIMIZED = "performance.optimized"
+    # When performance optimization is applied
 
     # ===================================================================
     # SECRET MANAGEMENT OPERATIONS
     # ===================================================================
     SECRET_OPERATION_COMPLETED = "secret.operation.completed"
+    # When secret operation (store/retrieve/import/export) completes
+    # (with operation_type: "storage", "retrieval", "import", etc. in event data)
+
     SECRET_OPERATION_FAILED = "secret.operation.failed"
+    # When secret operation (store/retrieve/import/export) fails
+
     SECRET_LISTING_COMPLETED = "secret.listing.completed"
+    # When secret listing operation completes
+
     SECRET_LISTING_FAILED = "secret.listing.failed"
+    # When secret listing operation fails
 
     # ===================================================================
     # DATABASE/STORAGE OPERATIONS
     # ===================================================================
     DB_CONNECTION_STARTED = "db.connection.started"
+    # When database connection is initiated
+
     DB_CONNECTION_FAILED = "db.connection.failed"
+    # When database connection fails
 
     # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
     # ===================================================================
     NETWORK_INTERFACE_INITIALIZED = "network.interface.initialized"
+    # When network interface is initialized
+
     NETWORK_INTERFACE_FAILED = "network.interface.failed"
+    # When network interface initialization fails
 
 
 class ConversationEvents(Enum):
@@ -205,209 +318,432 @@ class ConversationEvents(Enum):
     # SESSION MANAGEMENT
     # ===================================================================
     SESSION_CREATED = "session.created"
+    # When new user session is established
+
     SESSION_ENDED = "session.ended"
-    SESSION_TIMEOUT = "session.timeout"
+    # When user session is terminated normally
+
+    SESSION_EXPIRED = "session.expired"
+    # When user session expires due to inactivity
 
     # ===================================================================
     # REQUEST INGESTION & VALIDATION
     # ===================================================================
-    REQUEST_RECEIVED = "request.received"  # Initial event
-    REQUEST_PROCESSING = "request.processing"  # Processing state
-    REQUEST_VALIDATED = "request.validated"  # Validation success
-    REQUEST_DENIED_AUTH = "request.denied.auth"  # Auth failure
-    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"  # Rate limit failure
-    REQUEST_DENIED_VALIDATION = "request.denied.validation"  # Validation failure
+    REQUEST_RECEIVED = "request.received"
+    # When incoming request is received by the system
+
+    REQUEST_PROCESSING = "request.processing"
+    # When request enters processing pipeline
+
+    REQUEST_VALIDATED = "request.validated"
+    # When request passes validation checks
+
+    REQUEST_DENIED_AUTH = "request.denied.auth"
+    # When request is rejected due to authentication failure
+
+    REQUEST_DENIED_RATE_LIMIT = "request.denied.rate_limit"
+    # When request is rejected due to rate limiting
+
+    REQUEST_DENIED_VALIDATION = "request.denied.validation"
+    # When request is rejected due to validation errors
+
     REQUEST_FAILED = "request.failed"  # Error state
+    # When request processing fails with error
+
     REQUEST_COMPLETED = "request.completed"  # Success state
+    # When request processing completes successfully
 
     # ===================================================================
     # MULTI-MODAL CONTENT PROCESSING
     # ===================================================================
-    # Document Processing
     DOCUMENT_PROCESSING_STARTED = "document.processing.started"
+    # When document processing begins
+
     DOCUMENT_PROCESSING_COMPLETED = "document.processing.completed"
+    # When document processing completes successfully
+
     DOCUMENT_PROCESSING_FAILED = "document.processing.failed"
+    # When document processing fails
 
-    # Content Processing
     CONTENT_EXTRACTION_STARTED = "content.extraction.started"
-    CONTENT_EXTRACTION_COMPLETED = "content.extraction.completed"
-    CONTENT_EXTRACTION_FAILED = "content.extraction.failed"
-    CONTENT_PROCESSED = "content.processed"
-    CONTENT_RETRIEVED = "content.retrieved"
+    # When content extraction from media begins
 
-    # Media Analysis
+    CONTENT_EXTRACTION_COMPLETED = "content.extraction.completed"
+    # When content extraction completes successfully
+
+    CONTENT_EXTRACTION_FAILED = "content.extraction.failed"
+    # When content extraction fails
+
+    CONTENT_PROCESSED = "content.processed"
+    # When content processing completes
+
+    CONTENT_RETRIEVED = "content.retrieved"
+    # When content is retrieved from storage
+
     CONTENT_IMAGE_ANALYZED = "content.image.analyzed"
+    # When image analysis completes
+
     CONTENT_AUDIO_TRANSCRIBED = "content.audio.transcribed"
+    # When audio transcription completes
 
     # ===================================================================
     # OVERLORD ORCHESTRATION
     # ===================================================================
-    # Overlord Operations
     OVERLORD_ROUTING_STARTED = "overlord.routing.started"
-    OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
-    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection_started"
-    OVERLORD_AGENT_SELECTION_COMPLETED = "overlord.agent.selection_completed"
+    # When overlord begins routing decision process
 
-    OVERLORD_AGENT_NOTFOUND = "overlord.agent.not_found"
+    OVERLORD_ROUTING_COMPLETED = "overlord.routing.completed"
+    # When overlord completes routing decision
+
     OVERLORD_ROUTING_FAILED = "overlord.routing.failed"
+    # When overlord routing process fails
+
+    OVERLORD_AGENT_SELECTION_STARTED = "overlord.agent.selection_started"
+    # When overlord begins agent selection process
+
     OVERLORD_AGENT_SELECTED = "overlord.agent.selected"
+    # When overlord selects specific agent for task
+
     OVERLORD_TASK_DECOMPOSED = "overlord.task.decomposed"
+    # When overlord breaks down complex task into subtasks
 
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
     # Short-term memory operations
     MEMORY_SHORT_TERM_LOOKUP = "memory.short_term.lookup"
+    # When searching short-term memory
+
     MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
-    MEMORY_SHORT_TERM_ENHANCED = "memory.short_term.enhanced"
-    MEMORY_SHORT_TERM_UPDATED = "memory.short_term.updated"
+    # When data is retrieved from short-term memory
 
     # Long-term memory operations
     MEMORY_LONG_TERM_LOOKUP = "memory.long_term.lookup"
+    # When searching long-term memory
+
     MEMORY_LONG_TERM_RETRIEVED = "memory.long_term.retrieved"
+    # When data is retrieved from long-term memory
+
     MEMORY_LONG_TERM_ENHANCED = "memory.long_term.enhanced"
+    # When long-term memory is enhanced with new information
+
     MEMORY_LONG_TERM_UPDATED = "memory.long_term.updated"
+    # When long-term memory is updated
 
-    # Memory error events - Short-term
-    MEMORY_SHORT_TERM_ENHANCEMENT_FAILED = "memory.short_term.enhancement_failed"
-    MEMORY_SHORT_TERM_DELETION_FAILED = "memory.short_term.deletion_failed"
-    MEMORY_SHORT_TERM_UPDATE_FAILED = "memory.short_term.update_failed"
-    MEMORY_SHORT_TERM_RETRIEVAL_FAILED = "memory.short_term.retrieval_failed"
-
-    # Memory error events - Long-term
     MEMORY_LONG_TERM_ENHANCEMENT_FAILED = "memory.long_term.enhancement_failed"
+    # When long-term memory enhancement fails
+
     MEMORY_LONG_TERM_DELETION_FAILED = "memory.long_term.deletion_failed"
+    # When long-term memory deletion fails
+
     MEMORY_LONG_TERM_UPDATE_FAILED = "memory.long_term.update_failed"
+    # When long-term memory update fails
+
     MEMORY_LONG_TERM_RETRIEVAL_FAILED = "memory.long_term.retrieval_failed"
+    # When long-term memory retrieval fails
 
     # ===================================================================
     # AGENT PROCESSING
     # ===================================================================
-    # Message processing
     AGENT_MESSAGE_PROCESSING = "agent.message.processing"
+    # When agent begins processing a message
+
     AGENT_MESSAGE_COMPLETED = "agent.message.completed"
+    # When agent completes message processing
+
     AGENT_MESSAGE_FAILED = "agent.message.failed"
+    # When agent message processing fails
 
-    # Thinking
     AGENT_THINKING_STARTED = "agent.thinking.started"
+    # When agent begins thinking/reasoning process
+
     AGENT_THINKING_COMPLETED = "agent.thinking.completed"
+    # When agent completes thinking/reasoning
+
     AGENT_THINKING_FAILED = "agent.thinking.failed"
+    # When agent thinking/reasoning fails
 
-    # Planning
     AGENT_PLANNING_STARTED = "agent.planning.started"
-    AGENT_PLANNING_COMPLETED = "agent.planning.completed"
-    AGENT_PLANNING_FAILED = "agent.planning.failed"
+    # When agent begins planning process
 
-    # Response generation
+    AGENT_PLANNING_COMPLETED = "agent.planning.completed"
+    # When agent completes planning
+
+    AGENT_PLANNING_FAILED = "agent.planning.failed"
+    # When agent planning fails
+
     AGENT_RESPONSE_GENERATED = "agent.response.generated"
+    # When agent generates response
 
     # ===================================================================
     # MODEL OPERATIONS
     # ===================================================================
     MODEL_REQUEST_STARTED = "model.request.started"
+    # When LLM request is initiated
+
     MODEL_REQUEST_COMPLETED = "model.request.completed"
+    # When LLM request completes successfully
+
     MODEL_REQUEST_FAILED = "model.request.failed"
+    # When LLM request fails
+
     MODEL_STREAMING_STARTED = "model.streaming.started"
+    # When LLM streaming response begins
+
     MODEL_STREAMING_COMPLETED = "model.streaming.completed"
+    # When LLM streaming response completes
 
     # ===================================================================
     # TOOL & MCP OPERATIONS
     # ===================================================================
-    # Server connection events
     MCP_SERVER_CONNECTING = "mcp.server.connecting"
+    # When connecting to MCP server for request
+
     MCP_SERVER_CONNECTED = "mcp.server.connected"
+    # When MCP server connection established for request
+
     MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
+    # When MCP server disconnects during request
+
     MCP_SERVER_CONNECTION_FAILED = "mcp.server.connection_failed"
+    # When MCP server connection fails during request
 
-    # Tool discovery and usage
     MCP_TOOL_DISCOVERY_STARTED = "mcp.tool.discovery_started"
+    # When starting tool discovery for request
+
     MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery_completed"
+    # When tool discovery completes for request
+
     MCP_TOOL_DISCOVERY_FAILED = "mcp.tool.discovery_failed"
+    # When tool discovery fails for request
+
     MCP_TOOL_DISCOVERED = "mcp.tool.discovered"
+    # When specific tool is discovered
+
     MCP_TOOL_CALLED = "mcp.tool.called"
+    # When MCP tool is invoked
+
     MCP_TOOL_CALL_STARTED = "mcp.tool.call_started"
+    # When MCP tool call begins
+
     MCP_TOOL_CALL_COMPLETED = "mcp.tool.call_completed"
+    # When MCP tool call completes successfully
+
     MCP_TOOL_CALL_FAILED = "mcp.tool.call_failed"
+    # When MCP tool call fails
 
     # ===================================================================
-    # A2A & COLLABORATION
+    # EXTERNAL AGENT COLLABORATION (A2A)
     # ===================================================================
-    # external agent collaboration
-    # Message routing and delivery
-    A2A_MESSAGE_ROUTED = "a2a.message.routed"
     A2A_MESSAGE_SENT = "a2a.message.sent"
+    # When A2A message is sent to external agent
+
     A2A_MESSAGE_RECEIVED = "a2a.message.received"
+    # When A2A message is received from external agent
+
     A2A_MESSAGE_FAILED = "a2a.message.failed"
+    # When A2A message delivery fails
 
     # Request/response flow
     A2A_REQUEST_SENT = "a2a.request.sent"  # outbound
+    # When A2A request is sent to external agent
+
     A2A_REQUEST_RECEIVED = "a2a.request.received"  # inbound
+    # When A2A request is received from external agent
+
     A2A_RESPONSE_SENT = "a2a.response.sent"  # outbound
+    # When A2A response is sent to external agent
+
     A2A_RESPONSE_RECEIVED = "a2a.response.received"  # inbound
+    # When A2A response is received from external agent
 
-    # internal agent collaboration
-    # Discovery
+    # ===================================================================
+    # INTERNAL AGENT COLLABORATION
+    # ===================================================================
     COLAB_DISCOVERY_STARTED = "colab.discovery.started"
+    # When internal agent discovery begins
 
-    # Request flow
     COLAB_REQUEST_SENT = "colab.request.sent"  # outbound
+    # When request is sent to internal agent
+
     COLAB_REQUEST_RECEIVED = "colab.request.received"  # inbound
+    # When request is received from internal agent
 
-    # Response flow
     COLAB_RESPONSE_SENT = "colab.response.sent"  # outbound
-    COLAB_RESPONSE_RECEIVED = "colab.response.received"  # inbound
+    # When response is sent to internal agent
 
-    # Message flow
+    COLAB_RESPONSE_RECEIVED = "colab.response.received"  # inbound
+    # When response is received from internal agent
+
     COLAB_MESSAGE_SENT = "colab.message.sent"
+    # When message is sent to internal agent
+
     COLAB_MESSAGE_RECEIVED = "colab.message.received"
+    # When message is received from internal agent
 
     # ===================================================================
     # RESPONSE GENERATION
     # ===================================================================
     RESPONSE_GENERATION_STARTED = "response.generation.started"
+    # When response generation process begins
+
     RESPONSE_FORMATTED = "response.formatted"
+    # When response is formatted for delivery
+
     RESPONSE_VALIDATION_COMPLETED = "response.validation.completed"
+    # When response validation completes
+
     RESPONSE_CONVERSION_STARTED = "response.conversion.started"
+    # When response format conversion begins
+
     RESPONSE_CONVERSION_COMPLETED = "response.conversion.completed"
+    # When response format conversion completes
+
     RESPONSE_DELIVERY_STARTED = "response.delivery.started"
+    # When response delivery begins
+
     RESPONSE_DELIVERY_FAILED = "response.delivery.failed"
+    # When response delivery fails
+
     RESPONSE_DELIVERED = "response.delivered"
+    # When response is successfully delivered
 
     # ===================================================================
-    # ASYNC & DELIVERY
+    # ASYNC PROCESSING
     # ===================================================================
-    # Async processing lifecycle
     ASYNC_THRESHOLD_DETECTED = "async.threshold.detected"
-    ASYNC_PROCESSING_STARTED = "async.processing.started"
-    ASYNC_PROCESSING_COMPLETED = "async.processing.completed"
-    ASYNC_PROCESSING_FAILED = "async.processing.failed"
+    # When request processing time exceeds async threshold
 
-    # Response delivery lifecycle
+    ASYNC_PROCESSING_STARTED = "async.processing.started"
+    # When request switches to async processing mode
+
+    ASYNC_PROCESSING_COMPLETED = "async.processing.completed"
+    # When async processing completes
+
+    ASYNC_PROCESSING_FAILED = "async.processing.failed"
+    # When async processing fails
+
+    # ===================================================================
+    # WEBHOOK DELIVERY
+    # ===================================================================
     WEBHOOK_SENT = "webhook.sent"
+    # When webhook notification is sent
+
     WEBHOOK_FAILED = "webhook.failed"
+    # When webhook delivery fails
 
     # ===================================================================
     # CLARIFICATION HANDLING
     # ===================================================================
     CLARIFICATION_REQUEST_SENT = "clarification.request.sent"
+    # When clarification request is sent to user
+
     CLARIFICATION_RESPONSE_RECEIVED = "clarification.response.received"
+    # When clarification response is received from user
+
+
+class ServerEvents(Enum):
+    """Server event types for MUXI observability"""
+
+    SERVER_STARTED = "server.started"
+    # When server starts
+
+    SERVER_FAILED = "server.failed"
+    # When server fails
 
 
 class ErrorEvents(Enum):
+    """Error event types for MUXI observability (routed to stderr)."""
+
     # ===================================================================
-    # ERROR HANDLING & RECOVERY
+    # VALIDATION ERRORS
     # ===================================================================
-    TIMEOUT_DETECTED = "error.timeout.detected"
-    FALLBACK_ACTIVATED = "error.fallback.activated"
-    RECOVERY_COMPLETED = "error.recovery.completed"
-    CLARIFICATION_FAILED = "error.clarification.failed"
-    AGENT_PROCESSING = "error.agent.processing"
-    RETRY_ATTEMPTED = "error.retry.attempted"
-    VALIDATION_FAILED = "error.validation.failed"
-    AUTHENTICATION_FAILED = "error.authentication.failed"
-    AUTHORIZATION_FAILED = "error.authorization.failed"
-    RATE_LIMIT_EXCEEDED = "error.rate_limit.exceeded"
-    RESOURCE_EXHAUSTED = "error.resource.exhausted"
+    VALIDATION_FAILED = "validation.failed"
+    # When input validation fails (malformed data, missing fields, etc.)
+
+    SCHEMA_VALIDATION_FAILED = "schema.validation.failed"
+    # When data doesn't match expected schema
+
+    # ===================================================================
+    # AUTHENTICATION & AUTHORIZATION ERRORS
+    # ===================================================================
+    AUTHENTICATION_FAILED = "authentication.failed"
+    # When user authentication fails
+
+    AUTHORIZATION_FAILED = "authorization.failed"
+    # When user lacks permission for requested action
+
+    TOKEN_EXPIRED = "token.expired"
+    # When authentication token has expired
+
+    TOKEN_INVALID = "token.invalid"
+    # When authentication token is malformed or invalid
+
+    # ===================================================================
+    # NETWORK & CONNECTIVITY ERRORS
+    # ===================================================================
+    NETWORK_ERROR = "network.error"
+    # When network connectivity issues occur
+
+    CONNECTION_TIMEOUT = "connection.timeout"
+    # When connection times out
+
+    CONNECTION_REFUSED = "connection.refused"
+    # When connection is refused by target
+
+    # ===================================================================
+    # RESOURCE ERRORS
+    # ===================================================================
+    RESOURCE_NOT_FOUND = "resource.not_found"
+    # When requested resource doesn't exist
+
+    RESOURCE_UNAVAILABLE = "resource.unavailable"
+    # When resource exists but is temporarily unavailable
+
+    RESOURCE_EXHAUSTED = "resource.exhausted"
+    # When system resources are exhausted (memory, disk, etc.)
+
+    # ===================================================================
+    # RATE LIMITING ERRORS
+    # ===================================================================
+    RATE_LIMIT_EXCEEDED = "rate_limit.exceeded"
+    # When request rate exceeds configured limits
+
+    QUOTA_EXCEEDED = "quota.exceeded"
+    # When usage quota is exceeded
+
+    # ===================================================================
+    # CONFIGURATION ERRORS
+    # ===================================================================
+    CONFIGURATION_ERROR = "configuration.error"
+    # When system configuration is invalid or missing
+
+    ENVIRONMENT_ERROR = "environment.error"
+    # When required environment variables are missing or invalid
+
+    # ===================================================================
+    # SYSTEM ERRORS
+    # ===================================================================
+    INTERNAL_ERROR = "internal.error"
+    # When unexpected internal system error occurs
+
+    SERVICE_UNAVAILABLE = "service.unavailable"
+    # When required service is unavailable
+
+    DEPENDENCY_ERROR = "dependency.error"
+    # When external dependency fails or is unavailable
+
+    # ===================================================================
+    # DATA ERRORS
+    # ===================================================================
+    DATA_CORRUPTION = "data.corruption"
+    # When data corruption is detected
+
+    SERIALIZATION_ERROR = "serialization.error"
+    # When data serialization/deserialization fails
+
+    ENCODING_ERROR = "encoding.error"
+    # When character encoding/decoding fails
 
 
 @dataclass

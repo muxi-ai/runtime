@@ -4075,7 +4075,7 @@ class Overlord:
             # Emit agent selection completed event
             if request_context:
                 observability.emit_event(
-                    event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_COMPLETED,
+                    event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTED,
                     level=observability.EventLevel.INFO,
                     request_context=request_context,
                     data={"selected_agent": agent_name},
