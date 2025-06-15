@@ -203,11 +203,29 @@ class Agent:
             # self._proactive_detector = ProactiveClarificationIntentDetector(model=self.model)
             # self._mode_manager = ClarificationModeManager(overlord=self.overlord)
 
-            #  Clarification system init - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "agent_name": self.name,
+                    "components_initialized": True
+                },
+                description="Clarification system initialized successfully"
+            )
 
         except Exception as e:
-            #  Warning - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "agent_name": self.name,
+                    "error": str(e),
+                    "context": "initialization"
+                },
+                description=f"Failed to initialize clarification system: {str(e)}"
+            )
 
             # Set components to None so we can check if clarification is available
             self._clarification_analyzer = None
@@ -310,8 +328,17 @@ class Agent:
                     )
                 return response
         except Exception as e:
-            #  Clarification handling error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.CLARIFICATION_RESPONSE_RECEIVED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "context": "clarification_response_handling"
+                },
+                description=f"Clarification response handling failed: {str(e)}"
+            )
 
         # Phase 4: Check for proactive clarification requests (with error handling)
         try:
@@ -335,8 +362,17 @@ class Agent:
                     )
                 return response
         except Exception as e:
-            #  Debug - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "context": "proactive_clarification_handling"
+                },
+                description=f"Proactive clarification handling failed: {str(e)}"
+            )
 
         # Check if the request needs clarification before processing (with error handling)
         try:
@@ -360,37 +396,35 @@ class Agent:
                     )
                 return response
         except Exception as e:
-            #  Debug - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "context": "clarification_needs_check"
+                },
+                description=f"Clarification needs check failed: {str(e)}"
+            )
 
         # Process the message with the model directly (existing logic)
         raw_response = await self.model.chat(self._messages)
 
-        # Debug logging to see what we got
-        #  Response processing debug - add observability event
-        #  Response processing debug - add observability event
-
         # Extract the actual content string from the response
         if isinstance(raw_response, str):
             content = raw_response
-            #  Response extraction debug - add observability event
         elif hasattr(raw_response, "choices") and raw_response.choices:
             # Handle ChatCompletionResponse object
             message = raw_response.choices[0].message
-            #  Message type debug - add observability event
-            #  Debug - add observability event
             if isinstance(message, dict):
                 content = message.get("content", "")
-                #  Response extraction debug - add observability event
             else:
                 # Handle message as object with content attribute/property
                 content = getattr(message, "content", "")
-                #  Response extraction debug - add observability event
-            #  Response extraction debug - add observability event
         elif isinstance(raw_response, dict) and "choices" in raw_response:
             # Handle dict response format
             content = raw_response["choices"][0]["message"]["content"]
-            #  Response extraction debug - add observability event
         else:
             # Try to extract content from string representation if it's embedded
             response_str = str(raw_response)
@@ -402,15 +436,10 @@ class Agent:
                 content_match = re.search(pattern, response_str)
                 if content_match:
                     content = content_match.group(1) or content_match.group(2)
-                    #  Content extraction debug - add observability event
                 else:
                     content = response_str
-                    #  Debug - add observability event
             else:
                 content = response_str
-                #  Debug - add observability event
-
-        #  Content extraction debug - add observability event
 
         # Create response message
         response = MCPMessage(role="assistant", content=content)
@@ -706,8 +735,6 @@ class Agent:
                 )
 
         except ClarificationError as e:
-            #  Clarification error - add observability event
-
             # Emit clarification error event
             observability.emit_event(
                 event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
@@ -770,8 +797,16 @@ class Agent:
                 try:
                     available_tools = await self._mcp_service.list_available_tools()
                 except Exception as e:
-                    #  Tools availability debug - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.ConversationEvents.MCP_SERVER_CONNECTING,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "agent_id": self.agent_id,
+                            "error": str(e),
+                            "context": "tools_listing"
+                        },
+                        description=f"Failed to list available MCP tools: {str(e)}"
+                    )
 
             # Analyze the request for missing information
             analysis = await self._clarification_analyzer.analyze_request(
@@ -815,11 +850,29 @@ class Agent:
                 return question.question_text
 
         except ClarificationError as e:
-            #  Clarification error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "context": "clarification_analysis"
+                },
+                description=f"Clarification analysis failed: {str(e)}"
+            )
         except Exception as e:
-            #  Unexpected error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "context": "clarification_analysis_unexpected"
+                },
+                description=f"Unexpected error in clarification analysis: {str(e)}"
+            )
 
         return None
 
@@ -914,8 +967,16 @@ class Agent:
                     return str(raw_response)
 
         except Exception as e:
-            #  Agent error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "context": "complete_clarified_request"
+                },
+                description=f"Error completing clarified request: {str(e)}"
+            )
             return (
                 "I apologize, but I encountered an error while processing your request. "
                 "Please try again."
@@ -967,8 +1028,17 @@ class Agent:
                 )
 
         except Exception as e:
-            #  Agent error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "user_id": str(user_id) if user_id is not None else None,
+                    "error": str(e),
+                    "context": "proactive_clarification_request"
+                },
+                description=f"Error handling proactive clarification request: {str(e)}"
+            )
             return None
 
     async def _handle_proactive_session_response(self, session, message: str) -> str:
@@ -1000,8 +1070,16 @@ class Agent:
                 return await self._generate_next_goal_question(session, extracted_info)
 
         except Exception as e:
-            #  Agent error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "context": "proactive_session_response"
+                },
+                description=f"Error handling proactive session response: {str(e)}"
+            )
             return "I had trouble processing your response. Could you please continue?"
 
     async def _start_plan_analysis_session(self, proactive_request, user_id: str) -> str:
@@ -1041,8 +1119,16 @@ class Agent:
             return "\n\n".join(response_parts)
 
         except Exception as e:
-            #  Agent error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "context": "plan_analysis_session"
+                },
+                description=f"Error starting plan analysis session: {str(e)}"
+            )
             return (
                 "I'd be happy to help analyze your plan! However, I had trouble processing it. "
                 "Could you break down your plan into clear steps?"
@@ -1072,8 +1158,16 @@ class Agent:
                 )
 
         except Exception as e:
-            #  Agent error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "context": "proactive_questioning_session"
+                },
+                description=f"Error starting proactive questioning session: {str(e)}"
+            )
             return (
                 "I'd be happy to help guide you with questions! However, I had trouble "
                 "understanding your request. Could you tell me what you'd like help with?"
@@ -1236,10 +1330,6 @@ class Agent:
             )
 
         # Log the A2A communication
-        #  Info - add observability event
-        #     f"A2A Message (local): {self.agent_id} -> {target_agent_id} "
-        #     f"({message_type}, id: {message_id})"
-        # )
 
         try:
             # Send message directly to target agent with timeout
@@ -1261,10 +1351,19 @@ class Agent:
                 return None
 
         except asyncio.TimeoutError:
-            #  Error - add observability event
-            #     f"Local A2A message timed out after {timeout}s: "
-            #     f"{self.agent_id} -> {target_agent_id}"
-            # )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "message_type": message_type,
+                    "message_id": message_id,
+                    "timeout": timeout,
+                    "context": "local_a2a_timeout"
+                },
+                description=f"Local A2A message timeout: {self.agent_id} -> {target_agent_id}"
+            )
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
@@ -1274,7 +1373,19 @@ class Agent:
             else:
                 raise
         except Exception as e:
-            #  Error - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "message_type": message_type,
+                    "message_id": message_id,
+                    "error": str(e),
+                    "context": "local_a2a_error"
+                },
+                description=f"Local A2A message failed: {self.agent_id} -> {target_agent_id}"
+            )
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
@@ -1307,14 +1418,9 @@ class Agent:
             )
 
         # Log the external A2A communication
-        #  Info - add observability event
-        #     f"A2A Message (external): {self.agent_id} -> {target_agent_id} "
-        #     f"({message_type}, id: {message_id})"
-        # )
 
         try:
             # 1. Discover the target agent via registry
-            #  External agent discovery - add observability event
             discovered_agents = await registry_client.discover_agents()
 
             # Find the target agent across all registries
@@ -1330,9 +1436,6 @@ class Agent:
                             and agent_card.muxi_agent_id == target_agent_id
                         ):
                             all_matches.append(agent_card)
-                            #  Debug - add observability event
-                            #     f"Found potential agent {target_agent_id} at {agent_card.url}"
-                            # )
             else:
                 # Single registry
                 for agent_card in discovered_agents:
@@ -1341,7 +1444,6 @@ class Agent:
                         and agent_card.muxi_agent_id == target_agent_id
                     ):
                         all_matches.append(agent_card)
-                        #  Agent discovery - add observability event
 
             # Handle duplicate agent registrations by preferring specific criteria
             if all_matches:
@@ -1369,16 +1471,44 @@ class Agent:
                     # If no non-local match found, take the last one (most recent registration)
                     target_agent_url = (preferred_match or all_matches[-1]).url
 
-                    #  Info - add observability event
-                    #     f"Multiple agents found for {target_agent_id}, "
-                    #     f"selected: {target_agent_url}"
-                    # )
+                    observability.emit_event(
+                        event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "source_agent_id": self.agent_id,
+                            "target_agent_id": target_agent_id,
+                            "target_agent_url": target_agent_url,
+                            "total_matches_found": len(all_matches),
+                            "selected_match": "preferred" if preferred_match else "last"
+                        },
+                        description=f"Multiple agents found for {target_agent_id}, selected URL"
+                    )
 
-                #  Agent selection - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "source_agent_id": self.agent_id,
+                        "target_agent_id": target_agent_id,
+                        "target_agent_url": target_agent_url,
+                        "context": "agent_selection"
+                    },
+                    description=f"Selected agent {target_agent_id} at {target_agent_url}"
+                )
 
             if not target_agent_url:
                 error_msg = f"Agent {target_agent_id} not found in external registries"
-                #  Error - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "source_agent_id": self.agent_id,
+                        "target_agent_id": target_agent_id,
+                        "error": error_msg,
+                        "context": "external_agent_discovery"
+                    },
+                    description=f"Agent {target_agent_id} not found in external registries"
+                )
                 if message_type == "request" and wait_for_response:
                     return {"status": "error", "error": error_msg, "message_id": message_id}
                 else:
@@ -1449,13 +1579,29 @@ class Agent:
                 )
                 auth_type = AuthType(auth_type_value)
                 auth_required = auth_info.required
-                #  Debug - add observability event
-                #     f"Agent {target_agent_id} requires {auth_type} authentication "
-                #     f"(required: {auth_required})"
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "target_agent_id": target_agent_id,
+                        "auth_type": str(auth_type),
+                        "auth_required": auth_required,
+                        "context": "authentication_requirements"
+                    },
+                    description=f"Agent {target_agent_id} requires {auth_type} authentication"
+                )
             else:
-                #  Authentication debug - add observability event
-                _ = None  # remove this line when adding observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "target_agent_id": target_agent_id,
+                        "auth_type": "none",
+                        "auth_required": False,
+                        "context": "no_authentication_info"
+                    },
+                    description=f"No authentication info found for agent {target_agent_id}"
+                )
 
             # Prepare headers with authentication
             headers = {"Content-Type": "application/json"}
@@ -1486,7 +1632,19 @@ class Agent:
 
             if not auth_success and auth_required:
                 error_msg = f"Authentication failed for {target_agent_id} (requires {auth_type})"
-                #  Error - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "source_agent_id": self.agent_id,
+                        "target_agent_id": target_agent_id,
+                        "auth_type": str(auth_type),
+                        "auth_required": auth_required,
+                        "error": error_msg,
+                        "context": "authentication_failure"
+                    },
+                    description=f"Authentication failed for {target_agent_id}"
+                )
                 if message_type == "request" and wait_for_response:
                     return {"status": "error", "error": error_msg, "message_id": message_id}
                 else:
@@ -1509,10 +1667,30 @@ class Agent:
             # Formation server expects: /agents/{agent_id}/message
             endpoint_url = f"{base_url}/agents/{target_agent_id}/message"
 
-            #  HTTP request debug - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "endpoint_url": endpoint_url,
+                    "base_url": base_url,
+                    "context": "http_request_preparation"
+                },
+                description=f"Preparing HTTP request to {endpoint_url}"
+            )
             if auth_type != AuthType.NONE:
-                #  Authentication method debug - add observability event
-                _ = None  # remove this line when adding observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "target_agent_id": target_agent_id,
+                        "auth_type": str(auth_type),
+                        "auth_success": auth_success,
+                        "context": "authentication_method"
+                    },
+                    description=f"Using {auth_type} authentication for {target_agent_id}"
+                )
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 response = await client.post(endpoint_url, json=message_payload, headers=headers)
@@ -1520,10 +1698,18 @@ class Agent:
                 # 4. Handle HTTP response
                 if response.status_code == 200:
                     response_data = response.json()
-                    #  Info - add observability event
-                    #     f"External A2A message successful: {self.agent_id} -> {target_agent_id} "
-                    #     f"(status: {response_data.get('status', 'unknown')})"
-                    # )
+                    observability.emit_event(
+                        event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "source_agent_id": self.agent_id,
+                            "target_agent_id": target_agent_id,
+                            "response_status": response_data.get("status", "unknown"),
+                            "message_type": message_type,
+                            "context": "external_a2a_success"
+                        },
+                        description="External A2A message sent successfully"
+                    )
 
                     if message_type == "request" and wait_for_response:
                         return response_data
@@ -1532,7 +1718,18 @@ class Agent:
 
                 else:
                     error_msg = f"HTTP {response.status_code}: {response.text}"
-                    #  Error - add observability event
+                    observability.emit_event(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "source_agent_id": self.agent_id,
+                            "target_agent_id": target_agent_id,
+                            "http_status_code": response.status_code,
+                            "error": error_msg,
+                            "context": "external_a2a_http_error"
+                        },
+                        description=f"External A2A HTTP error: {response.status_code}"
+                    )
 
                     if message_type == "request" and wait_for_response:
                         return {"status": "error", "error": error_msg, "message_id": message_id}
@@ -1541,14 +1738,35 @@ class Agent:
 
         except httpx.TimeoutException:
             error_msg = f"Request timed out after {timeout} seconds"
-            #  Error - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "timeout": timeout,
+                    "error": error_msg,
+                    "context": "external_a2a_timeout"
+                },
+                description=f"External A2A request timeout after {timeout}s"
+            )
             if message_type == "request" and wait_for_response:
                 return {"status": "error", "error": error_msg, "message_id": message_id}
             else:
                 raise RuntimeError(error_msg)
 
         except Exception as e:
-            #  Error - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "error": str(e),
+                    "context": "external_a2a_exception"
+                },
+                description=f"External A2A message failed: {str(e)}"
+            )
             if message_type == "request" and wait_for_response:
                 return {
                     "status": "error",
@@ -1622,7 +1840,19 @@ class Agent:
                 )
 
         except Exception as e:
-            #  Agent error - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_type": message_type,
+                    "collaboration_type": collaboration_type,
+                    "error": str(e),
+                    "context": "a2a_message_handling"
+                },
+                description=f"Failed to process A2A message from {source_agent_id}"
+            )
             if message_type == "request":
                 return {
                     "status": "error",
@@ -1666,10 +1896,6 @@ class Agent:
         # Process the consultation through the agent's model directly
         raw_response = await self.model.chat([{"role": "user", "content": consultation_prompt}])
 
-        # Debug: Log what we received
-        #  Debug - add observability event
-        #  Debug - add observability event
-
         # For A2A protocol compatibility, ensure we return a clean string
         # Handle different response formats and extract text content
         content = None
@@ -1677,24 +1903,18 @@ class Agent:
         try:
             if isinstance(raw_response, str):
                 content = raw_response
-                #  Response extraction debug - add observability event
             elif hasattr(raw_response, "choices") and raw_response.choices:
                 # Handle ChatCompletionResponse object
                 choice = raw_response.choices[0]
                 message_obj = choice.message
-                #  Debug - add observability event
-                #  Debug - add observability event
 
                 # Try multiple ways to extract content
                 if hasattr(message_obj, "content") and message_obj.content:
                     content = str(message_obj.content)
-                    #  Debug - add observability event
                 elif isinstance(message_obj, dict) and "content" in message_obj:
                     content = str(message_obj["content"])
-                    #  Debug - add observability event
                 elif hasattr(message_obj, "get") and message_obj.get("content"):
                     content = str(message_obj.get("content"))
-                    #  Debug - add observability event
                 else:
                     # Convert the message object to string and try to extract content
                     message_str = str(message_obj)
@@ -1704,47 +1924,65 @@ class Agent:
                         match = re.search(r"'content':\s*'([^']*)'", message_str)
                         if match:
                             content = match.group(1)
-                            #  Content extraction debug - add observability event
                         else:
                             content = f"Consultation response for topic: {topic}"
-                            #  Warning - add observability event
                     else:
                         content = f"Consultation response for topic: {topic}"
-                        #  Warning - add observability event
             elif isinstance(raw_response, dict) and "choices" in raw_response:
                 # Handle dict response format
                 try:
                     content = str(raw_response["choices"][0]["message"]["content"])
-                    #  Response extraction debug - add observability event
                 except (KeyError, IndexError) as e:
-                    #  Agent error - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "agent_id": self.agent_id,
+                            "source_agent_id": source_agent_id,
+                            "topic": topic,
+                            "error": str(e),
+                            "context": "consultation_response_extraction"
+                        },
+                        description="Failed to extract consultation response content"
+                    )
                     content = f"Consultation response for topic: {topic}"
             else:
                 # Unknown format
                 content = f"Consultation response for topic: {topic}"
-                #  Warning - add observability event
 
         except Exception as e:
-            #  Error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "source_agent_id": source_agent_id,
+                    "topic": topic,
+                    "error": str(e),
+                    "context": "consultation_processing"
+                },
+                description="Error processing consultation response"
+            )
             content = f"Consultation response for topic: {topic}"
 
         # Ensure content is a valid string
         if not content or not isinstance(content, str):
             content = f"Consultation response for topic: {topic}"
-            #  Warning - add observability event
 
         if not content.strip():
             content = f"Consultation response for topic: {topic}"
-            #  Warning - add observability event
 
-        #  Debug - add observability event
-
-        #  Info - add observability event
-        #     f"Agent {self.agent_id} provided consultation to {source_agent_id} "
-        #     f"on topic: {topic}"
-        # )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+            level=observability.EventLevel.INFO,
+            data={
+                "expert_agent_id": self.agent_id,
+                "requesting_agent_id": source_agent_id,
+                "topic": topic,
+                "context": "consultation_provided"
+            },
+            description=f"Consultation provided to {source_agent_id} on topic: {topic}"
+        )
 
         response_dict = {
             "status": "success",
@@ -1777,7 +2015,18 @@ class Agent:
         if relevance_reason:
             log_parts.append(f"Relevance: {relevance_reason}")
 
-        #  Info - add observability event
+        observability.emit_event(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "recipient_agent_id": self.agent_id,
+                "source_agent_id": source_agent_id,
+                "topic": topic,
+                "relevance_reason": relevance_reason,
+                "context": "information_sharing"
+            },
+            description=f"Received shared information from {source_agent_id} on topic: {topic}"
+        )
 
         # Optionally store the shared information in memory
         if self.overlord and hasattr(self.overlord, "add_to_buffer_memory"):
@@ -1793,8 +2042,17 @@ class Agent:
                     agent_id=self.agent_id,
                 )
             except Exception as e:
-                #  Storage warning - add observability event
-                _ = e  # remove this after implementing observabilityility event
+                observability.emit_event(
+                    event_type=observability.SystemEvents.MEMORY_SHORT_TERM_STORAGE,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "source_agent_id": source_agent_id,
+                        "error": str(e),
+                        "context": "shared_information_storage"
+                    },
+                    description="Failed to store shared information in memory"
+                )
 
         return None  # Notifications don't return responses
 
@@ -1819,9 +2077,17 @@ class Agent:
         else:
             response_content = f"Acknowledged coordination request: {coordination_type}"
 
-        #  Info - add observability event
-        #     f"Agent {self.agent_id} coordinated with {source_agent_id} " f"({coordination_type})"
-        # )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "coordinating_agent_id": self.agent_id,
+                "requesting_agent_id": source_agent_id,
+                "coordination_type": coordination_type,
+                "context": "peer_coordination"
+            },
+            description=f"Coordinated with {source_agent_id} ({coordination_type})"
+        )
 
         return {
             "status": "success",
@@ -1908,18 +2174,46 @@ class Agent:
 
         elif message_type == "notification":
             # For notifications, just acknowledge receipt
-            #  Info - add observability event
-            #     f"Agent {self.agent_id} received notification from {source_agent_id}: {message}"
-            # )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "recipient_agent_id": self.agent_id,
+                    "source_agent_id": source_agent_id,
+                    "message_type": message_type,
+                    "context": "generic_notification"
+                },
+                description=f"Received notification from {source_agent_id}"
+            )
             return None
 
         elif message_type == "response":
             # For responses, log the response (typically handled by the sender)
-            #  Agent message received - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "recipient_agent_id": self.agent_id,
+                    "source_agent_id": source_agent_id,
+                    "message_type": message_type,
+                    "context": "generic_response"
+                },
+                description=f"Received response from {source_agent_id}"
+            )
             return None
 
         else:
-            #  Unknown message type - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "recipient_agent_id": self.agent_id,
+                    "source_agent_id": source_agent_id,
+                    "message_type": message_type,
+                    "context": "unknown_message_type"
+                },
+                description=f"Received A2A message with unknown type: {message_type}"
+            )
             return None
 
     async def request_consultation(
@@ -1969,21 +2263,45 @@ class Agent:
             )
 
             if response and response.get("status") == "success":
-                #  Info - add observability event
-                #     f"Agent {self.agent_id} received consultation from {target_agent_id} "
-                #     f"on topic: {topic}"
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "requesting_agent_id": self.agent_id,
+                        "expert_agent_id": target_agent_id,
+                        "topic": topic,
+                        "context": "consultation_received"
+                    },
+                    description=f"Received consultation from {target_agent_id} on topic: {topic}"
+                )
                 return response
             else:
-                #  Warning - add observability event
-                #     f"Consultation failed: {self.agent_id} -> {target_agent_id} "
-                #     f"on topic: {topic}"
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "requesting_agent_id": self.agent_id,
+                        "expert_agent_id": target_agent_id,
+                        "topic": topic,
+                        "context": "consultation_failed"
+                    },
+                    description=f"Consultation failed: {self.agent_id} -> {target_agent_id}"
+                )
                 return None
 
         except Exception as e:
-            #  Error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "requesting_agent_id": self.agent_id,
+                    "expert_agent_id": target_agent_id,
+                    "topic": topic,
+                    "error": str(e),
+                    "context": "consultation_exception"
+                },
+                description=f"Error requesting consultation from {target_agent_id}"
+            )
             return None
 
     async def share_information(
@@ -2033,15 +2351,33 @@ class Agent:
                 wait_for_response=False,
             )
 
-            #  Info - add observability event
-            #     f"Agent {self.agent_id} shared information with {target_agent_id} "
-            #     f"on topic: {topic}"
-            # )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                level=observability.EventLevel.INFO,
+                data={
+                    "sharing_agent_id": self.agent_id,
+                    "recipient_agent_id": target_agent_id,
+                    "topic": topic,
+                    "relevance_reason": relevance_reason,
+                    "context": "information_sharing"
+                },
+                description=f"Shared information with {target_agent_id} on topic: {topic}"
+            )
             return True
 
         except Exception as e:
-            #  Error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "sharing_agent_id": self.agent_id,
+                    "recipient_agent_id": target_agent_id,
+                    "topic": topic,
+                    "error": str(e),
+                    "context": "information_sharing_failed"
+                },
+                description=f"Failed to share information with {target_agent_id}"
+            )
             return False
 
     async def register_expertise(
@@ -2071,7 +2407,16 @@ class Agent:
             ... )
         """
         if not self.overlord or not hasattr(self.overlord, "register_agent_expertise"):
-            #  Feature not supported warning - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "expertise_areas": expertise_areas,
+                    "context": "expertise_registration_not_supported"
+                },
+                description="Expertise registration feature not supported by overlord"
+            )
             return False
 
         try:
@@ -2081,8 +2426,17 @@ class Agent:
                 proficiency_levels=proficiency_levels or {},
             )
         except Exception as e:
-            #  Error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "expertise_areas": expertise_areas,
+                    "error": str(e),
+                    "context": "expertise_registration_failed"
+                },
+                description="Failed to register agent expertise"
+            )
             return False
 
     async def find_expert(
@@ -2123,8 +2477,18 @@ class Agent:
                 topic=topic, min_proficiency=min_proficiency, requesting_agent_id=self.agent_id
             )
         except Exception as e:
-            #  Error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "topic": topic,
+                    "min_proficiency": min_proficiency,
+                    "error": str(e),
+                    "context": "expert_search_failed"
+                },
+                description=f"Failed to find experts for topic: {topic}"
+            )
             return {}
 
     async def coordinate_with_peer(
@@ -2174,19 +2538,43 @@ class Agent:
             )
 
             if response and response.get("status") == "success":
-                #  Info - add observability event
-                #     f"Agent {self.agent_id} coordinated with {peer_agent_id} "
-                #     f"({coordination_type})"
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "initiating_agent_id": self.agent_id,
+                        "peer_agent_id": peer_agent_id,
+                        "coordination_type": coordination_type,
+                        "context": "peer_coordination_success"
+                    },
+                    description=f"Successfully coordinated with {peer_agent_id}"
+                )
                 return response
             else:
-                #  Warning - add observability event
-                #     f"Coordination failed: {self.agent_id} -> {peer_agent_id} "
-                #     f"({coordination_type})"
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "initiating_agent_id": self.agent_id,
+                        "peer_agent_id": peer_agent_id,
+                        "coordination_type": coordination_type,
+                        "context": "peer_coordination_failed"
+                    },
+                    description=f"Coordination failed: {self.agent_id} -> {peer_agent_id}"
+                )
                 return None
 
         except Exception as e:
-            #  Error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "initiating_agent_id": self.agent_id,
+                    "peer_agent_id": peer_agent_id,
+                    "coordination_type": coordination_type,
+                    "error": str(e),
+                    "context": "peer_coordination_exception"
+                },
+                description=f"Error coordinating with {peer_agent_id}"
+            )
             return None
