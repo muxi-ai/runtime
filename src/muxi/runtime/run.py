@@ -142,8 +142,6 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
                 },
             )
 
-            # Log the error to the application logs
-            #  Error - add observability event
             # Print user-friendly error messages to the console
             print(f"Error: {msg}")
             print(f"Please stop any other processes using port {port} and try again.")
@@ -151,9 +149,6 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
 
         # For now, we'll just log that we would have started a server
         # This will be replaced with actual implementation later
-        #  Info - add observability event
-        #     f"[PLACEHOLDER] Starting MUXI server on {host}:{port} " f"(reload={reload}, mcp={mcp})"
-        # )
         print(f"[PLACEHOLDER] MUXI server would start on {host}:{port}")
         print("This is a placeholder until the MUXI API server is implemented.")
 
@@ -189,8 +184,6 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         )
 
         # Catch any unexpected exceptions during server startup
-        # Log the error with detailed information for debugging
-        #  Error - add observability event
         # Provide a simplified error message to the user
         print(f"Error: Failed to start MUXI server: {str(e)}")
         return False
