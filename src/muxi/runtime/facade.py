@@ -209,12 +209,20 @@ class Muxi:
 
                     # Wrap with Memobase for multi-user support
                     memobase = Memobase(long_term_memory=memory)
-                    #  Facade info - add observability event
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"memory_type": "PostgreSQL+Memobase"},
+                        description="Created PostgreSQL memory with Memobase"
+                    )
                     return memobase
                 except Exception as e:
-                    # Log the error but continue without long-term memory
-                    #  Facade error - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={"error": str(e)},
+                        description="Failed to create PostgreSQL memory"
+                    )
                     return None
 
             # SQLite connection string format (sqlite:///path/to/db)
@@ -223,24 +231,40 @@ class Muxi:
                     # Extract the path: remove 'sqlite:///' prefix
                     db_path = long_term_config[10:]
                     memory = SQLiteMemory(db_path=db_path)
-                    #  Facade info - add observability event
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"memory_type": "SQLite", "db_path": db_path},
+                        description="Created SQLite memory from connection string"
+                    )
                     return memory
                 except Exception as e:
-                    # Log the error but continue without long-term memory
-                    #  Facade error - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={"error": str(e)},
+                        description="Failed to create SQLite memory from connection string"
+                    )
                     return None
 
             # Plain SQLite path
             else:
                 try:
                     memory = SQLiteMemory(db_path=long_term_config)
-                    #  Facade info - add observability event
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"memory_type": "SQLite"},
+                        description="Created SQLite memory from direct path"
+                    )
                     return memory
                 except Exception as e:
-                    # Log the error but continue without long-term memory
-                    #  Facade error - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={"error": str(e)},
+                        description="Failed to create SQLite memory from direct path"
+                    )
                     return None
 
         # Boolean true - use connection string or default SQLite database
@@ -256,28 +280,49 @@ class Muxi:
 
                     # Wrap with Memobase for multi-user support
                     memobase = Memobase(long_term_memory=memory)
-                    #  Facade info - add observability event
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"memory_type": "PostgreSQL+Memobase"},
+                        description="Created PostgreSQL memory from environment config"
+                    )
                     return memobase
                 except Exception as e:
-                    # Log the error but fall back to SQLite
-                    #  Facade error - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e)},
+                        description="PostgreSQL failed, falling back to SQLite"
+                    )
                     pass
 
             # Fall back to SQLite
             try:
                 db_path = os.path.join(os.getcwd(), "muxi.db")
                 memory = SQLiteMemory(db_path=db_path)
-                #  Facade info - add observability event
+                observability.emit_event(
+                    event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"memory_type": "SQLite"},
+                    description="Created default SQLite memory database"
+                )
                 return memory
             except Exception as e:
-                # Log the error but continue without long-term memory
-                #  Facade error - add observability event
-                _ = e  # remove this after implementing observability
+                observability.emit_event(
+                    event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={"error": str(e)},
+                    description="Failed to create fallback SQLite memory"
+                )
                 return None
 
         # If we get here, we don't know how to handle the configuration
-        #  Facade warning - add observability event
+        observability.emit_event(
+            event_type=observability.SystemEvents.CONFIGURATION_ERROR,
+            level=observability.EventLevel.WARNING,
+            data={"config_type": type(long_term_config).__name__},
+            description="Unknown long-term memory configuration type"
+        )
         return None
 
     @property
@@ -394,7 +439,12 @@ class Muxi:
             and self.overlord.buffer_memory.model is None
         ):
             self.overlord.buffer_memory.model = model
-            #  Facade info - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                level=observability.EventLevel.INFO,
+                data={"action": "buffer_memory_model_assigned"},
+                description="Assigned model to buffer memory for vector search"
+            )
 
         # Connect MCP servers if specified
         mcp_servers = config.get("mcp_servers", [])
@@ -534,7 +584,12 @@ class Muxi:
 
                     # Missing required credential
                     if required:
-                        #  Facade warning - add observability event
+                        observability.emit_event(
+                            event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                            level=observability.EventLevel.WARNING,
+                            data={"server_name": name, "credential_id": cred_id},
+                            description=f"Missing required credential for MCP server {name}"
+                        )
                         continue
 
                 # Connect to the MCP server
@@ -543,17 +598,36 @@ class Muxi:
                     # Replace with actual method if different
                     if hasattr(agent, "connect_mcp_server"):
                         await agent.connect_mcp_server(name, url, processed_credentials)
-                        #  Facade info - add observability event
+                        observability.emit_event(
+                            event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                            level=observability.EventLevel.INFO,
+                            data={"server_name": name, "agent_id": agent.agent_id},
+                            description=f"Connected agent {agent.agent_id} to MCP server {name}"
+                        )
                     else:
-                        #  Facade warning - add observability event
+                        observability.emit_event(
+                            event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                            level=observability.EventLevel.WARNING,
+                            data={"server_name": name},
+                            description="Agent does not support MCP server connections"
+                        )
                         pass
 
                 except Exception as e:
-                    #  Facade error - add observability event
-                    _ = e  # remove this after implementing observability
+                    observability.emit_event(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={"server_name": name, "error": str(e)},
+                        description=f"Failed to connect to MCP server {name}"
+                    )
                     pass
             else:
-                #  Facade warning - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"server_config": str(server)},
+                    description="Invalid MCP server configuration: missing name or URL"
+                )
                 pass
 
     async def chat(

@@ -97,8 +97,6 @@ class OneLLMService:
         self._cache_ttl: float = 300.0  # 5 minutes
         self._cache_timestamps: Dict[str, float] = {}
 
-        #  LLM service info - add observability event
-
         # Emit service initialization event
         observability.emit_event(
             event_type=observability.ConversationEvents.SESSION_CREATED,
@@ -148,7 +146,6 @@ class OneLLMService:
         self._api_keys[provider] = api_key
         # Also set it in onellm for immediate use
         set_api_key(provider, api_key)
-        #  LLM service info - add observability event
 
         # Emit API key configuration event
         observability.emit_event(
@@ -433,15 +430,14 @@ class OneLLMService:
 
         except Exception as e:
             self._stats["failed_requests"] += 1
-            #  LLM service error - add observability event
 
             # Emit error event
             observability.emit_event(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                level=observability.eventlevel.error,
-                description=f"chat completion failed for {model}: {str(e)}",
+                level=observability.EventLevel.ERROR,
+                description=f"Chat completion failed for {model}: {str(e)}",
                 data={
-                    "service": "onellmservice",
+                    "service": "OneLLMService",
                     "operation": "chat",
                     "model": model,
                     "provider": provider,
@@ -631,7 +627,6 @@ class OneLLMService:
         old_stats = self._stats.copy()
         for key in self._stats:
             self._stats[key] = 0
-        #  LLM service info - add observability event
 
         # Emit stats reset event
         observability.emit_event(
@@ -651,7 +646,6 @@ class OneLLMService:
         cache_size = len(self._response_cache)
         self._response_cache.clear()
         self._cache_timestamps.clear()
-        #  LLM service info - add observability event
 
         # Emit cache clear event
         observability.emit_event(
@@ -696,8 +690,6 @@ class OneLLMService:
             self._retry_delay = retry_delay
         if cache_ttl is not None:
             self._cache_ttl = cache_ttl
-
-        #  LLM service info - add observability event
 
         # Emit configuration update event
         observability.emit_event(

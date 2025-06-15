@@ -169,18 +169,32 @@ class FileProcessor:
             # Check file size limits
             file_size = file_path.stat().st_size
             if file_size > FILE_SIZE_LIMITS["default"]:
-                #  LLM warning - add observability event
+                observability.emit_event(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"file_path": str(file_path), "file_size": file_size},
+                    description=f"File size {file_size} exceeds limit",
+                )
                 return False
 
             # Basic security check - avoid obviously dangerous files
             if file_path.suffix.lower() in [".exe", ".bat", ".sh", ".scr"]:
-                #  LLM warning - add observability event
+                observability.emit_event(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"file_path": str(file_path), "extension": file_path.suffix.lower()},
+                    description="File blocked due to dangerous extension",
+                )
                 return False
 
             return True
         except Exception as e:
-            #  LLM error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"file_path": str(file_path), "error": str(e)},
+                description=f"File security validation failed: {str(e)}",
+            )
             return False
 
     @staticmethod
@@ -194,8 +208,12 @@ class FileProcessor:
             if mime_type:
                 return mime_type
         except Exception as e:
-            #  LLM debug - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.DEBUG,
+                data={"file_path": str(file_path), "error": str(e)},
+                description="MIME type detection failed, using fallback",
+            )
 
         # Fallback to mimetypes module
         mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -328,7 +346,12 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = "open"
-            #  LLM warning - add observability event
+            observability.emit_event(
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
+                level=observability.EventLevel.WARNING,
+                data={"failure_count": self.failure_count, "threshold": self.failure_threshold},
+                description="Circuit breaker opened due to repeated failures",
+            )
 
 
 # Global cache for responses (simple in-memory cache)
@@ -461,15 +484,17 @@ async def _exponential_backoff_retry(
         except LLMError as e:
             if attempt == max_retries or not e.retryable or e.error_type not in retryable_errors:
                 _retry_stats["failed_requests"] += 1
-                #  LLM error - add observability event
-                #     f"Request failed after {attempt + 1} attempts: {str(e)}",
-                #     extra={
-                #         "error_type": e.error_type.value,
-                #         "provider": e.provider,
-                #         "retryable": e.retryable,
-                #         "attempt": attempt + 1,
-                #     },
-                # )
+                observability.emit_event(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "error_type": e.error_type.value,
+                        "provider": e.provider,
+                        "retryable": e.retryable,
+                        "attempt": attempt + 1,
+                    },
+                    description=f"Request failed after {attempt + 1} attempts",
+                )
                 raise e
 
             _retry_stats["retry_attempts"] += 1
@@ -479,16 +504,17 @@ async def _exponential_backoff_retry(
             if jitter:
                 delay = delay * (0.5 + random.random() * 0.5)  # Add 50% jitter
 
-            #  LLM warning - add observability event
-            #     f"Request failed (attempt {attempt + 1}/{max_retries + 1}): {str(e)}. "
-            #     f"Retrying in {delay:.2f}s",
-            #     extra={
-            #         "error_type": e.error_type.value,
-            #         "provider": e.provider,
-            #         "retry_delay": delay,
-            #         "attempt": attempt + 1,
-            #     },
-            # )
+            observability.emit_event(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error_type": e.error_type.value,
+                    "provider": e.provider,
+                    "retry_delay": delay,
+                    "attempt": attempt + 1,
+                },
+                description=f"Request failed, retrying in {delay:.2f}s",
+            )
 
             await asyncio.sleep(delay)
         except Exception as e:
@@ -507,7 +533,12 @@ def set_llm_api_key(api_key: str, provider: str) -> None:
         provider: The provider to set the key for (e.g., "openai", "anthropic")
     """
     set_api_key(provider, api_key)
-    #  LLM debug - add observability event
+    observability.emit_event(
+        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+        level=observability.EventLevel.DEBUG,
+        data={"provider": provider},
+        description=f"API key set for provider {provider}",
+    )
 
 
 class LLM:
@@ -587,16 +618,18 @@ class LLM:
         if api_key:
             set_llm_api_key(api_key, self._provider)
 
-        #  LLM info - add observability event
-        #     f"Initialized LLM with {self.model_name}",
-        #     extra={
-        #         "provider": self._provider,
-        #         "model": self._model,
-        #         "timeout": timeout,
-        #         "max_retries": max_retries,
-        #         "circuit_breaker_enabled": enable_circuit_breaker,
-        #     },
-        # )
+        observability.emit_event(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.INFO,
+            data={
+                "provider": self._provider,
+                "model": self._model,
+                "timeout": timeout,
+                "max_retries": max_retries,
+                "circuit_breaker_enabled": enable_circuit_breaker,
+            },
+            description=f"Initialized LLM with {self.model_name}",
+        )
 
         # Initialize fusion engine for advanced multimodal processing (lazy loaded)
         self._fusion_engine = None
@@ -609,12 +642,19 @@ class LLM:
                 from ..overlord.workflow.multimodal import MultiModalFusionEngine
 
                 self._fusion_engine = MultiModalFusionEngine(self)
-                #  LLM debug - add observability event
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.DEBUG,
+                    data={"fusion_engine": "MultiModalFusionEngine"},
+                    description="Fusion engine initialized successfully",
+                )
             except ImportError as e:
-                #  LLM warning - add observability event
-                _ = e  # remove this after implementing observability
-                #     f"Could not import fusion engine: {e}. " "Falling back to basic processing."
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e)},
+                    description="Could not import fusion engine, falling back to basic processing",
+                )
                 self._fusion_engine = None
         return self._fusion_engine
 
@@ -761,8 +801,6 @@ class LLM:
         Raises:
             LLMError: For various error conditions with appropriate classification.
         """
-        start_time = time.time()
-
         # Emit LLM request started event
         try:
             observability.emit_event(
@@ -781,8 +819,12 @@ class LLM:
                 description=f"LLM chat request started for {self.model_name}",
             )
         except Exception as e:
-            #  LLM warning - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e)},
+                description="Failed to emit LLM request started event",
+            )
 
         # Handle text-only conversations
         if not files:
@@ -843,9 +885,12 @@ class LLM:
 
             if multimodal_content is None:
                 # Fallback to basic processing if conversion failed
-                #  LLM warning - add observability event
-                #     "Failed to convert files to multimodal content, " "using basic processing"
-                # )
+                observability.emit_event(
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
+                    level=observability.EventLevel.WARNING,
+                    data={"fallback_reason": "multimodal_content_conversion_failed"},
+                    description="Failed to convert files, using basic processing",
+                )
                 return await self._legacy_chat_with_files(messages, files, **kwargs)
 
             # Map fusion_mode to ProcessingMode
@@ -872,8 +917,12 @@ class LLM:
             return await self._synthesize_chat_response(fusion_result, user_message, **kwargs)
 
         except Exception as e:
-            #  LLM error - add observability event
-            _ = e  # remove this after implementing observability
+            observability.emit_event(
+                event_type=observability.ConversationEvents.RESPONSE_GENERATION_STARTED,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "fusion_mode": fusion_mode},
+                description="Multimodal processing failed, falling back to basic processing",
+            )
             # Fallback to basic processing on any error
             return await self._legacy_chat_with_files(messages, files, **kwargs)
 
@@ -923,7 +972,15 @@ Provide a helpful, conversational response that directly addresses what the user
                         file_data = await FileProcessor.convert_file_for_onellm(file_path)
                         processed_files.append(file_data)
 
-                        #  LLM debug - add observability event
+                        observability.emit_event(
+                            event_type=observability.ConversationEvents.RESPONSE_FORMATTED,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "file_path": str(file_path),
+                                "file_type": file_data.get("type", "unknown"),
+                            },
+                            description=f"Successfully processed file {file_path.name}",
+                        )
 
                     except LLMError:
                         # Re-raise LLMErrors as-is
@@ -986,7 +1043,6 @@ Provide a helpful, conversational response that directly addresses what the user
             if not files:
                 cached_response = _get_cached_response(cache_key)
                 if cached_response is not None:
-                    #  LLM debug - add observability event
                     return cached_response
 
             # Call OneLLM ChatCompletion using async method
@@ -1060,7 +1116,6 @@ Provide a helpful, conversational response that directly addresses what the user
             cache_key = _get_cache_key("embed", **params)
             cached_response = _get_cached_response(cache_key)
             if cached_response is not None:
-                #  LLM debug - add observability event
                 return cached_response
 
             # Call OneLLM Embedding using async method
@@ -1110,7 +1165,6 @@ Provide a helpful, conversational response that directly addresses what the user
             cache_key = _get_cache_key("embed_batch", **params)
             cached_response = _get_cached_response(cache_key)
             if cached_response is not None:
-                #  LLM debug - add observability event
                 return cached_response
 
             # Call OneLLM Embedding using async method
@@ -1174,14 +1228,24 @@ def clear_llm_cache():
     """Clear the LLM response cache."""
     global _response_cache
     _response_cache.clear()
-    #  LLM info - add observability event
+    observability.emit_event(
+        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+        level=observability.EventLevel.INFO,
+        data={"action": "cache_cleared"},
+        description="LLM response cache cleared",
+    )
 
 
 def set_cache_ttl(ttl: int):
     """Set the cache TTL in seconds."""
     global _cache_ttl
     _cache_ttl = ttl
-    #  LLM info - add observability event
+    observability.emit_event(
+        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+        level=observability.EventLevel.INFO,
+        data={"action": "cache_ttl_set", "ttl": ttl},
+        description=f"Cache TTL set to {ttl} seconds",
+    )
 
 
 def get_cache_stats():
@@ -1237,4 +1301,9 @@ def reset_all_stats():
     }
     _circuit_breakers.clear()
     clear_llm_cache()
-    #  LLM info - add observability event
+    observability.emit_event(
+        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+        level=observability.EventLevel.INFO,
+        data={"action": "stats_reset"},
+        description="LLM statistics and circuit breakers reset",
+    )

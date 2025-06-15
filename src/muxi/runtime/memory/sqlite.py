@@ -40,6 +40,7 @@ import numpy as np
 
 from .base import BaseMemory
 from ..extensions import SQLiteVecExtension
+from .. import observability
 
 
 class SQLiteMemory(BaseMemory):
@@ -394,9 +395,13 @@ class SQLiteMemory(BaseMemory):
         ]
 
         # Log the result order for debugging
-        if results:
+        if results and observability:
             orders = [m.get("metadata", {}).get("order") for m in results]
-            #  Memory ordering debug - add observability event
+            observability.emit_event(
+                event_type="MEMORY_SHORT_TERM_LOOKUP",
+                level="debug",
+                description=f"Retrieved {len(results)} recent memories with orders: {orders[:5]}",
+            )
 
         return results
 
