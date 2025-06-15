@@ -42,6 +42,12 @@ class EventLevel(Enum):
 class SystemEvents(Enum):
     """System infrastructure events for server monitoring and operations (routed to stdout)."""
 
+    INITIALIZING = "service.initializing"
+    # When server starts initializing
+
+    SERVICE_STARTED = "service.started"
+    # When server is fully initialized and ready
+
     # ===================================================================
     # MCP SYSTEM EVENTS
     # ===================================================================
@@ -51,16 +57,7 @@ class SystemEvents(Enum):
     MCP_SERVER_PROCESS_FAILED = "mcp.server.process.failed"
     # When MCP server subprocess fails to start or crashes
 
-    MCP_SERVER_CONNECTING = "mcp.server.connecting"
-    # When initiating connection to MCP server
-
-    MCP_SERVER_CONNECTED = "mcp.server.connected"
-    # When MCP server connection is established
-
-    MCP_SERVER_REGISTRATION_STARTED = "mcp.server.registration.started"
-    # When beginning MCP server registration process
-
-    MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
+    MCP_SERVER_REGISTERED = "mcp.server.registration.completed"
     # When MCP server is successfully registered
 
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
@@ -126,19 +123,13 @@ class SystemEvents(Enum):
     A2A_HEALTH_CHECK_FAILED = "a2a.health.check.failed"
     # When A2A health check fails
 
-    A2A_REGISTRATION_STARTED = "a2a.registration.started"
-    # When starting agent registration with A2A registry
-
-    A2A_REGISTRATION_COMPLETED = "a2a.registration.completed"
+    A2A_REGISTRED = "a2a.registration.completed"
     # When agent is successfully registered with A2A registry
 
     A2A_REGISTRATION_FAILED = "a2a.registration.failed"
     # When agent registration with A2A registry fails
 
-    A2A_DEREGISTRATION_STARTED = "a2a.deregistration.started"
-    # When starting agent deregistration from A2A registry
-
-    A2A_DEREGISTRATION_COMPLETED = "a2a.deregistration.completed"
+    A2A_DEREGISTERED = "a2a.deregistration.completed"
     # When agent is successfully deregistered from A2A registry
 
     A2A_DEREGISTRATION_FAILED = "a2a.deregistration.failed"
@@ -414,6 +405,21 @@ class ConversationEvents(Enum):
     MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
     # When data is retrieved from short-term memory
 
+    MEMORY_SHORT_TERM_UPDATED = "memory.short_term.updated"
+    # When data is updated in short-term memory
+
+    MEMORY_SHORT_TERM_UPDATE_FAILED = "memory.short_term.update_failed"
+    # When short-term memory update fails
+
+    MEMORY_SHORT_TERM_RETRIEVAL_FAILED = "memory.short_term.retrieval_failed"
+    # When short-term memory retrieval fails
+
+    MEMORY_AUTO_EXTRACTED = "memory.auto.extracted"
+    # When memory is auto-extracted
+
+    MEMORY_AUTO_EXTRACTION_FAILED = "memory.auto.extraction.failed"
+    # When memory auto-extraction fails
+
     # Long-term memory operations
     MEMORY_LONG_TERM_LOOKUP = "memory.long_term.lookup"
     # When searching long-term memory
@@ -641,6 +647,9 @@ class ConversationEvents(Enum):
     CLARIFICATION_RESPONSE_RECEIVED = "clarification.response.received"
     # When clarification response is received from user
 
+    CLARIFICATION_COMPLETED = "clarification.completed"
+    # When clarification completes
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""
@@ -658,95 +667,98 @@ class ErrorEvents(Enum):
     # ===================================================================
     # VALIDATION ERRORS
     # ===================================================================
-    VALIDATION_FAILED = "validation.failed"
+    VALIDATION_FAILED = "error.validation.failed"
     # When input validation fails (malformed data, missing fields, etc.)
 
-    SCHEMA_VALIDATION_FAILED = "schema.validation.failed"
+    SCHEMA_VALIDATION_FAILED = "error.schema.validation.failed"
     # When data doesn't match expected schema
 
     # ===================================================================
     # AUTHENTICATION & AUTHORIZATION ERRORS
     # ===================================================================
-    AUTHENTICATION_FAILED = "authentication.failed"
+    AUTHENTICATION_FAILED = "error.authentication.failed"
     # When user authentication fails
 
-    AUTHORIZATION_FAILED = "authorization.failed"
+    AUTHORIZATION_FAILED = "error.authorization.failed"
     # When user lacks permission for requested action
 
-    TOKEN_EXPIRED = "token.expired"
+    TOKEN_EXPIRED = "error.token.expired"
     # When authentication token has expired
 
-    TOKEN_INVALID = "token.invalid"
+    TOKEN_INVALID = "error.token.invalid"
     # When authentication token is malformed or invalid
 
     # ===================================================================
     # NETWORK & CONNECTIVITY ERRORS
     # ===================================================================
-    NETWORK_ERROR = "network.error"
+    NETWORK_ERROR = "error.network.error"
     # When network connectivity issues occur
 
-    CONNECTION_TIMEOUT = "connection.timeout"
+    CONNECTION_TIMEOUT = "error.connection.timeout"
     # When connection times out
 
-    CONNECTION_REFUSED = "connection.refused"
+    CONNECTION_REFUSED = "error.connection.refused"
     # When connection is refused by target
 
     # ===================================================================
     # RESOURCE ERRORS
     # ===================================================================
-    RESOURCE_NOT_FOUND = "resource.not_found"
+    RESOURCE_NOT_FOUND = "error.resource.not_found"
     # When requested resource doesn't exist
 
-    RESOURCE_UNAVAILABLE = "resource.unavailable"
+    RESOURCE_UNAVAILABLE = "error.resource.unavailable"
     # When resource exists but is temporarily unavailable
 
-    RESOURCE_EXHAUSTED = "resource.exhausted"
+    RESOURCE_EXHAUSTED = "error.resource.exhausted"
     # When system resources are exhausted (memory, disk, etc.)
 
     # ===================================================================
     # RATE LIMITING ERRORS
     # ===================================================================
-    RATE_LIMIT_EXCEEDED = "rate_limit.exceeded"
+    RATE_LIMIT_EXCEEDED = "error.rate_limit.exceeded"
     # When request rate exceeds configured limits
 
-    QUOTA_EXCEEDED = "quota.exceeded"
+    QUOTA_EXCEEDED = "error.quota.exceeded"
     # When usage quota is exceeded
 
     # ===================================================================
     # CONFIGURATION ERRORS
     # ===================================================================
-    CONFIGURATION_ERROR = "configuration.error"
+    CONFIGURATION_ERROR = "error.configuration.error"
     # When system configuration is invalid or missing
 
-    ENVIRONMENT_ERROR = "environment.error"
+    ENVIRONMENT_ERROR = "error.environment.error"
     # When required environment variables are missing or invalid
 
     # ===================================================================
     # SYSTEM ERRORS
     # ===================================================================
-    INTERNAL_ERROR = "internal.error"
+    INTERNAL_ERROR = "error.internal.error"
     # When unexpected internal system error occurs
 
-    SERVICE_UNAVAILABLE = "service.unavailable"
+    SERVICE_UNAVAILABLE = "error.service.unavailable"
     # When required service is unavailable
 
-    DEPENDENCY_ERROR = "dependency.error"
+    DEPENDENCY_ERROR = "error.dependency.error"
     # When external dependency fails or is unavailable
 
     # ===================================================================
     # DATA ERRORS
     # ===================================================================
-    DATA_CORRUPTION = "data.corruption"
+    DATA_CORRUPTION = "error.data.corruption"
     # When data corruption is detected
 
-    SERIALIZATION_ERROR = "serialization.error"
+    SERIALIZATION_ERROR = "error.serialization.error"
     # When data serialization/deserialization fails
 
-    ENCODING_ERROR = "encoding.error"
+    ENCODING_ERROR = "error.encoding.error"
     # When character encoding/decoding fails
 
-    RETRY_ATTEMPTED = "retry.attempted"
+    RETRY_ATTEMPTED = "error.retry.attempted"
     # When a retry is attempted
+
+    WARNING = "error.warning"
+    # When we want to warn about something
 
 
 @dataclass
