@@ -214,6 +214,7 @@ class ToolParser:
                     )
             except Exception as e:
                 #  Warning - add observability event
+                #  MCP_SERVER_CONNECTING
                 _ = e  # remove this after implementing observability
 
         return tool_calls
@@ -284,6 +285,7 @@ class ToolParser:
                 )
             except Exception as e:
                 #  Warning - add observability event
+                #  MCP_SERVER_CONNECTING
                 _ = e  # remove this after implementing observability
 
         return tool_calls
@@ -315,6 +317,7 @@ class ToolParser:
                     params = json.loads(params_str)
                 except json.JSONDecodeError:
                     #  Warning - add observability event
+                    #  MCP_SERVER_CONNECTING
                     _ = None  # remove this after implementing observability
 
                 tool_calls.append(
@@ -328,6 +331,7 @@ class ToolParser:
                 )
             except Exception as e:
                 #  Warning - add observability event
+                #  MCP_SERVER_CONNECTING
                 _ = e  # remove this after implementing observability
 
         return tool_calls

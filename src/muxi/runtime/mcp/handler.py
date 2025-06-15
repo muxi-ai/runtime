@@ -315,6 +315,7 @@ class HTTPSSETransport(BaseTransport):
 
             start_time = time.time()
             #  Info - add observability event
+            #  MCP_SERVER_CONNECTING
 
             # Use the stream context manager properly
             async with self.client.stream(
@@ -332,12 +333,14 @@ class HTTPSSETransport(BaseTransport):
                         "timestamp": datetime.now().isoformat(),
                     }
                     #  Error - add observability event
+                    #  MCP_SERVER_CONNECTING
                     raise MCPConnectionError(
                         f"Failed to connect to SSE endpoint (status {response.status_code})",
                         error_details,
                     )
 
                 #  Info - add observability event
+                #  MCP_SERVER_CONNECTING
                 #     f"SSE connection established: {response.status_code} in {connection_time:.2f}s"
                 # )
 
@@ -345,6 +348,7 @@ class HTTPSSETransport(BaseTransport):
                 found_endpoint = False
                 async for line in response.aiter_lines():
                     #  Debug - add observability event
+                    #  MCP_SERVER_CONNECTING
 
                     if line.startswith("event: endpoint"):
                         # Next line should contain the data
@@ -353,6 +357,7 @@ class HTTPSSETransport(BaseTransport):
                     if line.startswith("data:") and self.message_url is None:
                         message_path = line[5:].strip()
                         #  Info - add observability event
+                        #  MCP_SERVER_CONNECTING
 
                         # Make sure it's a full URL
                         if message_path.startswith("http"):
@@ -380,7 +385,9 @@ class HTTPSSETransport(BaseTransport):
                                 self.session_id = params["session_id"]
 
                             #  MCP info - add observability event
+                            #  MCP_SERVER_CONNECTING
                             #  Info - add observability event
+                            #  MCP_SERVER_CONNECTING
                             self.connected = True
                             self.connect_time = datetime.now()
                             self.last_activity = self.connect_time
@@ -399,6 +406,7 @@ class HTTPSSETransport(BaseTransport):
                     "timestamp": datetime.now().isoformat(),
                 }
                 #  Error - add observability event
+                #  MCP_SERVER_CONNECTING
                 raise MCPConnectionError(
                     "Failed to extract endpoint information from SSE stream", error_details
                 )
@@ -412,6 +420,7 @@ class HTTPSSETransport(BaseTransport):
                 "timestamp": datetime.now().isoformat(),
             }
             #  MCP error - add observability event
+            #  MCP_SERVER_CONNECTING
             raise MCPTimeoutError("Connection to SSE endpoint timed out", error_details) from e
 
         except asyncio.CancelledError:

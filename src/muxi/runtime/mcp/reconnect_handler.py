@@ -101,6 +101,7 @@ class ReconnectingMCPHandler(MCPHandler):
 
         log_msg = f"Connecting to MCP server {name} at {server_url} " f"with reconnection support"
         #  Info - add observability event
+        #  MCP_SERVER_CONNECTING
 
         # Use the retry mechanism for connection
         try:
@@ -119,6 +120,7 @@ class ReconnectingMCPHandler(MCPHandler):
         except MCPConnectionError as e:
             error_msg = f"Failed to connect to MCP server {name} after retries: {str(e)}"
             #  Error - add observability event
+            #  MCP_SERVER_CONNECTING
             raise
 
     async def _connect_server_impl(
@@ -208,6 +210,7 @@ class ReconnectingMCPHandler(MCPHandler):
         except MCPConnectionError as e:
             error_msg = f"Failed to execute tool {tool_name} after retries: {str(e)}"
             #  Error - add observability event
+            #  MCP_SERVER_CONNECTING
             raise
 
     async def _execute_tool_impl(
@@ -247,6 +250,7 @@ class ReconnectingMCPHandler(MCPHandler):
                 self._reconnection_in_progress[server_name] = True
                 try:
                     #  Info - add observability event
+                    #  MCP_SERVER_CONNECTING
                     server_info = self.server_info.get(server_name, {})
                     url = server_info.get("url")
                     command = server_info.get("command")
@@ -268,6 +272,7 @@ class ReconnectingMCPHandler(MCPHandler):
                         request_timeout=request_timeout,
                     )
                     #  Info - add observability event
+                    #  MCP_SERVER_CONNECTING
                 finally:
                     self._reconnection_in_progress[server_name] = False
             else:
