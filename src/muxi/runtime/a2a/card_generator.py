@@ -94,20 +94,16 @@ class AgentCardGenerator:
 
             return config
         except Exception as e:
-            try:
-                observability.emit_event(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "config_path": str(config_path),
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                    },
-                    description=f"Failed to load agent config from {config_path}: {e}",
-                )
-            except Exception:
-                pass
-            #  Error - add observability event
+            observability.emit_event(
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "config_path": str(config_path),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                description=f"Failed to load agent config from {config_path}: {e}",
+            )
             raise
 
     def generate_agent_card(
@@ -167,7 +163,6 @@ class AgentCardGenerator:
                     },
                     description=f"Using cached agent card for {agent_id}",
                 )
-                #  Info - add observability event
                 return cached_card
 
         # Generate new card
@@ -178,7 +173,6 @@ class AgentCardGenerator:
             description=f"Generating new agent card for {agent_id}",
         )
 
-        #  Info - add observability event
         card = self._generate_card_from_config(agent_config, base_url, agent_id, formation_name)
 
         # Add MCP capabilities if present

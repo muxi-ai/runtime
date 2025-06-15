@@ -101,6 +101,7 @@ class LocalDiscoveryService:
             self.is_running = True
 
             #  A2A discovery info - add observability event
+            #  A2A_MESSAGE_SENT
             #     f"Starting A2A Discovery Service for formation '{formation_name}' on port {port}"
             # )
 
@@ -154,6 +155,7 @@ class LocalDiscoveryService:
         """Stop the discovery service."""
         try:
             #  A2A discovery info - add observability event
+            #  A2A_MESSAGE_SENT
 
             observability.emit_event(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STOPPED,
@@ -314,7 +316,7 @@ class LocalDiscoveryService:
                     self._save_registry()
 
                 observability.emit_event(
-                    event_type=observability.SystemEvents.A2A_DEREGISTRATION_COMPLETED,  # noqa: E501
+                    event_type=observability.SystemEvents.A2A_DEREGISTERED,
                     level=observability.EventLevel.INFO,
                     data={"agent_id": agent_id, "result": "success"},
                     description="A2A agent unregistration completed",
@@ -323,7 +325,7 @@ class LocalDiscoveryService:
                 return True
 
             observability.emit_event(
-                event_type=observability.SystemEvents.A2A_DEREGISTRATION_COMPLETED,
+                event_type=observability.SystemEvents.A2A_DEREGISTERED,
                 level=observability.EventLevel.WARNING,
                 data={"agent_id": agent_id, "result": "not_found"},
                 description="A2A agent unregistration completed - agent not found",
@@ -617,7 +619,7 @@ class LocalDiscoveryService:
                 registration.health_score = 0.1
 
                 observability.emit_event(
-                    event_type=observability.SystemEvents..A2A_HEALTH_CHECK_COMPLETED,
+                    event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": agent_id,
@@ -717,7 +719,7 @@ class LocalDiscoveryService:
                             cleaned_up_agents += 1
 
                             observability.emit_event(
-                                event_type=observability.SystemEvents.A2A_DEREGISTRATION_COMPLETED,  # noqa: E501
+                                event_type=observability.SystemEvents.A2A_DEREGISTERED,
                                 level=observability.EventLevel.INFO,
                                 data={
                                     "agent_id": agent_id,

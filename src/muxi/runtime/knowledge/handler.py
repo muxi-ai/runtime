@@ -716,7 +716,7 @@ class KnowledgeHandler:
 
         # Log file addition start
         observability.emit_event(
-                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                 level=observability.EventLevel.INFO,
                 description="Starting knowledge file addition",
                 data={
@@ -730,8 +730,6 @@ class KnowledgeHandler:
         try:
             file_mtime = os.path.getmtime(file_path)
         except FileNotFoundError:
-            #  Error - add observability event
-
             # Log file not found
             observability.emit_event(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
@@ -745,11 +743,9 @@ class KnowledgeHandler:
         for doc in self.documents:
             if doc.get("source") == file_path and doc.get("mtime") == file_mtime:
                 # File already processed and hasn't changed
-                #  Info - add observability event
-
                 # Log file already processed
                 observability.emit_event(
-                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                         level=observability.EventLevel.DEBUG,
                         description="Knowledge file already processed and unchanged",
                         data={"file_path": file_path, "file_mtime": file_mtime},
@@ -762,11 +758,9 @@ class KnowledgeHandler:
             chunks = chunk_text(content)
 
             if not chunks:
-                #  Warning - add observability event
-
                 # Log no content
                 observability.emit_event(
-                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                         level=observability.EventLevel.WARNING,
                         description="No content found in knowledge file",
                         data={
@@ -800,12 +794,9 @@ class KnowledgeHandler:
 
             # Save updated embeddings
             self._save_cached_embeddings(embeddings)
-
-            #  Info - add observability event
-
             # Log successful file addition
             observability.emit_event(
-                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                     level=observability.EventLevel.INFO,
                     description="Knowledge file added successfully",
                     data={
@@ -820,10 +811,11 @@ class KnowledgeHandler:
 
         except Exception as e:
             #  Error - add observability event
+            #  DOCUMENT_PROCESSING_FAILED
 
             # Log file addition error
             observability.emit_event(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to add knowledge file",
                     data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
@@ -847,7 +839,7 @@ class KnowledgeHandler:
         """
         # Log file removal start
         observability.emit_event(
-                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                 level=observability.EventLevel.INFO,
                 description="Starting knowledge file removal",
                 data={"file_path": file_path, "current_documents": len(self.documents)},
@@ -871,7 +863,7 @@ class KnowledgeHandler:
 
                 # Log successful file removal
                 observability.emit_event(
-                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                         level=observability.EventLevel.INFO,
                         description="Knowledge file removed successfully",
                         data={
@@ -885,7 +877,7 @@ class KnowledgeHandler:
             else:
                 # Log file not found for removal
                 observability.emit_event(
-                        event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                         level=observability.EventLevel.WARNING,
                         description="Knowledge file not found for removal",
                         data={"file_path": file_path, "current_documents": len(self.documents)},
@@ -896,7 +888,7 @@ class KnowledgeHandler:
         except Exception as e:
             # Log file removal error
             observability.emit_event(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
                     level=observability.EventLevel.ERROR,
                     description="Failed to remove knowledge file",
                     data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
@@ -938,5 +930,10 @@ class KnowledgeHandler:
             except Exception as e:
                 source_path = source_config.get("path", "unknown")
                 #  Error - add observability event
-                _ = e  # remove this after implementing observability
+                observability.emit_event(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    description="Failed to load knowledge source from config",
+                    data={"source_path": source_path, "error": str(e), "error_type": type(e).__name__},
+                )
                 continue

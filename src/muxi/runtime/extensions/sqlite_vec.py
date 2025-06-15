@@ -128,6 +128,7 @@ class SQLiteVecExtension(Extension):
         ext_path = os.path.join(loadable_dir, f"sqlite_vec.{extension}")
 
         #  Debug - add observability event
+        #  INTERNAL_ERROR
         return ext_path
 
     @classmethod
@@ -152,6 +153,7 @@ class SQLiteVecExtension(Extension):
         """
         if cls._is_initialized:
             #  Info - add observability event
+            #  INTERNAL_ERROR
             return True
 
         # If no explicit path is provided, use the platform-specific path
@@ -160,6 +162,7 @@ class SQLiteVecExtension(Extension):
                 path = cls._get_platform_extension_path()
             except ImportError as e:
                 #  Error - add observability event
+                #  INTERNAL_ERROR
                 _ = e  # remove this after implementing observability
                 # Will try fallbacks in load_extension
 
@@ -170,6 +173,7 @@ class SQLiteVecExtension(Extension):
         cls._is_initialized = True
 
         #  Info - add observability event
+        #  INTERNAL_ERROR
         return True
 
     @classmethod
@@ -194,15 +198,18 @@ class SQLiteVecExtension(Extension):
         if cls._init_path:
             if not os.path.exists(cls._init_path):
                 #  Warning - add observability event
+                #  INTERNAL_ERROR
                 _ = None  # remove this after implementing observability
                 # Will try fallbacks below
             else:
                 try:
                     conn.load_extension(cls._init_path)
                     #  Info - add observability event
+                    #  INTERNAL_ERROR
                     return
                 except Exception as e:
                     #  Warning - add observability event
+                    #  INTERNAL_ERROR
                     _ = e  # remove this after implementing observability
                     # Will try fallbacks below
 
@@ -212,12 +219,15 @@ class SQLiteVecExtension(Extension):
             if os.path.exists(path):
                 conn.load_extension(path)
                 #  Info - add observability event
+                #  INTERNAL_ERROR
                 return
             else:
                 #  Warning - add observability event
+                #  INTERNAL_ERROR
                 _ = None  # remove this after implementing observability
         except Exception as e:
             #  Warning - add observability event
+            #  INTERNAL_ERROR
             _ = e  # remove this after implementing observability
 
         # Otherwise try to use the Python package
@@ -226,6 +236,7 @@ class SQLiteVecExtension(Extension):
 
             sqlite_vec.load(conn)
             #  Info - add observability event
+            #  INTERNAL_ERROR
             return
         except ImportError:
             raise ImportError(

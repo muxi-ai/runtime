@@ -686,13 +686,6 @@ class A2AFormationServer:
                 },
                 description="A2A Formation Server started successfully",
             )
-
-            #  Server started event - add observability
-            #  Formation info event - add observability
-            #  Info - add observability event
-            #     f"Available agents: {list(self.overlord.agents.keys()) if self.overlord else []}"
-            # )
-
             return {
                 "status": "started",
                 "formation": self.formation_name,

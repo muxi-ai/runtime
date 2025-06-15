@@ -90,10 +90,12 @@ class FormationLoader:
         if path_obj.is_file():
             # Flattened formation file
             #  Formation loading - add observability event
+            #  CONFIG_FORMATION_LOADED
             return await self._load_flattened_formation(path, secrets_manager)
         elif path_obj.is_dir():
             # Modular formation directory
             #  Modular formation loading - add observability event
+            #  CONFIG_FORMATION_LOADED
             return await self._load_modular_formation(path, secrets_manager)
         else:
             raise ValueError(f"Invalid formation path: {path} (not a file or directory)")
@@ -123,6 +125,7 @@ class FormationLoader:
         config = self._resolve_knowledge_paths(config, formation_dir)
 
         #  Formation loaded successfully - add observability event
+        #  CONFIG_FORMATION_LOADED
         return config
 
     async def _load_modular_formation(
@@ -178,6 +181,7 @@ class FormationLoader:
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
 
         #  Modular formation loaded successfully - add observability event
+        #  CONFIG_FORMATION_LOADED
         return main_config
 
     async def _discover_and_merge_agents(
@@ -194,6 +198,7 @@ class FormationLoader:
         agents_dir = formation_dir / "agents"
         if not agents_dir.exists():
             #  Agent discovery - add observability event
+            #  AGENT_MESSAGE_PROCESSING
             return
 
         # Find all YAML files in agents directory
@@ -203,6 +208,7 @@ class FormationLoader:
 
         if not agent_files:
             #  Agent config discovery - add observability event
+            #  AGENT_MESSAGE_PROCESSING
             return
 
         # Initialize agents list if not present
@@ -213,6 +219,7 @@ class FormationLoader:
         for agent_file in sorted(agent_files):
             try:
                 #  Agent config loading - add observability event
+                #  AGENT_MESSAGE_PROCESSING
                 agent_config = self.config_loader.load(str(agent_file))
                 agent_config = await self.config_loader.process_secrets(
                     agent_config, secrets_manager
@@ -229,16 +236,20 @@ class FormationLoader:
                 if is_active:
                     config["agents"].append(agent_config)
                     #  Agent loaded successfully - add observability event
+                    #  AGENT_MESSAGE_PROCESSING
                 else:
                     #  Agent disabled - add observability event
+                    #  AGENT_MESSAGE_PROCESSING
                     _ = None  # remove this after implementing observability
 
             except Exception as e:
                 #  Agent config error - add observability event
+                #  AGENT_MESSAGE_FAILED
                 _ = e  # remove this after implementing observability
                 continue
 
         #  Agent discovery complete - add observability event
+        #  AGENT_MESSAGE_PROCESSING
 
     def _filter_inline_agents_by_active(self, config: Dict[str, Any]) -> None:
         """
@@ -265,8 +276,10 @@ class FormationLoader:
             if is_active:
                 filtered_agents.append(agent_config)
                 #  Agent loaded successfully - add observability event
+                #  AGENT_MESSAGE_PROCESSING
             else:
                 #  Agent disabled - add observability event
+                #  AGENT_MESSAGE_PROCESSING
                 _ = None  # remove this after implementing observability
 
         config["agents"] = filtered_agents
@@ -285,6 +298,7 @@ class FormationLoader:
         mcp_dir = formation_dir / "mcp"
         if not mcp_dir.exists():
             #  MCP discovery - add observability event
+            #  MCP_SERVER_CONNECTING
             return
 
         # Find all YAML files in mcp directory
@@ -294,6 +308,7 @@ class FormationLoader:
 
         if not mcp_files:
             #  MCP config discovery - add observability event
+            #  MCP_SERVER_CONNECTING
             return
 
         # Initialize MCP servers structure if not present
@@ -306,6 +321,7 @@ class FormationLoader:
         for mcp_file in sorted(mcp_files):
             try:
                 #  MCP config loading - add observability event
+                #  MCP_SERVER_CONNECTING
                 mcp_config = self.config_loader.load(str(mcp_file))
                 mcp_config = await self.config_loader.process_secrets(mcp_config, secrets_manager)
 
@@ -315,13 +331,16 @@ class FormationLoader:
 
                 config["mcp"]["servers"].append(mcp_config)
                 #  MCP server discovered - add observability event
+                #  MCP_SERVER_CONNECTING
 
             except Exception as e:
                 #  MCP config error - add observability event
+                #  MCP_SERVER_CONNECTING
                 _ = e  # remove this after implementing observability
                 continue
 
         #  Info - add observability event
+        #  MCP_SERVER_CONNECTING
         #     f"✅ Discovered {len(config['mcp']['servers'])} MCP servers from mcp/ directory"
         # )
 
@@ -339,6 +358,7 @@ class FormationLoader:
         a2a_dir = formation_dir / "a2a"
         if not a2a_dir.exists():
             #  A2A discovery - add observability event
+            #  A2A_MESSAGE_SENT
             return
 
         # Find all YAML files in a2a directory
@@ -348,6 +368,7 @@ class FormationLoader:
 
         if not a2a_files:
             #  A2A config discovery - add observability event
+            #  A2A_MESSAGE_SENT
             return
 
         # Initialize A2A outbound services structure if not present
@@ -362,6 +383,7 @@ class FormationLoader:
         for a2a_file in sorted(a2a_files):
             try:
                 #  A2A config loading - add observability event
+                #  A2A_MESSAGE_SENT
                 a2a_config = self.config_loader.load(str(a2a_file))
                 a2a_config = await self.config_loader.process_secrets(a2a_config, secrets_manager)
 
@@ -371,13 +393,16 @@ class FormationLoader:
 
                 config["a2a"]["outbound"]["services"].append(a2a_config)
                 #  A2A service discovered - add observability event
+                #  A2A_MESSAGE_SENT
 
             except Exception as e:
                 #  A2A config error - add observability event
+                #  A2A_MESSAGE_SENT
                 _ = e  # remove this after implementing observability
                 continue
 
         #  Info - add observability event
+        #  A2A_MESSAGE_SENT
         #     f"✅ Discovered {len(config['a2a']['outbound']['services'])} "
         #     "A2A services from a2a/ directory"
         # )

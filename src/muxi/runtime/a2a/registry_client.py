@@ -822,7 +822,8 @@ class A2ARegistryClient:
                             }
                         )
                     except Exception as e:
-                        #  Agent card parsing error - add observability event
+                        #  Error - add observability event
+                        #  SystemEventsA2A_DISCOVERY_FAILED
                         _ = e  # remove this after implementing observability
 
                 #  Discovery success event already emitted above
@@ -843,7 +844,6 @@ class A2ARegistryClient:
                     }
                 )
 
-                #  Discovery failure event already emitted above
                 return []
 
         except Exception as e:
