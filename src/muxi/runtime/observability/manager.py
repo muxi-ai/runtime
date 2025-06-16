@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional, List
 from .logger import EventLogger
 from .request_manager import RequestContextManager
 from .stream_processor import StreamProcessor
-from .health import HealthMonitor, HealthStatusAPI
+from .health import HealthManager, HealthMonitor, HealthStatusAPI
 from .types import ConversationEvents, SystemEvents, EventLevel, RequestContext
 
 
@@ -25,10 +25,12 @@ class ObservabilityManager:
             cleanup_interval=self.config.get("cleanup_interval", 300)
         )
         self.stream_processor = StreamProcessor()
+        self.health_manager = HealthManager()
         self.health_monitor = HealthMonitor(
+            health_manager=self.health_manager,
             check_interval=self.config.get("health_check_interval", 30)
         )
-        self.health_api = HealthStatusAPI(self.health_monitor.health_manager)
+        self.health_api = HealthStatusAPI(self.health_manager)
         self._streams_initialized = False
         self._health_monitoring_started = False
 

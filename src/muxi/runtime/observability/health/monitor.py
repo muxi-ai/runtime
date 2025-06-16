@@ -37,7 +37,7 @@ class HealthMonitor:
         multitasking.set_engine("process")
         # Set process pool size based on CPU cores
         max_workers = min(multiprocessing.cpu_count(), 8)  # Cap at 8 processes
-        multitasking.config(max_workers=max_workers)
+        multitasking.config["max_workers"] = max_workers
 
     def configure_destinations(self, destinations: List[Dict[str, Any]]) -> None:
         """
