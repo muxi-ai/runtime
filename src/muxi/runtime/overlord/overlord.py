@@ -587,7 +587,7 @@ class Overlord:
         """
         try:
             # Emit formation loading started event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
                 level=observability.EventLevel.INFO,
                 data={"formation_path": formation_path},
@@ -1927,7 +1927,7 @@ class Overlord:
                 )
 
                 # Emit memory storage completed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -1941,7 +1941,7 @@ class Overlord:
                 return memory_id
             except Exception as e:
                 # Emit memory storage failed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
@@ -1961,7 +1961,7 @@ class Overlord:
             )
 
             # Emit memory storage completed event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -1975,7 +1975,7 @@ class Overlord:
             return memory_id
         except Exception as e:
             # Emit memory storage failed event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -2037,7 +2037,7 @@ class Overlord:
         if self.buffer_memory:
             try:
                 # Emit memory search started event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -2055,7 +2055,7 @@ class Overlord:
                 )
 
                 # Emit memory search completed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -2085,7 +2085,7 @@ class Overlord:
         if self.long_term_memory and use_long_term:
             try:
                 # Emit memory search started event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_LOOKUP,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -2112,7 +2112,7 @@ class Overlord:
                     )
 
                 # Emit memory search completed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -3704,7 +3704,7 @@ class Overlord:
             session_id=session_id,
         ):
             # Emit request received event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_RECEIVED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -3718,7 +3718,7 @@ class Overlord:
             )
 
             # Emit request validation event (basic validation)
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_VALIDATED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -3805,7 +3805,7 @@ class Overlord:
                 processing_time = time.time() - start_time
 
                 # Emit performance monitoring completed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -3995,7 +3995,7 @@ class Overlord:
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
             # Emit agent selection started event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"message": message[:200]},
@@ -4005,7 +4005,7 @@ class Overlord:
             agent_name = await self.select_agent_for_message(message)
 
             # Emit agent selection completed event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTED,
                 level=observability.EventLevel.INFO,
                 data={"selected_agent": agent_name},

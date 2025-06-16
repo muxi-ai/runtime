@@ -397,7 +397,7 @@ class SQLiteMemory(BaseMemory):
         # Log the result order for debugging
         if results and observability:
             orders = [m.get("metadata", {}).get("order") for m in results]
-            observability.emit_event(
+            observability.observe(
                 event_type="MEMORY_SHORT_TERM_LOOKUP",
                 level="debug",
                 description=f"Retrieved {len(results)} recent memories with orders: {orders[:5]}",

@@ -209,7 +209,7 @@ class Muxi:
 
                     # Wrap with Memobase for multi-user support
                     memobase = Memobase(long_term_memory=memory)
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
                         level=observability.EventLevel.INFO,
                         data={"memory_type": "PostgreSQL+Memobase"},
@@ -217,7 +217,7 @@ class Muxi:
                     )
                     return memobase
                 except Exception as e:
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={"error": str(e)},
@@ -231,7 +231,7 @@ class Muxi:
                     # Extract the path: remove 'sqlite:///' prefix
                     db_path = long_term_config[10:]
                     memory = SQLiteMemory(db_path=db_path)
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
                         level=observability.EventLevel.INFO,
                         data={"memory_type": "SQLite", "db_path": db_path},
@@ -239,7 +239,7 @@ class Muxi:
                     )
                     return memory
                 except Exception as e:
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={"error": str(e)},
@@ -251,7 +251,7 @@ class Muxi:
             else:
                 try:
                     memory = SQLiteMemory(db_path=long_term_config)
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
                         level=observability.EventLevel.INFO,
                         data={"memory_type": "SQLite"},
@@ -259,7 +259,7 @@ class Muxi:
                     )
                     return memory
                 except Exception as e:
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={"error": str(e)},
@@ -280,7 +280,7 @@ class Muxi:
 
                     # Wrap with Memobase for multi-user support
                     memobase = Memobase(long_term_memory=memory)
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
                         level=observability.EventLevel.INFO,
                         data={"memory_type": "PostgreSQL+Memobase"},
@@ -288,7 +288,7 @@ class Muxi:
                     )
                     return memobase
                 except Exception as e:
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(e)},
@@ -300,7 +300,7 @@ class Muxi:
             try:
                 db_path = os.path.join(os.getcwd(), "muxi.db")
                 memory = SQLiteMemory(db_path=db_path)
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.DB_CONNECTION_STARTED,
                     level=observability.EventLevel.INFO,
                     data={"memory_type": "SQLite"},
@@ -308,7 +308,7 @@ class Muxi:
                 )
                 return memory
             except Exception as e:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.DB_CONNECTION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={"error": str(e)},
@@ -317,7 +317,7 @@ class Muxi:
                 return None
 
         # If we get here, we don't know how to handle the configuration
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.CONFIGURATION_ERROR,
             level=observability.EventLevel.WARNING,
             data={"config_type": type(long_term_config).__name__},
@@ -439,7 +439,7 @@ class Muxi:
             and self.overlord.buffer_memory.model is None
         ):
             self.overlord.buffer_memory.model = model
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
                 level=observability.EventLevel.INFO,
                 data={"action": "buffer_memory_model_assigned"},
@@ -584,7 +584,7 @@ class Muxi:
 
                     # Missing required credential
                     if required:
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
                             level=observability.EventLevel.WARNING,
                             data={"server_name": name, "credential_id": cred_id},
@@ -598,14 +598,14 @@ class Muxi:
                     # Replace with actual method if different
                     if hasattr(agent, "connect_mcp_server"):
                         await agent.connect_mcp_server(name, url, processed_credentials)
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
                             level=observability.EventLevel.INFO,
                             data={"server_name": name, "agent_id": agent.agent_id},
                             description=f"Connected agent {agent.agent_id} to MCP server {name}"
                         )
                     else:
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
                             level=observability.EventLevel.WARNING,
                             data={"server_name": name},
@@ -614,7 +614,7 @@ class Muxi:
                         pass
 
                 except Exception as e:
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={"server_name": name, "error": str(e)},
@@ -622,7 +622,7 @@ class Muxi:
                     )
                     pass
             else:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.AGENT_MESSAGE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"server_config": str(server)},
@@ -666,7 +666,7 @@ class Muxi:
             For async responses: Dict with request_id and status information.
         """
         # Emit facade request received event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_RECEIVED,
             level=observability.EventLevel.INFO,
             data={
@@ -692,7 +692,7 @@ class Muxi:
 
         # Emit facade response completion event
         is_async_response = isinstance(response, dict) and "request_id" in response
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_COMPLETED,
             level=observability.EventLevel.INFO,
             data={

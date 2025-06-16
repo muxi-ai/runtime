@@ -62,7 +62,7 @@ class CredentialManager:
         # Emit initialization event
         try:
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.INFO,
                 data={
@@ -99,7 +99,7 @@ class CredentialManager:
         # Emit credential retrieval start event
         try:
 
-            event_id = observability.emit_event(
+            event_id = observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.INFO,
                 data={
@@ -119,7 +119,7 @@ class CredentialManager:
 
         if not credential_id:
             # Emit validation failure event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_DENIED_VALIDATION,
                 level=observability.EventLevel.WARNING,
                 data={
@@ -165,7 +165,7 @@ class CredentialManager:
                     pass
 
             # Emit completion event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -185,7 +185,7 @@ class CredentialManager:
 
         except Exception as e:
             # Emit error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -219,7 +219,7 @@ class CredentialManager:
         """
         # Emit user credential retrieval start event
         try:
-            event_id = observability.emit_event(
+            event_id = observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -245,7 +245,7 @@ class CredentialManager:
             # return result[0] if result else None
 
             # Emit completion event for placeholder implementation
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -264,7 +264,7 @@ class CredentialManager:
             return None
         except Exception as e:
             # Emit error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -298,7 +298,7 @@ class CredentialManager:
         # Emit system credential retrieval start event
         try:
 
-            event_id = observability.emit_event(
+            event_id = observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -321,7 +321,7 @@ class CredentialManager:
             # return result[0] if result else None
 
             # Emit completion event for placeholder implementation
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -341,7 +341,7 @@ class CredentialManager:
             return None
         except Exception as e:
             # Emit error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -381,7 +381,7 @@ class CredentialManager:
         """
         # Emit MCP credential resolution start event
         try:
-            event_id = observability.emit_event(
+            event_id = observability.observe(
                 event_type=observability.ConversationEvents.MCP_SERVER_CONNECTING,
                 level=observability.EventLevel.INFO,
                 data={
@@ -400,7 +400,7 @@ class CredentialManager:
             auth_config = mcp_config.get("auth")
             if not auth_config:
                 # Emit completion event for no auth config
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -440,7 +440,7 @@ class CredentialManager:
                     if required and value is None:
                         credentials_failed.append(cred_id)
                         # Emit error event for missing required credential
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.ConversationEvents.REQUEST_FAILED,
                             level=observability.EventLevel.ERROR,
                             data={
@@ -471,7 +471,7 @@ class CredentialManager:
                 f"MCP credential resolution completed: "
                 f"{credentials_resolved} credentials resolved"
             )
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -491,7 +491,7 @@ class CredentialManager:
 
         except Exception as e:
             # Emit error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -530,7 +530,7 @@ class CredentialManager:
                 f"Starting batch MCP credential resolution for "
                 f"{len(mcp_configs)} configurations"
             )
-            event_id = observability.emit_event(
+            event_id = observability.observe(
                 event_type=observability.ConversationEvents.MCP_SERVER_CONNECTING,
                 level=observability.EventLevel.INFO,
                 data={
@@ -560,7 +560,7 @@ class CredentialManager:
                     failure_desc = (
                         f"Individual MCP config resolution failed " f"at index {i}: {str(e)}"
                     )
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.ConversationEvents.REQUEST_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={
@@ -584,7 +584,7 @@ class CredentialManager:
                 f"{successful_resolutions}/{len(mcp_configs)} "
                 f"successful"
             )
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -603,7 +603,7 @@ class CredentialManager:
 
         except Exception as e:
             # Emit error event for batch failure
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={

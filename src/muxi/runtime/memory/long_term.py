@@ -191,7 +191,7 @@ class LongTermMemory:
             The ID of the newly created memory entry.
         """
         # Emit memory storage started event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
             level=observability.EventLevel.INFO,
             data={
@@ -214,7 +214,7 @@ class LongTermMemory:
         memory_id = self._add_internal(content, embedding, metadata, self.default_collection)
 
         # Emit memory storage completed event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
@@ -326,7 +326,7 @@ class LongTermMemory:
             A list of dictionaries containing the search results, ordered by relevance.
         """
         # Emit memory search started event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
@@ -363,7 +363,7 @@ class LongTermMemory:
             )
 
         # Emit memory search completed event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
             level=observability.EventLevel.INFO,
             data={
@@ -498,7 +498,7 @@ class LongTermMemory:
             True if the update was successful, False otherwise.
         """
         # Emit memory update started event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={
@@ -515,7 +515,7 @@ class LongTermMemory:
 
             if not memory:
                 # Emit memory update failed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
@@ -543,7 +543,7 @@ class LongTermMemory:
             session.commit()
 
             # Emit memory update completed event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -570,7 +570,7 @@ class LongTermMemory:
             True if the deletion was successful, False otherwise.
         """
         # Emit memory deletion started event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             data={"memory_id": memory_id},
@@ -582,7 +582,7 @@ class LongTermMemory:
 
             if not memory:
                 # Emit memory deletion failed event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_DELETION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
@@ -597,7 +597,7 @@ class LongTermMemory:
             session.commit()
 
             # Emit memory deletion completed event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 data={"memory_id": memory_id},

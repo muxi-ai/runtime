@@ -79,7 +79,7 @@ class A2ARegistryClient:
                 self.registered_agents[registry_url] = []
 
             # Emit initialization event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                 level=observability.EventLevel.INFO,
                 description=f"A2A Registry Client initialized with {len(self.registries)} registries",  # noqa: E501
@@ -95,7 +95,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit error event for initialization failure
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to initialize A2A Registry Client: {str(e)}",
@@ -112,7 +112,7 @@ class A2ARegistryClient:
             await self.http_client.aclose()
 
             # Emit client close event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRY_DISCONNECTED,
                 level=observability.EventLevel.INFO,
                 description="A2A Registry Client closed",
@@ -126,7 +126,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit error event for close failure
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to close A2A Registry Client: {str(e)}",
@@ -143,7 +143,7 @@ class A2ARegistryClient:
                 self.registered_agents[registry_url] = []
 
                 # Emit registry addition event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                     level=observability.EventLevel.INFO,
                     description=f"Added registry: {registry_url}",
@@ -156,7 +156,7 @@ class A2ARegistryClient:
                 # Registry addition event already emitted above
             else:
                 # Emit warning for duplicate registry
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                     level=observability.EventLevel.WARNING,
                     description=f"Registry already exists: {registry_url}",
@@ -168,7 +168,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit error event for registry addition failure
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to add registry {registry_url}: {str(e)}",
@@ -190,7 +190,7 @@ class A2ARegistryClient:
                 self.registered_agents.pop(registry_url, None)
 
                 # Emit registry removal event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRY_DISCONNECTED,
                     level=observability.EventLevel.INFO,
                     description=f"Removed registry: {registry_url}",
@@ -204,7 +204,7 @@ class A2ARegistryClient:
                 #  Registry removal event already emitted above
             else:
                 # Emit warning for non-existent registry
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRY_DISCONNECTED,
                     level=observability.EventLevel.WARNING,
                     description=f"Registry not found for removal: {registry_url}",
@@ -216,7 +216,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit error event for registry removal failure
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to remove registry {registry_url}: {str(e)}",
@@ -239,7 +239,7 @@ class A2ARegistryClient:
         """
         try:
             # Emit health check start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.DEBUG,
                 description=f"Starting health check for registry: {registry_url}",
@@ -257,7 +257,7 @@ class A2ARegistryClient:
             }
 
             # Emit health check result event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=(
                     observability.EventLevel.INFO
@@ -277,7 +277,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit health check error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.ERROR,
                 description=f"Health check failed for registry: {registry_url}",
@@ -305,7 +305,7 @@ class A2ARegistryClient:
         try:
             if not self.registries:
                 # Emit no registries event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                     level=observability.EventLevel.WARNING,
                     description="No registries configured for health check",
@@ -314,7 +314,7 @@ class A2ARegistryClient:
                 return {}
 
             # Emit health check all start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.INFO,
                 description=f"Starting health check for all {len(self.registries)} registries",
@@ -335,7 +335,7 @@ class A2ARegistryClient:
             healthy_count = sum(1 for status in health_status.values() if status)
 
             # Emit health check all result event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.INFO,
                 description="Health check completed for all registries",
@@ -351,7 +351,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit health check all error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to perform health check on all registries: {str(e)}",
@@ -379,7 +379,7 @@ class A2ARegistryClient:
         """
         try:
             # Emit agent registration start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
                 level=observability.EventLevel.INFO,
                 description=f"Starting agent registration for {agent_card.name}",
@@ -398,7 +398,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit agent registration error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Agent registration failed for {agent_card.name}: {str(e)}",
@@ -428,7 +428,7 @@ class A2ARegistryClient:
                     self.registered_agents[registry_url].append(agent_card.url)
 
                 # Emit successful registration event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
                     description=f"Agent {agent_card.name} registered successfully with {registry_url}",  # noqa: E501
@@ -453,7 +453,7 @@ class A2ARegistryClient:
                 error_msg = f"Registration failed: {response.status_code}"
 
                 # Emit registration failure event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     description=f"Agent registration failed for {agent_card.name} on {registry_url}",  # noqa: E501
@@ -479,7 +479,7 @@ class A2ARegistryClient:
             error_msg = f"Registration error: {str(e)}"
 
             # Emit registration error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Agent registration error for {agent_card.name} on {registry_url}",  # noqa: E501
@@ -504,7 +504,7 @@ class A2ARegistryClient:
         try:
             if not self.registries:
                 # Emit no registries event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     description=f"No registries configured for agent {agent_card.name}",
@@ -517,7 +517,7 @@ class A2ARegistryClient:
                 return {}
 
             # Emit register all start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
                 level=observability.EventLevel.INFO,
                 description=f"Registering agent {agent_card.name} with all {len(self.registries)} registries",  # noqa: E501
@@ -552,7 +552,7 @@ class A2ARegistryClient:
                     )
 
             # Emit register all result event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Agent registration completed for {agent_card.name}",
@@ -569,7 +569,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit register all error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to register agent {agent_card.name} with all registries: {str(e)}",  # noqa: E501
@@ -601,7 +601,7 @@ class A2ARegistryClient:
 
             if not target_registries:
                 # Emit no registrations found event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     description=f"No registrations found for agent: {agent_url}",
@@ -613,7 +613,7 @@ class A2ARegistryClient:
                 return {}
 
             # Emit deregistration start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
                 level=observability.EventLevel.INFO,
                 description=f"Starting deregistration for agent: {agent_url}",
@@ -640,7 +640,7 @@ class A2ARegistryClient:
                             self.registered_agents[registry_url].remove(agent_url)
 
                         # Emit successful deregistration event
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
                             level=observability.EventLevel.INFO,
                             description=f"Agent deregistered successfully from {registry_url}",
@@ -663,7 +663,7 @@ class A2ARegistryClient:
                         error_msg = f"Deregistration failed: {response.status_code}"
 
                         # Emit deregistration failure event
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                             level=observability.EventLevel.ERROR,
                             description=f"Agent deregistration failed from {registry_url}",
@@ -688,7 +688,7 @@ class A2ARegistryClient:
                     error_msg = f"Deregistration error: {str(e)}"
 
                     # Emit deregistration error event
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.A2A_REGISTRATION_FAILED,
                         level=observability.EventLevel.ERROR,
                         description=f"Agent deregistration error from {registry_url}",
@@ -708,7 +708,7 @@ class A2ARegistryClient:
                     #  Deregistration error event already emitted above
 
             # Emit deregistration summary event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Agent deregistration completed for {agent_url}",
@@ -724,7 +724,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit deregistration error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to deregister agent {agent_url}: {str(e)}",
@@ -752,7 +752,7 @@ class A2ARegistryClient:
         """
         try:
             # Emit discovery start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.INFO,
                 description="Starting agent discovery",
@@ -770,7 +770,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit discovery error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Agent discovery failed: {str(e)}",
@@ -810,7 +810,7 @@ class A2ARegistryClient:
                         agent_cards.append(agent_card)
 
                         # Emit successful discovery event
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                             level=observability.EventLevel.INFO,
                             description=f"Agent discovery completed from {registry_url}",
@@ -832,7 +832,7 @@ class A2ARegistryClient:
                 error_msg = f"Discovery failed: {response.status_code}"
 
                 # Emit discovery failure event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DISCOVERY_FAILED,
                     level=observability.EventLevel.ERROR,
                     description=f"Agent discovery failed from {registry_url}",
@@ -848,7 +848,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit discovery error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Agent discovery error from {registry_url}",
@@ -869,7 +869,7 @@ class A2ARegistryClient:
         try:
             if not self.registries:
                 # Emit no registries event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DISCOVERY_FAILED,
                     level=observability.EventLevel.WARNING,
                     description="No registries configured for discovery",
@@ -881,7 +881,7 @@ class A2ARegistryClient:
                 return {}
 
             # Emit discover all start event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.INFO,
                 description=f"Discovering agents from all {len(self.registries)} registries",
@@ -911,7 +911,7 @@ class A2ARegistryClient:
                     #  Discovery exception event already emitted above
 
             # Emit discover all result event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description="Agent discovery completed from all registries",
@@ -929,7 +929,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit discover all error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to discover agents from all registries: {str(e)}",
@@ -945,7 +945,7 @@ class A2ARegistryClient:
         """Get the current status of all registries"""
         try:
             # Emit status request event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.DEBUG,
                 description="Registry status requested",
@@ -959,7 +959,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit status request error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registry status: {str(e)}",
@@ -971,7 +971,7 @@ class A2ARegistryClient:
         """Get the list of registered agents per registry"""
         try:
             # Emit registered agents request event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description="Registered agents list requested",
@@ -985,7 +985,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit registered agents request error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registered agents: {str(e)}",
@@ -1017,7 +1017,7 @@ class A2ARegistryClient:
             }
 
             # Emit stats request event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
                 level=observability.EventLevel.DEBUG,
                 description="Registry client stats requested",
@@ -1028,7 +1028,7 @@ class A2ARegistryClient:
 
         except Exception as e:
             # Emit stats request error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Failed to get registry client stats: {str(e)}",

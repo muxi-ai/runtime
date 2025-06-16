@@ -99,7 +99,7 @@ class Extension:
                 error_msg = "Extension must define a 'name' class attribute"
 
                 # Observability: Extension registration failed
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.EXTENSION_LOADED,
                     level=observability.EventLevel.ERROR,
                     description=(
@@ -118,7 +118,7 @@ class Extension:
             cls._registry[extension_cls.name] = extension_cls
 
             # Observability: Extension registration completed successfully
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.INFO,
                 description=f"Extension registration completed for {extension_cls.__name__}",
@@ -134,7 +134,7 @@ class Extension:
 
         except Exception as e:
             # Observability: Extension registration failed with exception
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.ERROR,
                 description=(
@@ -171,7 +171,7 @@ class Extension:
 
         except Exception as e:
             # Observability: Extension retrieval failed
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LISTING_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Extension lookup failed for name: {name}: {str(e)}",
@@ -201,7 +201,7 @@ class Extension:
             extension_names = list(cls._registry.keys())
 
             # Observability: Extension listing completed
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LISTED,
                 level=observability.EventLevel.DEBUG,
                 description=(
@@ -216,7 +216,7 @@ class Extension:
 
         except Exception as e:
             # Observability: Extension listing failed
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LISTING_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Extension listing failed: {str(e)}",
@@ -246,7 +246,7 @@ class Extension:
             error_msg = f"Extension {cls.__name__} does not implement the init method"
 
             # Observability: Extension initialization failed (not implemented)
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.ERROR,
                 description=(f"Extension initialization failed for " f"{cls.__name__}: {error_msg}"),
@@ -263,7 +263,7 @@ class Extension:
 
         except Exception as e:
             # Observability: Extension initialization failed with exception
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.EXTENSION_LOADED,
                 level=observability.EventLevel.ERROR,
                 description=(f"Extension initialization failed for " f"{cls.__name__}: {str(e)}"),

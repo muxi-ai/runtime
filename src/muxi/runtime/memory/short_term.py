@@ -406,7 +406,7 @@ class ShortTermMemory:
             and a score field indicating the match quality.
         """
         # Emit memory retrieval started event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
             level=observability.EventLevel.INFO,
             data={
@@ -427,7 +427,7 @@ class ShortTermMemory:
             recency_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Emit memory retrieval completed event for recency-only search
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -457,7 +457,7 @@ class ShortTermMemory:
                 )
 
                 # Emit memory retrieval completed event for embedding failure fallback
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                     level=observability.EventLevel.WARNING,
                     data={
@@ -533,7 +533,7 @@ class ShortTermMemory:
             final_results = results[:limit]
 
             # Emit memory retrieval completed event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -553,7 +553,7 @@ class ShortTermMemory:
             fallback_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
 
             # Emit memory retrieval completed event for fallback
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
                 level=observability.EventLevel.WARNING,
                 data={

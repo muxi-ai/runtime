@@ -68,7 +68,7 @@ class LocalDiscoveryService:
         self.http_client = httpx.AsyncClient(timeout=5.0)
 
         # Initialize observability
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.A2A_DISCOVERY_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
@@ -106,7 +106,7 @@ class LocalDiscoveryService:
             # )
 
             # Track service start
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -133,7 +133,7 @@ class LocalDiscoveryService:
                 "health_check_enabled": self.health_check_task is not None,
             }
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data=result,
@@ -143,7 +143,7 @@ class LocalDiscoveryService:
             return result
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={"formation_name": formation_name, "port": port, "error": str(e)},
@@ -157,7 +157,7 @@ class LocalDiscoveryService:
             #  A2A discovery info - add observability event
             #  A2A_MESSAGE_SENT
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STOPPED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -184,7 +184,7 @@ class LocalDiscoveryService:
             if self.config.enable_persistence:
                 self._save_registry()
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STOPPED,
                 level=observability.EventLevel.INFO,
                 data={"formation_name": self.formation_name},
@@ -192,7 +192,7 @@ class LocalDiscoveryService:
             )
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -220,7 +220,7 @@ class LocalDiscoveryService:
         try:
             #  A2A discovery info - add observability event
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -237,7 +237,7 @@ class LocalDiscoveryService:
                     agent_card = await self._fetch_agent_card(endpoint)
                 except Exception as e:
                     #  A2A discovery error - add observability event
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                         level=observability.EventLevel.ERROR,
                         data={"agent_id": agent_id, "endpoint": endpoint, "error": str(e)},
@@ -271,7 +271,7 @@ class LocalDiscoveryService:
                 "registered_at": registration.registered_at,
             }
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data=result,
@@ -281,7 +281,7 @@ class LocalDiscoveryService:
             return result
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": agent_id, "endpoint": endpoint, "error": str(e)},
@@ -300,7 +300,7 @@ class LocalDiscoveryService:
             True if agent was unregistered, False if not found
         """
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DEREGISTRATION_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"agent_id": agent_id, "formation_name": self.formation_name},
@@ -315,7 +315,7 @@ class LocalDiscoveryService:
                 if self.config.enable_persistence:
                     self._save_registry()
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DEREGISTERED,
                     level=observability.EventLevel.INFO,
                     data={"agent_id": agent_id, "result": "success"},
@@ -324,7 +324,7 @@ class LocalDiscoveryService:
 
                 return True
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DEREGISTERED,
                 level=observability.EventLevel.WARNING,
                 data={"agent_id": agent_id, "result": "not_found"},
@@ -334,7 +334,7 @@ class LocalDiscoveryService:
             return False
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": agent_id, "error": str(e)},
@@ -358,7 +358,7 @@ class LocalDiscoveryService:
             List of discovered agent information
         """
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -402,7 +402,7 @@ class LocalDiscoveryService:
             # Sort by health score (best first)
             discovered.sort(key=lambda x: x["health_score"], reverse=True)
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -416,7 +416,7 @@ class LocalDiscoveryService:
             return discovered
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -439,7 +439,7 @@ class LocalDiscoveryService:
             Agent information or None if not found
         """
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -450,7 +450,7 @@ class LocalDiscoveryService:
             )
 
             if agent_id not in self.agents:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={"agent_id": agent_id, "found": False},
@@ -471,7 +471,7 @@ class LocalDiscoveryService:
                 "last_seen": registration.last_seen,
             }
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={"agent_id": agent_id, "found": True, "status": registration.status},
@@ -481,7 +481,7 @@ class LocalDiscoveryService:
             return result
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={"agent_id": agent_id, "error": str(e)},
@@ -497,7 +497,7 @@ class LocalDiscoveryService:
             Formation status information
         """
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={"formation_name": self.formation_name},
@@ -529,7 +529,7 @@ class LocalDiscoveryService:
                 "service_uptime": time.time() - getattr(self, "start_time", time.time()),
             }
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -544,7 +544,7 @@ class LocalDiscoveryService:
             return result
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={"formation_name": self.formation_name, "error": str(e)},
@@ -565,7 +565,7 @@ class LocalDiscoveryService:
     async def _health_check_agent(self, agent_id: str, registration: AgentRegistration) -> bool:
         """Perform health check on a single agent."""
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -601,7 +601,7 @@ class LocalDiscoveryService:
                 else:
                     registration.health_score = 0.2
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -618,7 +618,7 @@ class LocalDiscoveryService:
                 registration.status = "inactive"
                 registration.health_score = 0.1
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
                     level=observability.EventLevel.WARNING,
                     data={
@@ -637,7 +637,7 @@ class LocalDiscoveryService:
             registration.status = "unreachable"
             registration.health_score = 0.0
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_HEALTH_CHECK_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
@@ -655,7 +655,7 @@ class LocalDiscoveryService:
         """Background task for health checking agents."""
         while self.is_running:
             try:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                     level=observability.EventLevel.DEBUG,
                     data={"formation_name": self.formation_name, "agent_count": len(self.agents)},
@@ -671,7 +671,7 @@ class LocalDiscoveryService:
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={"formation_name": self.formation_name, "agents_checked": len(tasks)},
@@ -686,7 +686,7 @@ class LocalDiscoveryService:
             except Exception as e:
                 #  A2A discovery error - add observability event
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={"formation_name": self.formation_name, "error": str(e)},
@@ -699,7 +699,7 @@ class LocalDiscoveryService:
         """Background task for cleaning up inactive agents."""
         while self.is_running:
             try:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                     level=observability.EventLevel.DEBUG,
                     data={"formation_name": self.formation_name, "agent_count": len(self.agents)},
@@ -718,7 +718,7 @@ class LocalDiscoveryService:
                             registration.health_score = 0.0
                             cleaned_up_agents += 1
 
-                            observability.emit_event(
+                            observability.observe(
                                 event_type=observability.SystemEvents.A2A_DEREGISTERED,
                                 level=observability.EventLevel.INFO,
                                 data={
@@ -730,7 +730,7 @@ class LocalDiscoveryService:
                                 description="A2A agent marked as unreachable due to timeout",
                             )
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -748,7 +748,7 @@ class LocalDiscoveryService:
             except Exception as e:
                 #  A2A discovery error - add observability event
 
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={"formation_name": self.formation_name, "error": str(e)},
@@ -760,7 +760,7 @@ class LocalDiscoveryService:
     def _load_registry(self):
         """Load persisted registry from file."""
         if not self.config.registry_file:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={"formation_name": self.formation_name},
@@ -769,7 +769,7 @@ class LocalDiscoveryService:
             return
 
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -781,7 +781,7 @@ class LocalDiscoveryService:
 
             registry_path = Path(self.config.registry_file)
             if not registry_path.exists():
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={
@@ -819,7 +819,7 @@ class LocalDiscoveryService:
 
             #  A2A discovery info - add observability event
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -834,7 +834,7 @@ class LocalDiscoveryService:
         except Exception as e:
             #  A2A discovery error - add observability event
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -848,7 +848,7 @@ class LocalDiscoveryService:
     def _save_registry(self):
         """Save current registry to file."""
         if not self.config.registry_file:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={"formation_name": self.formation_name},
@@ -857,7 +857,7 @@ class LocalDiscoveryService:
             return
 
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_DISCOVERY_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -897,7 +897,7 @@ class LocalDiscoveryService:
 
             #  A2A discovery debug - add observability event
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.A2A_DISCOVERY_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 data={"formation_name": self.formation_name, "saved_agents": len(self.agents)},
@@ -907,7 +907,7 @@ class LocalDiscoveryService:
         except Exception as e:
             #  A2A discovery error - add observability event
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={

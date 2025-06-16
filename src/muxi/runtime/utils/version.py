@@ -24,7 +24,7 @@ def get_version() -> str:
         # Try to read from package.json if it exists
         version_file = os.path.join(os.path.dirname(__file__), "..", "..", ".version")
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.DEBUG,
             description="Checking for version file",
@@ -40,7 +40,7 @@ def get_version() -> str:
             with open(version_file, "r", encoding="utf-8") as f:
                 version = f.read().strip()
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_COMPLETED,
                 level=observability.EventLevel.DEBUG,
                 description="Version file read successfully",
@@ -57,7 +57,7 @@ def get_version() -> str:
             return default_version
 
     except Exception as e:
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Version retrieval failed, using default version",

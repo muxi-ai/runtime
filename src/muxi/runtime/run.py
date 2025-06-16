@@ -57,7 +57,7 @@ def is_port_in_use(port):
         bool: True if the port is in use (unavailable), False if the port is free.
     """
     # Log port check attempt
-    observability.emit_event(
+    observability.observe(
         event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
         level=observability.EventLevel.DEBUG,
         description="Port availability check initiated",
@@ -70,7 +70,7 @@ def is_port_in_use(port):
         result = s.connect_ex(("localhost", port)) == 0
 
         # Log port check result
-        observability.emit_event(
+        observability.observe(
             event_type=(
                 observability.SystemEvents.RESOURCE_ALLOCATED
                 if not result
@@ -110,7 +110,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             to determine if startup succeeded in programmatic contexts.
     """
     # Log server startup attempt
-    observability.emit_event(
+    observability.observe(
         event_type=observability.ConversationEvents.SESSION_CREATED,
         level=observability.EventLevel.INFO,
         description="Server startup initiated",
@@ -130,7 +130,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
             msg = f"Port {port} is already in use. MUXI server cannot start."
 
             # Log port conflict error
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description="Server startup failed due to port conflict",
@@ -153,7 +153,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         print("This is a placeholder until the MUXI API server is implemented.")
 
         # Log successful server startup (placeholder)
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Server startup completed (placeholder)",
@@ -170,7 +170,7 @@ def run_server(host="0.0.0.0", port=5050, reload=True, mcp=False):
         return True
     except Exception as e:
         # Log server startup exception
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
             level=observability.EventLevel.ERROR,
             description="Server startup failed with exception",

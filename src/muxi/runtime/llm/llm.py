@@ -169,7 +169,7 @@ class FileProcessor:
             # Check file size limits
             file_size = file_path.stat().st_size
             if file_size > FILE_SIZE_LIMITS["default"]:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"file_path": str(file_path), "file_size": file_size},
@@ -179,7 +179,7 @@ class FileProcessor:
 
             # Basic security check - avoid obviously dangerous files
             if file_path.suffix.lower() in [".exe", ".bat", ".sh", ".scr"]:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"file_path": str(file_path), "extension": file_path.suffix.lower()},
@@ -189,7 +189,7 @@ class FileProcessor:
 
             return True
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={"file_path": str(file_path), "error": str(e)},
@@ -208,7 +208,7 @@ class FileProcessor:
             if mime_type:
                 return mime_type
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.DEBUG,
                 data={"file_path": str(file_path), "error": str(e)},
@@ -346,7 +346,7 @@ class CircuitBreaker:
 
         if self.failure_count >= self.failure_threshold:
             self.state = "open"
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
                 level=observability.EventLevel.WARNING,
                 data={"failure_count": self.failure_count, "threshold": self.failure_threshold},
@@ -484,7 +484,7 @@ async def _exponential_backoff_retry(
         except LLMError as e:
             if attempt == max_retries or not e.retryable or e.error_type not in retryable_errors:
                 _retry_stats["failed_requests"] += 1
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.ERROR,
                     data={
@@ -504,7 +504,7 @@ async def _exponential_backoff_retry(
             if jitter:
                 delay = delay * (0.5 + random.random() * 0.5)  # Add 50% jitter
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={
@@ -533,7 +533,7 @@ def set_llm_api_key(api_key: str, provider: str) -> None:
         provider: The provider to set the key for (e.g., "openai", "anthropic")
     """
     set_api_key(provider, api_key)
-    observability.emit_event(
+    observability.observe(
         event_type=observability.ErrorEvents.INTERNAL_ERROR,
         level=observability.EventLevel.DEBUG,
         data={"provider": provider},
@@ -618,7 +618,7 @@ class LLM:
         if api_key:
             set_llm_api_key(api_key, self._provider)
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.INFO,
             data={
@@ -642,14 +642,14 @@ class LLM:
                 from ..overlord.workflow.multimodal import MultiModalFusionEngine
 
                 self._fusion_engine = MultiModalFusionEngine(self)
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.DEBUG,
                     data={"fusion_engine": "MultiModalFusionEngine"},
                     description="Fusion engine initialized successfully",
                 )
             except ImportError as e:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
@@ -803,7 +803,7 @@ class LLM:
         """
         # Emit LLM request started event
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
@@ -819,7 +819,7 @@ class LLM:
                 description=f"LLM chat request started for {self.model_name}",
             )
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e)},
@@ -885,7 +885,7 @@ class LLM:
 
             if multimodal_content is None:
                 # Fallback to basic processing if conversion failed
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
                     level=observability.EventLevel.WARNING,
                     data={"fallback_reason": "multimodal_content_conversion_failed"},
@@ -917,7 +917,7 @@ class LLM:
             return await self._synthesize_chat_response(fusion_result, user_message, **kwargs)
 
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.RESPONSE_GENERATION_STARTED,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e), "fusion_mode": fusion_mode},
@@ -972,7 +972,7 @@ Provide a helpful, conversational response that directly addresses what the user
                         file_data = await FileProcessor.convert_file_for_onellm(file_path)
                         processed_files.append(file_data)
 
-                        observability.emit_event(
+                        observability.observe(
                             event_type=observability.ConversationEvents.RESPONSE_FORMATTED,
                             level=observability.EventLevel.DEBUG,
                             data={
@@ -1228,7 +1228,7 @@ def clear_llm_cache():
     """Clear the LLM response cache."""
     global _response_cache
     _response_cache.clear()
-    observability.emit_event(
+    observability.observe(
         event_type=observability.ErrorEvents.INTERNAL_ERROR,
         level=observability.EventLevel.INFO,
         data={"action": "cache_cleared"},
@@ -1240,7 +1240,7 @@ def set_cache_ttl(ttl: int):
     """Set the cache TTL in seconds."""
     global _cache_ttl
     _cache_ttl = ttl
-    observability.emit_event(
+    observability.observe(
         event_type=observability.ErrorEvents.INTERNAL_ERROR,
         level=observability.EventLevel.INFO,
         data={"action": "cache_ttl_set", "ttl": ttl},
@@ -1301,7 +1301,7 @@ def reset_all_stats():
     }
     _circuit_breakers.clear()
     clear_llm_cache()
-    observability.emit_event(
+    observability.observe(
         event_type=observability.ErrorEvents.INTERNAL_ERROR,
         level=observability.EventLevel.INFO,
         data={"action": "stats_reset"},

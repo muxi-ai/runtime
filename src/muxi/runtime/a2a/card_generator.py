@@ -41,7 +41,7 @@ class AgentCardGenerator:
         self.cache_manager = cache_manager or A2ACacheManager()
 
         # Initialize observability
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATOR_INITIALIZED,
             level=observability.EventLevel.INFO,
             data={
@@ -62,7 +62,7 @@ class AgentCardGenerator:
             Parsed agent configuration
         """
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_CONFIG_LOAD_STARTED,
                 level=observability.EventLevel.INFO,
                 data={"config_path": str(config_path), "file_exists": config_path.exists()},
@@ -76,7 +76,7 @@ class AgentCardGenerator:
                 config = yaml.safe_load(f)
 
             try:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
                     level=observability.EventLevel.INFO,
                     data={
@@ -94,7 +94,7 @@ class AgentCardGenerator:
 
             return config
         except Exception as e:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 data={
@@ -126,7 +126,7 @@ class AgentCardGenerator:
             Generated AgentCard
         """
         try:
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_CARD_GENERATING,
                 level=observability.EventLevel.INFO,
                 data={
@@ -152,7 +152,7 @@ class AgentCardGenerator:
         if self.cache_manager.is_cached(agent_id, config_hash):
             cached_card = self.cache_manager.get_cached_card(agent_id)
             if cached_card:
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.SystemEvents.A2A_CARD_GENERATED,
                     level=observability.EventLevel.INFO,
                     data={
@@ -166,7 +166,7 @@ class AgentCardGenerator:
                 return cached_card
 
         # Generate new card
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATING,
             level=observability.EventLevel.INFO,
             data={"agent_id": agent_id, "source": "generation", "config_hash": config_hash},
@@ -182,7 +182,7 @@ class AgentCardGenerator:
         # Cache the generated card
         self.cache_manager.cache_card(agent_id, card, config_hash)
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.INFO,
             data={
@@ -209,7 +209,7 @@ class AgentCardGenerator:
         if not agent_id:
             agent_id = config_path.stem
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
             level=observability.EventLevel.DEBUG,
             data={
@@ -262,7 +262,7 @@ class AgentCardGenerator:
         # Add metadata
         self._add_metadata_from_config(card, config)
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
@@ -373,7 +373,7 @@ class AgentCardGenerator:
                 )
                 capabilities_added.append(cap_name)
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
@@ -403,7 +403,7 @@ class AgentCardGenerator:
                 )
             )
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_CARD_GENERATED,
                 level=observability.EventLevel.DEBUG,
                 data={"mcp_servers": mcp_servers, "total_servers": len(mcp_servers)},
@@ -448,7 +448,7 @@ class AgentCardGenerator:
         )
         endpoints_added.append("agent_card")
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
@@ -480,7 +480,7 @@ class AgentCardGenerator:
                 required=auth_config.get("required", False),
             )
 
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.A2A_CARD_GENERATED,
                 level=observability.EventLevel.DEBUG,
                 data={
@@ -522,7 +522,7 @@ class AgentCardGenerator:
 
         card.metadata = metadata
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.DEBUG,
             data={
@@ -550,7 +550,7 @@ class AgentCardGenerator:
         Returns:
             Dictionary mapping agent IDs to their agent cards
         """
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATING,
             level=observability.EventLevel.INFO,
             data={
@@ -567,7 +567,7 @@ class AgentCardGenerator:
         # Find all YAML config files
         config_files = list(config_dir.glob("*.yaml")) + list(config_dir.glob("*.yml"))
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CONFIG_LOAD_STARTED,
             level=observability.EventLevel.INFO,
             data={
@@ -597,7 +597,7 @@ class AgentCardGenerator:
 
             except Exception as e:
                 failed_cards += 1
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={
@@ -609,7 +609,7 @@ class AgentCardGenerator:
                 )
                 continue
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_GENERATED,
             level=observability.EventLevel.INFO,
             data={
@@ -633,7 +633,7 @@ class AgentCardGenerator:
             cards: Dictionary of agent cards
             output_dir: Directory to write card files
         """
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_EXPORTING,
             level=observability.EventLevel.INFO,
             data={
@@ -658,7 +658,7 @@ class AgentCardGenerator:
                 #  Info - add observability event
             except Exception as e:
                 failed_exports += 1
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                     level=observability.EventLevel.ERROR,
                     data={
@@ -670,7 +670,7 @@ class AgentCardGenerator:
                     description=f"Failed to export card for {agent_id}: {e}",
                 )
 
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.A2A_CARD_EXPORTED,
             level=observability.EventLevel.INFO,
             data={

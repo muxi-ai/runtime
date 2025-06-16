@@ -98,7 +98,7 @@ class OneLLMService:
         self._cache_timestamps: Dict[str, float] = {}
 
         # Emit service initialization event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="OneLLMService singleton initialized",
@@ -126,7 +126,7 @@ class OneLLMService:
                     cls._instance = cls()
 
                     # Emit singleton access event
-                    observability.emit_event(
+                    observability.observe(
                         event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                         level=observability.EventLevel.INFO,
                         description="OneLLMService singleton instance created",
@@ -148,7 +148,7 @@ class OneLLMService:
         set_api_key(provider, api_key)
 
         # Emit API key configuration event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description=f"API key configured for provider: {provider}",
@@ -173,7 +173,7 @@ class OneLLMService:
         api_key = self._api_keys.get(provider)
 
         # Emit API key access event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.DEBUG,
             description=f"API key accessed for provider: {provider}",
@@ -251,7 +251,7 @@ class OneLLMService:
             self._stats["cache_hits"] += 1
 
             # Emit cache hit event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
                 level=observability.EventLevel.DEBUG,
                 description="Cache hit for LLM request",
@@ -268,7 +268,7 @@ class OneLLMService:
         self._stats["cache_misses"] += 1
 
         # Emit cache miss event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.DEBUG,
             description="Cache miss for LLM request",
@@ -294,7 +294,7 @@ class OneLLMService:
         self._cache_timestamps[cache_key] = time.time()
 
         # Emit cache store event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.DEBUG,
             description="Response cached for LLM request",
@@ -338,7 +338,7 @@ class OneLLMService:
         timeout = timeout or self._default_timeout
 
         # Emit chat request start event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
             level=observability.EventLevel.INFO,
             description=f"Chat completion request started for {model}",
@@ -370,7 +370,7 @@ class OneLLMService:
             cached_response = self._get_from_cache(cache_key)
             if cached_response:
                 # Emit cache hit completion event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                     level=observability.EventLevel.INFO,
                     description=f"Chat completion served from cache for {model}",
@@ -410,7 +410,7 @@ class OneLLMService:
                 self._set_cache(cache_key, response)
 
             # Emit successful completion event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Chat completion successful for {model}",
@@ -432,7 +432,7 @@ class OneLLMService:
             self._stats["failed_requests"] += 1
 
             # Emit error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Chat completion failed for {model}: {str(e)}",
@@ -495,7 +495,7 @@ class OneLLMService:
             texts = [texts]
 
         # Emit embedding request start event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
             level=observability.EventLevel.INFO,
             description=f"Embedding request started for {model}",
@@ -518,7 +518,7 @@ class OneLLMService:
             cached_response = self._get_from_cache(cache_key)
             if cached_response:
                 # Emit cache hit completion event
-                observability.emit_event(
+                observability.observe(
                     event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                     level=observability.EventLevel.INFO,
                     description=f"Embedding served from cache for {model}",
@@ -550,7 +550,7 @@ class OneLLMService:
                 self._set_cache(cache_key, response)
 
             # Emit successful completion event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description=f"Embedding successful for {model}",
@@ -571,7 +571,7 @@ class OneLLMService:
         except Exception as e:
             self._stats["failed_requests"] += 1
             # Emit error event
-            observability.emit_event(
+            observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description=f"Embedding failed for {model}: {str(e)}",
@@ -613,7 +613,7 @@ class OneLLMService:
         stats = self._stats.copy()
 
         # Emit stats access event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.DEBUG,
             description="Service statistics accessed",
@@ -629,7 +629,7 @@ class OneLLMService:
             self._stats[key] = 0
 
         # Emit stats reset event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.INFO,
             description="Service statistics reset",
@@ -648,7 +648,7 @@ class OneLLMService:
         self._cache_timestamps.clear()
 
         # Emit cache clear event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.SystemEvents.PERFORMANCE_OPTIMIZED,
             level=observability.EventLevel.INFO,
             description="Response cache cleared",
@@ -692,7 +692,7 @@ class OneLLMService:
             self._cache_ttl = cache_ttl
 
         # Emit configuration update event
-        observability.emit_event(
+        observability.observe(
             event_type=observability.ConversationEvents.SESSION_CREATED,
             level=observability.EventLevel.INFO,
             description="Service configuration updated",

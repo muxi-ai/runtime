@@ -34,7 +34,7 @@ def convert_onellm_to_muxi_content(
     """
     try:
 
-        observability.emit_event(
+        observability.observe(
             ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Starting OneLLM to MUXI content conversion",
@@ -67,7 +67,7 @@ def convert_onellm_to_muxi_content(
                     }
                 })
 
-        observability.emit_event(
+        observability.observe(
                 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "OneLLM to MUXI content conversion completed",
@@ -81,7 +81,7 @@ def convert_onellm_to_muxi_content(
         return muxi_content
 
     except Exception as e:
-        observability.emit_event(
+        observability.observe(
                 ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"OneLLM to MUXI content conversion failed: {str(e)}",
@@ -115,7 +115,7 @@ def extract_user_content(
             else 0
         )
 
-        observability.emit_event(
+        observability.observe(
             ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Starting MCP message content extraction",
@@ -139,7 +139,7 @@ def extract_user_content(
                 "file": None
             })
 
-            observability.emit_event(
+            observability.observe(
                     ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                     EventLevel.DEBUG,
                     "MCP string content extraction completed",
@@ -182,7 +182,7 @@ def extract_user_content(
                     }
                 })
 
-        observability.emit_event(
+        observability.observe(
                 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "MCP list content extraction completed",
@@ -198,7 +198,7 @@ def extract_user_content(
         return user_content
 
     except Exception as e:
-        observability.emit_event(
+        observability.observe(
                 ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"MCP content extraction failed: {str(e)}",
@@ -241,7 +241,7 @@ def create_unified_response(
     """
     try:
 
-        observability.emit_event(
+        observability.observe(
             ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Creating unified response object",
@@ -273,7 +273,7 @@ def create_unified_response(
             "response": content
         }
 
-        observability.emit_event(
+        observability.observe(
                 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "Unified response object created successfully",
@@ -291,7 +291,7 @@ def create_unified_response(
         return response
 
     except Exception as e:
-        observability.emit_event(
+        observability.observe(
                 ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"Unified response creation failed: {str(e)}",
@@ -321,7 +321,7 @@ def create_error_response(
     """
     try:
 
-        observability.emit_event(
+        observability.observe(
             ConversationEvents.RESPONSE_CONVERSION_STARTED,
             EventLevel.DEBUG,
             "Creating error response details",
@@ -344,7 +344,7 @@ def create_error_response(
             "trace": traceback.format_exc() if include_trace else None
         }
 
-        observability.emit_event(
+        observability.observe(
                 ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
                 EventLevel.DEBUG,
                 "Error response details created successfully",
@@ -360,7 +360,7 @@ def create_error_response(
         return error_details
 
     except Exception as e:
-        observability.emit_event(
+        observability.observe(
                 ErrorEvents.RETRY_ATTEMPTED,
                 EventLevel.ERROR,
                 f"Error response creation failed: {str(e)}",
