@@ -1,78 +1,80 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Overlord 2.0 - Intelligent Multi-Agent Orchestration System
-# Description:  Advanced AI coordination engine with intelligent workflow orchestration
-# Role:         The autonomous backbone of the Muxi framework's multi-agent architecture
-# Usage:        Primary conversation partner for users with seamless agent coordination
+# Title:        Overlord - Formation-First Multi-Agent Orchestration System
+# Description:  Configuration-driven AI coordination engine with intelligent agent routing
+# Role:         Central orchestrator for formation-based multi-agent architectures
+# Usage:        Load formation YAML files to define agents, then coordinate conversations
 # Author:       Muxi Framework Team
 #
-# The Overlord 2.0 is an intelligent orchestration system that transforms MUXI from
-# a simple agent router into an autonomous multi-agent coordinator. Users interact
-# with a single, consistent persona that seamlessly delegates complex tasks to
-# specialized agents behind the scenes.
+# The Overlord is a formation-first orchestration system that manages multi-agent
+# conversations through declarative YAML configuration. All agents, memory systems,
+# and integrations are defined in formation files, promoting reproducible and
+# maintainable AI architectures.
 #
-# Core Capabilities:
+# Core Architecture:
 #
-# 1. Intelligent Workflow Orchestration
-#    - Automatic complexity analysis of user requests
-#    - AI-powered task decomposition into multi-agent workflows
-#    - Plan preview and approval workflows for complex tasks
-#    - DAG-based execution with dependency resolution
-#    - Real-time progress tracking and coordination
+# 1. Formation-First Design
+#    - All configuration defined in formation YAML files
+#    - Agents created automatically from formation specifications
+#    - Centralized configuration management with secrets interpolation
+#    - Environment-specific formation variants supported
 #
-# 2. Seamless Agent Coordination
-#    - Capability-based intelligent agent selection
-#    - Multi-agent workflow execution with state management
-#    - Advanced response synthesis from multiple agent outputs
-#    - Graceful fallback to simple routing for basic requests
+# 2. Intelligent Agent Coordination
+#    - Capability-based intelligent agent selection and routing
+#    - Multi-agent conversation orchestration with context preservation
+#    - Graceful fallback mechanisms for agent unavailability
+#    - Consistent overlord persona across all interactions
 #
-# 3. Enhanced Memory Systems
-#    - Centralized buffer memory for conversation context
-#    - Long-term memory with multi-user support (Memobase)
-#    - Intelligent user information extraction across all interactions
-#    - Context preservation across complex workflows
+# 3. Centralized Memory Systems
+#    - Shared buffer memory for conversation context across agents
+#    - Long-term memory with multi-user support (Memobase integration)
+#    - Automatic user information extraction and context building
+#    - Memory isolation and sharing controls per formation
 #
-# 4. External Integration & Tools
-#    - MCP (Model Context Protocol) server integration
+# 4. External Integration Framework
+#    - MCP (Model Context Protocol) server integration for tool access
 #    - A2A (Agent-to-Agent) communication with external formations
-#    - Secure API access and secrets management
-#    - Dynamic tool discovery and registration
+#    - Secure secrets management with environment interpolation
+#    - Dynamic service discovery and registration
 #
-# 5. User Experience Excellence
-#    - Persona-first architecture - users never feel "transferred"
-#    - Natural language plan explanations with approval workflows
-#    - Consistent voice across simple and complex interactions
-#    - Transparent progress updates for long-running tasks
+# 5. Production-Ready Features
+#    - Async/sync conversation modes with intelligent switching
+#    - Document processing with workflow integration
+#    - Comprehensive logging and observability hooks
+#    - Graceful error handling and circuit breaker patterns
 #
-# Usage Examples:
+# Formation-First Usage:
 #
-# Simple Interaction (Direct Routing):
+# Basic Setup:
 #   overlord = Overlord()
-#   response = await overlord.chat("What's the weather today?")
-#   # → Routes directly to weather agent, maintains overlord persona
+#   await overlord.load_formation_from_path("formation.yaml")
+#   response = await overlord.chat("Hello, how can you help me?")
+#   # → Automatically routes to appropriate agent based on formation config
 #
-# Complex Workflow (Automatic Decomposition):
-#   response = await overlord.chat("Research AI trends and write a comprehensive report")
-#   # → Automatically decomposes into: research → analysis → writing workflow
-#   # → Coordinates multiple agents seamlessly behind the scenes
-#   # → Returns unified response as if from single assistant
+# Development Testing:
+#   overlord = Overlord()
+#   await overlord.load_formation_from_path("formation.yaml")
+#   response = await overlord.run_agent("Debug this code", "code-assistant")
+#   # → Directly invoke specific agent for testing
 #
-# Plan Approval Workflow:
-#   response = await overlord.chat("Refactor my auth system. Show me your plan first.")
-#   # → Detects approval request, generates human-readable plan
-#   # → Presents plan for user review before execution
-#   # → Handles approval/rejection/modification workflow
+# Formation File Structure:
+#   # formation.yaml
+#   agents:
+#     - id: assistant
+#       system_message: "You are a helpful assistant"
+#       llm_models:
+#         - text: "openai/gpt-4o"
+#   memory:
+#     buffer:
+#       enabled: true
+#       size: 50
+#   a2a:
+#     inbound:
+#       enabled: true
 #
-# Configuration-based Setup:
-#   app = muxi(buffer_size=50, enable_workflow=True)
-#   app.add_agent("researcher", "configs/researcher.yaml")
-#   app.add_agent("writer", "configs/writer.yaml")
-#   response = await app.chat("Create a business plan for sustainable packaging")
-#   # → Intelligent orchestration across multiple specialists
-#
-# This implementation represents the culmination of Tasks 3.2, 3.4, and 3.6,
-# transforming MUXI into a truly autonomous multi-agent orchestration system.
+# The formation-first approach ensures consistent, reproducible deployments
+# while maintaining the flexibility for complex multi-agent orchestration.
 # =============================================================================
 
 import asyncio
@@ -1108,12 +1110,21 @@ class Overlord:
         """
         Create an agent from configuration dict.
 
+        This method creates a new agent instance from a configuration dictionary and registers
+        it with the overlord. It handles both new and legacy configuration formats and sets up
+        all necessary metadata for agent routing and functionality.
+
         Args:
-            agent_config: Agent configuration dictionary
+            agent_config: Agent configuration dictionary containing agent parameters
+                like id, model configuration, system_message, etc.
         """
         agent_id = agent_config.get("id")
         if not agent_id:
             return
+
+        # Check if agent already exists
+        if agent_id in self.agents:
+            raise ValueError(f"Agent with ID '{agent_id}' already exists")
 
         # Create model from configuration (support both new and legacy formats)
         if "llm_models" in agent_config:
@@ -1131,16 +1142,25 @@ class Overlord:
             model_config = agent_config.get("model", {})
             model = await self.create_model(**model_config)
 
-        # Extract other agent parameters
+        # Extract agent parameters
         system_message = agent_config.get("system_message")
         description = agent_config.get("description")
         name = agent_config.get("name", agent_id)
         role = agent_config.get("role")
         specialties = agent_config.get("specialties", [])
+        request_timeout = agent_config.get("request_timeout")
+        a2a_internal = agent_config.get("a2a_internal", True)
+        a2a_external = agent_config.get("a2a_external", True)
 
-        # Create the agent
-        agent = self.create_agent(
-            agent_id=agent_id, model=model, system_message=system_message, description=description
+        # Create agent with reference to overlord for memory access
+        agent = Agent(
+            model=model,
+            overlord=self,  # Pass reference to overlord
+            system_message=system_message,
+            agent_id=agent_id,
+            request_timeout=request_timeout,  # Pass timeout parameter
+            a2a_internal=a2a_internal,
+            a2a_external=a2a_external,
         )
 
         # Set enhanced metadata attributes on the agent
@@ -1148,15 +1168,31 @@ class Overlord:
         agent.role = role
         agent.specialties = specialties
 
-        # Update the stored metadata with the correct values
-        if agent_id in self.agent_metadata:
-            self.agent_metadata[agent_id].update(
-                {
-                    "name": name,
-                    "role": role,
-                    "specialties": specialties,
-                }
-            )
+        # Add agent to overlord
+        self.agents[agent_id] = agent
+        self.agent_descriptions[agent_id] = description or system_message or f"Agent {agent_id}"
+
+        # Store enhanced agent metadata for intelligent routing
+        self.agent_metadata[agent_id] = {
+            "name": name,
+            "role": role,
+            "specialties": specialties,
+            "description": description or system_message or f"Agent {agent_id}",
+        }
+
+        #  Info - add observability event
+        # SystemEvents.AGENT_INITIALIZED
+
+        # Track agents that need external registration (but don't register yet)
+        a2a_config = self.formation_config.get("a2a", {}) if self.formation_config else {}
+        inbound_config = a2a_config.get("inbound", {})
+        inbound_enabled = inbound_config.get("enabled", False)
+
+        if inbound_enabled and a2a_external:
+            # Store for later registration after formation server starts
+            if not hasattr(self, "pending_external_registrations"):
+                self.pending_external_registrations = set()
+            self.pending_external_registrations.add(agent_id)
 
     async def _register_mcp_server_from_config(self, server_config: Dict[str, Any]) -> None:
         """
@@ -1451,131 +1487,6 @@ class Overlord:
             max_tokens=max_tokens,
             **kwargs,
         )
-
-    def create_agent(
-        self,
-        agent_id: str,
-        model: LLM,
-        system_message: Optional[str] = None,
-        description: Optional[str] = None,
-        request_timeout: Optional[int] = None,
-        a2a_internal: bool = True,
-        a2a_external: bool = True,
-    ) -> Agent:
-        """
-        Create a new agent that uses the overlord's memory systems.
-
-        This method creates a new agent instance with the specified configuration and registers
-        it with the overlord. The created agent will have access to the overlord's
-        centralized memory systems, enabling it to maintain context across conversations.
-
-        Args:
-            agent_id: Unique identifier for the agent. Must be unique among all registered agents.
-                This ID is used for agent selection, routing, and in memory metadata.
-            model: The language model to use for the agent. This model will process messages
-                and generate responses for this specific agent.
-            system_message: Optional system message to set agent's behavior and persona.
-                This defines the agent's role, capabilities, and personality.
-            description: Optional description of the agent's capabilities and purpose.
-                Used for intelligent message routing to select the appropriate agent for
-                specific queries. If not provided, falls back to system_message.
-
-            request_timeout: Optional timeout in seconds for MCP requests.
-                If not provided, defaults to the overlord's timeout setting.
-            a2a_internal: Whether the agent participates in internal A2A communication.
-            a2a_external: Whether the agent participates in external A2A communication.
-
-        Returns:
-            The created agent instance.
-
-        Raises:
-            ValueError: If an agent with the provided agent_id already exists.
-        """
-        if agent_id in self.agents:
-            raise ValueError(f"Agent with ID '{agent_id}' already exists")
-
-        # Create agent with reference to overlord for memory access
-        agent = Agent(
-            model=model,
-            overlord=self,  # Pass reference to overlord
-            system_message=system_message,
-            agent_id=agent_id,
-            request_timeout=request_timeout,  # Pass timeout parameter
-            a2a_internal=a2a_internal,
-            a2a_external=a2a_external,
-        )
-
-        # Add agent to overlord
-        self.agents[agent_id] = agent
-        self.agent_descriptions[agent_id] = description or system_message or f"Agent {agent_id}"
-
-        # Store enhanced agent metadata for intelligent routing
-        self.agent_metadata[agent_id] = {
-            "name": getattr(agent, "name", agent_id),
-            "role": getattr(agent, "role", None),
-            "specialties": getattr(agent, "specialties", []),
-            "description": description or system_message or f"Agent {agent_id}",
-        }
-
-        #  Info - add observability event
-        # SystemEvents.AGENT_INITIALIZED
-
-        # Track agents that need external registration (but don't register yet)
-        a2a_config = self.formation_config.get("a2a", {}) if self.formation_config else {}
-        inbound_config = a2a_config.get("inbound", {})
-        inbound_enabled = inbound_config.get("enabled", False)
-
-        if inbound_enabled and a2a_external:
-            # Store for later registration after formation server starts
-            if not hasattr(self, "pending_external_registrations"):
-                self.pending_external_registrations = set()
-            self.pending_external_registrations.add(agent_id)
-
-        return agent
-
-    def add_agent(
-        self,
-        agent: Agent,
-    ) -> Agent:
-        """
-        Add an existing agent to the overlord.
-
-        This method registers a pre-constructed agent with the overlord. It's useful
-        when you've created an agent instance directly and need to integrate it with
-        the overlord's management system.
-
-        Args:
-            agent: The agent instance to add. Must have a unique agent_id not already
-                registered with this overlord.
-
-
-        Returns:
-            The added agent instance (same as input).
-
-        Raises:
-            ValueError: If an agent with the same agent_id already exists in the overlord.
-        """
-        if agent.agent_id in self.agents:
-            raise ValueError(f"Agent with ID '{agent.agent_id}' already exists")
-
-        # Store the agent
-        self.agents[agent.agent_id] = agent
-
-        # Store description for routing (legacy)
-        self.agent_descriptions[agent.agent_id] = agent.system_message or ""
-
-        # Store enhanced agent metadata for intelligent routing
-        self.agent_metadata[agent.agent_id] = {
-            "name": getattr(agent, "name", agent.agent_id),
-            "role": getattr(agent, "role", None),
-            "specialties": getattr(agent, "specialties", []),
-            "description": agent.system_message or "",
-        }
-
-        #  Info - add observability event
-        # SystemEvents.AGENT_INITIALIZED
-
-        return agent
 
     # Memory access methods
 
@@ -4243,5 +4154,4 @@ class Overlord:
             #  Warning - add observability event
             # SystemEvents.A2A_AGENT_DEREGISTRATION_FAILED
             _ = e  # remove this after implementing observability
-
 
