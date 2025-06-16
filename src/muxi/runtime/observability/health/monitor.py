@@ -48,6 +48,37 @@ class HealthMonitor:
         """
         self.destinations = destinations
 
+    async def start(self, destinations: Optional[List[str]] = None) -> None:
+        """
+        Start health monitoring with optional destination list.
+
+        Args:
+            destinations: Optional list of destination strings to monitor
+        """
+        if destinations:
+            # Convert string destinations to config format
+            dest_configs = []
+            for dest in destinations:
+                if dest.startswith(("http://", "https://")):
+                    dest_configs.append({"destination": dest, "protocol": "http"})
+                elif dest.startswith("kafka://"):
+                    dest_configs.append({"destination": dest, "protocol": "kafka"})
+                elif dest.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
+                    dest_configs.append({
+                        "destination": dest,
+                        "protocol": "zmq"
+                    })
+                else:
+                    # Assume file destination
+                    dest_configs.append({
+                        "destination": dest,
+                        "transport": "file"
+                    })
+
+            self.configure_destinations(dest_configs)
+
+        await self.start_monitoring()
+
     async def start_monitoring(self) -> None:
         """Start the health monitoring service."""
         if not self.destinations:
