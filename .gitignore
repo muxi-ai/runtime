@@ -159,3 +159,4 @@ logs/
 
 .a2a_registry/
 .registry_data/
+src/muxi/runtime/observability/health/.status
