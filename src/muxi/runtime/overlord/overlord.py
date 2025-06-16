@@ -80,7 +80,7 @@
 import asyncio
 import hashlib
 import time
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, AsyncGenerator
 import datetime
 import os
 
@@ -1325,6 +1325,9 @@ class Overlord:
                 self.auto_decomposition = config_section.get("auto_decomposition", True)
                 self.plan_approval_threshold = config_section.get("plan_approval_threshold", 7)
 
+                # Streaming configuration
+                self.streaming = overlord_config.get("streaming", True)
+
                 # Initialize cache expiry tracking if TTL is configured
                 if self.routing_cache_ttl > 0:
                     self._routing_cache_expiry: Dict[str, float] = {}
@@ -1362,6 +1365,9 @@ class Overlord:
                     self.auto_decomposition = True
                     self.plan_approval_threshold = 7
 
+                    # Streaming configuration (default for legacy)
+                    self.streaming = overlord_config.get("streaming", True)
+
                     # Initialize cache expiry tracking if TTL is configured
                     if self.routing_cache_ttl > 0:
                         self._routing_cache_expiry: Dict[str, float] = {}
@@ -1394,6 +1400,10 @@ class Overlord:
                     self.error_recovery = True
                     self.auto_decomposition = True
                     self.plan_approval_threshold = 7
+
+                    # Streaming configuration (default for no config)
+                    self.streaming = True
+
                     self._routing_cache_expiry: Dict[str, float] = {}
 
             #  Info - add observability event
@@ -1435,6 +1445,10 @@ class Overlord:
             self.error_recovery = True
             self.auto_decomposition = True
             self.plan_approval_threshold = 7
+
+            # Streaming configuration (default for error case)
+            self.streaming = True
+
             self._routing_cache_expiry: Dict[str, float] = {}
 
     async def create_model(
@@ -2943,7 +2957,8 @@ class Overlord:
         use_async: Optional[bool] = None,  # None=intelligent, True=force async, False=force sync
         webhook_url: Optional[str] = None,  # Optional webhook URL
         threshold_seconds: Optional[float] = None,  # Optional threshold override
-    ) -> Union[MCPMessage, Dict[str, Any]]:
+        stream: Optional[bool] = None,  # None=use config, True=force stream, False=no stream
+    ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
         Enhanced chat with async support for long-running agentic tasks.
 
@@ -2963,9 +2978,12 @@ class Overlord:
                 to formation config if not provided.
             threshold_seconds: Optional threshold override for async decision. Defaults
                 to formation config if not provided.
+            stream: Optional streaming behavior. None=use formation config, True=force streaming,
+                False=disable streaming. Only applies to sync processing.
 
         Returns:
-            For sync processing: MCPMessage with the agent's response
+            For sync processing: str with the agent's response content, or
+                AsyncGenerator if streaming
             For async processing: Dict with request_id, status, and processing info
         """
         # Generate unique request ID for all requests (for tracking and logging)
@@ -2977,7 +2995,6 @@ class Overlord:
             request_id=request_id,
             formation_id=self.formation_id,
             user_id=str(user_id) if user_id is not None else None,
-            session_id=session_id,
         ):
             # Emit request received event
             observability.observe(
@@ -3007,6 +3024,9 @@ class Overlord:
             # Use provided values or formation defaults
             webhook_url = webhook_url or self.async_webhook_url
             threshold_seconds = threshold_seconds or self.async_threshold_seconds
+
+            # Determine streaming behavior
+            use_streaming = stream if stream is not None else self.streaming
 
             # Async decision logic
             if use_async is False:
@@ -3073,46 +3093,62 @@ class Overlord:
                 )
             else:
                 # Synchronous processing path
-                start_time = time.time()
+                if use_streaming:
+                    # Return streaming generator
+                    return self._process_streaming_chat(
+                        message, agent_name, user_id
+                    )
+                else:
+                    # Non-streaming synchronous processing
+                    start_time = time.time()
 
-                result = await self._process_sync_chat(
-                    message, agent_name, user_id
-                )
-                processing_time = time.time() - start_time
+                    result = await self._process_sync_chat(
+                        message, agent_name, user_id
+                    )
+                    processing_time = time.time() - start_time
 
-                # Emit performance monitoring completed event
-                observability.observe(
-                    event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "operation": "sync_chat",
-                        "processing_time": processing_time,
-                        "message_length": len(message),
-                        "performance_score": "good" if processing_time < 5.0 else "slow",
-                        "phase": "completed",
-                    },
-                    description=f"Performance monitoring completed: {processing_time:.2f}s",
-                )
+                    # Emit performance monitoring completed event
+                    observability.observe(
+                        event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "operation": "sync_chat",
+                            "processing_time": processing_time,
+                            "message_length": len(message),
+                            "performance_score": "good" if processing_time < 5.0 else "slow",
+                            "phase": "completed",
+                        },
+                        description=f"Performance monitoring completed: {processing_time:.2f}s",
+                    )
 
-                # Extract user-facing content from result
-                result_content = result.content if hasattr(result, "content") else str(result)
-                user_content = extract_user_content(result_content)
+                    # Extract user-facing content from result
+                    result_content = result.content if hasattr(result, "content") else str(result)
+                    user_content = extract_user_content(result_content)
 
-                #  Info - add observability event
-                # ConversationEvents.RESPONSE_DELIVERY_STARTED
+                    # Create unified response for internal consistency (streaming, observability)
+                    # Note: unified_response is created for internal tracking but not returned
+                    _ = create_unified_response(
+                        request_id=request_id,
+                        status="completed",
+                        content=user_content,
+                        formation_id=self.formation_id,
+                        processing_mode="sync",
+                        processing_time=processing_time,
+                        webhook_url=None,  # Not used for sync
+                        error=None,
+                        user_id=str(user_id) if user_id is not None else None,
+                    )
 
-                # Return sync response using unified format
-                return create_unified_response(
-                    request_id=request_id,
-                    status="completed",
-                    content=user_content,
-                    formation_id=self.formation_id,
-                    processing_mode="sync",
-                    processing_time=processing_time,
-                    webhook_url=None,  # Not used for sync
-                    error=None,
-                    user_id=str(user_id) if user_id is not None else None,
-                )
+                    # For sync mode, extract and return just the string content for user convenience
+                    if user_content and len(user_content) > 0:
+                        first_item = user_content[0]
+                        if isinstance(first_item, dict) and "text" in first_item:
+                            return first_item["text"]
+                        elif isinstance(first_item, str):
+                            return first_item
+
+                    # Fallback to empty string
+                    return ""
 
     async def _execute_async_request(
         self, request_id: str, message: str, agent_name: Optional[str], user_id: Any
@@ -3303,6 +3339,158 @@ class Overlord:
         )
 
         return result
+
+    async def _process_streaming_chat(
+        self, message: str, agent_name: Optional[str], user_id: Any
+    ) -> AsyncGenerator[str, None]:
+        """
+        Process chat with streaming response.
+
+        This method handles streaming chat processing, yielding content chunks as they
+        are generated by the agent's model. It follows the same agent selection and
+        processing logic as sync chat but returns an AsyncGenerator for real-time
+        streaming responses.
+
+        Args:
+            message: User's message to process
+            agent_name: Optional specific agent to use (None for auto-selection)
+            user_id: User identifier for memory and context
+
+        Yields:
+            str: Content chunks as they are generated by the model
+
+        Note:
+            Memory storage and observability events are handled after streaming
+            completes to avoid blocking the stream.
+        """
+        # Use existing agent selection logic if no specific agent requested
+        if agent_name is None:
+            # Emit agent selection started event
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
+                level=observability.EventLevel.INFO,
+                data={"message": message[:200]},
+                description="Starting agent selection process for streaming",
+            )
+
+            agent_name = await self.select_agent_for_message(message)
+
+            # Emit agent selection completed event
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTED,
+                level=observability.EventLevel.INFO,
+                data={"selected_agent": agent_name},
+                description=f"Agent selection completed for streaming: {agent_name}",
+            )
+
+        # Get the selected agent
+        agent = self.get_agent(agent_name)
+
+        # Convert user_id to int using flexible user ID handling
+        user_id_int = None
+        if user_id is not None:
+            user_id_int = await self._enhance_existing_user_id_conversion(user_id)
+
+        # Check if agent's model supports streaming
+        if not hasattr(agent.model, 'stream') or not callable(getattr(agent.model, 'stream')):
+            # Fallback to sync processing if streaming not supported
+            result = await agent.process_message(message, user_id=user_id_int)
+            result_content = result.content if hasattr(result, "content") else str(result)
+            yield result_content
+            return
+
+        # Process the message with streaming enabled
+        full_response = ""
+        try:
+            # Use agent's streaming capability
+            async for chunk in agent.model.stream(message):
+                if chunk:
+                    full_response += chunk
+                    yield chunk
+
+            # After streaming completes, handle memory storage and observability
+            # This happens asynchronously to not block the stream
+            asyncio.create_task(
+                self._handle_post_streaming_tasks(
+                    message, full_response, agent_name, user_id_int
+                )
+            )
+
+        except Exception as e:
+            # Handle streaming errors gracefully
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "agent": agent_name},
+                description=f"Streaming error in agent {agent_name}: {str(e)}",
+            )
+
+            # Yield error message to user
+            yield f"Error during streaming: {str(e)}"
+
+    async def _handle_post_streaming_tasks(
+        self, message: str, response: str, agent_name: str, user_id_int: Optional[int]
+    ) -> None:
+        """
+        Handle memory storage and observability after streaming completes.
+
+        This method runs asynchronously after streaming to handle tasks that
+        shouldn't block the real-time stream, such as memory storage and
+        user information extraction.
+
+        Args:
+            message: Original user message
+            response: Complete response that was streamed
+            agent_name: Name of the agent that processed the message
+            user_id_int: Internal user ID for memory operations
+        """
+        try:
+            # Add messages to memory
+            current_time = time.time()
+
+            # Store user message
+            await self.add_message_to_memory(
+                content=message,
+                role="user",
+                timestamp=current_time,
+                agent_id=agent_name,
+                user_id=user_id_int,
+            )
+
+            # Store agent response
+            await self.add_message_to_memory(
+                content=response,
+                role="assistant",
+                timestamp=current_time + 0.1,  # Slight offset for ordering
+                agent_id=agent_name,
+                user_id=user_id_int,
+            )
+
+            # Handle user information extraction if enabled
+            if user_id_int and user_id_int != 0:  # Skip for anonymous users
+                await self.handle_user_information_extraction(
+                    user_message=message,
+                    agent_response=response,
+                    user_id=user_id_int,
+                    agent_id=agent_name,
+                )
+
+            # Emit completion event
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={"agent": agent_name, "streaming": True},
+                description=f"Streaming chat completed successfully with agent {agent_name}",
+            )
+
+        except Exception as e:
+            # Log post-processing errors but don't propagate them
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "agent": agent_name, "phase": "post_streaming"},
+                description=f"Error in post-streaming tasks: {str(e)}",
+            )
 
     async def _get_webhook_url_for_request(self, request_id: str) -> Optional[str]:
         """
@@ -4154,4 +4342,3 @@ class Overlord:
             #  Warning - add observability event
             # SystemEvents.A2A_AGENT_DEREGISTRATION_FAILED
             _ = e  # remove this after implementing observability
-
