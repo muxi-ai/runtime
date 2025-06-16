@@ -54,6 +54,7 @@ __all__ = [
     "RequestContextManager",
     # Helper functions
     "emit_event",
+    "observe",  # Backward compatibility
 ]
 
 
@@ -94,7 +95,7 @@ def emit_event(
             loop = asyncio.get_running_loop()
         except RuntimeError:
             # No running loop, create new one
-            asyncio.run(logger.observe(
+            asyncio.run(logger.emit_event(
                 event_type=event_type,
                 level=level,
                 data=data or {},
@@ -103,7 +104,7 @@ def emit_event(
             ))
         else:
             # Running loop exists, create task
-            loop.create_task(logger.observe(
+            loop.create_task(logger.emit_event(
                 event_type=event_type,
                 level=level,
                 data=data or {},
@@ -113,3 +114,22 @@ def emit_event(
     except Exception:
         # Silently fail if observability unavailable
         pass
+
+
+# Backward compatibility alias
+def observe(
+    event_type: Union[SystemEvents, ConversationEvents, str],
+    level: EventLevel = EventLevel.INFO,
+    data: Optional[Dict[str, Any]] = None,
+    description: str = "",
+) -> None:
+    """
+    Backward compatibility alias for emit_event.
+
+    Args:
+        event_type: The event type enum or string
+        level: Event level (defaults to INFO)
+        data: Additional event data
+        description: Human-readable description
+    """
+    emit_event(event_type=event_type, level=level, data=data, description=description)

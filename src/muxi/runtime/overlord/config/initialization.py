@@ -7,8 +7,7 @@ to improve maintainability and separation of concerns.
 import time
 from typing import Any, Dict, Optional
 
-from ...utils.string_utils import normalize_external_id
-from ...utils.network_utils import detect_stream_protocol
+from ...observability.utils import detect_stream_protocol
 
 
 async def initialize_llm_config(overlord) -> None:
