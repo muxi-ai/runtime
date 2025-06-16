@@ -23,11 +23,32 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Union
 
 from .utils.id_generator import generate_nanoid as generate_id
+
+# ===================================================================
+# CONTEXT VARIABLE INFRASTRUCTURE
+# ===================================================================
+
+# Global context variable to track current request context
+_current_request_context: ContextVar[Optional['RequestContext']] = ContextVar(
+    'request_context',
+    default=None
+)
+
+
+def get_current_request_context() -> Optional['RequestContext']:
+    """Get the current request context from context variable."""
+    return _current_request_context.get()
+
+
+def set_request_context(context: 'RequestContext') -> None:
+    """Set the current request context (internal use only)."""
+    _current_request_context.set(context)
 
 
 class EventLevel(Enum):
@@ -783,6 +804,7 @@ class RequestContext:
     started: float = field(default_factory=lambda: time.time() * 1000)  # milliseconds
     formation_id: Optional[str] = None
     user_id: Optional[str] = None
+    session_id: Optional[str] = None
     tokens: TokenUsage = field(default_factory=TokenUsage)
     _parent_events: Set[str] = field(default_factory=set, init=False)
 
@@ -856,12 +878,18 @@ class RequestContextManager:
         request_id: Optional[str] = None,
         formation_id: Optional[str] = None,
         user_id: Optional[str] = None,
+        session_id: Optional[str] = None,
     ):
-        """Context manager for request tracking with automatic cleanup."""
+        """Context manager for request tracking with automatic context propagation."""
         if request_id is None:
             request_id = generate_id()
 
-        context = RequestContext(id=request_id, formation_id=formation_id, user_id=user_id)
+        context = RequestContext(
+            id=request_id, formation_id=formation_id, user_id=user_id, session_id=session_id
+        )
+
+        # Set the context variable when entering the context
+        token = _current_request_context.set(context)
 
         async with self._lock:
             self._contexts[request_id] = context
@@ -873,8 +901,9 @@ class RequestContextManager:
             context.fail()
             raise
         finally:
+            # Reset the context variable when exiting
+            _current_request_context.reset(token)
             # Don't remove immediately - let cleanup handle it
-            pass
 
     async def get_context(self, request_id: str) -> Optional[RequestContext]:
         """Get request context by ID."""
@@ -1149,11 +1178,11 @@ class ObservabilityManager:
         formation_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ):
-        """Context manager for request tracking."""
+        """Context manager for request tracking with automatic context propagation."""
         async with self.request_manager.track_request(
             request_id=request_id, formation_id=formation_id, user_id=user_id
         ) as context:
-            # Emit request received event
+            # Emit request received event - context automatically available!
             await self.event_logger.emit_event(
                 ConversationEvents.REQUEST_RECEIVED,
                 level=EventLevel.INFO,
@@ -1164,7 +1193,7 @@ class ObservabilityManager:
             try:
                 yield context
 
-                # Emit request completed event
+                # Emit request completed event - context automatically available!
                 await self.event_logger.emit_event(
                     ConversationEvents.REQUEST_COMPLETED,
                     level=EventLevel.INFO,
@@ -1173,7 +1202,7 @@ class ObservabilityManager:
                 )
 
             except Exception as e:
-                # Emit request failed event
+                # Emit request failed event - context automatically available!
                 await self.event_logger.emit_event(
                     ConversationEvents.REQUEST_FAILED,
                     level=EventLevel.ERROR,
@@ -1228,23 +1257,26 @@ class ObservabilityManager:
 async def emit_event(
     event_type: str,
     level: str = "INFO",
-    request_context=None,
-    data: dict = None,
+    data: Optional[Dict[str, Any]] = None,
     description: str = "",
 ):
     """
-    Emit an observability event with direct access to observability system.
+    Emit an observability event with automatic context propagation.
 
-    Simple helper function to replace 943 observability placeholders throughout the codebase.
-    Uses direct access to ObservabilityManager singleton instead of requiring overlord reference.
+    This function automatically retrieves the request context from the
+    contextvars system, eliminating the need to manually pass request_context
+    throughout the codebase.
 
     Args:
         event_type: ConversationEvents enum name (e.g., "AGENT_MESSAGE_PROCESSING")
         level: EventLevel name (e.g., "INFO", "ERROR", "DEBUG")
-        request_context: Request context for event correlation
         data: Additional event data dictionary
         description: Human-readable event description
     """
+    # Automatically get context from ContextVar
+    request_context = get_current_request_context()
+
+    # Skip if no context available (not in a tracked request)
     if not request_context:
         return
 
@@ -1258,11 +1290,11 @@ async def emit_event(
         event_enum = getattr(ConversationEvents, event_type)
         level_enum = getattr(EventLevel, level)
 
-        # Emit event directly through observability manager
+        # Emit event through observability manager
         await observability_manager.event_logger.emit_event(
             event_enum,
             level=level_enum,
-            request_context=request_context,
+            request_context=request_context,  # Context automatically provided
             data=data or {},
             description=description,
         )

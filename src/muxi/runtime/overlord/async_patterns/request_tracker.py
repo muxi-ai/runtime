@@ -29,6 +29,7 @@ class RequestState:
     status: RequestStatus
     start_time: float
     user_id: Optional[str] = None
+    session_id: Optional[str] = None
     end_time: Optional[float] = None
     result: Any = None
     error: Optional[str] = None

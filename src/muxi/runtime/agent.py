@@ -247,7 +247,7 @@ class Agent:
         return self._mcp_service
 
     async def process_message(
-        self, message: Union[str, MCPMessage], user_id: Any = None, request_context=None
+        self, message: Union[str, MCPMessage], user_id: Any = None
     ) -> MCPMessage:
         """
         Process a message from the user and generate a response.
@@ -278,19 +278,16 @@ class Agent:
             message_obj = message
 
         # Emit agent message processing event
-        if request_context:
-
-            observability.emit_event(
-                event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
-                level=observability.EventLevel.INFO,
-                request_context=request_context,
-                data={
-                    "agent_id": self.agent_id,
-                    "agent_name": self.name,
-                    "message_length": len(content),
-                },
-                description=f"Agent {self.agent_id} processing message",
-            )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "message_length": len(content),
+            },
+            description=f"Agent {self.agent_id} processing message",
+        )
 
         # Let overlord handle memory management
         timestamp = datetime.datetime.now().timestamp()
@@ -448,19 +445,16 @@ class Agent:
         self._messages.append({"role": "assistant", "content": response.content})
 
         # Emit agent response generated event
-        if request_context:
-
-            observability.emit_event(
-                event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
-                level=observability.EventLevel.INFO,
-                request_context=request_context,
-                data={
-                    "agent_id": self.agent_id,
-                    "agent_name": self.name,
-                    "response_length": len(content),
-                },
-                description=f"Agent {self.agent_id} response generated",
-            )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "response_length": len(content),
+            },
+            description=f"Agent {self.agent_id} response generated",
+        )
 
         # Let overlord handle memory management for the response
         if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
@@ -590,7 +584,6 @@ class Agent:
         tool_name: str,
         parameters: Dict[str, Any],
         server_id: Optional[str] = None,
-        request_context=None,
     ) -> Dict[str, Any]:
         """
         Invoke a tool via the centralized MCP service.
@@ -605,7 +598,6 @@ class Agent:
                 expected parameters for the specified tool.
             server_id: Optional specific server ID to use. If not provided,
                 the MCP service will route to an appropriate server.
-            request_context: Optional request context for observability tracking.
 
         Returns:
             The result of the tool call as a dictionary.
@@ -614,20 +606,17 @@ class Agent:
             Exception: Any error from the MCP service during tool invocation
         """
         # Emit MCP tool call started event
-        if request_context:
-
-            observability.emit_event(
-                event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
-                level=observability.EventLevel.INFO,
-                request_context=request_context,
-                data={
-                    "tool_name": tool_name,
-                    "server_id": server_id,
-                    "agent_id": self.agent_id,
-                    "parameters": parameters,
-                },
-                description=f"MCP tool call started: {tool_name}",
-            )
+        observability.emit_event(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "tool_name": tool_name,
+                "server_id": server_id,
+                "agent_id": self.agent_id,
+                "parameters": parameters,
+            },
+            description=f"MCP tool call started: {tool_name}",
+        )
 
         try:
             # Execute the tool call
@@ -639,37 +628,33 @@ class Agent:
             )
 
             # Emit MCP tool call completed event
-            if request_context:
-                observability.emit_event(
-                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    request_context=request_context,
-                    data={
-                        "tool_name": tool_name,
-                        "server_id": server_id,
-                        "agent_id": self.agent_id,
-                        "success": result.get("status") == "success",
-                    },
-                    description=f"MCP tool call completed: {tool_name}",
-                )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "agent_id": self.agent_id,
+                    "success": result.get("status") == "success",
+                },
+                description=f"MCP tool call completed: {tool_name}",
+            )
 
             return result
 
         except Exception as e:
             # Emit MCP tool call failed event
-            if request_context:
-                observability.emit_event(
-                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    request_context=request_context,
-                    data={
-                        "tool_name": tool_name,
-                        "server_id": server_id,
-                        "agent_id": self.agent_id,
-                        "error": str(e),
-                    },
-                    description=f"MCP tool call failed: {tool_name} - {str(e)}",
-                )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                },
+                description=f"MCP tool call failed: {tool_name} - {str(e)}",
+            )
             raise
 
     async def _handle_potential_clarification_response(

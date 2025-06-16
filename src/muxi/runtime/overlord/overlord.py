@@ -3663,6 +3663,7 @@ class Overlord:
         message: str,
         agent_name: Optional[str] = None,
         user_id: Any = None,
+        session_id: Optional[str] = None,  # Optional session ID for tracking
         use_async: Optional[bool] = None,  # None=intelligent, True=force async, False=force sync
         webhook_url: Optional[str] = None,  # Optional webhook URL
         threshold_seconds: Optional[float] = None,  # Optional threshold override
@@ -3700,12 +3701,12 @@ class Overlord:
             request_id=request_id,
             formation_id=self.formation_id,
             user_id=str(user_id) if user_id is not None else None,
-        ) as request_context:
+            session_id=session_id,
+        ):
             # Emit request received event
             observability.emit_event(
                 event_type=observability.ConversationEvents.REQUEST_RECEIVED,
                 level=observability.EventLevel.INFO,
-                request_context=request_context,
                 data={
                     "message_length": len(message),
                     "agent_name": agent_name,
@@ -3720,7 +3721,6 @@ class Overlord:
             observability.emit_event(
                 event_type=observability.ConversationEvents.REQUEST_VALIDATED,
                 level=observability.EventLevel.INFO,
-                request_context=request_context,
                 data={
                     "message_valid": len(message.strip()) > 0,
                     "agent_exists": agent_name is None or agent_name in self.agents,
@@ -3774,6 +3774,7 @@ class Overlord:
                     webhook_url=webhook_url,
                     estimated_completion=estimated_time,
                     user_id=user_id,
+                    session_id=session_id,
                 )
                 await self.request_tracker.track_request(request_id, initial_state)
 
@@ -3799,7 +3800,7 @@ class Overlord:
                 start_time = time.time()
 
                 result = await self._process_sync_chat(
-                    message, agent_name, user_id, request_context
+                    message, agent_name, user_id
                 )
                 processing_time = time.time() - start_time
 
@@ -3807,7 +3808,6 @@ class Overlord:
                 observability.emit_event(
                     event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
                     level=observability.EventLevel.DEBUG,
-                    request_context=request_context,
                     data={
                         "operation": "sync_chat",
                         "processing_time": processing_time,
@@ -3982,7 +3982,7 @@ class Overlord:
                 _ = None  # remove this after implementing observability
 
     async def _process_sync_chat(
-        self, message: str, agent_name: Optional[str], user_id: Any, request_context=None
+        self, message: str, agent_name: Optional[str], user_id: Any
     ) -> MCPMessage:
         """
         Process chat synchronously using existing infrastructure.
@@ -3995,26 +3995,22 @@ class Overlord:
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
             # Emit agent selection started event
-            if request_context:
-                observability.emit_event(
-                    event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
-                    level=observability.EventLevel.INFO,
-                    request_context=request_context,
-                    data={"message": message[:200]},
-                    description="Starting agent selection process",
-                )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
+                level=observability.EventLevel.INFO,
+                data={"message": message[:200]},
+                description="Starting agent selection process",
+            )
 
             agent_name = await self.select_agent_for_message(message)
 
             # Emit agent selection completed event
-            if request_context:
-                observability.emit_event(
-                    event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTED,
-                    level=observability.EventLevel.INFO,
-                    request_context=request_context,
-                    data={"selected_agent": agent_name},
-                    description=f"Agent selection completed: {agent_name}",
-                )
+            observability.emit_event(
+                event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTED,
+                level=observability.EventLevel.INFO,
+                data={"selected_agent": agent_name},
+                description=f"Agent selection completed: {agent_name}",
+            )
 
         # Get the selected agent and process the message
         agent = self.get_agent(agent_name)
@@ -4027,7 +4023,7 @@ class Overlord:
 
         # Process the message using the agent
         result = await agent.process_message(
-            message, user_id=user_id_int, request_context=request_context
+            message, user_id=user_id_int
         )
 
         return result
