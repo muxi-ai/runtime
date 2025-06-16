@@ -24,9 +24,9 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
 - **Multi-Modal Support**: Handle text, image, audio, video, and document content
 - **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
-- **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, and background processing
+- **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, background processing, and session tracking
 - **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
-- **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling and metadata
+- **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
 
 ## Installation
 
@@ -69,8 +69,13 @@ coder = Agent(
 overlord.add_agent(assistant)
 overlord.add_agent(coder)
 
-# Run a conversation
-response = overlord.chat("assistant", "Hello, can you help me with a coding problem?")
+# Run a conversation with session tracking
+response = overlord.chat(
+    message="Hello, can you help me with a coding problem?",
+    agent_name="assistant",
+    user_id="user123",
+    session_id="session_abc"
+)
 print(response)
 ```
 
