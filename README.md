@@ -25,6 +25,7 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Multi-Modal Support**: Handle text, image, audio, video, and document content
 - **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
 - **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, background processing, and session tracking
+- **Streaming Responses**: Real-time streaming chat responses with AsyncGenerator support for ChatGPT-like streaming behavior
 - **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
 - **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
 - **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
@@ -78,6 +79,16 @@ response = overlord.chat(
     session_id="session_abc"
 )
 print(response)
+
+# Streaming conversation (ChatGPT-like streaming)
+async for chunk in overlord.chat(
+    message="Explain how async generators work",
+    agent_name="coder",
+    user_id="user123",
+    session_id="session_abc",
+    stream=True  # Enable streaming
+):
+    print(chunk, end="", flush=True)
 ```
 
 ## Secrets Management (Development)
