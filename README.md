@@ -27,6 +27,7 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, background processing, and session tracking
 - **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
 - **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
+- **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
 
 ## Installation
 
@@ -161,6 +162,11 @@ muxi/runtime/
 ├── mcp/              # Model Context Protocol
 │   ├── service.py    # Centralized MCP service
 │   └── transport/    # Transport implementations
+├── observability/    # Observability & monitoring
+│   ├── manager.py    # Central observability manager
+│   ├── transports/   # Event transport implementations
+│   ├── formatters/   # Event formatting (10 formats)
+│   └── health/       # Health monitoring system
 └── knowledge/        # Knowledge base integration
 ```
 
