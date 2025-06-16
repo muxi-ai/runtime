@@ -44,7 +44,7 @@ class TestEventLogger:
         )
 
         with patch('builtins.print') as mock_print:
-            event_id = await logger.emit_event(
+            event_id = await logger.observe(
                 event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
@@ -67,14 +67,14 @@ class TestEventLogger:
 
         with patch('builtins.print') as mock_print:
             # This should not be emitted (INFO < WARNING)
-            await logger.emit_event(
+            await logger.observe(
                 event_type=ConversationEventType.AGENT_MESSAGE_PROCESSING,
                 level=EventLevel.INFO,
                 request_context=request_context
             )
 
             # This should be emitted (WARNING >= WARNING)
-            await logger.emit_event(
+            await logger.observe(
                 event_type=ConversationEventType.AGENT_MESSAGE_FAILED,
                 level=EventLevel.WARNING,
                 request_context=request_context
@@ -253,7 +253,7 @@ class TestPerformance:
 
         with patch('builtins.print'):  # Suppress actual output
             for _ in range(10):  # Emit 10 events for basic test
-                await logger.emit_event(
+                await logger.observe(
                     event_type=ConversationEventType.AGENT_MESSAGE_PROCESSING,
                     level=EventLevel.INFO,
                     request_context=request_context,
@@ -287,14 +287,14 @@ class TestIntegration:
 
                 # Simulate overlord routing
                 with patch('builtins.print'):
-                    await manager.event_logger.emit_event(
+                    await manager.event_logger.observe(
                         event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                         level=EventLevel.INFO,
                         request_context=context,
                         description="Starting routing"
                     )
 
-                    await manager.event_logger.emit_event(
+                    await manager.event_logger.observe(
                         event_type=ConversationEventType.OVERLORD_AGENT_SELECTED,
                         level=EventLevel.INFO,
                         request_context=context,
@@ -302,14 +302,14 @@ class TestIntegration:
                         description="Agent selected"
                     )
 
-                    await manager.event_logger.emit_event(
+                    await manager.event_logger.observe(
                         event_type=ConversationEventType.AGENT_MESSAGE_PROCESSING,
                         level=EventLevel.INFO,
                         request_context=context,
                         description="Processing message"
                     )
 
-                    await manager.event_logger.emit_event(
+                    await manager.event_logger.observe(
                         event_type=ConversationEventType.AGENT_MESSAGE_COMPLETED,
                         level=EventLevel.INFO,
                         request_context=context,
@@ -334,7 +334,7 @@ class TestIntegration:
 
         with patch('builtins.print'):
             # Tool call started
-            await manager.event_logger.emit_event(
+            await manager.event_logger.observe(
                 event_type=ConversationEventType.MCP_TOOL_CALLED,
                 level=EventLevel.INFO,
                 request_context=request_context,
@@ -343,7 +343,7 @@ class TestIntegration:
             )
 
             # Tool call completed
-            await manager.event_logger.emit_event(
+            await manager.event_logger.observe(
                 event_type=ConversationEventType.MCP_TOOL_COMPLETED,
                 level=EventLevel.INFO,
                 request_context=request_context,

@@ -71,7 +71,7 @@ class TestEventLogger:
         )
 
         with patch('builtins.print') as mock_print:
-            await event_logger.emit_event(
+            await event_logger.observe(
                 event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
@@ -105,7 +105,7 @@ class TestEventLogger:
         )
 
         with patch('builtins.print') as mock_print:
-            await logger.emit_event(
+            await logger.observe(
                 event_type=ConversationEventType.OVERLORD_ROUTING_STARTED,
                 level=EventLevel.INFO,
                 request_context=request_context,
@@ -421,7 +421,7 @@ class TestPerformance:
 
         with patch('builtins.print'):  # Suppress actual output
             for _ in range(100):  # Emit 100 events
-                await logger.emit_event(
+                await logger.observe(
                     event_type=ConversationEventType.AGENT_MESSAGE_RECEIVED,
                     level=EventLevel.INFO,
                     request_context=request_context,
@@ -452,7 +452,7 @@ class TestPerformance:
         start_time = time.time()
 
         for _ in range(1000):  # Emit 1000 events with disabled logger
-            await logger.emit_event(
+            await logger.observe(
                 event_type=ConversationEventType.AGENT_MESSAGE_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=request_context,
@@ -496,7 +496,7 @@ class TestErrorHandling:
         # Test with non-serializable data
         with patch('builtins.print') as mock_print:
             # This should not raise an exception
-            await logger.emit_event(
+            await logger.observe(
                 event_type=ConversationEventType.AGENT_MESSAGE_RECEIVED,
                 level=EventLevel.INFO,
                 request_context=request_context,
