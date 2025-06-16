@@ -108,6 +108,31 @@ from .workflow import (
     Workflow,
 )
 
+# Utility functions
+from .utils import (
+    generate_api_key,
+    normalize_external_id,
+)
+
+# Configuration Management (Phase 2)
+from .config import (
+    initialize_llm_config,
+    initialize_auth_config,
+    initialize_memory_config,
+    initialize_logging_config,
+    initialize_clarification_config,
+    initialize_document_processing_config,
+    SecretsInterpolator,
+)
+
+# Memory Management (Phase 3)
+from .memory import (
+    BufferMemoryManager,
+    PersistentMemoryManager,
+    UserContextManager,
+    ExtractionCoordinator,
+)
+
 # NEW: Import multimodal and synthesis components
 from .workflow.multimodal import MultiModalFusionEngine, MultiModalWorkflowIntegrator
 from .workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
@@ -356,13 +381,13 @@ class Overlord:
 
         # Generate API keys if not provided
         if self.user_api_key is None:
-            self.user_api_key = self._generate_api_key("user")
+            self.user_api_key = generate_api_key("user")
             self._user_key_auto_generated = True
         else:
             self._user_key_auto_generated = False
 
         if self.admin_api_key is None:
-            self.admin_api_key = self._generate_api_key("admin")
+            self.admin_api_key = generate_api_key("admin")
             self._admin_key_auto_generated = True
         else:
             self._admin_key_auto_generated = False
@@ -464,6 +489,13 @@ class Overlord:
         self.async_threshold_seconds = async_config.get("threshold_seconds", 30)
         self.async_enable_estimation = async_config.get("enable_estimation", True)
         self.async_webhook_url = async_config.get("webhook_url")
+
+        # Initialize extracted configuration and memory managers
+        self.secrets_interpolator = SecretsInterpolator(self)
+        self.buffer_memory_manager = BufferMemoryManager(self)
+        self.persistent_memory_manager = PersistentMemoryManager(self)
+        self.user_context_manager = UserContextManager(self)
+        self.extraction_coordinator = ExtractionCoordinator(self)
 
     async def start(self) -> None:
         """Start all overlord services including cache manager."""
@@ -683,22 +715,22 @@ class Overlord:
         config = self.formation_config
 
         # Initialize LLM configuration and model resolver
-        await self._initialize_llm_config()
+        await initialize_llm_config(self)
 
         # Initialize auth configuration
-        await self._initialize_auth_config()
+        await initialize_auth_config(self)
 
         # Initialize memory configuration
-        await self._initialize_memory_config()
+        await initialize_memory_config(self)
 
         # Initialize logging configuration
-        await self._initialize_logging_config()
+        await initialize_logging_config(self)
 
         # Initialize clarification configuration
-        await self._initialize_clarification_config()
+        await initialize_clarification_config(self)
 
         # Initialize document processing configuration
-        await self._initialize_document_processing_config()
+        await initialize_document_processing_config(self)
 
         # Initialize document processing components
         await self._initialize_document_components()
@@ -904,118 +936,8 @@ class Overlord:
         Returns:
             Processed stream configuration or None if invalid
         """
-        # Extract basic stream configuration
-        transport = stream.get("transport")
-        level = stream.get("level", "info")
-        format_type = stream.get("format", "jsonl")
-        events = stream.get("events", [])
-        auth = stream.get("auth", {})
-
-        if not transport:
-            #  Warning - add observability event
-            # SystemEvents.FAILED_INITIALIZATION
-            return None
-
-        # Process transport-specific configuration
-        processed_stream = {
-            "transport": transport,
-            "level": level,
-            "format": format_type,
-            "events": events,
-            "auth": auth,
-        }
-
-        if transport == "stdout":
-            # No additional configuration needed for stdout
-            pass
-
-        elif transport == "file":
-            destination = stream.get("destination")
-            if not destination:
-                #  Warning - add observability event
-                # SystemEvents.FAILED_INITIALIZATION
-                return None
-            processed_stream["destination"] = destination
-
-        elif transport == "stream":
-            destination = stream.get("destination")
-            protocol = stream.get("protocol")
-
-            if not destination:
-                #  Warning - add observability event
-                # SystemEvents.FAILED_INITIALIZATION
-                return None
-
-            # Auto-detect protocol if not specified
-            if not protocol:
-                protocol = self._detect_stream_protocol(destination)
-
-            processed_stream["destination"] = destination
-            processed_stream["protocol"] = protocol
-
-        elif transport == "trail":
-            # MUXI Trail transport - special case with fixed destination
-            processed_stream["destination"] = "tcps://trail.muxi.ai/ingest"
-            processed_stream["protocol"] = "zmq"
-            processed_stream["format"] = "msgpack"  # Trail always uses msgpack
-
-            # Ensure auth is configured for trail
-            if not auth:
-                return None
-
-        else:
-            #  Warning - add observability event
-            # SystemEvents.FAILED_INITIALIZATION
-            return None
-
-        # Interpolate secrets in auth if needed
-        if auth:
-            try:
-                interpolated_auth = await self.interpolate_secrets(auth)
-                processed_stream["auth"] = interpolated_auth
-            except Exception as e:
-                #  Warning - add observability event
-                # ErrorEvents.INTERNAL_ERROR
-                _ = e  # remove this after implementing observability
-
-        return processed_stream
-
-    def _detect_stream_protocol(self, destination: str) -> str:
-        """
-        Detect stream protocol from destination URL.
-
-        Args:
-            destination: Stream destination URL
-
-        Returns:
-            Detected protocol string
-        """
-        if destination.startswith(("https://", "http://")):
-            return "webhook"
-        elif destination.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
-            return "zmq"
-        elif destination.startswith(("ws://", "wss://")):
-            return "websocket"
-        else:
-            return "zmq"  # Default fallback
-
-    def _convert_logging_format(self, schema_format: str) -> str:
-        """
-        Convert SCHEMA_GUIDE.md logging format to LoggingConfig format.
-
-        Args:
-            schema_format: Format from SCHEMA_GUIDE.md ('jsonl' or 'text')
-
-        Returns:
-            Format string for LoggingConfig
-        """
-        if schema_format == "jsonl":
-            return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
-        elif schema_format == "text":
-            return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
-        else:
-            # Default format
-            return "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}"
+        from .config.initialization import _process_logging_stream
+        return await _process_logging_stream(self, stream, index)
 
     async def _initialize_clarification_config(self) -> None:
         """
@@ -1025,48 +947,7 @@ class Overlord:
         parameter collection and applies privacy-by-default settings with
         industry-standard style preferences.
         """
-        overlord_config = self.formation_config.get("overlord", {})
-        clarification_config = overlord_config.get("clarification", {})
-
-        if not clarification_config:
-            return
-
-        try:
-            from ..clarification.types import ClarificationConfig, QuestionStyle
-
-            # Extract configuration with privacy-by-default approach
-            max_questions = clarification_config.get("max_questions", 5)
-            style_str = clarification_config.get("style", "conversational")
-            persist_learned_info = clarification_config.get("persist_learned_info", False)
-
-            # Validate and convert style string to enum
-            try:
-                style = QuestionStyle(style_str.lower())
-            except ValueError:
-                style = QuestionStyle.CONVERSATIONAL
-
-            # Validate max_questions
-            if not isinstance(max_questions, int) or max_questions < 1:
-                max_questions = 5
-            elif max_questions > 20:
-                #  Warning - add observability event
-                # ErrorEvents.WARNING
-                #   f"max_questions '{max_questions}' is very high, consider reducing for better UX"
-                _ = max_questions  # remove this after implementing observability
-
-            # Update the overlord's clarification configuration
-            self.clarification_config = ClarificationConfig(
-                max_questions=max_questions, style=style, persist_learned_info=persist_learned_info
-            )
-
-        except Exception as e:
-            # Keep default configuration on error
-            #  Warning - add observability event
-            # ErrorEvents.FAILED_INITIALIZATION
-            _ = e  # remove this after implementing observability
-
-        if clarification_config:
-            _ = None  # remove this after implementing observability
+        await initialize_clarification_config(self)
 
     async def _initialize_document_processing_config(self) -> None:
         """
@@ -1075,37 +956,7 @@ class Overlord:
         This processes the unified document configuration from llm.models.documents.settings
         for use by document-related components.
         """
-        try:
-            # Import the document processing config module
-            from ..config.document_processing import DocumentProcessingConfig
-
-            # Extract LLM configuration from formation
-            llm_config = self.formation_config.get("llm", {})
-
-            # Create document processing configuration instance using unified schema
-            self.document_processing_config = DocumentProcessingConfig(llm_config)
-
-            # Log the configuration details
-            enabled = self.document_processing_config.is_enabled()
-            if enabled:
-                # Extract configuration values for potential observability logging
-                chunk_size = self.document_processing_config.get_chunk_size()
-                max_file_size = self.document_processing_config.get_max_file_size_mb()
-                strategy = self.document_processing_config.get_extraction_strategy()
-
-                #  Info - add observability event
-                # SystemEvents.INITIALIZING (document processing config + settings)
-                # These variables could be used in observability events when implemented:
-                # chunk_size, max_file_size, strategy
-
-        except Exception as e:
-            #  Warning - add observability event
-            # ErrorEvents.FAILED_INITIALIZATION
-            _ = e  # remove this after implementing observability
-
-            # Fall back to default configuration
-            from ..config.document_processing import DocumentProcessingConfig
-            self.document_processing_config = DocumentProcessingConfig({})
+        await initialize_document_processing_config(self)
 
     async def _initialize_document_components(self) -> None:
         """
@@ -1159,119 +1010,13 @@ class Overlord:
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
-        try:
-            from ..memory.short_term import ShortTermMemory
-
-            # Extract buffer configuration
-            size = buffer_config.get("size", 10)
-            multiplier = buffer_config.get("multiplier", 10)
-            vector_search = buffer_config.get("vector_search", True)
-            dimension = buffer_config.get("vector_dimension", 1536)
-            mode = buffer_config.get("mode", "local")
-            remote_config = buffer_config.get("remote", {})
-
-            # Get embedding model for vector search if enabled
-            embedding_model = None
-            if vector_search:
-                try:
-                    embedding_model = await self.get_model_for_capability("embedding")
-                except Exception as e:
-                    #  Warning - add observability event
-                    # ErrorEvents.FAILED_INITIALIZATION
-                    _ = e  # remove this after implementing observability
-                    vector_search = False
-
-            # Create buffer memory instance
-            self.buffer_memory = ShortTermMemory(
-                max_size=size,
-                buffer_multiplier=multiplier,
-                dimension=dimension,
-                model=embedding_model,
-                mode=mode,
-                remote=remote_config if mode == "remote" else None,
-            )
-
-        except Exception as e:
-            #  Warning - add observability event
-            # ErrorEvents.FAILED_INITIALIZATION (buffer memory)
-            _ = e  # remove this after implementing observability
+        from .config.initialization import _initialize_buffer_memory
+        await _initialize_buffer_memory(self, buffer_config)
 
     async def _initialize_persistent_memory(self, persistent_config: Dict[str, Any]) -> None:
         """Initialize persistent memory from configuration."""
-        try:
-            connection_string = persistent_config.get("connection_string")
-            embedding_model_name = persistent_config.get("embedding_model")
-
-            if not connection_string:
-                return
-
-            # Interpolate secrets in connection string if needed
-            if "${{ secrets." in connection_string:
-                try:
-                    interpolated = await self.interpolate_secrets(
-                        {"connection_string": connection_string}
-                    )
-                    connection_string = interpolated.get("connection_string", connection_string)
-                except Exception as e:
-                    #  Warning - add observability event
-                    # ErrorEvents.FAILED_INITIALIZATION (persistent memory)
-                    _ = e  # remove this after implementing observability
-                    return
-
-            # Get embedding model
-            embedding_model = None
-            if embedding_model_name:
-                try:
-                    # Create model from specific name override
-                    embedding_model = await self.create_model(model=embedding_model_name)
-                except Exception as e:
-                    #  Warning - add observability event
-                    # ErrorEvents.FAILED_INITIALIZATION (embedding model)
-                    _ = e  # remove this after implementing observability
-                    try:
-                        # Fall back to default embedding capability
-                        embedding_model = await self.get_model_for_capability("embedding")
-                    except Exception as e2:
-                        #  Warning - add observability event
-                        # ErrorEvents.FAILED_INITIALIZATION (embedding model)
-                        _ = e2  # remove this after implementing observability
-
-            # Determine memory type based on connection string
-            if connection_string.startswith("postgresql://") or connection_string.startswith(
-                "postgres://"
-            ):
-                #  Info - add observability event
-                # SystemEvents.INITIALIZING (persistent memory - PostgreSQL)
-                from ..memory.memobase import Memobase
-
-                self.long_term_memory = Memobase(
-                    connection_string=connection_string, model=embedding_model
-                )
-
-            elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
-                #  Info - add observability event
-                # SystemEvents.INITIALIZING (persistent memory - SQLite)
-                from ..memory.sqlite import SQLiteMemory
-
-                # Remove sqlite:// prefix if present
-                db_path = connection_string.replace("sqlite://", "")
-                self.long_term_memory = SQLiteMemory(db_path=db_path)
-
-                # Set the embedding provider after initialization
-                if embedding_model:
-                    try:
-                        embedding_llm = await self.get_model_for_capability("embedding")
-                        self.long_term_memory.embedding_provider = embedding_llm
-                    except Exception as e:
-                        #  Warning - add observability event
-                        # ErrorEvents.FAILED_INITIALIZATION (embedding provider)
-                        _ = e  # remove this after implementing observability
-
-        except Exception as e:
-            #  Error - add observability event
-            # ErrorEvents.INTERNAL_ERROR (persistent memory)
-            _ = e  # remove this after implementing observability
-            raise
+        from .config.initialization import _initialize_persistent_memory
+        await _initialize_persistent_memory(self, persistent_config)
 
     async def get_model_for_capability(
         self, capability: str, agent_id: Optional[str] = None
@@ -1856,25 +1601,7 @@ class Overlord:
             True if added successfully, False if buffer_memory is not available
             or an error occurred during addition.
         """
-        if not self.buffer_memory:
-            return False
-
-        # Add agent_id to metadata for context if provided
-        full_metadata = metadata or {}
-        if agent_id:
-            full_metadata["agent_id"] = agent_id
-
-        # Add to buffer memory (now async)
-        try:
-            await self.buffer_memory.add(message, metadata=full_metadata)
-            #  Info - add observability event
-            # ConversationEvents.MEMORY_SHORT_TERM_UPDATED
-            return True
-        except Exception as e:
-            #  Warning - add observability event
-            # ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED
-            _ = e  # remove this after implementing observability
-            return False
+        return await self.buffer_memory_manager.add_to_buffer_memory(message, metadata, agent_id)
 
     async def add_to_long_term_memory(
         self,
@@ -1907,84 +1634,9 @@ class Overlord:
             The ID of the newly created memory entry if successful, None otherwise.
             This ID can be used for later updating or deleting the specific memory.
         """
-        if not self.long_term_memory:
-            return None
-
-        # Add agent_id to metadata for context if provided
-        full_metadata = metadata or {}
-        if agent_id:
-            full_metadata["agent_id"] = agent_id
-
-        # Handle multi-user case with Memobase
-        if self.is_multi_user and user_id is not None:
-            try:
-                internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-                memory_id = await self.long_term_memory.add(
-                    content=content,
-                    metadata=full_metadata,
-                    embedding=embedding,
-                    user_id=internal_user_id,
-                )
-
-                # Emit memory storage completed event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "memory_id": memory_id,
-                        "memory_type": "long_term",
-                        "content_length": len(content),
-                    },
-                    description="Long-term memory storage completed",
-                )
-
-                return memory_id
-            except Exception as e:
-                # Emit memory storage failed event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "memory_type": "long_term",
-                        "error": str(e),
-                    },
-                    description=f"Long-term memory storage failed: {e}",
-                )
-                return None
-
-        # Standard long-term memory case
-        try:
-            memory_id = await self.long_term_memory.add(
-                content=content,
-                metadata=full_metadata,
-                embedding=embedding,
-            )
-
-            # Emit memory storage completed event
-            observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCED,
-                level=observability.EventLevel.DEBUG,
-                data={
-                    "memory_id": memory_id,
-                    "memory_type": "long_term",
-                    "content_length": len(content),
-                },
-                description="Long-term memory storage completed",
-            )
-
-            return memory_id
-        except Exception as e:
-            # Emit memory storage failed event
-            observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "memory_type": "long_term",
-                    "error": str(e),
-                },
-                description=f"Long-term memory storage failed: {e}",
-            )
-            return None
+        return await self.persistent_memory_manager.add_to_long_term_memory(
+            content, metadata, embedding, agent_id, user_id
+        )
 
     async def search_memory(
         self,
@@ -2025,126 +1677,9 @@ class Overlord:
 
             Results are sorted by relevance (lowest distance first).
         """
-        # Start with empty results
-        results = []
-
-        # Prepare metadata filter
-        full_filter = filter_metadata or {}
-        if agent_id:
-            full_filter["agent_id"] = agent_id
-
-        # Search buffer memory if available
-        if self.buffer_memory:
-            try:
-                # Emit memory search started event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "query": query[:100],
-                        "memory_type": "buffer",
-                        "k": k,
-                        "agent_id": agent_id,
-                    },
-                    description="Starting buffer memory search",
-                )
-
-                # Use updated search method (now async)
-                buffer_results = await self.buffer_memory.search(
-                    query=query, limit=k, filter_metadata=full_filter
-                )
-
-                # Emit memory search completed event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "query": query[:100],
-                        "memory_type": "buffer",
-                        "results_count": len(buffer_results),
-                    },
-                    description=(f"Buffer memory search completed: {len(buffer_results)} results"),
-                )
-
-                # Convert to standard format
-                for item in buffer_results:
-                    results.append(
-                        {
-                            "text": item["content"],
-                            "metadata": item["metadata"],
-                            "distance": 1.0 - item["score"],  # Convert score to distance
-                            "source": "buffer",
-                        }
-                    )
-            except Exception as e:
-                #  Warning - add observability event
-                # ConversationEvents.MEMORY_SHORT_TERM_RETRIEVAL_FAILED
-                _ = e  # remove this after implementing observability
-
-        # Search long-term memory if available and enabled
-        if self.long_term_memory and use_long_term:
-            try:
-                # Emit memory search started event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_LOOKUP,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "query": query[:100],
-                        "memory_type": "long_term",
-                        "k": k,
-                        "agent_id": agent_id,
-                        "user_id": str(user_id) if user_id is not None else None,
-                    },
-                    description="Starting long-term memory search",
-                )
-
-                # Handle multi-user case with Memobase
-                if self.is_multi_user and user_id is not None:
-                    # ENHANCE: Use flexible user ID conversion
-                    internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-                    lt_results = await self.long_term_memory.search(
-                        query=query, limit=k, user_id=internal_user_id, filter_metadata=full_filter
-                    )
-                # Standard long-term memory case
-                else:
-                    lt_results = await self.long_term_memory.search(
-                        query=query, k=k, filter_metadata=full_filter
-                    )
-
-                # Emit memory search completed event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
-                    level=observability.EventLevel.DEBUG,
-                    data={
-                        "query": query[:100],
-                        "memory_type": "long_term",
-                        "results_count": len(lt_results),
-                    },
-                    description=(f"Long-term memory search completed: {len(lt_results)} results"),
-                )
-
-                # Add to results in standard format
-                results.extend(
-                    [
-                        {
-                            "text": item[1].get("text", ""),
-                            "metadata": item[1].get("metadata", {}),
-                            "distance": item[0],
-                            "source": "long_term",
-                        }
-                        for item in lt_results
-                    ]
-                )
-            except Exception as e:
-                #  Warning - add observability event
-                # ConversationEvents.MEMORY_SHORT_TERM_RETRIEVAL_FAILED
-                _ = e  # remove this after implementing observability
-
-        # Sort by distance and limit to k results
-        results.sort(key=lambda x: x["distance"])
-        results = results[:k]
-
-        return results
+        return await self.buffer_memory_manager.search_buffer_memory(
+            query, agent_id, k, use_long_term, user_id, filter_metadata
+        )
 
     async def clear_memory(
         self,
@@ -2167,42 +1702,9 @@ class Overlord:
             user_id: Optional user ID for multi-user support.
                 Only clears memories for this specific user (requires Memobase).
         """
-        filter_metadata = {}
-        if agent_id:
-            filter_metadata["agent_id"] = agent_id
-
-        # Clear buffer memory
-        if self.buffer_memory:
-            try:
-                self.buffer_memory.clear(
-                    filter_metadata=filter_metadata if filter_metadata else None
-                )
-            except Exception as e:
-                #  Buffer memory clear error - add observability event
-                #  MEMORY_SHORT_TERM_LOOKUP
-                #  MEMORY_SHORT_TERM_LOOKUP
-                _ = e  # remove this after implementing observability
-
-        # Clear long-term memory if requested
-        if clear_long_term and self.long_term_memory:
-            try:
-                if self.is_multi_user and user_id is not None:
-                    # ENHANCE: Use flexible user ID conversion
-                    internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-                    # For multi-user with Memobase
-                    await self.long_term_memory.clear(
-                        user_id=internal_user_id,
-                        filter_metadata=filter_metadata if filter_metadata else None,
-                    )
-                else:
-                    # For standard long-term memory
-                    await self.long_term_memory.clear(
-                        filter_metadata=filter_metadata if filter_metadata else None
-                    )
-            except Exception as e:
-                #  Warning - add observability event
-                # ConversationEvents.MEMORY_LONG_TERM_DELETION_FAILED
-                _ = e  # remove this after implementing observability
+        await self.buffer_memory_manager.clear_buffer_memory(agent_id)
+        if clear_long_term:
+            await self.persistent_memory_manager.clear_long_term_memory(user_id, agent_id)
 
     async def clear_all_memories(self, clear_long_term: bool = False) -> None:
         """
@@ -2874,98 +2376,9 @@ class Overlord:
             extraction_model: Optional model to use for extraction.
                 If provided, overrides the default extraction model.
         """
-        # ENHANCE: Use flexible user ID conversion
-        try:
-            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - add observability event
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return
-
-        # Skip extraction for anonymous users
-        if internal_user_id == 0:
-            return
-
-        # Skip if extraction is disabled or not available
-        if not self.auto_extract_user_info or not self.memory_extractor:
-            return
-
-        # Increment message count for this user
-        self.message_counts[internal_user_id] = self.message_counts.get(internal_user_id, 0) + 1
-
-        # Process this conversation turn for information extraction
-        try:
-            # Use asyncio.create_task to run extraction in background
-            asyncio.create_task(
-                self._run_extraction(
-                    user_message=user_message,
-                    agent_response=agent_response,
-                    user_id=internal_user_id,
-                    agent_id=agent_id,
-                    message_count=self.message_counts[internal_user_id],
-                    extraction_model=extraction_model,
-                )
-            )
-            #  Info - add observability event
-            # ConversationEvents.MEMORY_AUTO_EXTRACTED
-        except Exception as e:
-            # Log but don't fail if extraction errors occur
-            #  Warning - add observability event
-            # ConversationEvents.MEMORY_AUTO_EXTRACTION_FAILED
-            _ = e  # remove this after implementing observability
-
-    async def _run_extraction(
-        self,
-        user_message: str,
-        agent_response: str,
-        user_id: int,
-        agent_id: str,
-        message_count: int = 1,
-        extraction_model: Optional[LLM] = None,
-    ) -> None:
-        """
-        Run the extraction process asynchronously.
-
-        This internal method handles the actual extraction process,
-        using the MemoryExtractor to analyze the conversation turn and
-        extract relevant user information.
-
-        Args:
-            user_message: The user's message to analyze.
-            agent_response: The agent's response for context.
-            user_id: The user's ID for storing extracted information.
-            agent_id: The agent's ID for metadata.
-            message_count: The current message count for this user.
-                Used for throttling extraction frequency.
-            extraction_model: Optional model to use for extraction.
-                If provided, temporarily overrides the default model.
-        """
-        # Use provided extraction model if available
-        if extraction_model:
-            # Temporarily override the extractor's model
-            original_model = self.memory_extractor.extraction_model
-            self.memory_extractor.extraction_model = extraction_model
-
-            try:
-                # Process the conversation turn
-                await self.memory_extractor.process_conversation_turn(
-                    user_message=user_message,
-                    agent_response=agent_response,
-                    user_id=user_id,
-                    message_count=message_count,
-                )
-            finally:
-                # Restore the original model
-                self.memory_extractor.extraction_model = original_model
-        else:
-            # Use the default extraction model
-            await self.memory_extractor.process_conversation_turn(
-                user_message=user_message,
-                agent_response=agent_response,
-                user_id=user_id,
-                message_count=message_count,
-            )
+        await self.extraction_coordinator.handle_user_information_extraction(
+            user_message, agent_response, user_id, agent_id, extraction_model
+        )
 
     async def get_user_context_memory(
         self, user_id: Any, agent_id: Optional[str] = None
@@ -2993,24 +2406,7 @@ class Overlord:
             Returns an empty dictionary if no context exists or if multi-user
             support is not enabled.
         """
-        if not self.is_multi_user or not isinstance(self.long_term_memory, Memobase):
-            return {}
-
-        try:
-            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - add observability event
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return {}
-
-        context = await self.long_term_memory.get_user_context_memory(user_id=internal_user_id)
-
-        #  Info - add observability event
-        # ConversationEvents.MEMORY_LONG_TERM_RETRIEVED
-        # Retrieved user context memory for user: '{internal_user_id}'
-
-        return context
+        return await self.user_context_manager.get_user_context_memory(user_id, agent_id)
 
     async def add_user_context_memory(
         self,
@@ -3044,25 +2440,9 @@ class Overlord:
             reference the specific memory items later.
             Returns an empty list if multi-user support is not enabled.
         """
-        if not self.is_multi_user or not isinstance(self.long_term_memory, Memobase):
-            return []
-
-        try:
-            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - add observability event
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return []
-
-        context = await self.long_term_memory.add_user_context_memory(
-            user_id=internal_user_id, knowledge=knowledge, source=source, importance=importance
+        return await self.user_context_manager.add_user_context_memory(
+            user_id, knowledge, source, importance, agent_id
         )
-
-        #  Info - add observability event
-        # ConversationEvents.MEMORY_LONG_TERM_ENHANCED
-
-        return context
 
     async def clear_user_context_memory(
         self, user_id: Any, keys: Optional[List[str]] = None, agent_id: Optional[str] = None
@@ -3086,26 +2466,7 @@ class Overlord:
             True if successful, False otherwise (including if multi-user
             support is not enabled).
         """
-        if not self.is_multi_user or not isinstance(self.long_term_memory, Memobase):
-            return False
-
-        # ENHANCE: Use flexible user ID conversion
-        try:
-            internal_user_id = await self._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - add observability event
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return False
-
-        context = await self.long_term_memory.clear_user_context_memory(
-            user_id=internal_user_id, keys=keys
-        )
-
-        #  Info - add observability event
-        # ConversationEvents.MEMORY_SHORT_TERM_UPDATED
-
-        return context
+        return await self.user_context_manager.clear_user_context_memory(user_id, keys, agent_id)
 
     async def register_mcp_server(
         self,
@@ -4364,7 +3725,7 @@ class Overlord:
             return 0
 
         # Convert to string for consistent processing across all ID types
-        external_id_str = self._normalize_external_id(external_user_id)
+        external_id_str = normalize_external_id(external_user_id)
 
         # Use enhanced resolution to get internal ID and isolation key
         internal_id, isolation_key = await self._resolve_flexible_user_id(external_id_str)
@@ -4526,40 +3887,6 @@ class Overlord:
             "internal_id": synthetic_id,
             "isolation_key": f"user_{synthetic_id}_{external_id_hash[:8]}",
         }
-
-    def _normalize_external_id(self, external_user_id: Any) -> str:
-        """
-        Normalize any external user ID to consistent string format.
-
-        This method converts external user IDs from various formats (string, int, float,
-        objects) to a consistent string representation for internal processing. It handles
-        common edge cases like None values and provides consistent string conversion
-        for complex object types.
-
-        Args:
-            external_user_id: User ID in any format (str, int, float, object, None)
-
-        Returns:
-            Normalized string representation suitable for hashing and storage:
-            - None values become "anonymous"
-            - Numbers are converted to strings
-            - Objects use their string representation
-            - Strings are stripped of whitespace
-        """
-        # Handle None values as anonymous users
-        if external_user_id is None:
-            return "anonymous"
-
-        # Handle string IDs by stripping whitespace
-        if isinstance(external_user_id, str):
-            return external_user_id.strip()
-
-        # Handle numeric IDs by converting to string
-        if isinstance(external_user_id, (int, float)):
-            return str(external_user_id)
-
-        # Handle any other type (objects, etc.) using string representation
-        return str(external_user_id)
 
     def _initialize_memory_extractor(self) -> None:
         """
@@ -4913,32 +4240,4 @@ class Overlord:
             # SystemEvents.A2A_AGENT_DEREGISTRATION_FAILED
             _ = e  # remove this after implementing observability
 
-    def _generate_api_key(self, key_type: str) -> str:
-        """
-        Generate a new API key with appropriate prefix.
 
-        This internal method creates a random, secure API key with a prefix indicating
-        the key type (user or admin).
-
-        Args:
-            key_type: Type of key to generate ("user" or "admin").
-                Determines the prefix of the generated key.
-
-        Returns:
-            A new API key string in the format:
-            - User keys: "sk_muxi_user_[random string]"
-            - Admin keys: "sk_muxi_admin_[random string]"
-        """
-        import secrets
-        import string
-
-        # Constants for API key generation
-        API_KEY_LENGTH = 24
-        ALPHABET = string.ascii_letters + string.digits
-
-        # Generate a random string using secure random
-        random_part = "".join(secrets.choice(ALPHABET) for _ in range(API_KEY_LENGTH))
-
-        # Add the appropriate prefix based on key type
-        prefix = "sk_muxi_user" if key_type == "user" else "sk_muxi_admin"
-        return f"{prefix}_{random_part}"
