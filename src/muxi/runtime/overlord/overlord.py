@@ -506,8 +506,8 @@ class Overlord:
             # Start cache manager
             await self.cache_manager.start()
 
-            # Start observability system
-            self.observability_manager = observability.ObservabilityManager.get_instance()
+            # Initialize observability system (gets reconfigured after formation config)
+            self.observability_manager = observability.ObservabilityManager()
             await self.observability_manager.start()
 
             # Initialize other services if needed
@@ -916,6 +916,10 @@ class Overlord:
 
             # Store processed logging configuration
             self._logging_config = {"enabled": enabled, "streams": processed_streams}
+
+            # Reconfigure observability manager with the processed logging config
+            if hasattr(self, 'observability_manager') and self.observability_manager:
+                await self.observability_manager.reconfigure_streams(processed_streams)
 
         except Exception as e:
             #  Warning - add observability event
