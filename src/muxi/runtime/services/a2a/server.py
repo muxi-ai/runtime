@@ -45,7 +45,7 @@ class A2AMessageResponse(BaseModel):
     error: Optional[str] = None
 
 
-class A2AFormationServer:
+class A2AServer:
     """
     Single A2A HTTP server for an entire formation.
 

@@ -95,7 +95,7 @@ from ...services.memory.long_term import LongTermMemory
 from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
-from ...services.a2a.formation_server import A2AFormationServer
+from ...services.a2a.server import A2AServer
 
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
@@ -237,7 +237,7 @@ class Overlord:
         admin_api_key (str): API key for admin-level access
         formation_config (Dict[str, Any]): Formation configuration including A2A settings
         external_registry_client (Optional[A2ARegistryClient]): Client for external A2A registries
-        formation_server (Optional[A2AFormationServer]): Server for A2A formation
+        a2a_server (Optional[A2AServer]): Server for A2A formation
 
         # Enhanced workflow attributes
         enable_workflow_by_default (bool): Whether to enable workflow mode by default
@@ -354,7 +354,7 @@ class Overlord:
         self.inbound_registry_client: Optional[A2ARegistryClient] = None
 
         # Initialize A2A Formation Server (will be set up based on config)
-        self.formation_server: Optional[A2AFormationServer] = None
+        self.a2a_server: Optional[A2AServer] = None
 
         # Initialize external registries if configured in formation
         # Initialize external registry clients for inbound/outbound
@@ -365,7 +365,7 @@ class Overlord:
         self.pending_external_registrations = set()
 
         # Initialize the A2A Formation Server
-        self._initialize_formation_server()
+        self._initialize_a2a_server()
 
         # Note: Outbound services will be initialized asynchronously when needed
 
@@ -518,11 +518,11 @@ class Overlord:
             # Initialize other services if needed
             self._initialize_external_registry_client()
             self._initialize_inbound_registry_client()
-            self._initialize_formation_server()
+            self._initialize_a2a_server()
 
             # Start A2A formation server if initialized
-            if self.formation_server:
-                await self._start_formation_server()
+            if self.a2a_server:
+                await self._start_a2a_server()
 
             # Process pending external agent registrations
             if self.inbound_registry_client and hasattr(self, "pending_external_registrations"):
@@ -1236,7 +1236,7 @@ class Overlord:
             # Reinitialize A2A components with updated config
             self._initialize_external_registry_client()
             self._initialize_inbound_registry_client()
-            self._initialize_formation_server()
+            self._initialize_a2a_server()
 
             # Handle outbound configuration
             outbound_config = interpolated_config.get("outbound", {})
@@ -1263,7 +1263,7 @@ class Overlord:
                 # SystemEvents.A2A_INBOUND_ENABLED
 
                 # If formation server was created, ensure it's started
-                if self.formation_server and hasattr(self, "observability_manager"):
+                if self.a2a_server and hasattr(self, "observability_manager"):
                     # Server will be started in the start() method
                     pass
 
@@ -4138,7 +4138,7 @@ class Overlord:
             _ = e  # remove this after implementing observability
             self.inbound_registry_client = None
 
-    def _initialize_formation_server(self) -> None:
+    def _initialize_a2a_server(self) -> None:
         """
         Initialize A2A formation server.
 
@@ -4156,7 +4156,7 @@ class Overlord:
         host, port, and authentication requirements.
 
         Side Effects:
-            - Sets self.formation_server to A2AFormationServer instance or None
+            - Sets self.a2a_server to A2AServer instance or None
             - Emits observability events for initialization success/failure
         """
         try:
@@ -4174,7 +4174,7 @@ class Overlord:
             auth_config = inbound_config.get("auth", {})  # Authentication settings
 
             # Create formation server instance
-            self.formation_server = A2AFormationServer(
+            self.a2a_server = A2AServer(
                 host=host,
                 port=port,
                 formation_id=self.formation_id,
@@ -4187,11 +4187,11 @@ class Overlord:
 
         except Exception as e:
             #  Warning - TODO: add observability
-            # SystemEvents.FAILED_INITIALIZATION (formation_server)
+            # SystemEvents.FAILED_INITIALIZATION (a2a_server)
             _ = e  # remove this after implementing observability
-            self.formation_server = None
+            self.a2a_server = None
 
-    async def _start_formation_server(self) -> None:
+    async def _start_a2a_server(self) -> None:
         """
         Start the A2A formation server.
 
@@ -4212,8 +4212,8 @@ class Overlord:
             - Makes local agents discoverable to external formations
         """
         try:
-            if self.formation_server:
-                await self.formation_server.start()
+            if self.a2a_server:
+                await self.a2a_server.start()
 
                 #  Info - TODO: add observability
                 # SystemEvents.A2A_SERVER_STARTED

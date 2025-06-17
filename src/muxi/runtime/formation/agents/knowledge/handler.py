@@ -80,9 +80,9 @@ import pickle
 from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
-# Loguru import removed - add observability import
 
-# FAISSx will be imported dynamically in _setup_faissx method
+from faissx import client as faiss
+
 
 from ....utils import load_document, chunk_text
 from .base import FileKnowledge
@@ -234,41 +234,23 @@ class KnowledgeHandler:
 
     def _setup_faissx(self):
         """Set up FAISSx based on mode."""
-        try:
-            if self.mode == "remote":
-                from faissx import client as faiss
+        if self.mode == "remote":
+            faiss.configure(
+                server=self.remote.get("url", "tcp://localhost:45678"),
+                api_key=self.remote.get("api_key", "test_key"),
+                tenant_id=self.remote.get("tenant_id", "test_tenant"),
+            )
 
-                faiss.configure(
-                    server=self.remote.get("url", "tcp://localhost:45678"),
-                    api_key=self.remote.get("api_key", "test_key"),
-                    tenant_id=self.remote.get("tenant_id", "test_tenant"),
-                )
-            else:
-                from faissx import local as faiss
-
-            # Log FAISSx setup
-            observability.observe(
-                    event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-                    level=observability.EventLevel.INFO,
-                    description="FAISSx setup completed",
-                    data={
-                        "mode": self.mode,
-                        "remote_config": (self.remote if self.mode == "remote" else None),
-                    },
-                )
-
-            return faiss
-        except ImportError as e:
-            print(f"Failed to import FAISSx: {e}")
-
-            # Log FAISSx setup error
-            observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
-                    description="Failed to setup FAISSx",
-                    data={"error": str(e), "error_type": type(e).__name__, "mode": self.mode},
-                )
-            return None
+        # Log FAISSx setup
+        observability.observe(
+                event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+                level=observability.EventLevel.INFO,
+                description="FAISSx setup completed",
+                data={
+                    "mode": self.mode,
+                    "remote_config": (self.remote if self.mode == "remote" else None),
+                },
+            )
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content with performance limits."""

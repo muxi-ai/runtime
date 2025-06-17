@@ -15,7 +15,7 @@ from .discovery import (
     AgentRegistration
 )
 from .registry_client import A2ARegistryClient
-from .formation_server import A2AFormationServer
+from .formation_server import A2AServer
 
 __all__ = [
     # Models
@@ -41,5 +41,5 @@ __all__ = [
     "A2ARegistryClient",
 
     # Formation Server
-    "A2AFormationServer",
+    "A2AServer",
 ]
