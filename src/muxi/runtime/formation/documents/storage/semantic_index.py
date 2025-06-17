@@ -18,8 +18,7 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from pathlib import Path
 
-from faissx.client import FaissXClient
-import faiss
+from faissx import client as faiss
 
 
 @dataclass
@@ -40,7 +39,8 @@ class DocumentSemanticIndex:
     Enhanced FAISS integration for document semantic search.
 
     Provides efficient vector similarity search across document collections
-    with support for both local FAISS and remote FAISSx operations.
+    with support for both local FAISS and remote FAISSx operations using
+    a unified API.
     """
 
     def __init__(
@@ -68,7 +68,6 @@ class DocumentSemanticIndex:
 
         # Index components
         self._faiss_index = None
-        self._faissx_client = None
         self._document_vectors: List[np.ndarray] = []
         self._document_metadata: List[Dict[str, Any]] = []
         self._id_to_index: Dict[str, int] = {}  # chunk_id -> index position
@@ -83,37 +82,32 @@ class DocumentSemanticIndex:
         #  Semantic index info - TODO: add observability
 
     def _initialize_index(self) -> None:
-        """Initialize the appropriate index type"""
-        if self.mode == "remote":
-            self._initialize_remote_index()
-        else:
-            self._initialize_local_index()
-
-        # Try to load existing index
-        if self.persist_index:
-            self._load_index()
-
-    def _initialize_remote_index(self) -> None:
-        """Initialize remote FAISSx client"""
+        """Initialize the FAISS index with optional remote configuration"""
         try:
-            self._faissx_client = FaissXClient(
-                url=self.remote_config.get("url", "tcp://localhost:45678"),
-                api_key=self.remote_config.get("api_key"),
-                tenant_id=self.remote_config.get("tenant_id"),
-            )
+            # Configure for remote mode if needed
+            if self.mode == "remote" and self.remote_config:
+                faiss.configure(
+                    server=self.remote_config.get("url", "tcp://localhost:45678"),
+                    api_key=self.remote_config.get("api_key"),
+                    tenant_id=self.remote_config.get("tenant_id"),
+                )
+            elif self.mode != "local" and self.mode != "remote":
+                raise ValueError(f"Invalid mode: {self.mode}. Must be 'local' or 'remote'")
+
+            # Create L2 distance index for semantic similarity
+            # Same for both local and remote - faissx is drop-in replacement
+            self._faiss_index = faiss.IndexFlatL2(self.vector_dimension)
+
+            # Try to load existing index
+            if self.persist_index:
+                self._load_index()
+
             #  Semantic index info - TODO: add observability
+
         except Exception as e:
             #  Semantic index error - TODO: add observability
             _ = e  # remove this after implementing observability
-            # Fall back to local FAISS
-            self.mode = "local"
-            self._initialize_local_index()
-
-    def _initialize_local_index(self) -> None:
-        """Initialize local FAISS index"""
-        # Create L2 distance index for semantic similarity
-        self._faiss_index = faiss.IndexFlatL2(self.vector_dimension)
-        #  Semantic index info - TODO: add observability
+            raise
 
     async def add_document_chunks(
         self,
@@ -166,31 +160,30 @@ class DocumentSemanticIndex:
 
             metadata_list.append(combined_metadata)
 
-        # Add to index
-        if self.mode == "remote" and self._faissx_client:
-            await self._add_to_remote_index(vectors, metadata_list)
-        else:
-            await self._add_to_local_index(vectors, metadata_list)
+        # Add to index - same method for both local and remote
+        await self._add_vectors(vectors, metadata_list)
 
         # Persist if enabled
         if self.persist_index:
             await self._save_index()
 
-    async def _add_to_remote_index(
+    async def _add_vectors(
         self, vectors: List[np.ndarray], metadata_list: List[Dict[str, Any]]
     ) -> None:
-        """Add vectors to remote FAISSx index"""
+        """Add vectors to FAISS index - works for both local and remote"""
         try:
-            # Add vectors with metadata
+            # Prepare vector array
+            vector_array = np.array(vectors, dtype=np.float32)
+
+            # Add to FAISS index - same API for local and remote
+            self._faiss_index.add(vector_array)
+
+            # Track metadata
+            start_index = len(self._document_vectors)
             for i, (vector, metadata) in enumerate(zip(vectors, metadata_list)):
                 chunk_id = metadata.get("chunk_id", f"chunk_{int(time.time())}_{i}")
+                index_pos = start_index + i
 
-                await self._faissx_client.add_vector(
-                    vector_id=chunk_id, vector=vector, metadata=metadata
-                )
-
-                # Track locally
-                index_pos = len(self._document_vectors)
                 self._document_vectors.append(vector)
                 self._document_metadata.append(metadata)
                 self._id_to_index[chunk_id] = index_pos
@@ -201,31 +194,7 @@ class DocumentSemanticIndex:
         except Exception as e:
             #  Semantic index error - TODO: add observability
             _ = e  # remove this after implementing observability
-            # Fall back to local index
-            await self._add_to_local_index(vectors, metadata_list)
-
-    async def _add_to_local_index(
-        self, vectors: List[np.ndarray], metadata_list: List[Dict[str, Any]]
-    ) -> None:
-        """Add vectors to local FAISS index"""
-        # Prepare vector array
-        vector_array = np.array(vectors, dtype=np.float32)
-
-        # Add to FAISS index
-        self._faiss_index.add(vector_array)
-
-        # Track metadata
-        start_index = len(self._document_vectors)
-        for i, (vector, metadata) in enumerate(zip(vectors, metadata_list)):
-            chunk_id = metadata.get("chunk_id", f"chunk_{int(time.time())}_{i}")
-            index_pos = start_index + i
-
-            self._document_vectors.append(vector)
-            self._document_metadata.append(metadata)
-            self._id_to_index[chunk_id] = index_pos
-            self._index_to_id[index_pos] = chunk_id
-
-        #  Semantic index info - TODO: add observability
+            raise
 
     async def search_documents(
         self,
@@ -246,16 +215,6 @@ class DocumentSemanticIndex:
         Returns:
             List of DocumentSearchResult objects
         """
-        return await self._search_local(query_vector, k, document_ids, metadata_filter)
-
-    async def _search_local(
-        self,
-        query_vector: np.ndarray,
-        k: int,
-        document_ids: Optional[List[str]] = None,
-        metadata_filter: Optional[Dict[str, Any]] = None,
-    ) -> List[DocumentSearchResult]:
-        """Search using local FAISS"""
         if not self._faiss_index or len(self._document_vectors) == 0:
             return []
 
@@ -265,7 +224,7 @@ class DocumentSemanticIndex:
 
         query_vector = query_vector.reshape(1, -1)
 
-        # Search FAISS index
+        # Search FAISS index - same API for local and remote
         search_k = min(k * 3, len(self._document_vectors))  # Get more for filtering
         distances, indices = self._faiss_index.search(query_vector, search_k)
 
@@ -342,18 +301,16 @@ class DocumentSemanticIndex:
         if not chunks_to_remove:
             return False
 
-        # For local FAISS, we need to rebuild the index
-        if self.mode == "local":
-            await self._rebuild_local_index_without_chunks(chunks_to_remove)
-        elif self.mode == "remote" and self._faissx_client:
-            await self._remove_from_remote_index(chunks_to_remove)
+        # Rebuild the index without the removed chunks
+        # Same process for both local and remote
+        await self._rebuild_index_without_chunks(chunks_to_remove)
 
         #  Semantic index info - TODO: add observability
         return True
 
-    async def _rebuild_local_index_without_chunks(self, indices_to_remove: List[int]) -> None:
-        """Rebuild local index without specified chunks"""
-        # Create new index
+    async def _rebuild_index_without_chunks(self, indices_to_remove: List[int]) -> None:
+        """Rebuild index without specified chunks - works for both local and remote"""
+        # Create new index - faiss is already configured in _initialize_index()
         new_index = faiss.IndexFlatL2(self.vector_dimension)
         new_vectors = []
         new_metadata = []
@@ -387,17 +344,6 @@ class DocumentSemanticIndex:
         self._document_metadata = new_metadata
         self._id_to_index = new_id_to_index
         self._index_to_id = new_index_to_id
-
-    async def _remove_from_remote_index(self, indices_to_remove: List[int]) -> None:
-        """Remove chunks from remote FAISSx index"""
-        try:
-            for index in indices_to_remove:
-                chunk_id = self._index_to_id.get(index)
-                if chunk_id:
-                    await self._faissx_client.delete_vector(chunk_id)
-        except Exception as e:
-            #  Semantic index error - TODO: add observability
-            _ = e  # remove this after implementing observability
 
     def get_index_stats(self) -> Dict[str, Any]:
         """Get statistics about the semantic index"""
@@ -449,8 +395,8 @@ class DocumentSemanticIndex:
             with open(f"{self.index_path}.pkl", "wb") as f:
                 pickle.dump(index_data, f)
 
-            # Save FAISS index if local
-            if self.mode == "local" and self._faiss_index:
+            # Save FAISS index - works for both local and remote
+            if self._faiss_index:
                 faiss.write_index(self._faiss_index, f"{self.index_path}.faiss")
 
             #  Semantic index info - TODO: add observability
@@ -477,8 +423,8 @@ class DocumentSemanticIndex:
             self._id_to_index = index_data.get("id_to_index", {})
             self._index_to_id = index_data.get("index_to_id", {})
 
-            # Load FAISS index if local mode and file exists
-            if self.mode == "local" and Path(faiss_path).exists():
+            # Load FAISS index if file exists
+            if Path(faiss_path).exists():
                 self._faiss_index = faiss.read_index(faiss_path)
 
             #  Semantic index info - TODO: add observability
