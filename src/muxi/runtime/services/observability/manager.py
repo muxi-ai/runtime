@@ -13,7 +13,7 @@ from .request_manager import RequestContextManager
 from .stream_processor import StreamProcessor
 from .health import HealthManager, HealthMonitor, HealthStatusAPI
 from .types import ConversationEvents, SystemEvents, EventLevel, RequestContext
-
+from ...utils.user_dirs import get_observability_dir
 
 class ObservabilityManager:
     """Central manager for the observability system."""
@@ -48,7 +48,7 @@ class ObservabilityManager:
         output_config = {}
 
         if output == "file":
-            output_config["path"] = logging_config.get("path", "muxi_events.jsonl")
+            output_config["path"] = logging_config.get("path",  f"{get_observability_dir()}/muxi.jsonl")
         elif output == "stream":
             output_config["url"] = logging_config.get("stream_url", "")
         elif output == "trail":

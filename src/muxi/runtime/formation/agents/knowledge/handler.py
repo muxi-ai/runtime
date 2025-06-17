@@ -87,6 +87,7 @@ import numpy as np
 from ....utils import load_document, chunk_text
 from .base import FileKnowledge
 from ....services import observability
+from ....utils.user_dirs import get_knowledge_dir
 
 
 class KnowledgeHandler:
@@ -102,7 +103,7 @@ class KnowledgeHandler:
         self,
         agent_id_or_sources: Union[str, List],
         embedding_dimension: int = 1536,
-        cache_dir: str = ".cache/knowledge_embeddings",
+        cache_dir: str = get_knowledge_dir(),
         mode: str = "local",
         remote: Optional[Dict[str, Any]] = None,
         max_files_per_source: int = 10,  # Add performance limit
@@ -603,7 +604,7 @@ class KnowledgeHandler:
             handler = cls(
                 agent_id_or_sources=agent_id,
                 embedding_dimension=kwargs.get("embedding_dimension", 128),  # Smaller dimension
-                cache_dir=kwargs.get("cache_dir", ".cache/knowledge_embeddings"),
+                cache_dir=kwargs.get("cache_dir", get_knowledge_dir()),
                 mode=kwargs.get("mode", "local"),
                 remote=kwargs.get("remote"),
                 max_files_per_source=kwargs.get("max_files_per_source", 5),  # Very conservative

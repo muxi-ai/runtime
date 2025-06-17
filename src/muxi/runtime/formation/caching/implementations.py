@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import numpy as np
 from scipy.spatial.distance import cosine
+from ...utils.user_dirs import get_memory_dir
 
 from .types import CachedResponse
 
@@ -282,7 +283,7 @@ class PersistentCache:
     Ideal for embeddings and long-term workflow results.
     """
 
-    def __init__(self, db_path: str = "cache/persistent.db"):
+    def __init__(self, db_path: str = f"{get_memory_dir()}/persistent.db"):
         """
         Initialize persistent cache.
 

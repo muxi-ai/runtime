@@ -193,6 +193,7 @@ from ..background import (
 # Unified Response Components (Phase 3)
 from ...utils.response_converter import create_unified_response, extract_user_content
 from ..clarification.types import ClarificationConfig, QuestionStyle
+from ...utils.user_dirs import set_formation_id
 
 
 class Overlord:
@@ -322,6 +323,7 @@ class Overlord:
 
         # Set formation_id for unified response format
         self.formation_id = self.formation_config.get("formation_id", "default-formation")
+        set_formation_id(self.formation_id)
 
         # Initialize SecretsManager if formation_path is provided
         self.secrets_manager: Optional[SecretsManager] = None

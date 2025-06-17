@@ -16,6 +16,7 @@ from .types import CacheKey, CachedResponse, CacheType, CacheStatistics
 from .implementations import LRUCache, SizeBasedCache, PersistentCache, SemanticCache
 from .analytics import CacheHitAnalyzer
 from .memory_optimizer import MemoryOptimizer
+from ...utils.user_dirs import get_memory_dir
 
 
 class IntelligentCacheManager:
@@ -31,7 +32,7 @@ class IntelligentCacheManager:
         l1_max_size: int = 1000,
         l2_max_size: int = 500,
         l3_max_memory_mb: int = 100,
-        persistent_db_path: str = "cache/persistent.db",
+        persistent_db_path: str = f"{get_memory_dir()}/muxi.db",
         similarity_threshold: float = 0.85,
         default_ttl_seconds: int = 3600,
         enable_analytics: bool = True,

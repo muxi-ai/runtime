@@ -37,7 +37,7 @@
 
 from pydantic import BaseModel, Field
 from typing import Optional
-from ...utils.user_dirs import user_dir
+from ...utils.user_dirs import get_memory_dir
 
 
 class DatabaseConfig(BaseModel):
@@ -57,7 +57,7 @@ class DatabaseConfig(BaseModel):
     """
 
     connection_string: Optional[str] = Field(
-        default=f"sqlite:///{user_dir()}/muxi.db",
+        default=f"sqlite:///{get_memory_dir()}/muxi.db",
         description="Database connection string",
     )
     pool_size: int = Field(

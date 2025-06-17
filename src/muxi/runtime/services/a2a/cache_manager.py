@@ -13,13 +13,14 @@ from datetime import datetime, timezone
 
 from .models import AgentCard
 from .. import observability
+from ...utils.user_dirs import get_a2a_cache_dir
 
 
 class A2ACacheManager:
     """
     Manages caching of A2A agent cards with hash-based invalidation
 
-    The cache is stored in `.cache/a2a_cards/` directory and uses configuration
+    The cache is stored in `~/.muxi/cache/a2a_cards/` directory and uses configuration
     hash to determine if cached cards are still valid.
     """
 
@@ -28,17 +29,16 @@ class A2ACacheManager:
         Initialize cache manager
 
         Args:
-            cache_dir: Directory to store cache files. Defaults to .cache/a2a_cards/
+            cache_dir: Directory to store cache files. Defaults to ~/.muxi/cache/a2a_cards/
         """
         if cache_dir is None:
-            # Default to .cache/a2a_cards/ in the project root
-            cache_dir = Path.cwd() / ".cache" / "a2a_cards"
+            from ...utils.user_dirs import get_a2a_cards_dir
+            cache_dir = get_a2a_cards_dir()
 
-        self.cache_dir = Path(cache_dir)
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir = Path(get_a2a_cache_dir())
 
         # Cache metadata file
-        self.metadata_file = self.cache_dir / "cache_metadata.json"
+        self.metadata_file = self.cache_dir / "metadata.json"
         self._load_metadata()
 
     def _load_metadata(self) -> None:

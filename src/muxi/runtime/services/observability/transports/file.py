@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, Any, List
 from .base import BaseTransport, TransportStatus
+from ....utils.user_dirs import get_observability_dir
 
 try:
     import aiofiles
@@ -17,7 +18,7 @@ class FileTransport(BaseTransport):
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.file_path = Path(config.get("destination", "/tmp/muxi_events.jsonl"))
+        self.file_path = Path(config.get("destination", f"{get_observability_dir()}/muxi.jsonl"))
         self.rotation_config = config.get("rotation", {})
         self.max_size_mb = self.rotation_config.get("max_size_mb", 100)
         self.max_files = self.rotation_config.get("max_files", 10)

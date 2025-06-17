@@ -12,6 +12,7 @@ import aiofiles.os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from datetime import datetime
+from ....utils.user_dirs import get_observability_dir
 
 
 class HealthManager:
@@ -27,8 +28,7 @@ class HealthManager:
             self.health_file = Path(health_file_path)
         else:
             # Default location in health directory
-            current_dir = Path(__file__).parent
-            self.health_file = current_dir / ".status"
+            self.health_file = f"{get_observability_dir()}/health.json"
 
         self._lock = asyncio.Lock()
 

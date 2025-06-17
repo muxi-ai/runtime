@@ -9,8 +9,9 @@ import json
 import time
 from typing import Any, Dict, List, Optional, Union
 
-from ..utils.id_generator import generate_nanoid as generate_id
+from ...utils.id_generator import generate_nanoid as generate_id
 from .types import ConversationEvents, SystemEvents, EventLevel, RequestContext
+from ...utils.user_dirs import get_observability_dir
 
 
 class EventLogger:
@@ -153,7 +154,7 @@ class EventLogger:
 
     async def _emit_to_file(self, event_line: str) -> None:
         """Emit event to file output."""
-        file_path = self.output_config.get("path", "muxi_events.jsonl")
+        file_path = self.output_config.get("path",  f"{get_observability_dir()}/muxi.jsonl")
         try:
             import aiofiles
 
