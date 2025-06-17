@@ -9,9 +9,6 @@ handling across all MUXI communication modes.
 from typing import Dict, Optional
 from dataclasses import dataclass
 
-# Observability integration
-from .. import observability
-
 
 @dataclass
 class ErrorCodeInfo:

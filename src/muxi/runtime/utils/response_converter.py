@@ -17,7 +17,7 @@ from ..types.response import (
 )
 from ..types.errors import get_error_info
 from ..utils.error_classifier import classify_error_code
-from .. import observability
+from ..services import observability
 
 
 def convert_onellm_to_muxi_content(

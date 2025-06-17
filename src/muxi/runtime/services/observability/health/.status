@@ -1,0 +1,14 @@
+{
+  "last_checked": "2025-06-16T17:40:40.032868Z",
+  "destinations": {
+    "https://ran.local": {
+      "healthy": true,
+      "last_error": null
+    },
+    "http://localhost": {
+      "healthy": false,
+      "last_error": "Connection refused",
+      "since": "2025-06-16T17:40:40.033023Z"
+    }
+  }
+}

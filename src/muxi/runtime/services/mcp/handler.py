@@ -1,0 +1,1660 @@
+# =============================================================================
+# FRONTMATTER
+# =============================================================================
+# Title:        MCP Handler - Model Context Protocol Implementation
+# Description:  Core implementation of the Model Context Protocol (MCP)
+# Role:         Enables agents to interact with external tools and services
+# Usage:        Used by Overlord to connect agents with external tools
+# Author:       Muxi Framework Team
+#
+# The MCP Handler provides a robust implementation of the Model Context Protocol,
+# enabling agents to communicate with external tools and services. It includes:
+#
+# 1. Transport Layer
+#    - HTTP+SSE transport for web-based MCP servers
+#    - Command-line transport for local tools
+#    - Abstract interface for custom transport implementations
+#
+# 2. Connection Management
+#    - Secure establishment of MCP server connections
+#    - Session tracking and maintenance
+#    - Error handling and recovery
+#
+# 3. Request/Response Cycle
+#    - Formatting and sending MCP messages
+#    - Processing tool responses
+#    - Handling asynchronous operations
+#
+# 4. Error Handling
+#    - Specialized error types for different failure modes
+#    - Graceful degradation on connection issues
+#    - Detailed logging for troubleshooting
+#
+# The MCP implementation enables agents to:
+# - Discover and use external tools dynamically
+# - Execute complex operations beyond LLM capabilities
+# - Interact with real-world systems and data sources
+# - Maintain persistent connections to tool servers
+#
+# This module implements the official Model Context Protocol specification,
+# using the MCP Python SDK for transport and message handling.
+#
+# Example usage:
+#
+#   # Create handler with model for extracting tool calls
+#   handler = MCPHandler(model=openai_model)
+#
+#   # Connect to an MCP server
+#   await handler.connect_server(
+#       name="file_tools",
+#       url="http://localhost:8080/api/mcp"
+#   )
+#
+#   # Execute a tool
+#   result = await handler.execute_tool(
+#       server_name="file_tools",
+#       tool_name="read_file",
+#       params={"path": "config.json"}
+#   )
+# =============================================================================
+
+import json
+import uuid
+from typing import Any, Dict, List, Optional, Callable, AsyncGenerator
+import asyncio
+import httpx
+import time
+from datetime import datetime
+
+try:
+    from mcp import JSONRPCRequest
+except ImportError:
+    # Fallback if mcp package is not available
+    class JSONRPCRequest:
+        def __init__(self, method: str, params: dict, id: str = None):
+            self.method = method
+            self.params = params
+            self.id = id or str(uuid.uuid4())
+
+
+from .. import observability
+
+
+class MCPError(Exception):
+    """
+    Base exception class for MCP-related errors.
+
+    This serves as the parent class for all MCP-specific exceptions,
+    providing a consistent interface for error handling and propagation.
+    """
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        """
+        Initialize an MCP error.
+
+        Args:
+            message: Human-readable error message describing what went wrong
+            details: Optional dictionary with additional error context and details
+        """
+        self.message = message
+        self.details = details or {}
+        super().__init__(f"{message}" + (f": {json.dumps(details)}" if details else ""))
+
+
+class MCPConnectionError(MCPError):
+    """
+    Exception raised for connection-related errors.
+
+    This exception indicates issues establishing or maintaining a connection
+    to an MCP server, such as network failures, authentication problems,
+    or server unavailability.
+    """
+
+    pass
+
+
+class MCPRequestError(MCPError):
+    """
+    Exception raised for errors when making requests to MCP servers.
+
+    This exception indicates issues with specific requests, such as
+    invalid parameters, missing permissions, or server-side errors
+    during tool execution.
+    """
+
+    pass
+
+
+class MCPTimeoutError(MCPError):
+    """
+    Exception raised when MCP operations time out.
+
+    This exception indicates that a request to an MCP server took
+    longer than the specified timeout period, which could be due to
+    network issues, server overload, or long-running operations.
+    """
+
+    pass
+
+
+class MCPCancelledError(MCPError):
+    """
+    Exception raised when an MCP operation is cancelled.
+
+    This exception indicates that an operation was intentionally
+    cancelled, typically by user action or as part of cleanup during
+    error handling or shutdown.
+    """
+
+    pass
+
+
+class CancellationToken:
+    """
+    A token that can be used to cancel async operations.
+
+    This class provides a mechanism for cancelling asynchronous operations,
+    such as MCP requests, by registering tasks that should be cancelled
+    when the token is cancelled.
+    """
+
+    def __init__(self):
+        """Initialize a new cancellation token in the non-cancelled state."""
+        self.cancelled = False
+        self._tasks = set()
+
+    def cancel(self):
+        """
+        Mark the token as cancelled and cancel all registered tasks.
+
+        This method cancels all asyncio tasks that have been registered
+        with this token, allowing for coordinated cancellation of related
+        operations.
+        """
+        self.cancelled = True
+        for task in self._tasks:
+            if not task.done():
+                task.cancel()
+
+    def register(self, task):
+        """
+        Register a task to be cancelled when this token is cancelled.
+
+        Args:
+            task: The asyncio task to register for cancellation
+        """
+        self._tasks.add(task)
+
+    def unregister(self, task):
+        """
+        Unregister a task so it won't be cancelled with this token.
+
+        Args:
+            task: The asyncio task to unregister
+        """
+        if task in self._tasks:
+            self._tasks.remove(task)
+
+    def throw_if_cancelled(self):
+        """
+        Throw an exception if this token has been cancelled.
+
+        Raises:
+            MCPCancelledError: If this token has been cancelled
+        """
+        if self.cancelled:
+            raise MCPCancelledError(
+                "Operation was cancelled", {"timestamp": datetime.now().isoformat()}
+            )
+
+
+class BaseTransport:
+    """
+    Base class for all MCP transport implementations.
+
+    This abstract class defines the interface that all transport implementations
+    must follow, providing a consistent way to connect to different types of
+    MCP servers regardless of the underlying transport mechanism.
+    """
+
+    async def connect(self) -> bool:
+        """
+        Connect to the MCP server.
+
+        Returns:
+            bool: True if connected successfully
+
+        Raises:
+            NotImplementedError: Subclasses must implement this method
+        """
+        raise NotImplementedError("Subclasses must implement connect()")
+
+    async def send_request(self, request_obj: Any) -> Dict[str, Any]:
+        """
+        Send a request to the MCP server.
+
+        Args:
+            request_obj: The request object to send
+
+        Returns:
+            Dict: The response from the server
+
+        Raises:
+            NotImplementedError: Subclasses must implement this method
+        """
+        raise NotImplementedError("Subclasses must implement send_request()")
+
+    async def disconnect(self) -> bool:
+        """
+        Disconnect from the MCP server.
+
+        Returns:
+            bool: True if disconnected successfully
+
+        Raises:
+            NotImplementedError: Subclasses must implement this method
+        """
+        raise NotImplementedError("Subclasses must implement disconnect()")
+
+
+class HTTPSSETransport(BaseTransport):
+    """
+    HTTP+SSE transport for MCP servers.
+
+    This transport implementation uses HTTP with Server-Sent Events (SSE)
+    for communicating with MCP servers, following the official MCP specification.
+    It handles connection establishment, message exchange, and connection
+    management.
+    """
+
+    def __init__(self, url: str, request_timeout: int = 60):
+        """
+        Initialize with server URL.
+
+        Args:
+            url: Base URL of the MCP server. Can be either the main server URL
+                or a specific SSE endpoint URL.
+            request_timeout: Timeout for requests in seconds. Controls how long
+                to wait for responses before raising a timeout error.
+        """
+        self.base_url = url
+        self.sse_url = url if "/sse" in url else f"{url.rstrip('/')}/sse"
+        self.message_url = None
+        self.session_id = None
+        self.client = httpx.AsyncClient(timeout=request_timeout)
+        self.sse_connection = None
+        self.connected = False
+        self.request_timeout = request_timeout
+        self.connect_time = None
+        self.last_activity = None
+
+    async def connect(self) -> bool:
+        """
+        Connect to the MCP server using HTTP+SSE protocol.
+
+        Establishes a connection to the MCP server by:
+        1. Connecting to the SSE endpoint
+        2. Receiving the message endpoint information
+        3. Extracting the session ID for future requests
+
+        Returns:
+            bool: True if connected successfully
+
+        Raises:
+            MCPConnectionError: If connection fails
+            MCPTimeoutError: If connection times out
+            MCPCancelledError: If connection is cancelled
+        """
+        try:
+            # Initialize SSE connection with proper headers
+            headers = {
+                "Accept": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+            }
+
+            start_time = time.time()
+            #  Info - TODO: add observability
+            #  MCP_SERVER_CONNECTING
+
+            # Use the stream context manager properly
+            async with self.client.stream(
+                "GET", self.sse_url, headers=headers, timeout=self.request_timeout
+            ) as response:
+                self.sse_connection = response
+                connection_time = time.time() - start_time
+
+                if response.status_code != 200:
+                    error_details = {
+                        "status_code": response.status_code,
+                        "url": self.sse_url,
+                        "headers": dict(response.headers),
+                        "connection_time_s": connection_time,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                    #  Error - TODO: add observability
+                    #  MCP_SERVER_CONNECTING
+                    raise MCPConnectionError(
+                        f"Failed to connect to SSE endpoint (status {response.status_code})",
+                        error_details,
+                    )
+
+                #  Info - TODO: add observability
+                #  MCP_SERVER_CONNECTING
+                #     f"SSE connection established: {response.status_code} in {connection_time:.2f}s"
+                # )
+
+                # Process SSE events to get endpoint info
+                found_endpoint = False
+                async for line in response.aiter_lines():
+                    #  Debug - TODO: add observability
+                    #  MCP_SERVER_CONNECTING
+
+                    if line.startswith("event: endpoint"):
+                        # Next line should contain the data
+                        continue
+
+                    if line.startswith("data:") and self.message_url is None:
+                        message_path = line[5:].strip()
+                        #  Info - TODO: add observability
+                        #  MCP_SERVER_CONNECTING
+
+                        # Make sure it's a full URL
+                        if message_path.startswith("http"):
+                            self.message_url = message_path
+                        else:
+                            # Handle relative paths
+                            server_base = self.base_url
+                            if "/sse" in server_base:
+                                server_base = server_base.split("/sse")[0]
+                            else:
+                                server_base = server_base.rstrip("/")
+
+                            if not message_path.startswith("/"):
+                                message_path = "/" + message_path
+                            self.message_url = server_base + message_path
+
+                        # Extract session ID from the URL
+                        if "?" in self.message_url:
+                            query = self.message_url.split("?")[1]
+                            params = dict(p.split("=") for p in query.split("&"))
+
+                            if "sessionId" in params:
+                                self.session_id = params["sessionId"]
+                            elif "session_id" in params:
+                                self.session_id = params["session_id"]
+
+                            #  MCP info - TODO: add observability
+                            #  MCP_SERVER_CONNECTING
+                            #  Info - TODO: add observability
+                            #  MCP_SERVER_CONNECTING
+                            self.connected = True
+                            self.connect_time = datetime.now()
+                            self.last_activity = self.connect_time
+                            found_endpoint = True
+                            break
+
+                # If we found the endpoint info, we're connected
+                if found_endpoint:
+                    return True
+
+                # If we got here without finding an endpoint, the connection failed
+                error_details = {
+                    "url": self.sse_url,
+                    "status_code": response.status_code,
+                    "connection_time_s": connection_time,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                #  Error - TODO: add observability
+                #  MCP_SERVER_CONNECTING
+                raise MCPConnectionError(
+                    "Failed to extract endpoint information from SSE stream", error_details
+                )
+
+        except httpx.TimeoutException as e:
+            error_details = {
+                "url": self.sse_url,
+                "timeout_seconds": self.request_timeout,
+                "error_type": "timeout",
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  MCP error - TODO: add observability
+            #  MCP_SERVER_CONNECTING
+            raise MCPTimeoutError("Connection to SSE endpoint timed out", error_details) from e
+
+        except asyncio.CancelledError:
+            #  Info - TODO: add observability
+            raise MCPCancelledError(
+                "SSE connection attempt was cancelled",
+                {"url": self.sse_url, "timestamp": datetime.now().isoformat()},
+            )
+
+        except Exception as e:
+            error_details = {
+                "url": self.sse_url,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError("Error connecting to MCP server", error_details) from e
+
+    async def listen_for_events(
+        self,
+        callback: Optional[Callable] = None,
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> AsyncGenerator:
+        """
+        Listen for SSE events from the server.
+
+        This method provides an async generator that yields SSE event lines
+        as they are received from the server, allowing for real-time event
+        processing.
+
+        Args:
+            callback: Optional callback function to call for each event line
+            cancellation_token: Optional token for cancelling the listening operation
+
+        Yields:
+            str: Each line of SSE events from the server
+
+        Raises:
+            MCPConnectionError: If there are issues with the SSE connection
+            MCPCancelledError: If the operation is cancelled
+        """
+        if not self.sse_connection:
+            #  Error - TODO: add observability
+            return
+
+        try:
+            async for line in self.sse_connection.aiter_lines():
+                if cancellation_token:
+                    cancellation_token.throw_if_cancelled()
+
+                self.last_activity = datetime.now()
+                if callback:
+                    await callback(line)
+                yield line
+        except asyncio.CancelledError:
+            #  Info - TODO: add observability
+            raise MCPCancelledError(
+                "SSE event listener was cancelled",
+                {"url": self.sse_url, "timestamp": datetime.now().isoformat()},
+            )
+        except Exception as e:
+            error_details = {
+                "url": self.sse_url,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  Error - TODO: add observability
+            raise MCPConnectionError("Error listening for SSE events", error_details) from e
+
+    async def send_request(
+        self, request_obj: Any, cancellation_token: Optional[CancellationToken] = None
+    ) -> Dict[str, Any]:
+        """
+        Send request to the MCP server.
+
+        Sends a request to the message endpoint of the MCP server and processes
+        the response, handling different response types and status codes according
+        to the MCP specification.
+
+        Args:
+            request_obj: A request object with model_dump() method or a dictionary
+                containing the request details.
+            cancellation_token: Optional token to cancel the operation if needed.
+
+        Returns:
+            Dict containing the response or status information.
+
+        Raises:
+            MCPConnectionError: If not connected to the server
+            MCPRequestError: If the request fails
+            MCPTimeoutError: If the request times out
+            MCPCancelledError: If the operation is cancelled
+        """
+        if not self.message_url or not self.session_id:
+            raise MCPConnectionError(
+                "Not connected to MCP server",
+                {
+                    "message_url_exists": self.message_url is not None,
+                    "session_id_exists": self.session_id is not None,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+
+        # Convert request to dictionary
+        if hasattr(request_obj, "model_dump"):
+            request_data = request_obj.model_dump()
+        else:
+            request_data = request_obj
+
+        # Ensure session ID is included
+        url = self.message_url
+        if "sessionId=" not in url and "session_id=" not in url:
+            separator = "&" if "?" in url else "?"
+            url += f"{separator}sessionId={self.session_id}"
+
+        method_name = request_data.get("method", "unknown")
+        request_id = request_data.get("id", str(uuid.uuid4()))
+        #  Info - TODO: add observability
+
+        try:
+            if cancellation_token:
+                cancellation_token.throw_if_cancelled()
+
+            start_time = time.time()
+
+            # Send request and handle 202 Accepted (async processing)
+            response = await self.client.post(
+                url, json=request_data, headers={"Content-Type": "application/json"}
+            )
+
+            request_time = time.time() - start_time
+            self.last_activity = datetime.now()
+
+            #  Info - TODO: add observability
+
+            if response.status_code == 202:
+                # Server accepted the request asynchronously
+                #  Info - TODO: add observability
+                return {
+                    "status": "accepted",
+                    "request_id": request_id,
+                    "method": method_name,
+                    "request_time_s": request_time,
+                }
+
+            elif response.status_code < 300:
+                # Server returned immediate result
+                try:
+                    return response.json()
+                except Exception:
+                    resp_text = (
+                        response.text[:100] + "..." if len(response.text) > 100 else response.text
+                    )
+                    #  Warning - TODO: add observability
+                    #     f"Non-JSON response with status {response.status_code}: {resp_text}"
+                    # )
+                    return {
+                        "status": "success",
+                        "response": response.text,
+                        "request_id": request_id,
+                        "method": method_name,
+                        "request_time_s": request_time,
+                    }
+            else:
+                error_details = {
+                    "status_code": response.status_code,
+                    "url": url,
+                    "method": method_name,
+                    "request_id": request_id,
+                    "response_text": response.text[:500],
+                    "request_time_s": request_time,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                #  Error - TODO: add observability
+                raise MCPRequestError(
+                    f"Request failed with status {response.status_code}", error_details
+                )
+
+        except httpx.TimeoutException as e:
+            error_details = {
+                "url": url,
+                "method": method_name,
+                "request_id": request_id,
+                "timeout_seconds": self.request_timeout,
+                "error_type": "timeout",
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  Error - TODO: add observability
+            raise MCPTimeoutError("Request timed out", error_details) from e
+
+        except asyncio.CancelledError:
+            #  Info - TODO: add observability
+            raise MCPCancelledError(
+                "Request was cancelled",
+                {
+                    "url": url,
+                    "method": method_name,
+                    "request_id": request_id,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+
+        except Exception as e:
+            if isinstance(e, MCPError):
+                raise
+
+            error_details = {
+                "url": url,
+                "method": method_name,
+                "request_id": request_id,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  Error - TODO: add observability
+            raise MCPRequestError("Error sending request", error_details) from e
+
+    async def disconnect(self) -> bool:
+        """
+        Disconnect from MCP server.
+
+        Properly closes the SSE connection and HTTP client to ensure
+        clean disconnection from the MCP server.
+
+        Returns:
+            bool: True if disconnected successfully
+
+        Raises:
+            MCPConnectionError: If there are issues during disconnection
+        """
+        try:
+            if self.sse_connection:
+                await self.sse_connection.aclose()
+
+            await self.client.aclose()
+            self.connected = False
+            #  MCP info - TODO: add observability
+            return True
+        except Exception as e:
+            error_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  Error - TODO: add observability
+            raise MCPConnectionError("Error disconnecting from MCP server", error_details) from e
+
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about this connection.
+
+        Returns information about the connection status, timing, and activity,
+        useful for monitoring and debugging.
+
+        Returns:
+            Dict with connection statistics including status, URLs,
+            timing information, and activity metrics
+        """
+        stats = {
+            "connected": self.connected,
+            "type": "http",
+            "base_url": self.base_url,
+            "session_id": self.session_id,
+            "current_time": datetime.now().isoformat(),
+        }
+
+        if self.connect_time:
+            stats["connect_time"] = self.connect_time.isoformat()
+            stats["connection_age_s"] = (datetime.now() - self.connect_time).total_seconds()
+
+        if self.last_activity:
+            stats["last_activity"] = self.last_activity.isoformat()
+            stats["idle_time_s"] = (datetime.now() - self.last_activity).total_seconds()
+
+        return stats
+
+
+class CommandLineTransport(BaseTransport):
+    """
+    Command-line transport for MCP servers.
+
+    This transport implementation launches MCP servers as local processes
+    and communicates with them via standard input/output. It's useful for
+    running local tool servers that don't require HTTP communication.
+    """
+
+    def __init__(self, command: str):
+        """
+        Initialize with command to start the server.
+
+        Args:
+            command: Shell command to start the server process. This should
+                launch an executable that implements the MCP protocol over
+                standard input/output.
+        """
+        self.command = command
+        self.process = None
+        self.stdin = None
+        self.stdout = None
+        self.connected = False
+        self.connect_time = None
+        self.last_activity = None
+        self.session_id = str(uuid.uuid4())  # Generate a unique session ID
+
+    async def connect(self) -> bool:
+        """
+        Start the server process and establish connection.
+
+        Launches the MCP server as a subprocess and sets up communication
+        channels via standard input/output.
+
+        Returns:
+            bool: True if the server was started successfully
+
+        Raises:
+            MCPConnectionError: If the server process cannot be started
+            MCPCancelledError: If the operation is cancelled
+        """
+        try:
+            #  MCP info - TODO: add observability
+            start_time = time.time()
+
+            # Start the process
+            self.process = await asyncio.create_subprocess_shell(
+                self.command,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            connection_time = time.time() - start_time
+
+            if self.process:
+                self.stdin = self.process.stdin
+                self.stdout = self.process.stdout
+                self.connected = True
+                self.connect_time = datetime.now()
+                self.last_activity = self.connect_time
+
+                #  Info - TODO: add observability
+                #     f"MCP server process started with PID {self.process.pid} "
+                #     f"in {connection_time:.2f}s"
+                # )
+                return True
+            else:
+                error_details = {
+                    "command": self.command,
+                    "connection_time_s": connection_time,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                #  MCP error - TODO: add observability
+                raise MCPConnectionError("Failed to start MCP server process", error_details)
+
+        except asyncio.CancelledError:
+            #  Info - TODO: add observability
+            raise MCPCancelledError(
+                "Process start was cancelled",
+                {"command": self.command, "timestamp": datetime.now().isoformat()},
+            )
+
+        except Exception as e:
+            error_details = {
+                "command": self.command,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError("Error starting MCP server process", error_details) from e
+
+    async def send_request(
+        self, request_obj: Any, cancellation_token: Optional[CancellationToken] = None
+    ) -> Dict[str, Any]:
+        """
+        Send a request to the MCP server process.
+
+        Sends a request to the MCP server via standard input and reads the
+        response from standard output, following the MCP JSON-RPC protocol.
+
+        Args:
+            request_obj: A request object with model_dump() method or a dictionary
+                containing the request details.
+            cancellation_token: Optional token to cancel the operation if needed.
+
+        Returns:
+            Dict containing the response from the server.
+
+        Raises:
+            MCPConnectionError: If not connected to the server
+            MCPRequestError: If the request fails
+            MCPCancelledError: If the operation is cancelled
+        """
+        if not self.connected or not self.stdin or not self.stdout:
+            raise MCPConnectionError(
+                "Not connected to MCP server process",
+                {
+                    "connected": self.connected,
+                    "stdin_exists": self.stdin is not None,
+                    "stdout_exists": self.stdout is not None,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+
+        # Convert request to dictionary
+        if hasattr(request_obj, "model_dump"):
+            request_data = request_obj.model_dump()
+        else:
+            request_data = request_obj
+
+        method_name = request_data.get("method", "unknown")
+        request_id = request_data.get("id", str(uuid.uuid4()))
+        #  Info - TODO: add observability
+
+        try:
+            if cancellation_token:
+                cancellation_token.throw_if_cancelled()
+
+            start_time = time.time()
+
+            # Send request to process stdin
+            request_json = json.dumps(request_data) + "\n"
+            self.stdin.write(request_json.encode())
+            await self.stdin.drain()
+
+            # Read response from process stdout
+            response_line = await self.stdout.readline()
+
+            request_time = time.time() - start_time
+            self.last_activity = datetime.now()
+
+            #  Info - TODO: add observability
+
+            if not response_line:
+                error_details = {
+                    "method": method_name,
+                    "request_id": request_id,
+                    "request_time_s": request_time,
+                    "timestamp": datetime.now().isoformat(),
+                }
+                #  MCP error - TODO: add observability
+                raise MCPRequestError("Empty response from MCP server process", error_details)
+
+            try:
+                response_data = json.loads(response_line.decode())
+                return response_data
+            except json.JSONDecodeError as e:
+                response_text = (
+                    response_line.decode()[:100] + "..."
+                    if len(response_line) > 100
+                    else response_line.decode()
+                )
+                error_details = {
+                    "method": method_name,
+                    "request_id": request_id,
+                    "response_text": response_text,
+                    "request_time_s": request_time,
+                    "error_type": "json_decode_error",
+                    "error_message": str(e),
+                    "timestamp": datetime.now().isoformat(),
+                }
+                #  Error - TODO: add observability
+                raise MCPRequestError(
+                    "Invalid JSON response from MCP server process", error_details
+                ) from e
+
+        except asyncio.CancelledError:
+            #  Info - TODO: add observability
+            raise MCPCancelledError(
+                "Request was cancelled",
+                {
+                    "method": method_name,
+                    "request_id": request_id,
+                    "timestamp": datetime.now().isoformat(),
+                },
+            )
+
+        except Exception as e:
+            if isinstance(e, MCPError):
+                raise
+
+            error_details = {
+                "method": method_name,
+                "request_id": request_id,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  Error - TODO: add observability
+            raise MCPRequestError(
+                "Error sending request to MCP server process", error_details
+            ) from e
+
+    async def disconnect(self) -> bool:
+        """
+        Terminate the server process.
+
+        Properly shuts down the MCP server process by closing stdin and
+        terminating the process if necessary.
+
+        Returns:
+            bool: True if the server process was terminated successfully
+
+        Raises:
+            MCPConnectionError: If there are issues during termination
+        """
+        try:
+            if self.process:
+                # Close stdin to signal end of input
+                if self.stdin:
+                    self.stdin.close()
+
+                # Terminate process if it's still running
+                if self.process.returncode is None:
+                    #  MCP info - TODO: add observability
+                    self.process.terminate()
+
+                    # Wait for process to terminate
+                    try:
+                        await asyncio.wait_for(self.process.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        #  Warning - TODO: add observability
+                        #     f"Process didn't terminate, killing it (PID {self.process.pid})"
+                        # )
+                        self.process.kill()
+
+                # Reset state
+                self.process = None
+                self.stdin = None
+                self.stdout = None
+                self.connected = False
+
+                #  MCP info - TODO: add observability
+                return True
+
+            return True  # Already disconnected
+
+        except Exception as e:
+            error_details = {
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+                "timestamp": datetime.now().isoformat(),
+            }
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError(
+                "Error disconnecting from MCP server process", error_details
+            ) from e
+
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """
+        Get statistics about this connection.
+
+        Returns information about the server process, connection timing, and
+        activity, useful for monitoring and debugging.
+
+        Returns:
+            Dict with connection statistics including process details,
+            timing information, and activity metrics
+        """
+        stats = {
+            "connected": self.connected,
+            "type": "command",
+            "command": self.command,
+            "session_id": self.session_id,
+            "current_time": datetime.now().isoformat(),
+        }
+
+        if self.process:
+            stats["pid"] = self.process.pid
+            stats["returncode"] = self.process.returncode
+
+        if self.connect_time:
+            stats["connect_time"] = self.connect_time.isoformat()
+            stats["connection_age_s"] = (datetime.now() - self.connect_time).total_seconds()
+
+        if self.last_activity:
+            stats["last_activity"] = self.last_activity.isoformat()
+            stats["idle_time_s"] = (datetime.now() - self.last_activity).total_seconds()
+
+        return stats
+
+
+class MCPTransportFactory:
+    """Factory class for creating MCP transport instances."""
+
+    @staticmethod
+    def create_transport(
+        url: Optional[str] = None, command: Optional[str] = None, **kwargs
+    ) -> BaseTransport:
+        """Create a transport instance based on parameters.
+
+        Args:
+            url: URL for HTTP-based MCP servers
+            command: Command for command-line based MCP servers
+            **kwargs: Additional parameters for transport initialization
+
+        Returns:
+            An instance of BaseTransport
+
+        Raises:
+            ValueError: If neither url nor command is provided, or if both are provided
+        """
+        #  Info - TODO: add observability
+
+        if url is not None and command is not None:
+            raise ValueError(
+                "Cannot provide both url and command. "
+                "Use url for HTTP servers and command for command-line servers."
+            )
+
+        if url is None and command is None:
+            raise ValueError("Must provide either url or command.")
+
+        if url is not None:
+            request_timeout = kwargs.get("request_timeout", 60)
+            return HTTPSSETransport(url, request_timeout)
+        else:  # command is not None
+            return CommandLineTransport(command)
+
+    @staticmethod
+    def supports_parameters(url: Optional[str] = None, command: Optional[str] = None) -> bool:
+        """Check if the provided parameters are supported.
+
+        Args:
+            url: URL for HTTP-based MCP servers
+            command: Command for command-line based MCP servers
+
+        Returns:
+            True if parameters are supported, False otherwise
+        """
+        if url is not None and command is not None:
+            return False
+        if url is None and command is None:
+            return False
+        return True
+
+
+class MCPServerClient:
+    """
+    Client for a specific MCP server.
+
+    This class manages a connection to an MCP server using the MCP SDK.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        url: Optional[str] = None,
+        command: Optional[str] = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        request_timeout: int = 60,
+    ):
+        """
+        Initialize an MCP server client.
+
+        Args:
+            name: The name of the server (for identification)
+            url: The URL for HTTP-based MCP servers
+            command: The command for command-line MCP servers
+            credentials: Credentials for the server (optional)
+            request_timeout: Timeout for requests in seconds
+        """
+        self.name = name
+        self.url = url
+        self.command = command
+        self.credentials = credentials or {}
+        self.client = None
+        self.connected = False
+        self.transport = None
+        self.request_timeout = request_timeout
+        self.active_requests = {}  # Map of request_id -> CancellationToken
+
+    async def connect(self) -> bool:
+        """
+        Connect to the MCP server.
+
+        Returns:
+            bool: True if connection was successful
+
+        Raises:
+            MCPConnectionError: If connection fails
+        """
+        try:
+            # Create transport using factory
+            self.transport = MCPTransportFactory.create_transport(
+                url=self.url, command=self.command, request_timeout=self.request_timeout
+            )
+
+            # Connect the transport
+            await self.transport.connect()
+
+            # If we get here, the connection was successful
+            # (otherwise an exception would have been raised)
+            self.connected = True
+
+            transport_type = "http" if self.url else "command"
+            #  Info - TODO: add observability
+            #     f"Successfully connected to MCP server '{self.name}' "
+            #     f"using {transport_type} transport"
+            # )
+
+            return True
+
+        except Exception as e:
+            error_details = {
+                "server_name": self.name,
+                "url": self.url,
+                "command": self.command,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            }
+
+            if isinstance(e, MCPError):
+                # Propagate MCP errors with additional context
+                e.details.update({"server_name": self.name})
+                raise
+
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError(
+                f"Failed to connect to MCP server '{self.name}'", error_details
+            ) from e
+
+    async def disconnect(self) -> bool:
+        """
+        Disconnect from the MCP server.
+
+        Returns:
+            bool: True if disconnection was successful
+        """
+        try:
+            # Cancel any active requests
+            for request_id, token in self.active_requests.items():
+                #  Info - TODO: add observability
+                token.cancel()
+
+            self.active_requests.clear()
+
+            if self.transport:
+                await self.transport.disconnect()
+
+            self.connected = False
+            self.transport = None
+            #  MCP info - TODO: add observability
+
+            return True
+
+        except Exception as e:
+            error_details = {
+                "server_name": self.name,
+                "url": self.url,
+                "command": self.command,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            }
+
+            if isinstance(e, MCPError):
+                # Propagate MCP errors with additional context
+                e.details.update({"server_name": self.name})
+                raise
+
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError(
+                f"Error disconnecting from MCP server '{self.name}'", error_details
+            ) from e
+
+    async def send_message(
+        self,
+        method: str,
+        params: Dict[str, Any],
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> Dict[str, Any]:
+        """
+        Send a message to the MCP server.
+
+        Args:
+            method: The method to call
+            params: The parameters to pass to the method
+            cancellation_token: Optional token to cancel the operation
+
+        Returns:
+            Dict[str, Any]: The response from the server
+
+        Raises:
+            MCPConnectionError: If not connected to an MCP server
+            MCPRequestError: If the request fails
+            MCPTimeoutError: If the request times out
+            MCPCancelledError: If the request is cancelled
+        """
+        if not self.connected or not self.transport:
+            raise MCPConnectionError(
+                f"Not connected to MCP server '{self.name}'",
+                {
+                    "server_name": self.name,
+                    "connected": self.connected,
+                    "transport_exists": self.transport is not None,
+                },
+            )
+
+        # Create a new request ID
+        request_id = str(uuid.uuid4())
+
+        # Create a new cancellation token if one wasn't provided
+        own_token = cancellation_token is None
+        if own_token:
+            cancellation_token = CancellationToken()
+
+        # Create the request object
+        request = JSONRPCRequest(jsonrpc="2.0", method=method, params=params, id=request_id)
+
+        try:
+            # Track the request
+            self.active_requests[request_id] = cancellation_token
+
+            # Add credentials if provided
+            if self.credentials and params is not None:
+                # Merge credentials with params
+                for key, value in self.credentials.items():
+                    if key not in params:
+                        request.params[key] = value
+
+            # Send the request
+            #  MCP info - TODO: add observability
+            # Convert the request to a dict for the transport
+            request_dict = request.model_dump()
+            response = await self.transport.send_request(request_dict, cancellation_token)
+
+            return response
+
+        except Exception as e:
+            error_details = {
+                "server_name": self.name,
+                "method": method,
+                "request_id": request_id,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            }
+
+            if isinstance(e, MCPError):
+                # Propagate MCP errors with additional context
+                e.details.update({"server_name": self.name})
+                raise
+
+            #  MCP error - TODO: add observability
+            raise MCPRequestError(
+                f"Error sending message to MCP server '{self.name}'", error_details
+            ) from e
+
+        finally:
+            # Clean up
+            if request_id in self.active_requests:
+                del self.active_requests[request_id]
+
+    async def execute_tool(
+        self,
+        tool_name: str,
+        params: Dict[str, Any],
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute a tool on the MCP server.
+
+        Args:
+            tool_name: The name of the tool to execute
+            params: The parameters to pass to the tool
+            cancellation_token: Optional token to cancel the operation
+
+        Returns:
+            Dict[str, Any]: The result of the tool execution
+        """
+        return await self.send_message(tool_name, params, cancellation_token)
+
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """Get statistics about this connection."""
+        stats = {
+            "server_name": self.name,
+            "connected": self.connected,
+            "url": self.url,
+            "command": self.command,
+            "active_requests": len(self.active_requests),
+            "current_time": datetime.now().isoformat(),
+        }
+
+        # Add transport-specific stats if available
+        if self.transport and hasattr(self.transport, "get_connection_stats"):
+            transport_stats = self.transport.get_connection_stats()
+            stats.update(transport_stats)
+
+        return stats
+
+    def cancel_all_requests(self) -> int:
+        """Cancel all active requests.
+
+        Returns:
+            int: Number of requests cancelled
+        """
+        count = len(self.active_requests)
+
+        for request_id, token in self.active_requests.items():
+            #  Info - TODO: add observability
+            token.cancel()
+
+        self.active_requests.clear()
+        return count
+
+
+class MCPHandler:
+    """
+    Handler for Model Context Protocol (MCP) servers.
+
+    This class manages connections to MCP servers and handles message processing.
+    """
+
+    def __init__(self, model):
+        """
+        Initialize the MCP handler.
+
+        Args:
+            model: The model used for extracting tool calls
+        """
+        self.model = model
+        self.active_connections = {}  # Map of server_name -> MCPServerClient
+        self.available_tools = {}  # Map of tool_name -> server_name
+        self.cancellation_tokens = {}  # Map of operation_id -> CancellationToken
+
+    async def connect_server(
+        self,
+        name: str,
+        url: Optional[str] = None,
+        command: Optional[str] = None,
+        credentials: Optional[Dict[str, Any]] = None,
+        request_timeout: int = 60,
+    ) -> bool:
+        """
+        Connect to an MCP server.
+
+        Args:
+            name: The name of the server (for identification)
+            url: The URL for HTTP-based MCP servers
+            command: The command for command-line MCP servers
+            credentials: Credentials for the server (optional)
+            request_timeout: Timeout for requests in seconds
+
+        Returns:
+            bool: True if connection was successful
+
+        Raises:
+            MCPConnectionError: If connection fails
+            ValueError: If neither url nor command is provided, or if both are provided
+        """
+        # Check if we're already connected to this server
+        if name in self.active_connections:
+            #  MCP warning - TODO: add observability
+            await self.disconnect_server(name)
+
+        # Check if parameters are supported
+        if not MCPTransportFactory.supports_parameters(url=url, command=command):
+            if url is not None and command is not None:
+                raise ValueError(
+                    "Cannot provide both url and command. "
+                    "Use url for HTTP servers and command for command-line servers."
+                )
+            else:  # url is None and command is None
+                raise ValueError("Must provide either url or command.")
+
+        try:
+            # Create a new client
+            client = MCPServerClient(
+                name=name,
+                url=url,
+                command=command,
+                credentials=credentials,
+                request_timeout=request_timeout,
+            )
+
+            # Connect the client
+            await client.connect()
+
+            # Store the client
+            self.active_connections[name] = client
+
+            #  MCP info - TODO: add observability
+            return True
+
+        except Exception as e:
+            error_details = {
+                "server_name": name,
+                "url": url,
+                "command": command,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            }
+
+            if isinstance(e, MCPError):
+                # Just propagate MCP errors
+                raise
+
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError(
+                f"Failed to connect to MCP server '{name}'", error_details
+            ) from e
+
+    async def disconnect_server(self, name: str) -> bool:
+        """
+        Disconnect from an MCP server.
+
+        Args:
+            name: The name of the server to disconnect from
+
+        Returns:
+            bool: True if disconnection was successful
+        """
+        if name not in self.active_connections:
+            #  MCP warning - TODO: add observability
+            return False
+
+        try:
+            # Get the client
+            client = self.active_connections[name]
+
+            # Disconnect the client
+            await client.disconnect()
+
+            # Remove from active connections
+            del self.active_connections[name]
+
+            #  MCP info - TODO: add observability
+            return True
+
+        except Exception as e:
+            error_details = {
+                "server_name": name,
+                "error_type": type(e).__name__,
+                "error_message": str(e),
+            }
+
+            if isinstance(e, MCPError):
+                # Just propagate MCP errors
+                raise
+
+            #  MCP error - TODO: add observability
+            raise MCPConnectionError(
+                f"Error disconnecting from MCP server '{name}'", error_details
+            ) from e
+
+    async def process_message(
+        self, message: Dict[str, Any], cancellation_token: Optional[CancellationToken] = None
+    ) -> Dict[str, Any]:
+        """
+        Process a message that may contain tool calls to MCP servers.
+
+        Args:
+            message: The message to process
+            cancellation_token: Optional token to cancel the operation
+
+        Returns:
+            Dict[str, Any]: The processed message
+        """
+        # If message doesn't contain tool calls, just return it
+        if "tool_calls" not in message.get("content", {}):
+            return message
+
+        # Create a new cancellation token if one wasn't provided
+        operation_id = str(uuid.uuid4())
+        own_token = cancellation_token is None
+        if own_token:
+            cancellation_token = CancellationToken()
+            self.cancellation_tokens[operation_id] = cancellation_token
+
+        try:
+            # Get the tool calls
+            tool_calls = message["content"]["tool_calls"]
+
+            # Process each tool call
+            for tool_call in tool_calls:
+                try:
+                    if cancellation_token:
+                        cancellation_token.throw_if_cancelled()
+
+                    # Extract tool details
+                    tool_name = tool_call.get("name", "")
+                    tool_params = tool_call.get("parameters", {})
+
+                    # Find the server for this tool
+                    server_name = self._get_server_for_tool(tool_name)
+                    if not server_name:
+                        #  Warning - TODO: add observability
+                        tool_call["output"] = {
+                            "error": f"No server registered for tool '{tool_name}'"
+                        }
+                        continue
+
+                    # Execute the tool
+                    #  Info - TODO: add observability
+                    result = await self.execute_tool(
+                        server_name, tool_name, tool_params, cancellation_token
+                    )
+
+                    # Store the result
+                    tool_call["output"] = result
+
+                except Exception as e:
+                    error_details = {
+                        "tool_name": tool_name if "tool_name" in locals() else "unknown",
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                    }
+
+                    #  Error - TODO: add observability
+                    tool_call["output"] = {"error": str(e), "details": error_details}
+
+            return message
+
+        finally:
+            # Clean up
+            if own_token and operation_id in self.cancellation_tokens:
+                del self.cancellation_tokens[operation_id]
+
+    async def execute_tool(
+        self,
+        server_name: str,
+        tool_name: str,
+        params: Dict[str, Any],
+        cancellation_token: Optional[CancellationToken] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute a tool on an MCP server.
+
+        Args:
+            server_name: The name of the server to execute the tool on
+            tool_name: The name of the tool to execute
+            params: The parameters to pass to the tool
+            cancellation_token: Optional token to cancel the operation
+
+        Returns:
+            Dict[str, Any]: The result of the tool execution
+
+        Raises:
+            MCPConnectionError: If not connected to the specified server
+        """
+        if server_name not in self.active_connections:
+            raise MCPConnectionError(f"Not connected to MCP server '{server_name}'")
+
+        client = self.active_connections[server_name]
+        return await client.execute_tool(tool_name, params, cancellation_token)
+
+    async def list_tools(self, server_name: str) -> List[Dict[str, Any]]:
+        """
+        List tools available on an MCP server.
+
+        Args:
+            server_name: The name of the server to list tools for
+
+        Returns:
+            List[Dict[str, Any]]: The list of available tools
+        """
+        if server_name not in self.active_connections:
+            raise MCPConnectionError(f"Not connected to MCP server '{server_name}'")
+
+        client = self.active_connections[server_name]
+
+        # The 'list_tools' method is a standard MCP method
+        try:
+            result = await client.send_message("list_tools", {})
+            return result.get("result", [])
+        except Exception as e:
+            #  Error - TODO: add observability
+            _ = e  # remove this after implementing observability
+            raise
+
+    def _get_server_for_tool(self, tool_name: str) -> Optional[str]:
+        """
+        Get the server name for a tool.
+
+        Args:
+            tool_name: The name of the tool
+
+        Returns:
+            str: The name of the server for this tool, or None if not found
+        """
+        # First check if we have a mapping for this tool
+        if tool_name in self.available_tools:
+            return self.available_tools[tool_name]
+
+        # Otherwise, assume the tool is on a server with the same name
+        if tool_name in self.active_connections:
+            return tool_name
+
+        # As a fallback, check if any server name is a prefix of the tool name
+        for server_name in self.active_connections:
+            if tool_name.startswith(f"{server_name}."):
+                return server_name
+
+        return None
+
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """Get statistics about all connections."""
+        stats = {
+            "active_connections": len(self.active_connections),
+            "registered_tools": len(self.available_tools),
+            "active_operations": len(self.cancellation_tokens),
+            "current_time": datetime.now().isoformat(),
+            "connections": {},
+        }
+
+        # Add stats for each connection
+        for name, client in self.active_connections.items():
+            if hasattr(client, "get_connection_stats"):
+                stats["connections"][name] = client.get_connection_stats()
+            else:
+                stats["connections"][name] = {"connected": client.connected}
+
+        return stats
+
+    def cancel_all_operations(self) -> int:
+        """Cancel all active operations.
+
+        Returns:
+            int: Number of operations cancelled
+        """
+        count = len(self.cancellation_tokens)
+
+        for operation_id, token in self.cancellation_tokens.items():
+            #  Info - TODO: add observability
+            token.cancel()
+
+        self.cancellation_tokens.clear()
+
+        # Also cancel operations in each client
+        for name, client in self.active_connections.items():
+            if hasattr(client, "cancel_all_requests"):
+                client_count = client.cancel_all_requests()
+                #  Info - TODO: add observability
+                count += client_count
+
+        return count

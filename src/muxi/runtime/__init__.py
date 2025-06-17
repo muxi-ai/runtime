@@ -19,8 +19,8 @@
 # =============================================================================
 
 # Import core classes for direct access
-from .overlord import Overlord
-from .llm import LLM
+from .formation.overlord import Overlord
+from .services.llm import LLM
 from .utils.version import get_version
 
 
@@ -37,6 +37,7 @@ __url__ = "https://github.com/muxi-ai"
 __all__ = [
     "Overlord",
     "LLM",
+    "observability",
 ]
 
 # Public API methods for Overlord (exposed when importing Overlord directly):

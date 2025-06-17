@@ -8,7 +8,7 @@ across the application.
 from nanoid import generate
 
 # Observability integration
-from .. import observability
+from ..services import observability
 
 
 def generate_nanoid(size: int = 21) -> str:

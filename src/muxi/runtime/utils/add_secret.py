@@ -16,7 +16,7 @@ import warnings
 from pathlib import Path
 import os
 
-from ..secrets_manager import SecretsManager
+from ..services.secrets import SecretsManager
 
 
 # Suppress common warnings that clutter the output

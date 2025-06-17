@@ -8,7 +8,7 @@ import os
 from typing import List
 
 # Observability integration
-from .. import observability
+from ..services import observability
 
 
 def load_document(file_path: str) -> str:

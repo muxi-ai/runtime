@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .user_dirs import user_cache_dir
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -42,7 +43,7 @@ REGISTRY_CONFIG = {
     "host": "0.0.0.0",
     "port": 9090,
     "log_level": "info",
-    "data_dir": ".registry_data",
+    "data_dir": str(user_cache_dir("a2a_registry")),
     "max_agents": 1000,
     "agent_ttl_hours": 24,
 }

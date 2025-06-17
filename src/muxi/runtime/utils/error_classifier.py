@@ -9,7 +9,7 @@ import asyncio
 from typing import Type, Dict
 
 from ..types.errors import ERROR_CODE_REGISTRY
-from .. import observability
+from ..services import observability
 
 
 # Exception type to error code mapping
