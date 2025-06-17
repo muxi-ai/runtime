@@ -52,7 +52,7 @@ async def test_registration():
 
     # Start formation server
     print("\n🚀 Starting formation server...")
-    result = await overlord.start_formation_server()
+    result = await overlord.start_a2a_server()
     print(f"Formation server result: {result}")
 
     # Check registry again
@@ -68,7 +68,7 @@ async def test_registration():
 
     # Cleanup
     print("\n🧹 Cleaning up...")
-    await overlord.stop_formation_server()
+    await overlord.stop_a2a_server()
     print("✅ Cleanup complete")
 
 

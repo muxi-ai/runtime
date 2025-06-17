@@ -100,12 +100,12 @@ async def formation_overlord():
         )
 
     # Start formation server
-    await overlord.start_formation_server()
+    await overlord.start_a2a_server()
 
     yield overlord
 
     # Cleanup
-    await overlord.stop_formation_server()
+    await overlord.stop_a2a_server()
 
 
 @pytest.mark.asyncio
@@ -351,7 +351,7 @@ class TestSecurityAndValidation:
             a2a_external=True
         )
 
-        await overlord.start_formation_server()
+        await overlord.start_a2a_server()
 
         try:
             # Test that localhost (untrusted) is rejected
@@ -369,7 +369,7 @@ class TestSecurityAndValidation:
                     assert response.status == 403
 
         finally:
-            await overlord.stop_formation_server()
+            await overlord.stop_a2a_server()
 
     async def test_agent_a2a_disabled(self, formation_overlord):
         """Test that agents with A2A disabled reject external messages"""
@@ -403,7 +403,7 @@ class TestSecurityAndValidation:
 
 
 @pytest.mark.asyncio
-async def test_formation_server_performance():
+async def test_a2a_server_performance():
     """Test performance characteristics of formation server"""
     formation_config = {
         "name": "performance-test",
@@ -432,7 +432,7 @@ async def test_formation_server_performance():
             a2a_external=True
         )
 
-    await overlord.start_formation_server()
+    await overlord.start_a2a_server()
 
     try:
         # Test rapid sequential requests
@@ -465,7 +465,7 @@ async def test_formation_server_performance():
         print(f"✅ Handled 50 requests in {duration:.2f} seconds ({50/duration:.1f} req/sec)")
 
     finally:
-        await overlord.stop_formation_server()
+        await overlord.stop_a2a_server()
 
 
 if __name__ == "__main__":

@@ -53,12 +53,12 @@ async def optimal_formation():
         )
 
     # Start formation server
-    await overlord.start_formation_server()
+    await overlord.start_a2a_server()
 
     yield overlord
 
     # Cleanup
-    await overlord.stop_formation_server()
+    await overlord.stop_a2a_server()
 
 
 class TestOptimalA2AArchitecture:
@@ -142,14 +142,14 @@ class TestOptimalA2AArchitecture:
             # Expected to fail in test environment, but validates the path
             assert "external" in str(e).lower() or "connection" in str(e).lower()
 
-    async def test_formation_server_direct_agent_access(self, optimal_formation):
+    async def test_server_direct_agent_access(self, optimal_formation):
         """Test: Formation Server has direct access to agents"""
         overlord = optimal_formation
 
         # Verify formation server has direct access to agents
-        formation_server = overlord.formation_server
-        assert formation_server is not None
-        assert formation_server.overlord == overlord
+        server = overlord.server
+        assert server is not None
+        assert server.overlord == overlord
 
         # Test that formation server can directly route to agents
         # without going through overlord.route_a2a_message
@@ -199,7 +199,7 @@ class TestOptimalA2AArchitecture:
         )
         assert success_count == 3
 
-    async def test_formation_server_agent_discovery(self, optimal_formation):
+    async def test_server_agent_discovery(self, optimal_formation):
         """Test: Formation server provides agent discovery without overlord routing"""
         overlord = optimal_formation
 
@@ -225,8 +225,8 @@ class TestOptimalA2AArchitecture:
 
         # Overlord should provide these management functions
         assert hasattr(overlord, 'create_agent')
-        assert hasattr(overlord, 'start_formation_server')
-        assert hasattr(overlord, 'stop_formation_server')
+        assert hasattr(overlord, 'start_server')
+        assert hasattr(overlord, 'stop_server')
         assert hasattr(overlord, 'register_agent_with_external_registry')
         assert hasattr(overlord, 'discover_external_agents')
 

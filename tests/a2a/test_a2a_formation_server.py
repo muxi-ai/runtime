@@ -12,7 +12,7 @@ import aiohttp
 
 from src.muxi.runtime.overlord import Overlord
 from src.muxi.runtime.llm import LLM
-from src.muxi.runtime.a2a.formation_server import A2AFormationServer
+from src.muxi.runtime.a2a.server import A2AServer
 
 
 @pytest.fixture
@@ -57,38 +57,38 @@ def mock_model():
     return model
 
 
-class TestA2AFormationServerIntegration:
+class TestA2AServerIntegration:
     """Test A2A Formation Server integration with Overlord"""
 
-    def test_formation_server_initialization_enabled(self, formation_config, mock_model):
+    def test_server_initialization_enabled(self, formation_config, mock_model):
         """Test that formation server is initialized when enabled"""
         overlord = Overlord(formation_config=formation_config)
 
         # Verify formation server was created
-        assert overlord.formation_server is not None
-        assert isinstance(overlord.formation_server, A2AFormationServer)
-        assert overlord.formation_server.port == 8182
-        assert overlord.formation_server.host == "127.0.0.1"
-        assert overlord.formation_server.formation_name == "test-formation"
-        assert overlord.formation_server.auth_mode == "none"
-        assert overlord.formation_server.trusted_endpoints == ["127.0.0.1", "localhost"]
+        assert overlord.server is not None
+        assert isinstance(overlord.server, A2AServer)
+        assert overlord.server.port == 8182
+        assert overlord.server.host == "127.0.0.1"
+        assert overlord.server.formation_name == "test-formation"
+        assert overlord.server.auth_mode == "none"
+        assert overlord.server.trusted_endpoints == ["127.0.0.1", "localhost"]
 
-    def test_formation_server_initialization_disabled(self, disabled_formation_config, mock_model):
+    def test_server_initialization_disabled(self, disabled_formation_config, mock_model):
         """Test that formation server is not initialized when disabled"""
         overlord = Overlord(formation_config=disabled_formation_config)
 
         # Verify formation server was not created
-        assert overlord.formation_server is None
+        assert overlord.server is None
 
-    def test_formation_server_initialization_no_config(self, mock_model):
+    def test_server_initialization_no_config(self, mock_model):
         """Test that formation server is not initialized without config"""
         overlord = Overlord()
 
         # Verify formation server was not created
-        assert overlord.formation_server is None
+        assert overlord.server is None
 
     @pytest.mark.asyncio
-    async def test_formation_server_lifecycle(self, formation_config, mock_model):
+    async def test_server_lifecycle(self, formation_config, mock_model):
         """Test starting and stopping the formation server"""
         overlord = Overlord(formation_config=formation_config)
 
@@ -100,26 +100,26 @@ class TestA2AFormationServerIntegration:
         )
 
         # Start the formation server
-        start_result = await overlord.start_formation_server()
+        start_result = await overlord.start_a2a_server()
         assert start_result["status"] == "started"
         assert start_result["port"] == 8182
         assert "test-agent" in start_result["agents"]
 
         # Check server status
-        status = await overlord.get_formation_server_status()
+        status = await overlord.get_server_status()
         assert status["running"] is True
         assert status["port"] == 8182
 
         # Stop the formation server
-        stop_result = await overlord.stop_formation_server()
+        stop_result = await overlord.stop_a2a_server()
         assert stop_result["status"] == "stopped"
 
         # Check server status after stopping
-        status = await overlord.get_formation_server_status()
+        status = await overlord.get_server_status()
         assert status["running"] is False
 
     @pytest.mark.asyncio
-    async def test_formation_server_health_endpoints(self, formation_config, mock_model):
+    async def test_server_health_endpoints(self, formation_config, mock_model):
         """Test that formation server health endpoints work"""
         overlord = Overlord(formation_config=formation_config)
 
@@ -132,7 +132,7 @@ class TestA2AFormationServerIntegration:
         )
 
         # Start the formation server
-        await overlord.start_formation_server()
+        await overlord.start_a2a_server()
 
         try:
             # Test health endpoint
@@ -167,7 +167,7 @@ class TestA2AFormationServerIntegration:
 
         finally:
             # Clean up
-            await overlord.stop_formation_server()
+            await overlord.stop_a2a_server()
 
     @pytest.mark.asyncio
     async def test_agent_message_routing(self, formation_config, mock_model):
@@ -183,7 +183,7 @@ class TestA2AFormationServerIntegration:
         )
 
         # Start the formation server
-        await overlord.start_formation_server()
+        await overlord.start_a2a_server()
 
         try:
             # Test agent message endpoint
@@ -212,7 +212,7 @@ class TestA2AFormationServerIntegration:
 
         finally:
             # Clean up
-            await overlord.stop_formation_server()
+            await overlord.stop_a2a_server()
 
     @pytest.mark.asyncio
     async def test_agent_not_found_error(self, formation_config, mock_model):
@@ -220,7 +220,7 @@ class TestA2AFormationServerIntegration:
         overlord = Overlord(formation_config=formation_config)
 
         # Start the formation server without adding any agents
-        await overlord.start_formation_server()
+        await overlord.start_a2a_server()
 
         try:
             message_payload = {
@@ -239,7 +239,7 @@ class TestA2AFormationServerIntegration:
 
         finally:
             # Clean up
-            await overlord.stop_formation_server()
+            await overlord.stop_a2a_server()
 
     @pytest.mark.asyncio
     async def test_trusted_endpoints_security(self, mock_model):
@@ -269,7 +269,7 @@ class TestA2AFormationServerIntegration:
         )
 
         # Start the formation server
-        await overlord.start_formation_server()
+        await overlord.start_a2a_server()
 
         try:
             message_payload = {
@@ -289,7 +289,7 @@ class TestA2AFormationServerIntegration:
 
         finally:
             # Clean up
-            await overlord.stop_formation_server()
+            await overlord.stop_a2a_server()
 
     def test_server_management_methods_without_server(self, mock_model):
         """Test server management methods when no server is configured"""
@@ -300,15 +300,15 @@ class TestA2AFormationServerIntegration:
 
     async def _test_no_server_configured(self, overlord):
         """Helper method for testing server methods without configuration"""
-        start_result = await overlord.start_formation_server()
+        start_result = await overlord.start_a2a_server()
         assert start_result["status"] == "error"
         assert "not configured" in start_result["message"]
 
-        stop_result = await overlord.stop_formation_server()
+        stop_result = await overlord.stop_a2a_server()
         assert stop_result["status"] == "error"
         assert "not configured" in stop_result["message"]
 
-        status_result = await overlord.get_formation_server_status()
+        status_result = await overlord.get_server_status()
         assert status_result["status"] == "not_configured"
         assert "not configured" in status_result["message"]
 

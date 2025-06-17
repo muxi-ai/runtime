@@ -115,8 +115,8 @@ class Task112CompletionTest:
 
         print("\n🚀 Step 5: Starting Formation HTTP Servers...")
         # Start the formation servers to listen for incoming A2A messages
-        await self.formation_a_overlord.start_formation_server()
-        await self.formation_b_overlord.start_formation_server()
+        await self.formation_a_overlord.start_a2a_server()
+        await self.formation_b_overlord.start_a2a_server()
         print("   ✅ Formation A server started on port 8080")
         print("   ✅ Formation B server started on port 8081")
 

@@ -14,7 +14,7 @@ from src.muxi.runtime.overlord import Overlord
 from src.muxi.runtime.llm import LLM
 
 
-async def test_a2a_formation_server():
+async def test_a2a_a2a_server():
     """Manual test of A2A Formation Server"""
 
     # Configuration
@@ -43,7 +43,7 @@ async def test_a2a_formation_server():
 
     # Create overlord with formation server
     overlord = Overlord(formation_config=formation_config)
-    print(f"✅ Formation server initialized: {overlord.formation_server is not None}")
+    print(f"✅ Formation server initialized: {overlord.server is not None}")
 
     # Add a test agent
     agent = overlord.create_agent(
@@ -55,7 +55,7 @@ async def test_a2a_formation_server():
     print(f"✅ Created agent: {agent.agent_id}")
 
     # Start the formation server
-    start_result = await overlord.start_formation_server()
+    start_result = await overlord.start_a2a_server()
     print(f"✅ Server started: {start_result}")
 
     if start_result["status"] != "started":
@@ -148,7 +148,7 @@ async def test_a2a_formation_server():
 
     finally:
         # Stop the formation server
-        stop_result = await overlord.stop_formation_server()
+        stop_result = await overlord.stop_a2a_server()
         print(f"✅ Server stopped: {stop_result}")
 
 
@@ -158,7 +158,7 @@ async def main():
     print("🧪 MANUAL A2A FORMATION SERVER TEST")
     print("=" * 60)
 
-    success = await test_a2a_formation_server()
+    success = await test_a2a_a2a_server()
 
     print("=" * 60)
     if success:
