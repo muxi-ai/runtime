@@ -13,13 +13,14 @@ import asyncio
 import tempfile
 
 # Add runtime to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 def create_test_document(content: str, filename: str = "test_doc.txt") -> str:
     """Create a temporary test document."""
     temp_dir = tempfile.mkdtemp()
     doc_path = os.path.join(temp_dir, filename)
-    with open(doc_path, 'w', encoding='utf-8') as f:
+    with open(doc_path, "w", encoding="utf-8") as f:
         f.write(content)
     return doc_path
 
@@ -30,11 +31,13 @@ async def test_storage_experience_integration():
 
     try:
         # Import components from both layers
-        from src.muxi.runtime.overlord.document_storage import (
-            DocumentChunkManager, DocumentMetadataStore
+        from src.muxi.runtime.formation.documents.storage import (
+            DocumentChunkManager,
+            DocumentMetadataStore,
         )
-        from src.muxi.runtime.overlord.document_experience import (
-            DocumentSummarizer, DocumentAcknowledgmentGenerator
+        from src.muxi.runtime.formation.documents.experience import (
+            DocumentSummarizer,
+            DocumentAcknowledgmentGenerator,
         )
 
         # Initialize components
@@ -59,29 +62,24 @@ async def test_storage_experience_integration():
 
         # Storage layer processing
         chunks = await chunk_manager.chunk_document(
-            content=test_content,
-            filename="integration_test.txt",
-            strategy="semantic"
+            content=test_content, filename="integration_test.txt", strategy="semantic"
         )
 
         doc_path = create_test_document(test_content, "integration_test.txt")
         metadata = {
             "filename": "integration_test.txt",
             "chunk_count": len(chunks),
-            "content_type": "text/plain"
+            "content_type": "text/plain",
         }
         doc_id = await metadata_store.store_document_metadata(doc_path, metadata)
 
         # Experience layer processing using storage results
         summary = await summarizer.generate_summary(
-            test_content,
-            summary_type="overview",
-            max_length=150
+            test_content, summary_type="overview", max_length=150
         )
 
         acknowledgment = await ack_generator.generate_completion_acknowledgment(
-            "integration_test.txt",
-            {"chunks": len(chunks), "summary": summary}
+            "integration_test.txt", {"chunks": len(chunks), "summary": summary}
         )
 
         # Validate integration
@@ -90,7 +88,7 @@ async def test_storage_experience_integration():
         assert len(summary) > 20, "Experience layer failed to generate summary"
         assert len(acknowledgment) > 30, "Experience layer failed to generate acknowledgment"
 
-        print(f"  ✅ Storage → Experience integration working")
+        print("  ✅ Storage → Experience integration working")
         print(f"     Chunks: {len(chunks)}, Summary: {len(summary)} chars")
         return True
 
@@ -105,16 +103,18 @@ async def test_experience_workflow_integration():
 
     try:
         # Import components from both layers
-        from src.muxi.runtime.overlord.document_experience import (
-            DocumentSummarizer, DocumentErrorHandler
+        from src.muxi.runtime.formation.documents.experience import (
+            DocumentSummarizer,
+            # DocumentErrorHandler,
         )
-        from src.muxi.runtime.overlord.document_workflow import (
-            DocumentWorkflowIntegrator, DocumentContextPreserver
+        from src.muxi.runtime.formation.documents.workflow import (
+            DocumentWorkflowIntegrator,
+            DocumentContextPreserver,
         )
 
         # Initialize components
         summarizer = DocumentSummarizer()
-        error_handler = DocumentErrorHandler()
+        # error_handler = DocumentErrorHandler()
         workflow_integrator = DocumentWorkflowIntegrator()
         context_preserver = DocumentContextPreserver()
 
@@ -135,9 +135,7 @@ async def test_experience_workflow_integration():
 
         # Experience layer processing
         summary = await summarizer.generate_summary(
-            workflow_content,
-            summary_type="actionable",
-            max_length=200
+            workflow_content, summary_type="actionable", max_length=200
         )
 
         # Workflow layer processing using experience results
@@ -148,13 +146,12 @@ async def test_experience_workflow_integration():
             "user_message": "Process this project planning document",
             "summary_generated": summary,
             "tasks_extracted": len(tasks),
-            "timestamp": "2025-01-15T11:00:00Z"
+            "timestamp": "2025-01-15T11:00:00Z",
         }
 
         await context_preserver.preserve_conversation_context("test_user", context)
         retrieved_context = await context_preserver.get_relevant_context(
-            "test_user",
-            "What tasks were extracted from the project document?"
+            "test_user", "What tasks were extracted from the project document?"
         )
 
         # Validate integration
@@ -162,7 +159,7 @@ async def test_experience_workflow_integration():
         assert len(tasks) > 0, "Workflow layer failed to generate tasks"
         assert retrieved_context is not None, "Workflow layer failed to preserve context"
 
-        print(f"  ✅ Experience → Workflow integration working")
+        print("  ✅ Experience → Workflow integration working")
         print(f"     Summary: {len(summary)} chars, Tasks: {len(tasks)}")
         return True
 
@@ -177,11 +174,13 @@ async def test_storage_workflow_integration():
 
     try:
         # Import components from both layers
-        from src.muxi.runtime.overlord.document_storage import (
-            DocumentChunkManager, DocumentReferenceSystem
+        from src.muxi.runtime.formation.documents.storage import (
+            DocumentChunkManager,
+            DocumentReferenceSystem,
         )
-        from src.muxi.runtime.overlord.document_workflow import (
-            DocumentCrossReferenceManager, DocumentWorkflowIntegrator
+        from src.muxi.runtime.formation.documents.workflow import (
+            DocumentCrossReferenceManager,
+            DocumentWorkflowIntegrator,
         )
 
         # Initialize components
@@ -205,15 +204,11 @@ async def test_storage_workflow_integration():
 
         # Storage layer processing
         doc1_chunks = await chunk_manager.chunk_document(
-            content=doc1_content,
-            filename="requirements.txt",
-            strategy="fixed"
+            content=doc1_content, filename="requirements.txt", strategy="fixed"
         )
 
         doc2_chunks = await chunk_manager.chunk_document(
-            content=doc2_content,
-            filename="tech_spec.txt",
-            strategy="fixed"
+            content=doc2_content, filename="tech_spec.txt", strategy="fixed"
         )
 
         # Reference system operations
@@ -235,7 +230,7 @@ async def test_storage_workflow_integration():
         assert len(connections) >= 0, "Workflow layer failed to discover connections"
         assert len(workflow_tasks) > 0, "Workflow layer failed to generate tasks"
 
-        print(f"  ✅ Storage → Workflow integration working")
+        print("  ✅ Storage → Workflow integration working")
         print(f"     Chunks: {len(doc1_chunks + doc2_chunks)}, Tasks: {len(workflow_tasks)}")
         return True
 
@@ -250,14 +245,17 @@ async def test_three_layer_integration():
 
     try:
         # Import components from all three layers
-        from src.muxi.runtime.overlord.document_storage import (
-            DocumentChunkManager, DocumentMetadataStore
+        from src.muxi.runtime.formation.documents.storage import (
+            DocumentChunkManager,
+            DocumentMetadataStore,
         )
-        from src.muxi.runtime.overlord.document_experience import (
-            DocumentSummarizer, DocumentAcknowledgmentGenerator
+        from src.muxi.runtime.formation.documents.experience import (
+            DocumentSummarizer,
+            DocumentAcknowledgmentGenerator,
         )
-        from src.muxi.runtime.overlord.document_workflow import (
-            DocumentWorkflowIntegrator, DocumentContextPreserver
+        from src.muxi.runtime.formation.documents.workflow import (
+            DocumentWorkflowIntegrator,
+            DocumentContextPreserver,
         )
 
         # Initialize all components
@@ -306,9 +304,7 @@ async def test_three_layer_integration():
         # Layer 1: Storage processing
         print("  📁 Storage Layer: Chunking and metadata...")
         chunks = await chunk_manager.chunk_document(
-            content=complex_content,
-            filename="product_roadmap_q1_2025.txt",
-            strategy="semantic"
+            content=complex_content, filename="product_roadmap_q1_2025.txt", strategy="semantic"
         )
 
         doc_path = create_test_document(complex_content, "product_roadmap_q1_2025.txt")
@@ -316,21 +312,18 @@ async def test_three_layer_integration():
             "filename": "product_roadmap_q1_2025.txt",
             "file_size": len(complex_content),
             "chunk_count": len(chunks),
-            "document_type": "roadmap"
+            "document_type": "roadmap",
         }
         doc_id = await metadata_store.store_document_metadata(doc_path, metadata)
 
         # Layer 2: Experience processing
         print("  🎭 Experience Layer: Summary and acknowledgments...")
         summary = await summarizer.generate_summary(
-            complex_content,
-            summary_type="executive",
-            max_length=300
+            complex_content, summary_type="executive", max_length=300
         )
 
         processing_ack = await ack_generator.generate_processing_acknowledgment(
-            "product_roadmap_q1_2025.txt",
-            "Extract roadmap tasks and timeline"
+            "product_roadmap_q1_2025.txt", "Extract roadmap tasks and timeline"
         )
 
         # Layer 3: Workflow processing
@@ -344,19 +337,14 @@ async def test_three_layer_integration():
             "summary": summary[:100] + "...",  # Truncated summary
             "tasks_extracted": len(tasks),
             "processing_acknowledgment": processing_ack[:50] + "...",
-            "timestamp": "2025-01-15T14:00:00Z"
+            "timestamp": "2025-01-15T14:00:00Z",
         }
 
         await context_preserver.preserve_conversation_context("roadmap_user", workflow_context)
 
         completion_ack = await ack_generator.generate_completion_acknowledgment(
             "product_roadmap_q1_2025.txt",
-            {
-                "summary": summary,
-                "chunks": len(chunks),
-                "tasks": len(tasks),
-                "metadata": metadata
-            }
+            {"summary": summary, "chunks": len(chunks), "tasks": len(tasks), "metadata": metadata},
         )
 
         # Validate three-layer integration
@@ -369,12 +357,11 @@ async def test_three_layer_integration():
 
         # Test cross-layer data flow
         retrieved_context = await context_preserver.get_relevant_context(
-            "roadmap_user",
-            "What tasks were extracted from the roadmap?"
+            "roadmap_user", "What tasks were extracted from the roadmap?"
         )
         assert retrieved_context is not None, "Workflow layer: Context retrieval failed"
 
-        print(f"  ✅ Three-layer integration successful")
+        print("  ✅ Three-layer integration successful")
         print(f"     Storage: {len(chunks)} chunks, doc_id: {doc_id}")
         print(f"     Experience: {len(summary)} char summary, acks generated")
         print(f"     Workflow: {len(tasks)} tasks, context preserved")
@@ -383,6 +370,7 @@ async def test_three_layer_integration():
     except Exception as e:
         print(f"  ❌ Three-layer integration failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -396,7 +384,7 @@ async def main():
         ("Storage ↔ Experience Integration", test_storage_experience_integration),
         ("Experience ↔ Workflow Integration", test_experience_workflow_integration),
         ("Storage ↔ Workflow Integration", test_storage_workflow_integration),
-        ("Three-Layer Integration", test_three_layer_integration)
+        ("Three-Layer Integration", test_three_layer_integration),
     ]
 
     results = []
@@ -449,5 +437,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n\n💥 Integration test crashed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

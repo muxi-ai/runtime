@@ -44,12 +44,12 @@ async def validate_implementation_structure():
     print("\n🔍 Validating Document Processing Implementation Structure")
     print("=" * 70)
 
-    base_path = Path(__file__).parent.parent.parent / "src" / "muxi" / "runtime" / "overlord"
+    base_path = Path(__file__).parent.parent.parent / "src" / "muxi" / "runtime" / "formation" / "documents"
 
     # Define expected components with line count claims from report
     components = {
         "Document Storage Foundation Layer": {
-            "path": base_path / "document_storage",
+            "path": base_path / "storage",
             "files": {
                 "chunk_manager.py": 475,
                 "metadata_store.py": 464,
@@ -60,7 +60,7 @@ async def validate_implementation_structure():
             "claimed_total": 2483
         },
         "Document User Experience Layer": {
-            "path": base_path / "document_experience",
+            "path": base_path / "experience",
             "files": {
                 "acknowledgment_generator.py": 549,
                 "summarizer.py": 459,
@@ -69,7 +69,7 @@ async def validate_implementation_structure():
             "claimed_total": 1653
         },
         "Document Workflow Integration Layer": {
-            "path": base_path / "document_workflow",
+            "path": base_path / "workflow",
             "files": {
                 "workflow_integrator.py": 544,
                 "cross_reference_manager.py": 286,
@@ -118,7 +118,7 @@ async def test_document_storage_integration():
 
     try:
         # Import storage components
-        from src.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.formation.documents.storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
             DocumentSemanticIndex,
@@ -265,7 +265,7 @@ async def test_document_experience_integration():
 
     try:
         # Import experience components
-        from src.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.formation.documents.experience import (
             DocumentAcknowledgmentGenerator,
             DocumentSummarizer,
             DocumentErrorHandler
@@ -421,7 +421,7 @@ async def test_document_workflow_integration():
 
     try:
         # Import workflow components
-        from src.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.formation.documents.workflow import (
             DocumentWorkflowIntegrator,
             DocumentCrossReferenceManager,
             DocumentContextPreserver
@@ -641,13 +641,13 @@ async def test_end_to_end_integration():
 
     try:
         # Import all components for full integration test
-        from src.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.formation.documents.storage import (
             DocumentChunkManager, DocumentMetadataStore, DocumentSemanticIndex, DocumentReferenceSystem
         )
-        from src.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.formation.documents.experience import (
             DocumentAcknowledgmentGenerator, DocumentSummarizer, DocumentErrorHandler
         )
-        from src.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.formation.documents.workflow import (
             DocumentWorkflowIntegrator, DocumentCrossReferenceManager, DocumentContextPreserver
         )
 

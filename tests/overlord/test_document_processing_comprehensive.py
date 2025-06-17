@@ -3,9 +3,9 @@
 Comprehensive Document Processing Implementation Test Suite
 
 Tests all three layers of the document processing system:
-1. Document Storage Foundation Layer (Subtask 3.7)
-2. Document User Experience Layer (Subtask 3.8)
-3. Document Workflow Integration Layer (Subtask 3.9)
+1. Document Storage Foundation Layer
+2. Document User Experience Layer
+3. Document Workflow Integration Layer
 
 Plus unified configuration schema integration.
 """
@@ -77,7 +77,7 @@ async def test_document_storage_layer():
 
     try:
         # Import all document storage components
-        from src.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.formation.documents.storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
             DocumentSemanticIndex,
@@ -228,7 +228,7 @@ async def test_document_experience_layer():
 
     try:
         # Import document experience components
-        from src.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.formation.documents.experience import (
             DocumentAcknowledgmentGenerator,
             DocumentSummarizer,
             DocumentErrorHandler
@@ -355,7 +355,7 @@ async def test_document_workflow_layer():
 
     try:
         # Import document workflow components
-        from src.muxi.runtime.overlord.document_workflow import (
+        from src.muxi.runtime.formation.documents.workflow import (
             DocumentWorkflowIntegrator,
             DocumentCrossReferenceManager,
             DocumentContextPreserver
@@ -526,13 +526,13 @@ async def test_integration_workflow():
     try:
         # Import all components for integration test
         from src.muxi.runtime.config.document_processing import DocumentProcessingConfig
-        from src.muxi.runtime.overlord.document_storage import (
+        from src.muxi.runtime.formation.documents.storage import (
             DocumentChunkManager, DocumentMetadataStore
         )
-        from src.muxi.runtime.overlord.document_experience import (
+        from src.muxi.runtime.formation.documents.experience import (
             DocumentAcknowledgmentGenerator, DocumentSummarizer
         )
-        from src.muxi.runtime.overlord.document_workflow import DocumentWorkflowIntegrator
+        from src.muxi.runtime.formation.documents.workflow import DocumentWorkflowIntegrator
 
         print("✅ All components imported for integration test")
 

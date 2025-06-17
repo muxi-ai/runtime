@@ -30,16 +30,16 @@ sys.modules['spacy'] = type('MockSpacy', (), {
     '__version__': '3.7.0'
 })()
 
-from src.muxi.runtime.overlord.document_storage import (
+from src.muxi.runtime.formation.documents.storage import (
     DocumentChunkManager,
     DocumentAwareBufferMemory,
     DocumentSemanticIndex
 )
-from src.muxi.runtime.overlord.document_experience import (
+from src.muxi.runtime.formation.documents.experience import (
     DocumentSummarizer,
     DocumentAcknowledgmentGenerator
 )
-from src.muxi.runtime.overlord.document_workflow import (
+from src.muxi.runtime.formation.documents.workflow import (
     DocumentWorkflowIntegrator
 )
 
