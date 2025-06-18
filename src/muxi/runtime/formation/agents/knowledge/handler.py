@@ -257,6 +257,25 @@ class KnowledgeHandler:
             )
             return
 
+        # Only support FileKnowledge sources with hybrid architecture
+        if not isinstance(source, FileKnowledge):
+            print(
+                f"Unsupported source type: {type(source).__name__}. "
+                f"Only FileKnowledge is supported."
+            )
+
+            # Log unsupported source type
+            observability.observe(
+                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                level=observability.EventLevel.ERROR,
+                description="Unsupported knowledge source type",
+                data={
+                    "source_type": type(source).__name__,
+                    "supported_types": ["FileKnowledge"],
+                },
+            )
+            return
+
         self.sources.append(source)
 
         if generate_embeddings_fn is None:
@@ -276,126 +295,51 @@ class KnowledgeHandler:
 
         try:
             # Use FileKnowledge's hybrid architecture integration
-            if isinstance(source, FileKnowledge):
-                # Use FileKnowledge's advanced processing with DocumentChunkManager
-                document_chunks = await source.process_with_chunk_manager(
-                    chunk_manager=self.chunk_manager, file_limit=self.max_files_per_source
+            document_chunks = await source.process_with_chunk_manager(
+                chunk_manager=self.chunk_manager, file_limit=self.max_files_per_source
+            )
+
+            # Limit total chunks processed
+            if len(document_chunks) > self.max_total_files:
+                print(
+                    f"Limiting chunks to {self.max_total_files} "
+                    f"(found {len(document_chunks)})"
                 )
+                document_chunks = document_chunks[: self.max_total_files]
 
-                # Limit total chunks processed
-                if len(document_chunks) > self.max_total_files:
-                    print(
-                        f"Limiting chunks to {self.max_total_files} "
-                        f"(found {len(document_chunks)})"
-                    )
-                    document_chunks = document_chunks[: self.max_total_files]
+            # Generate embeddings for all chunks
+            if document_chunks:
+                chunk_contents = [chunk.content for chunk in document_chunks]
+                embeddings = await generate_embeddings_fn(chunk_contents)
 
-                # Generate embeddings for all chunks
-                if document_chunks:
-                    chunk_contents = [chunk.content for chunk in document_chunks]
-                    embeddings = await generate_embeddings_fn(chunk_contents)
+                if not embeddings:
+                    print("Failed to generate embeddings for chunks")
+                    return
 
-                    if not embeddings:
-                        print("Failed to generate embeddings for chunks")
-                        return
-
-                    # Add chunks and embeddings to ShortTermMemory with documents namespace
-                    chunks_added = 0
-                    for chunk, embedding in zip(document_chunks, embeddings):
-                        try:
-                            metadata = {
-                                "document_id": chunk.document_id,
-                                "chunk_id": chunk.chunk_id,
-                                "knowledge_source": source.name,
-                                "description": source.description,
-                                **chunk.metadata
-                            }
-
-                            await self.short_term_memory.add_with_embedding(
-                                text=chunk.content,
-                                embedding=embedding,
-                                metadata=metadata,
-                                namespace=DOCUMENT_NAMESPACE
-                            )
-                            chunks_added += 1
-                        except Exception as e:
-                            print(f"Failed to add chunk {chunk.chunk_id}: {e}")
-                            continue
-
-                    print(f"✓ Processed {source.name}: {chunks_added} chunks added")
-
-            else:
-                # Fallback for non-FileKnowledge sources (legacy behavior)
-                files_processed = 0
-                total_chunks_processed = 0
-
-                # Get all files from the source with limits
-                files = source.get_files()[: self.max_files_per_source]
-
-                for file_path in files:
-                    if files_processed >= self.max_files_per_source:
-                        break
-
-                    if total_chunks_processed >= self.max_total_files:
-                        print(f"Reached maximum total chunks limit ({self.max_total_files})")
-                        break
-
+                # Add chunks and embeddings to ShortTermMemory with documents namespace
+                chunks_added = 0
+                for chunk, embedding in zip(document_chunks, embeddings):
                     try:
-                        # Load and process file using basic method
-                        content = load_document(file_path)
-                        if not content or len(content.strip()) < 10:
-                            continue
+                        metadata = {
+                            "document_id": chunk.document_id,
+                            "chunk_id": chunk.chunk_id,
+                            "knowledge_source": source.name,
+                            "description": source.description,
+                            **chunk.metadata
+                        }
 
-                        # Use DocumentChunkManager to process the document
-                        document_chunks = await self.chunk_manager.chunk_document(
-                            content=content,
-                            filename=os.path.basename(file_path),
-                            strategy="adaptive",
-                            document_id=file_path,
+                        await self.short_term_memory.add_with_embedding(
+                            text=chunk.content,
+                            embedding=embedding,
+                            metadata=metadata,
+                            namespace=DOCUMENT_NAMESPACE
                         )
-
-                        if not document_chunks:
-                            continue
-
-                        # Limit chunks per file
-                        document_chunks = document_chunks[:5]
-
-                        # Generate embeddings for chunks
-                        chunk_contents = [chunk.content for chunk in document_chunks]
-                        embeddings = await generate_embeddings_fn(chunk_contents)
-
-                        if not embeddings:
-                            print(f"Failed to generate embeddings for {file_path}")
-                            continue
-
-                        # Add chunks and embeddings to ShortTermMemory with documents namespace
-                        for chunk, embedding in zip(document_chunks, embeddings):
-                            if total_chunks_processed >= self.max_total_files:
-                                break
-
-                            metadata = {
-                                "document_id": chunk.document_id,
-                                "chunk_id": chunk.chunk_id,
-                                "source": file_path,
-                                "description": source.description,
-                                "source_type": type(source).__name__,
-                                **chunk.metadata
-                            }
-
-                            await self.short_term_memory.add_with_embedding(
-                                text=chunk.content,
-                                embedding=embedding,
-                                metadata=metadata,
-                                namespace=DOCUMENT_NAMESPACE
-                            )
-                            total_chunks_processed += 1
-
-                        files_processed += 1
-                        print(f"✓ Processed {file_path} ({len(document_chunks)} chunks)")
-
+                        chunks_added += 1
                     except Exception as e:
-                        print(f"Failed to process file {file_path}: {e}")
+                        print(f"Failed to add chunk {chunk.chunk_id}: {e}")
                         continue
+
+                print(f"✓ Processed {source.name}: {chunks_added} chunks added")
 
             # Log successful knowledge source addition
             observability.observe(
@@ -404,8 +348,8 @@ class KnowledgeHandler:
                 description="Knowledge source addition completed with hybrid architecture",
                 data={
                     "source_path": getattr(source, "path", str(source)),
-                    "files_processed": files_processed,
-                    "total_chunks": total_chunks_processed,
+                    "chunks_processed": len(document_chunks) if document_chunks else 0,
+                    "chunks_added": chunks_added if 'chunks_added' in locals() else 0,
                     "total_sources": len(self.sources),
                 },
             )
