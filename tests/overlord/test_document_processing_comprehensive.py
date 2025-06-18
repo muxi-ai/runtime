@@ -1,5 +1,21 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: Document Processing Comprehensive Test
+
+⚠️  DEPRECATION NOTICE:
+This test file tests deprecated document workflow components that are not recommended
+for agent knowledge use cases. These components are maintained for backward compatibility
+with existing document processing workflows only.
+
+For agent knowledge systems, use:
+- DocumentChunkManager: Efficient document chunking and processing
+- DocumentSemanticIndex: Vector-based semantic search and indexing
+
+The following components tested here are deprecated for agent knowledge:
+- DocumentWorkflowIntegrator: Use agent knowledge system's built-in capabilities
+- DocumentCrossReferenceManager: Use agent knowledge system's built-in capabilities
+- DocumentContextPreserver: Use agent knowledge system's short-term memory integration
+
 Comprehensive Document Processing Implementation Test Suite
 
 Tests all three layers of the document processing system:

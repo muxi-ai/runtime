@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 """
-Document Processing Integration Test
+DEPRECATED: Document Integration Test
+
+⚠️  DEPRECATION NOTICE:
+This test file tests deprecated document workflow components that are not recommended
+for agent knowledge use cases. For agent knowledge systems, use DocumentChunkManager
+and DocumentSemanticIndex from the storage module instead.
 
 This test focuses on the integration between different document processing components
 and validates that they work together correctly. This is a focused test that

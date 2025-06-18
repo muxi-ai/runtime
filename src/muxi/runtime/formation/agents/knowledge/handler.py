@@ -32,11 +32,17 @@
 #    - Optimized vector search parameters for agent use cases
 #    - Batch processing for improved throughput
 #
+# 5. Memory Integration (Task 3.1)
+#    - Automatic injection of knowledge into short-term memory
+#    - Unified search across knowledge and memory
+#    - Context-aware knowledge retrieval
+#
 # The KnowledgeHandler is typically used to:
 # - Process documents and file-based knowledge
 # - Generate and store vector embeddings
 # - Provide agents with relevant information based on queries
 # - Ground agent responses in factual information
+# - Enhance agent memory with relevant knowledge
 #
 # This implementation uses the hybrid architecture with DocumentChunkManager
 # and DocumentSemanticIndex for unified document processing and search.
@@ -53,7 +59,7 @@
 #       embedding_dimension=1536
 #   )
 #
-#   # Initialize with remote FAISSx server
+#   # Initialize with remote FAISSx server and memory integration
 #   handler = KnowledgeHandler(
 #       agent_id="support_agent",
 #       embedding_dimension=1536,
@@ -62,7 +68,9 @@
 #           "url": "tcp://localhost:45678",
 #           "api_key": "your_api_key",
 #           "tenant": "your_tenant"
-#       }
+#       },
+#       short_term_memory=memory_instance,
+#       auto_inject_knowledge=True
 #   )
 #
 #   # Add documents to knowledge base
@@ -73,11 +81,19 @@
 #   )
 #   await handler.add_file(knowledge_source, model.get_embedding)
 #
-#   # Search for relevant information
+#   # Search for relevant information (auto-injects into memory if enabled)
 #   results = await handler.search(
 #       query="How do I reset my password?",
 #       generate_embedding_fn=model.get_embedding,
 #       top_k=3
+#   )
+#
+#   # Unified search across knowledge and memory
+#   unified_results = await handler.search_unified(
+#       query="Previous discussions about password reset",
+#       generate_embedding_fn=model.get_embedding,
+#       include_memory=True,
+#       memory_weight=0.3
 #   )
 # =============================================================================
 
@@ -938,8 +954,13 @@ class KnowledgeHandler:
             return chunks_added
 
         except Exception as e:
-            #  Error - TODO: add observability
-            #  DOCUMENT_PROCESSING_FAILED
+            # Log document processing failure
+            observability.observe(
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                description="Failed to process knowledge file during addition",
+                data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
+            )
 
             # Log file addition error
             observability.observe(
