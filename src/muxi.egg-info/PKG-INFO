@@ -1,0 +1,261 @@
+Metadata-Version: 2.4
+Name: muxi
+Version: 0.0.1
+Summary: A powerful, extensible framework for building AI agents
+Author-email: Ran Aroussi <ran@aroussi.com>
+Project-URL: Homepage, https://github.com/muxi-ai/runtime
+Project-URL: Bug Tracker, https://github.com/muxi-ai/runtime/issues
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: httpx>=0.24.0
+Requires-Dist: anyio>=3.7.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: websockets>=11.0.3
+Requires-Dist: httpx-sse>=0.4.0
+Requires-Dist: rich>=13.6.0
+Requires-Dist: colorama>=0.4.6
+Requires-Dist: mcp>=1.4.1
+Requires-Dist: aiofiles>=23.2.0
+Requires-Dist: python-magic>=0.4.27
+Requires-Dist: markitdown[all]>=0.1.0
+Requires-Dist: pypdf2>=3.0.0
+Requires-Dist: python-docx>=1.1.0
+Requires-Dist: markdownify>=0.11.6
+Requires-Dist: nltk>=3.8.0
+Requires-Dist: spacy>=3.8.0
+Requires-Dist: sentence-transformers>=2.2.0
+Requires-Dist: onellm>=0.0.7
+Requires-Dist: a2a-sdk>=1.0.0
+Requires-Dist: pytest>=7.0.0
+Requires-Dist: fastapi>=0.108.0
+Requires-Dist: uvicorn>=0.24.0
+Requires-Dist: starlette>=0.27.0
+Requires-Dist: faiss-cpu>=1.10.0
+Requires-Dist: faissx>=0.1.0
+Requires-Dist: pgvector>=0.3.6
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: sqlite-vec>=0.1.7
+Requires-Dist: psycopg2-binary>=2.9.9
+Requires-Dist: sqlalchemy>=2.0.0
+Requires-Dist: aiohttp>=3.8.0
+Requires-Dist: asyncio>=3.4.3
+Requires-Dist: click>=8.1.0
+Requires-Dist: openai>=1.3.0
+Dynamic: license-file
+
+# MUXI Runtime
+
+> The computational engine that powers formation execution in the MUXI AI Server and enables direct deployment in embedded systems.
+
+## Overview
+
+MUXI Runtime is the foundational execution engine of the MUXI Framework, serving as the computational core that runs AI agent formations. It provides a comprehensive set of abstractions and utilities for building, deploying, and managing complex AI agent systems both within the MUXI Server and as a standalone embedded runtime.****
+
+Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful engine that executes formation definitions (YAML configs) as live AI systems, while the MUXI Server acts as the "Docker daemon" handling HTTP, routing, authentication, and formation lifecycle management.
+
+**Dual Deployment Model:**
+- **Server Integration**: Powers formation execution within the MUXI AI Server
+- **Embedded Systems**: Runs directly in applications for local AI agent capabilities
+
+## Features
+
+- **Formation Execution**: Direct execution of formation YAML configurations as live AI systems
+- **Overlord Orchestration**: Central orchestration system for managing multiple agents
+- **Agent Framework**: Flexible agent implementation with specialized capabilities
+- **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management
+- **MCP Protocol**: Model Context Protocol implementation for tool integration
+- **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
+- **Security Layer**: Role-based access control and permission management
+- **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
+- **Multi-Modal Support**: Handle text, image, audio, video, and document content
+- **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
+- **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, background processing, and session tracking
+- **Streaming Responses**: Real-time streaming chat responses with AsyncGenerator support for ChatGPT-like streaming behavior
+- **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
+- **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
+- **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
+
+## Installation
+
+```bash
+# From PyPI
+pip install muxi-runtime
+
+# Development installation
+git clone https://github.com/muxi-ai/runtime.git
+cd runtime
+pip install -e .
+```
+
+## Usage
+
+```python
+from muxi.runtime import Overlord, Agent
+
+# Create an overlord to manage agents and shared memory
+overlord = Overlord(
+    id="my-overlord",
+    description="My orchestration system",
+    buffer_size=10,
+    buffer_multiplier=5
+)
+
+# Add agents to the overlord
+assistant = Agent(
+    id="assistant",
+    system_message="You are a helpful assistant.",
+    model="openai/gpt-4o"
+)
+
+coder = Agent(
+    id="coder",
+    system_message="You are an expert programmer.",
+    model="anthropic/claude-3-opus"
+)
+
+overlord.add_agent(assistant)
+overlord.add_agent(coder)
+
+# Run a conversation with session tracking
+response = overlord.chat(
+    message="Hello, can you help me with a coding problem?",
+    agent_name="assistant",
+    user_id="user123",
+    session_id="session_abc"
+)
+print(response)
+
+# Streaming conversation (ChatGPT-like streaming)
+async for chunk in overlord.chat(
+    message="Explain how async generators work",
+    agent_name="coder",
+    user_id="user123",
+    session_id="session_abc",
+    stream=True  # Enable streaming
+):
+    print(chunk, end="", flush=True)
+```
+
+## Secrets Management (Development)
+
+MUXI Runtime includes an encrypted secrets management system for storing sensitive configuration like API keys. For development and testing, use the provided utility scripts:
+
+### Adding Secrets
+
+```bash
+# Add a secret to a formation
+python runtime/muxi/runtime/utils/add_secret.py <formation_path> <SECRET_NAME> "<secret_value>"
+
+# Examples
+python runtime/muxi/runtime/utils/add_secret.py examples/configs OPENAI_API_KEY "sk-your-key-here"
+python runtime/muxi/runtime/utils/add_secret.py formation-a.yaml WEATHER_API_KEY "your-weather-key"
+```
+
+### Listing Secrets
+
+```bash
+# List all secrets in a formation
+python runtime/muxi/runtime/utils/add_secret.py <formation_path> list
+
+# Example
+python runtime/muxi/runtime/utils/add_secret.py examples/configs list
+```
+
+### Deleting Secrets
+
+```bash
+# Delete a specific secret
+python runtime/muxi/runtime/utils/delete_secret.py <formation_path> <SECRET_NAME>
+
+# Examples
+python runtime/muxi/runtime/utils/delete_secret.py examples/configs OPENAI_API_KEY
+python runtime/muxi/runtime/utils/delete_secret.py formation-a.yaml WEATHER_API_KEY
+
+# List secrets (to verify deletion)
+python runtime/muxi/runtime/utils/delete_secret.py examples/configs list
+```
+
+### Using Secrets in Configuration
+
+In your formation YAML files, reference secrets using GitHub Actions-style syntax:
+
+```yaml
+# formation.yaml
+agents:
+  - agent_id: assistant
+    model:
+      provider: openai
+      api_key: "${{ secrets.OPENAI_API_KEY }}"  # Encrypted secret reference
+      model: gpt-4o
+
+mcp_servers:
+  - server_id: weather-api
+    url: "https://api.weather.com"
+    credentials:
+      api_key: "${{ secrets.WEATHER_API_KEY }}"  # Encrypted secret reference
+```
+
+### Security Features
+
+- **AES-256-GCM Encryption**: All secrets are encrypted with per-formation master keys
+- **Secure File Permissions**: Secret files (`.key`, `secrets.enc`) use 0o600 permissions
+- **Formation Isolation**: Each formation has its own encrypted secrets store
+- **No Plaintext Storage**: Secrets are never stored in plaintext on disk
+
+## Architecture
+
+MUXI Runtime consists of several key components:
+
+```
+muxi/runtime/
+├── agent.py          # Agent implementation
+├── overlord.py       # Overlord orchestration
+├── config/           # Configuration components
+├── memory/           # Memory systems
+│   ├── buffer.py     # Buffer memory
+│   ├── long_term.py  # Long-term memory
+│   └── extractor.py  # Information extraction
+├── mcp/              # Model Context Protocol
+│   ├── service.py    # Centralized MCP service
+│   └── transport/    # Transport implementations
+├── observability/    # Observability & monitoring
+│   ├── manager.py    # Central observability manager
+│   ├── transports/   # Event transport implementations
+│   ├── formatters/   # Event formatting (10 formats)
+│   └── health/       # Health monitoring system
+└── knowledge/        # Knowledge base integration
+```
+
+## Runtime in the MUXI Ecosystem
+
+MUXI Runtime is part of the broader MUXI Framework ecosystem, designed around formation-based AI system deployment:
+
+- **MUXI Runtime**: The computational engine executing formations (this repository) - **✅ 100% Complete + Async Orchestration**
+- **MUXI Server**: Formation execution server with REST/SSE/WebRTC/MCP/Webhook APIs - **⏳ Next Phase**
+- **OneLLM**: Provider-agnostic LLM interface with multi-modal support - **✅ OpenAI Complete**
+- **FAISSx**: Distributed FAISS vector database for memory systems - **✅ Integration Complete**
+- **MUXI CLI**: Command-line interface for formation management (planned)
+- **MUXI Schemas**: Formation and agent configuration schemas
+
+### Formation-First Architecture
+
+The runtime executes **Formation configs** (YAML files defining complete AI systems) as live **Formations** (running AI systems), following a Docker-like paradigm:
+
+| Docker Concept | MUXI Equivalent |
+|---------------|-----------------|
+| Dockerfile | Formation.yaml |
+| Docker Container | Running Formation |
+| Docker Runtime | MUXI Runtime |
+| Docker Daemon | MUXI Server |
+
+
+## License
+
+Elastic License 2.0
+
