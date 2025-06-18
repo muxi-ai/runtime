@@ -124,7 +124,7 @@ from .initialization import (
     initialize_memory_config,
     initialize_logging_config,
     initialize_clarification_config,
-    initialize_document_processing_config
+    initialize_document_processing_config,
 )
 from .secrets_manager import SecretsInterpolator
 
@@ -2572,7 +2572,7 @@ class Overlord:
         Phase 1: Document Storage Foundation (Task 3.7)
         - Parse and chunk documents using DocumentChunkManager
         - Store in enhanced buffer memory with DocumentAwareBufferMemory
-        - Index for semantic search with DocumentSemanticIndex
+        - Index for semantic search with ShortTermMemory
 
         Phase 2: Document User Experience (Task 3.8)
         - Generate persona-consistent acknowledgments
@@ -3298,7 +3298,7 @@ class Overlord:
         """
         try:
             # Check if response has clarification metadata
-            if not hasattr(agent_response, 'metadata') or not agent_response.metadata:
+            if not hasattr(agent_response, "metadata") or not agent_response.metadata:
                 return None
 
             metadata = agent_response.metadata
@@ -3306,8 +3306,10 @@ class Overlord:
                 return None
 
             # Check for agent clarification request structure
-            if (metadata.get("needs_clarification") and
-                    metadata.get("clarification_type") == "information_request"):
+            if (
+                metadata.get("needs_clarification")
+                and metadata.get("clarification_type") == "information_request"
+            ):
                 return metadata
 
             return None
@@ -3331,7 +3333,7 @@ class Overlord:
         agent_response: MuxiResponse,
         original_message: str,
         agent_name: str,
-        user_id_int: Optional[int]
+        user_id_int: Optional[int],
     ) -> MuxiResponse:
         """
         Handle agent clarification request by converting it to user clarification.
@@ -3367,8 +3369,8 @@ class Overlord:
                     "original_agent_response": agent_response.content,
                     "required_info": required_info,
                     "agent_reasoning": agent_reasoning,
-                    "original_message": original_message
-                }
+                    "original_message": original_message,
+                },
             )
 
             # Emit clarification event
@@ -3401,10 +3403,7 @@ class Overlord:
             return agent_response
 
     async def _generate_user_clarification_question(
-        self,
-        required_info: Dict[str, str],
-        agent_reasoning: str,
-        original_agent_response: str
+        self, required_info: Dict[str, str], agent_reasoning: str, original_agent_response: str
     ) -> str:
         """
         Generate a user-friendly clarification question from agent requirements.
@@ -3418,10 +3417,16 @@ class Overlord:
             Formatted clarification question for the user
         """
         if not required_info:
-            return "I need some additional information to help you better. Could you provide more details?"
+            return (
+                "I need some additional information to help you better. "
+                "Could you provide more details?"
+            )
 
         # Create introduction
-        intro = "I'd like to help you with that! To provide the most accurate response, I need some additional information:"
+        intro = (
+            "I'd like to help you with that! To provide the most accurate response, "
+            "I need some additional information:"
+        )
 
         # Format questions
         questions = []
@@ -3445,7 +3450,7 @@ class Overlord:
         self,
         clarification_response: str,
         clarification_metadata: Dict[str, Any],
-        user_id: Any = None
+        user_id: Any = None,
     ) -> MuxiResponse:
         """
         Process user's response to agent clarification request.
@@ -3495,7 +3500,10 @@ class Overlord:
 
             return MuxiResponse(
                 role="assistant",
-                content="I apologize, but I encountered an error processing your additional information. Please try again."
+                content=(
+                    "I apologize, but I encountered an error processing your additional "
+                    "information. Please try again."
+                ),
             )
 
     async def _process_streaming_chat(

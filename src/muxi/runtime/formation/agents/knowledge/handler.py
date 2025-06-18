@@ -13,7 +13,7 @@
 # 1. Vector Storage
 #    - Efficient storage of document embeddings
 #    - FAISSx index for fast similarity search
-#    - Persistence through DocumentSemanticIndex
+#    - Persistence through ShortTermMemory
 #
 # 2. Document Management
 #    - Loading and chunking of documents via DocumentChunkManager
@@ -45,7 +45,7 @@
 # - Enhance agent memory with relevant knowledge
 #
 # This implementation uses the hybrid architecture with DocumentChunkManager
-# and DocumentSemanticIndex for unified document processing and search.
+# and ShortTermMemory for unified document processing and search.
 #
 # Supports both local and remote FAISSx modes:
 # - Local mode: Uses local FAISSx client with file-based persistence
@@ -107,7 +107,6 @@ import numpy as np
 
 # Hybrid architecture imports
 from ...documents.storage.chunk_manager import DocumentChunkManager
-from ...documents.storage.semantic_index import DocumentSemanticIndex
 
 from ....utils import load_document
 from .base import FileKnowledge
@@ -117,6 +116,10 @@ from ....utils.user_dirs import get_knowledge_dir
 # Short-term memory integration for Task 3.1
 from ....services.memory.short_term import ShortTermMemory
 
+# Phase 2: Document-specific namespace constants
+DOCUMENT_NAMESPACE = "documents"
+KNOWLEDGE_INJECTION_NAMESPACE = "knowledge"  # Keep existing behavior
+
 
 class KnowledgeHandler:
     """
@@ -124,7 +127,7 @@ class KnowledgeHandler:
 
     The KnowledgeHandler manages a collection of knowledge sources and provides
     a unified interface for searching across all of them. It uses the hybrid
-    architecture with DocumentChunkManager and DocumentSemanticIndex for
+    architecture with DocumentChunkManager and ShortTermMemory for
     document processing and FAISSx for vector-based similarity search.
     """
 
@@ -204,20 +207,24 @@ class KnowledgeHandler:
             # Use default configuration if no formation config
             document_config = DocumentProcessingConfig({})
 
-        # Initialize DocumentChunkManager with proper configuration
+        # Keep DocumentChunkManager - it's essential!
         self.chunk_manager = DocumentChunkManager(document_config=document_config)
 
-        # Agent-optimized semantic index configuration
-        semantic_index_path = f"{self.cache_dir}/{self.agent_id_or_sources}_semantic_index"
+        # Now using ShortTermMemory directly instead of DocumentSemanticIndex
+        # Documents will use ShortTermMemory with "documents" namespace
 
-        # Initialize DocumentSemanticIndex
-        self.semantic_index = DocumentSemanticIndex(
-            vector_dimension=self.embedding_dimension,
-            mode=self.mode,
-            remote_config=self.remote if self.mode == "remote" else None,
-            index_path=semantic_index_path,
-            persist_index=True,  # Enable persistence for agent knowledge
-        )
+        # Ensure we have ShortTermMemory for document storage
+        if not self.short_term_memory:
+            self.short_term_memory = ShortTermMemory(
+                max_size=2000,      # Large context window for documents
+                buffer_multiplier=20,  # 40,000 total capacity for documents
+                dimension=self.embedding_dimension,
+                model=None,  # We provide embeddings directly via add_with_embedding
+                mode=self.mode,
+                remote=self.remote,
+                max_memory_mb=5000,  # 5GB limit for document storage
+                fifo_interval_min=30  # Less frequent cleanup for documents
+            )
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content using hybrid architecture."""
@@ -292,24 +299,23 @@ class KnowledgeHandler:
                         print("Failed to generate embeddings for chunks")
                         return
 
-                    # Add chunks and embeddings to semantic index
+                    # Add chunks and embeddings to ShortTermMemory with documents namespace
                     chunks_added = 0
                     for chunk, embedding in zip(document_chunks, embeddings):
                         try:
-                            await self.semantic_index.add_document_chunks(
-                                chunks=[
-                                    {
-                                        "content": chunk.content,
-                                        "chunk_id": chunk.chunk_id,
-                                        "document_id": chunk.document_id,
-                                        "metadata": chunk.metadata,
-                                    }
-                                ],
-                                embeddings=[embedding],
-                                document_metadata={
-                                    "knowledge_source": source.name,
-                                    "description": source.description,
-                                },
+                            metadata = {
+                                "document_id": chunk.document_id,
+                                "chunk_id": chunk.chunk_id,
+                                "knowledge_source": source.name,
+                                "description": source.description,
+                                **chunk.metadata
+                            }
+
+                            await self.short_term_memory.add_with_embedding(
+                                text=chunk.content,
+                                embedding=embedding,
+                                metadata=metadata,
+                                namespace=DOCUMENT_NAMESPACE
                             )
                             chunks_added += 1
                         except Exception as e:
@@ -362,26 +368,25 @@ class KnowledgeHandler:
                             print(f"Failed to generate embeddings for {file_path}")
                             continue
 
-                        # Add chunks and embeddings to semantic index
+                        # Add chunks and embeddings to ShortTermMemory with documents namespace
                         for chunk, embedding in zip(document_chunks, embeddings):
                             if total_chunks_processed >= self.max_total_files:
                                 break
 
-                            await self.semantic_index.add_document_chunks(
-                                chunks=[
-                                    {
-                                        "content": chunk.content,
-                                        "chunk_id": chunk.chunk_id,
-                                        "document_id": chunk.document_id,
-                                        "metadata": chunk.metadata,
-                                    }
-                                ],
-                                embeddings=[embedding],
-                                document_metadata={
-                                    "source": file_path,
-                                    "description": source.description,
-                                    "source_type": type(source).__name__,
-                                },
+                            metadata = {
+                                "document_id": chunk.document_id,
+                                "chunk_id": chunk.chunk_id,
+                                "source": file_path,
+                                "description": source.description,
+                                "source_type": type(source).__name__,
+                                **chunk.metadata
+                            }
+
+                            await self.short_term_memory.add_with_embedding(
+                                text=chunk.content,
+                                embedding=embedding,
+                                metadata=metadata,
+                                namespace=DOCUMENT_NAMESPACE
                             )
                             total_chunks_processed += 1
 
@@ -435,7 +440,7 @@ class KnowledgeHandler:
                 "query_length": len(query),
                 "top_k": top_k,
                 "has_embedding_function": generate_embeddings_fn is not None,
-                "has_semantic_index": hasattr(self, "semantic_index"),
+                "has_short_term_memory": self.short_term_memory is not None,
             },
         )
 
@@ -464,30 +469,30 @@ class KnowledgeHandler:
             # Use standard search parameters
             search_k = top_k
 
-            # Use DocumentSemanticIndex for search
-            search_results = await self.semantic_index.search_documents(
-                query_vector=query_vector,
-                k=search_k,
-                document_ids=None,  # Search all documents
-                metadata_filter=None,  # No filtering
+            # Use ShortTermMemory for document search with documents namespace
+            memory_results = await self.short_term_memory.search(
+                query="",  # Empty since we provide vector
+                query_vector=query_vector.tolist(),
+                limit=search_k * 2,  # Get more results for filtering
+                recency_bias=0.05,  # Very low for documents - favor semantic similarity
+                namespace=DOCUMENT_NAMESPACE
             )
 
-            # Convert search results to standard format
+            # Convert to standard format
             results = []
-            for i, result in enumerate(search_results):
-
-                content = result.content
+            for item in memory_results:
+                content = item["text"]
                 if len(content) > 200:
                     content = content[:200] + "..."
 
                 results.append(
                     {
                         "content": content,
-                        "relevance": result.score,
+                        "relevance": item.get("score", 0.0),
                         "metadata": {
-                            **result.metadata,
-                            "document_id": result.document_id,
-                            "chunk_id": result.chunk_id,
+                            **item["metadata"],
+                            "document_id": item["metadata"].get("document_id", ""),
+                            "chunk_id": item["metadata"].get("chunk_id", ""),
                         },
                     }
                 )
@@ -655,10 +660,14 @@ class KnowledgeHandler:
                     continue
 
             source_count = len(handler.sources)
-            # Get document count from hybrid architecture components
+            # Get document count from ShortTermMemory documents namespace
             doc_count = 0
-            if hasattr(handler, "semantic_index") and handler.semantic_index:
-                doc_count = await handler.semantic_index.get_document_count()
+            if handler.short_term_memory:
+                all_docs = handler.short_term_memory.get_items_by_metadata(
+                    metadata_filter={},
+                    namespace=DOCUMENT_NAMESPACE
+                )
+                doc_count = len(all_docs)
 
             print(
                 f"✓ KnowledgeHandler created with {source_count} sources and {doc_count} documents"
@@ -694,7 +703,7 @@ class KnowledgeHandler:
         Add a file to the knowledge base using hybrid architecture.
 
         This method processes a file from a knowledge source, chunks its content using
-        DocumentChunkManager, generates embeddings, and adds them to the DocumentSemanticIndex
+        DocumentChunkManager, generates embeddings, and adds them to ShortTermMemory
         for future retrieval.
 
         Args:
@@ -727,9 +736,10 @@ class KnowledgeHandler:
             # File not found or error reading file
             return 0
 
-        # Check if document already exists in semantic index with same content hash
-        existing_docs = await self.semantic_index.get_documents_by_metadata(
-            metadata_filter={"source": file_path, "content_hash": file_md5}
+        # Check if document already exists in ShortTermMemory with same content hash
+        existing_docs = self.short_term_memory.get_items_by_metadata(
+            metadata_filter={"source": file_path, "content_hash": file_md5},
+            namespace=DOCUMENT_NAMESPACE
         )
 
         if existing_docs:
@@ -789,15 +799,23 @@ class KnowledgeHandler:
                 print(f"Failed to generate embeddings for {file_path}")
                 return 0
 
-            # Add chunks and embeddings to semantic index
+            # Add chunks and embeddings to ShortTermMemory with documents namespace
             chunks_added = 0
             for chunk, embedding in zip(document_chunks, embeddings):
-                await self.semantic_index.add_document(
-                    document_id=chunk.document_id,
-                    chunk_id=chunk.chunk_id,
-                    content=chunk.content,
+                metadata = {
+                    "document_id": chunk.document_id,
+                    "chunk_id": chunk.chunk_id,
+                    "source": file_path,
+                    "content_hash": file_md5,
+                    "description": description,
+                    **chunk.metadata
+                }
+
+                await self.short_term_memory.add_with_embedding(
+                    text=chunk.content,
                     embedding=embedding,
-                    metadata=chunk.metadata,
+                    metadata=metadata,
+                    namespace=DOCUMENT_NAMESPACE
                 )
                 chunks_added += 1
 
@@ -837,8 +855,8 @@ class KnowledgeHandler:
         """
         Remove a file from the knowledge base using hybrid architecture.
 
-        This method removes all chunks associated with a specific file from the
-        DocumentSemanticIndex.
+        This method removes all chunks associated with a specific file from
+        ShortTermMemory.
 
         Args:
             file_path: Path to the file to remove from the knowledge base
@@ -855,9 +873,10 @@ class KnowledgeHandler:
         )
 
         try:
-            # Remove documents from semantic index by source metadata
-            removed_count = await self.semantic_index.remove_documents_by_metadata(
-                metadata_filter={"source": file_path}
+            # Remove documents from ShortTermMemory by source metadata
+            removed_count = self.short_term_memory.remove_by_metadata(
+                metadata_filter={"source": file_path},
+                namespace=DOCUMENT_NAMESPACE
             )
 
             if removed_count > 0:
@@ -904,12 +923,15 @@ class KnowledgeHandler:
         Returns:
             List[str]: List of file paths in the knowledge base
         """
-        # Get unique source paths from semantic index metadata
-        all_documents = await self.semantic_index.get_all_documents()
+        # Get unique source paths from ShortTermMemory documents namespace
+        all_documents = self.short_term_memory.get_items_by_metadata(
+            metadata_filter={},  # Get all documents
+            namespace=DOCUMENT_NAMESPACE
+        )
         sources = set()
         for doc in all_documents:
-            if "source" in doc.metadata:
-                sources.add(doc.metadata["source"])
+            if "source" in doc["metadata"]:
+                sources.add(doc["metadata"]["source"])
         return list(sources)
 
     async def load_sources_from_config(
@@ -993,7 +1015,7 @@ class KnowledgeHandler:
 
                 # Add to short-term memory with knowledge namespace
                 await self.short_term_memory.add(
-                    text=content, metadata=memory_metadata, namespace="knowledge"
+                    text=content, metadata=memory_metadata, namespace=KNOWLEDGE_INJECTION_NAMESPACE
                 )
 
             # Log successful knowledge injection

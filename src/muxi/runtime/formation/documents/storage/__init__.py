@@ -9,7 +9,7 @@ Core Components:
 - DocumentAwareBufferMemory: Extended buffer memory with document processing
 - DocumentChunkManager: Intelligent document chunking with adaptive strategies
 - DocumentMetadataStore: Document metadata tracking and management
-- DocumentSemanticIndex: Enhanced FAISS integration for document search
+
 - DocumentReferenceSystem: Cross-document reference management
 
 Integration:
@@ -22,7 +22,7 @@ Integration:
 from .buffer_memory import DocumentAwareBufferMemory
 from .chunk_manager import DocumentChunkManager, DocumentChunk
 from .metadata_store import DocumentMetadataStore
-from .semantic_index import DocumentSemanticIndex, DocumentSearchResult
+
 from .reference_system import DocumentReferenceSystem
 
 __all__ = [
@@ -30,7 +30,6 @@ __all__ = [
     "DocumentChunkManager",
     "DocumentChunk",
     "DocumentMetadataStore",
-    "DocumentSemanticIndex",
-    "DocumentSearchResult",
+
     "DocumentReferenceSystem",
 ]

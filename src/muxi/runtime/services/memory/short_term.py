@@ -328,6 +328,7 @@ class ShortTermMemory:
         limit: int = 10,
         filter_metadata: Optional[Dict[str, Any]] = None,
         use_entire_buffer: bool = True,
+        namespace: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Search the buffer based on recency only.
@@ -354,20 +355,26 @@ class ShortTermMemory:
             # Use only the most recent items (up to max_size) - the context window
             recent_items = list(self.buffer)[-self.max_size:]
 
-        # Apply metadata filtering if specified
-        if filter_metadata:
+        # Apply filtering if specified
+        if filter_metadata or namespace:
             results = []
             for item in reversed(recent_items):  # Reverse to get most recent first
-                # Check if all filter criteria match
-                if all(
+                # Apply namespace filter if provided
+                if namespace and item.get("namespace") != namespace:
+                    continue
+
+                # Check if all metadata filter criteria match
+                if filter_metadata and not all(
                     key in item["metadata"] and item["metadata"][key] == value
                     for key, value in filter_metadata.items()
                 ):
-                    # Include a copy of the item to avoid modifying the buffer
-                    results.append(item.copy())
-                    # Stop if we've reached the limit
-                    if len(results) >= limit:
-                        break
+                    continue
+
+                # Include a copy of the item to avoid modifying the buffer
+                results.append(item.copy())
+                # Stop if we've reached the limit
+                if len(results) >= limit:
+                    break
             return results
         else:
             # If no filtering, just return the most recent items (most recent first)
@@ -380,6 +387,7 @@ class ShortTermMemory:
         filter_metadata: Optional[Dict[str, Any]] = None,
         query_vector: Optional[List[float]] = None,
         recency_bias: float = 0.3,
+        namespace: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Search the buffer using vector similarity and recency.
@@ -399,6 +407,8 @@ class ShortTermMemory:
             recency_bias: Weight given to recency vs. semantic similarity (0.0-1.0).
                 Higher values favor recent items, lower values favor semantic similarity.
                 Default is 0.3, providing a balance that slightly favors similarity.
+            namespace: Optional namespace filter. If provided, only items
+                in this namespace will be considered for search.
 
         Returns:
             List of matched items sorted by the combined score of semantic
@@ -424,7 +434,9 @@ class ShortTermMemory:
         # If we don't have a model, return most recent messages
         if not self.model:
             #  Recency search fallback - TODO: add observability
-            recency_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+            recency_results = self._recency_search(
+                limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+            )
 
             # Emit memory retrieval completed event for recency-only search
             observability.observe(
@@ -453,7 +465,7 @@ class ShortTermMemory:
                 #  Query embedding error - TODO: add observability
                 # Fallback to recency search if embedding generation fails
                 embedding_fallback_results = self._recency_search(
-                    limit, filter_metadata, use_entire_buffer=True
+                    limit, filter_metadata, use_entire_buffer=True, namespace=namespace
                 )
 
                 # Emit memory retrieval completed event for embedding failure fallback
@@ -476,7 +488,9 @@ class ShortTermMemory:
 
         # If we have no embeddings in the index, use recency search
         if self.index_count == 0:
-            return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+            return self._recency_search(
+                limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+            )
 
         try:
             # Convert query vector to numpy array
@@ -504,6 +518,10 @@ class ShortTermMemory:
 
                 item = self.buffer[buffer_idx].copy()
 
+                # Apply namespace filter if provided
+                if namespace and item.get("namespace") != namespace:
+                    continue
+
                 # Apply metadata filters if provided
                 if filter_metadata and not all(
                     key in item["metadata"] and item["metadata"][key] == value
@@ -526,7 +544,9 @@ class ShortTermMemory:
 
             # If we don't have enough results, try recency search
             if not results:
-                return self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+                return self._recency_search(
+                    limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+                )
 
             # Sort by combined score (descending)
             results.sort(key=lambda x: x["score"], reverse=True)
@@ -550,7 +570,9 @@ class ShortTermMemory:
         except Exception as e:
             # Handle FAISS search errors gracefully
             #  Vector search error - TODO: add observability
-            fallback_results = self._recency_search(limit, filter_metadata, use_entire_buffer=True)
+            fallback_results = self._recency_search(
+                limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+            )
 
             # Emit memory retrieval completed event for fallback
             observability.observe(
@@ -608,6 +630,136 @@ class ShortTermMemory:
                 if limit and len(items) >= limit:
                     break
         return items
+
+    def remove_by_metadata(self, metadata_filter: Dict[str, Any], namespace: str = None) -> int:
+        """
+        Remove items matching metadata filter and optional namespace.
+
+        Args:
+            metadata_filter: Dictionary of metadata key-value pairs to match.
+                Only items with matching metadata values will be removed.
+            namespace: Optional namespace filter. If provided, only items
+                in this namespace will be considered for removal.
+
+        Returns:
+            Number of items removed from the buffer.
+        """
+        removed_count = 0
+        items_to_remove = []
+
+        for i, item in enumerate(self.buffer):
+            # Check namespace filter
+            if namespace and item.get("namespace") != namespace:
+                continue
+
+            # Check metadata filter
+            if all(item["metadata"].get(k) == v for k, v in metadata_filter.items()):
+                items_to_remove.append(i)
+
+        # Remove items in reverse order to maintain indices
+        for i in reversed(items_to_remove):
+            del self.buffer[i]
+            removed_count += 1
+
+        # Mark index for rebuild if we removed items
+        if removed_count > 0:
+            self.needs_rebuild = True
+
+        return removed_count
+
+    def get_items_by_metadata(
+        self, metadata_filter: Dict[str, Any], namespace: str = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get items matching metadata filter and optional namespace.
+
+        Args:
+            metadata_filter: Dictionary of metadata key-value pairs to match.
+                Only items with matching metadata values will be returned.
+            namespace: Optional namespace filter. If provided, only items
+                in this namespace will be considered.
+
+        Returns:
+            List of buffer items matching the filter criteria.
+        """
+        results = []
+        for item in self.buffer:
+            # Check namespace filter
+            if namespace and item.get("namespace") != namespace:
+                continue
+
+            # Check metadata filter
+            if all(
+                item["metadata"].get(k) == v for k, v in metadata_filter.items()
+            ):
+                results.append(item.copy())
+
+        return results
+
+    async def add_with_embedding(
+        self,
+        text: str,
+        embedding: List[float],
+        metadata: Optional[Dict[str, Any]] = None,
+        namespace: str = "buffer",
+    ) -> None:
+        """
+        Add item with pre-computed embedding (for documents).
+
+        This method allows adding items with pre-computed embeddings, which is
+        useful
+        for documents that have already been processed through an embedding model.
+        It bypasses the model.embed() call and directly adds the embedding to the FAISS index.
+
+        Args:
+            text: The text content to add to the buffer.
+            embedding: Pre-computed embedding vector for the text.
+            metadata: Optional dictionary of metadata associated with this text.
+            namespace: Namespace for organizing items (e.g., "buffer", "documents").
+        """
+        if metadata is None:
+            metadata = {}
+
+        # Create item
+        item = {
+            "text": text,
+            "metadata": metadata,
+            "timestamp": time.time(),
+            "namespace": namespace,
+            "embedding": embedding  # Store pre-computed embedding
+        }
+
+        # Add to buffer
+        self.buffer.append(item)
+
+        # Add to FAISS index directly if vector search is enabled
+        if self.has_vector_search:
+            try:
+                if isinstance(embedding, list):
+                    embedding_np = np.array([embedding], dtype=np.float32)
+                else:
+                    embedding_np = embedding.reshape(1, -1)
+
+                self.index.add(embedding_np)
+
+                # Update mapping
+                buffer_idx = len(self.buffer) - 1
+                self.index_mapping[buffer_idx] = self.index_count
+                self.index_count += 1
+
+            except Exception as e:
+                # If FAISS fails, keep the item in buffer but disable vector search for this item
+                observability.observe(
+                    event_type=observability.SystemEvents.RESOURCE_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    description="Failed to add pre-computed embedding to FAISS index",
+                    data={
+                        "error": str(e),
+                        "text_length": len(text),
+                        "embedding_dimension": len(embedding),
+                        "namespace": namespace,
+                    },
+                )
 
     def clear(self) -> None:
         """
