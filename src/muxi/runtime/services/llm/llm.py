@@ -639,7 +639,7 @@ class LLM:
         """Lazy initialize fusion engine for advanced multimodal processing"""
         if self._fusion_engine is None:
             try:
-                from ..overlord.workflow.multimodal import MultiModalFusionEngine
+                from ...formation.workflow.multimodal import MultiModalFusionEngine
 
                 self._fusion_engine = MultiModalFusionEngine(self)
                 observability.observe(
@@ -661,7 +661,7 @@ class LLM:
     async def _convert_files_to_content(self, files: List[Union[str, Path]]):
         """Convert file paths to MultiModalContent objects for fusion engine"""
         try:
-            from ..overlord.workflow.multimodal import MultiModalContent
+            from ...formation.workflow.multimodal import MultiModalContent
 
             content_items = []
 
@@ -690,7 +690,7 @@ class LLM:
     async def _detect_file_modality(self, file_path: Union[str, Path]):
         """Detect modality from file extension/type"""
         try:
-            from ..overlord.workflow.multimodal import ModalityType
+            from ...formation.workflow.multimodal import ModalityType
 
             import mimetypes
 
@@ -732,7 +732,7 @@ class LLM:
     async def _text_chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Handle text-only chat (no files)"""
         # Use existing chat logic for text-only processing
-        return await self._legacy_chat_with_files(messages, None, **kwargs)
+        return await self._basic_chat_with_files(messages, None, **kwargs)
 
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns."""
@@ -842,7 +842,7 @@ class LLM:
         # Handle multimodal conversations
         if fusion_mode == "basic" or self.fusion_engine is None:
             # Use basic pass-through processing
-            return await self._legacy_chat_with_files(
+            return await self._basic_chat_with_files(
                 messages,
                 files,
                 temperature=temperature,
@@ -878,7 +878,7 @@ class LLM:
         """Process files using advanced fusion engine"""
 
         try:
-            from ..overlord.workflow.multimodal import ProcessingMode
+            from ...formation.workflow.multimodal import ProcessingMode
 
             # Convert files to MultiModalContent format
             multimodal_content = await self._convert_files_to_content(files)
@@ -891,7 +891,7 @@ class LLM:
                     data={"fallback_reason": "multimodal_content_conversion_failed"},
                     description="Failed to convert files, using basic processing",
                 )
-                return await self._legacy_chat_with_files(messages, files, **kwargs)
+                return await self._basic_chat_with_files(messages, files, **kwargs)
 
             # Map fusion_mode to ProcessingMode
             mode_mapping = {
@@ -924,7 +924,7 @@ class LLM:
                 description="Multimodal processing failed, falling back to basic processing",
             )
             # Fallback to basic processing on any error
-            return await self._legacy_chat_with_files(messages, files, **kwargs)
+            return await self._basic_chat_with_files(messages, files, **kwargs)
 
     async def _synthesize_chat_response(self, fusion_result, user_message: str, **kwargs) -> str:
         """Convert fusion result to natural chat response"""
@@ -948,10 +948,10 @@ Provide a helpful, conversational response that directly addresses what the user
         synthesis_messages = [{"role": "user", "content": synthesis_prompt}]
         return await self._text_chat(synthesis_messages, **kwargs)
 
-    async def _legacy_chat_with_files(
+    async def _basic_chat_with_files(
         self, messages: List[Dict[str, str]], files: Optional[List[Union[str, Path]]], **kwargs
     ) -> str:
-        """Legacy file processing implementation for backward compatibility"""
+        """Basic file processing implementation"""
 
         async def _chat_request():
             # Process files if provided

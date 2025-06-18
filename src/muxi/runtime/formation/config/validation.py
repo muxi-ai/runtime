@@ -370,11 +370,6 @@ class FormationValidator:
             if "llm_models" in agent_config:
                 self._validate_llm_models(agent_config["llm_models"])
 
-            # Legacy model validation (for backward compatibility)
-            if "model" in agent_config:
-                # Legacy 'model' field is still supported for compatibility
-                pass
-
             # Validate knowledge configuration
             if "knowledge" in agent_config:
                 self._validate_agent_knowledge_config(agent_config["knowledge"])
@@ -451,11 +446,6 @@ class FormationValidator:
         # Validate authentication configuration
         if "auth" in server_config:
             self._validate_mcp_auth_config(server_config["auth"], server_id or index)
-
-        # Check for legacy fields
-        if "url" in server_config:
-            # Legacy 'url' field is still supported for compatibility
-            pass
 
     def _validate_mcp_metadata_fields(
         self, server_config: Dict[str, Any], server_identifier: Union[str, int]
@@ -1297,13 +1287,6 @@ class FormationValidator:
             # Ensure buffer memory is always available with default settings
             memory_config["buffer"] = {"size": 10, "multiplier": 10, "vector_search": True}
 
-        # Legacy short_term configuration is no longer supported
-        if "short_term" in memory_config:
-            self.result.add_error(
-                "Legacy memory.short_term configuration is no longer supported. "
-                "Use memory.working instead, and move buffer settings to memory.buffer."
-            )
-
         # Validate persistent memory configuration
         if "persistent" in memory_config:
             persistent_config = memory_config["persistent"]
@@ -1312,12 +1295,6 @@ class FormationValidator:
             else:
                 self._validate_persistent_memory_config(persistent_config)
 
-        # Legacy long_term configuration is no longer supported
-        if "long_term" in memory_config:
-            self.result.add_error(
-                "Legacy memory.long_term configuration is no longer supported. "
-                "Use memory.persistent instead."
-            )
 
     def _get_default_working_memory_config(self) -> Dict[str, Any]:
         """Get default working memory configuration."""
@@ -1771,18 +1748,10 @@ class FormationValidator:
 
         # Allow any additional fields users might want to add for overlord configuration
 
-        # Validate persona (new) and system_message (legacy support)
+        # Validate persona new
         if "persona" in overlord_config:
             if not isinstance(overlord_config["persona"], str):
                 self.result.add_error("Overlord persona must be a string")
-
-        # Legacy support for system_message (but warn about deprecation)
-        if "system_message" in overlord_config:
-            self.result.add_warning(
-                "Overlord 'system_message' is deprecated. Use 'persona' instead."
-            )
-            if not isinstance(overlord_config["system_message"], str):
-                self.result.add_error("Overlord system_message must be a string")
 
         # Validate overlord LLM configuration
         if "llm" in overlord_config:

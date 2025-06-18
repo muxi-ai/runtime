@@ -25,7 +25,6 @@
 #
 # 3. Configuration Normalization
 #    - Converts simplified config formats to standardized structure
-#    - Ensures backward compatibility with older config formats
 #    - Provides sensible defaults for missing values
 #
 # Example usage:
@@ -169,101 +168,6 @@ class ConfigLoader:
         return await replace_secrets(config)
 
     @staticmethod
-    def normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Normalize configuration to a standard format.
-
-        This method converts different simplified memory configuration formats
-        to the standard structure expected by the framework. It ensures backward
-        compatibility with older configuration formats and provides defaults
-        for missing values.
-
-        Args:
-            config: The configuration dictionary to normalize
-
-        Returns:
-            Dict[str, Any]: Normalized configuration with standardized structure
-        """
-        # Create a copy to avoid modifying the original
-        result = config.copy()
-
-        # Normalize memory configuration
-        if "memory" in result:
-            memory = result["memory"].copy()
-
-            # Handle the new buffer_size parameter if present (preferred)
-            if "buffer_size" in memory:
-                buffer_size = memory.pop("buffer_size")  # Remove and get the value
-                # Create/update buffer config with the correct structure
-                if isinstance(memory.get("buffer"), dict):
-                    memory["buffer"] = memory.get("buffer")
-                else:
-                    memory["buffer"] = {}
-                memory["buffer"]["enabled"] = True
-                memory["buffer"]["window_size"] = int(buffer_size)
-                if "buffer_multiplier" not in memory["buffer"]:
-                    memory["buffer"]["buffer_multiplier"] = 10  # Default multiplier
-
-            # Normalize buffer memory (number -> {enabled: true, window_size: number})
-            if "buffer" in memory:
-                if isinstance(memory["buffer"], (int, float)):
-                    buffer_size = int(memory["buffer"])
-                    memory["buffer"] = {
-                        "enabled": True,
-                        "window_size": buffer_size,
-                        "buffer_multiplier": 10,  # Default multiplier
-                    }
-                elif memory["buffer"] is True:
-                    memory["buffer"] = {
-                        "enabled": True,
-                        "window_size": 5,  # Default window size
-                        "buffer_multiplier": 10,  # Default multiplier
-                    }
-                elif not isinstance(memory["buffer"], dict):
-                    memory["buffer"] = {
-                        "enabled": bool(memory["buffer"]),
-                        "window_size": 5,  # Default window size
-                        "buffer_multiplier": 10,  # Default multiplier
-                    }
-                elif isinstance(memory["buffer"], dict):
-                    # Set default multiplier if not provided
-                    if "buffer_multiplier" not in memory["buffer"]:
-                        memory["buffer"]["buffer_multiplier"] = 10
-            else:
-                # Ensure buffer memory is always available with default settings
-                memory["buffer"] = {
-                    "enabled": True,
-                    "window_size": 5,  # Default window size
-                    "buffer_multiplier": 10,  # Default multiplier
-                }
-
-            # Normalize long-term memory (boolean -> {enabled: boolean})
-            if "long_term" in memory:
-                if isinstance(memory["long_term"], bool):
-                    enabled = memory["long_term"]
-                    memory["long_term"] = {"enabled": enabled}
-                elif not isinstance(memory["long_term"], dict):
-                    memory["long_term"] = {"enabled": bool(memory["long_term"])}
-            else:
-                # Default to disabled long-term memory
-                memory["long_term"] = {"enabled": False}
-
-            # Update memory in the result
-            result["memory"] = memory
-        else:
-            # If memory is not specified, create default configuration
-            result["memory"] = {
-                "buffer": {
-                    "enabled": True,
-                    "window_size": 5,  # Default window size
-                    "buffer_multiplier": 10,  # Default multiplier
-                },
-                "long_term": {"enabled": False},
-            }
-
-        return result
-
-    @staticmethod
     def validate_config(config: Dict[str, Any]) -> None:
         """
         Validate the configuration.
@@ -353,6 +257,5 @@ class ConfigLoader:
         """
         config = self.load(path)
         config = await self.process_secrets(config, secrets_manager)
-        config = self.normalize_config(config)
         self.validate_config(config)
         return config

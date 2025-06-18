@@ -48,7 +48,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 from .loader import ConfigLoader
@@ -415,6 +415,8 @@ class FormationLoader:
 
         This method processes knowledge configuration paths and resolves them relative
         to the formation directory. Absolute paths (starting with '/') are preserved.
+        Supports both sources as list of dicts with path/description
+        and sources as list of strings.
 
         Args:
             config: Formation configuration
@@ -428,9 +430,7 @@ class FormationLoader:
             knowledge_config = config["overlord"]["knowledge"]
             if knowledge_config.get("enabled", False):
                 sources = knowledge_config.get("sources", [])
-                for source in sources:
-                    if "path" in source:
-                        source["path"] = self._resolve_single_path(source["path"], formation_dir)
+                self._resolve_sources_paths(sources, formation_dir)
 
         # Process agent knowledge configurations
         if "agents" in config:
@@ -439,13 +439,27 @@ class FormationLoader:
                     knowledge_config = agent["knowledge"]
                     if knowledge_config.get("enabled", False):
                         sources = knowledge_config.get("sources", [])
-                        for source in sources:
-                            if "path" in source:
-                                source["path"] = self._resolve_single_path(
-                                    source["path"], formation_dir
-                                )
+                        self._resolve_sources_paths(sources, formation_dir)
 
         return config
+
+    def _resolve_sources_paths(self, sources: List[Any], formation_dir: str) -> None:
+        """
+        Resolve paths in knowledge sources list.
+
+        Supports both sources as list of dicts with path/description
+        and sources as list of strings.
+
+        Args:
+            sources: List of knowledge sources to resolve paths for
+            formation_dir: Formation directory path
+        """
+        for source in sources:
+            if isinstance(source, dict):
+                if "path" in source:
+                    source["path"] = self._resolve_single_path(
+                        source["path"], formation_dir
+                    )
 
     def _resolve_single_path(self, path: str, formation_dir: str) -> str:
         """

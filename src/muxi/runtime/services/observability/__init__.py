@@ -54,7 +54,7 @@ __all__ = [
     "RequestContextManager",
     # Helper functions
     "emit_event",
-    "observe",  # Backward compatibility
+    "observe",
 ]
 
 
@@ -66,7 +66,7 @@ import asyncio
 from typing import Any, Dict, Optional, Union
 
 
-def emit_event(
+def observe(
     event_type: Union[SystemEvents, ConversationEvents, str],
     level: EventLevel = EventLevel.INFO,
     data: Optional[Dict[str, Any]] = None,
@@ -115,21 +115,3 @@ def emit_event(
         # Silently fail if observability unavailable
         pass
 
-
-# Backward compatibility alias
-def observe(
-    event_type: Union[SystemEvents, ConversationEvents, str],
-    level: EventLevel = EventLevel.INFO,
-    data: Optional[Dict[str, Any]] = None,
-    description: str = "",
-) -> None:
-    """
-    Backward compatibility alias for emit_event.
-
-    Args:
-        event_type: The event type enum or string
-        level: Event level (defaults to INFO)
-        data: Additional event data
-        description: Human-readable description
-    """
-    emit_event(event_type=event_type, level=level, data=data, description=description)

@@ -5,11 +5,12 @@ This module defines the standardized response format for all MUXI communication
 modes (sync, async, webhooks) with multi-modal support and OpenAI compatibility.
 """
 
-from typing import Optional, List, Literal, TypedDict, Union
+from typing import Optional, List, Literal, TypedDict, Union, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
-# Import FunctionCallModel from MCP module where it belongs
-from ..services.mcp.message import FunctionCallModel
+# Import FunctionCallModel only for type checking to avoid circular imports
+if TYPE_CHECKING:
+    from ..services.mcp.message import FunctionCallModel
 
 
 class MuxiFileContent(TypedDict):
@@ -91,7 +92,7 @@ class MuxiMessageContent(BaseModel):
 
     type: str = Field(..., description="Content type ('text' or 'tool_calls')")
     text: Optional[str] = Field(None, description="Text content (when type='text')")
-    tool_calls: Optional[List[FunctionCallModel]] = Field(
+    tool_calls: Optional[List["FunctionCallModel"]] = Field(
         None, description="Tool calls (when type='tool_calls')"
     )
 

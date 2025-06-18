@@ -47,41 +47,6 @@ class MemoryConfig:
     def __init__(self, memory_config: Dict[str, Any]):
         """Initialize memory configuration."""
         self.memory_config = memory_config
-        self._validate_and_migrate()
-
-    def _validate_and_migrate(self) -> None:
-        """Validate and migrate legacy memory configuration."""
-        # Handle legacy memory.short_term configuration
-        if "short_term" in self.memory_config:
-            #  Warning - TODO: add observability
-            #     "Legacy memory.short_term configuration detected. "
-            #     "Please migrate to memory.working and memory.buffer structure."
-            # )
-            # Migrate short_term to working
-            short_term_config = self.memory_config.pop("short_term")
-            if "working" not in self.memory_config:
-                self.memory_config["working"] = {}
-
-            # Extract buffer config from short_term.buffer to top-level
-            if isinstance(short_term_config, dict) and "buffer" in short_term_config:
-                buffer_config = short_term_config.pop("buffer")
-                if "buffer" not in self.memory_config:
-                    self.memory_config["buffer"] = buffer_config
-
-            # Move remaining short_term config to working
-            if isinstance(short_term_config, dict):
-                self.memory_config["working"].update(short_term_config)
-
-        # Handle legacy memory.long_term configuration
-        if "long_term" in self.memory_config:
-            #  Warning - TODO: add observability
-            #     "Legacy memory.long_term configuration detected. "
-            #     "Please migrate to memory.persistent structure."
-            # )
-            # Migrate long_term to persistent
-            long_term_config = self.memory_config.pop("long_term")
-            if "persistent" not in self.memory_config:
-                self.memory_config["persistent"] = long_term_config
 
     def get_working_config(self) -> Dict[str, Any]:
         """Get working memory configuration."""

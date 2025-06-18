@@ -256,15 +256,6 @@ class A2AServer:
                 """
                 return await self._handle_a2a_message(agent_id, request, http_request)
 
-            # Legacy endpoint support (if needed)
-            @self.app.post("/{agent_id}")
-            async def handle_legacy_message(
-                http_request: Request,
-                agent_id: str = Path(..., description="ID of the target agent"),
-                request: A2AMessageRequest = ...,
-            ) -> A2AMessageResponse:
-                """Legacy endpoint for backward compatibility"""
-                return await self._handle_a2a_message(agent_id, request, http_request)
 
             # Emit app creation event
             observability.observe(

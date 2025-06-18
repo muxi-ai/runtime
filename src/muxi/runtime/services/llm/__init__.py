@@ -38,10 +38,6 @@ from .errors import (
     OneLLMServiceError,
 )
 
-# For backward compatibility, expose OneLLMAuthenticationError as AuthenticationError
-AuthenticationError = OneLLMAuthenticationError
-RateLimitError = OneLLMRateLimitError
-
 __all__ = [
     "OneLLMService",
     "LLM",
@@ -54,8 +50,6 @@ __all__ = [
     "clear_llm_cache",
     "set_cache_ttl",
     "reset_all_stats",
-    "AuthenticationError",
-    "RateLimitError",
     "OneLLMError",
     "OneLLMConnectionError",
     "OneLLMAuthenticationError",

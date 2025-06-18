@@ -605,37 +605,6 @@ async def deregister_agent(request: dict):
             raise HTTPException(status_code=500, detail="Failed to deregister agent")
         raise
 
-
-@app.delete("/register/{agent_url_encoded}")
-async def deregister_agent_legacy(agent_url_encoded: str):
-    """
-    Legacy deregister endpoint (for backward compatibility).
-
-    The agent URL must be URL-encoded in the path parameter.
-    Recommended to use POST /deregister instead.
-    """
-    try:
-        # Decode the URL
-        agent_url = urllib.parse.unquote(agent_url_encoded)
-
-        success = storage.deregister_agent(agent_url)
-        if success:
-            response_data = {
-                "message": "Agent deregistered successfully",
-                "agent_url": agent_url,
-                "deregistered_at": datetime.now(timezone.utc).isoformat(),
-            }
-
-            return response_data
-        else:
-            raise HTTPException(status_code=404, detail=f"Agent not found: {agent_url}")
-
-    except Exception as e:
-        if not isinstance(e, HTTPException):
-            raise HTTPException(status_code=500, detail="Failed to deregister agent")
-        raise
-
-
 @app.get("/discover", response_model=DiscoveryResponse)
 async def discover_agents(
     capabilities: Optional[str] = Query(None, description="Comma-separated capabilities filter"),
@@ -757,7 +726,6 @@ def main():
     print("Available endpoints:")
     print("  POST   /register          - Register an agent")
     print("  POST   /deregister        - Deregister an agent")
-    print("  DELETE /register/{url}    - Deregister an agent (legacy)")
     print("  GET    /discover          - Discover agents")
     print("  GET    /health            - Health check")
     print()
