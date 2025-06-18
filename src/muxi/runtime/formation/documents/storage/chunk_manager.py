@@ -55,31 +55,22 @@ class DocumentChunkManager:
     def __init__(
         self,
         document_config: Optional[DocumentProcessingConfig] = None,
-        legacy_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the document chunk manager.
 
         Args:
             document_config: DocumentProcessingConfig object with chunking parameters
-            legacy_config: Optional legacy configuration dictionary (deprecated)
         """
-        # Use document processing configuration if provided,
-        # otherwise fall back to legacy or defaults
+        # Use document processing configuration if provided, otherwise use defaults
         if document_config is not None:
             self.document_config = document_config
-            self.default_chunk_size = document_config.get_chunk_size()
-            self.chunk_overlap = document_config.get_chunk_overlap()
-        elif legacy_config is not None:
-            # Support legacy configuration format during transition
-            self.document_config = None
-            self.default_chunk_size = legacy_config.get("default_chunk_size", 1000)
-            self.chunk_overlap = legacy_config.get("chunk_overlap", 100)
         else:
             # Use default values
             self.document_config = DocumentProcessingConfig({})
-            self.default_chunk_size = self.document_config.get_chunk_size()
-            self.chunk_overlap = self.document_config.get_chunk_overlap()
+
+        self.default_chunk_size = self.document_config.get_chunk_size()
+        self.chunk_overlap = self.document_config.get_chunk_overlap()
 
         # Additional chunking parameters with sensible defaults
         self.max_chunk_size = self.default_chunk_size * 2

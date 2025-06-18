@@ -68,7 +68,6 @@ class DocumentAwareBufferMemory:
         remote: Optional[Dict[str, Any]] = None,
         max_memory_mb: int = 1000,
         fifo_interval_min: float = 5,
-        chunk_config: Optional[Dict[str, Any]] = None,
         metadata_storage_path: Optional[str] = None,
     ):
         """
@@ -120,7 +119,12 @@ class DocumentAwareBufferMemory:
                 setattr(self, attr, getattr(self._short_term_memory, attr))
 
         # Document-specific components
-        self.chunk_manager = DocumentChunkManager(chunk_config or {})
+        from ...config.document_processing import DocumentProcessingConfig
+
+        # Create proper DocumentProcessingConfig from chunk_config
+        document_config = DocumentProcessingConfig({})
+
+        self.chunk_manager = DocumentChunkManager(document_config=document_config)
         self.metadata_store = DocumentMetadataStore(metadata_storage_path)
 
         # Document tracking

@@ -192,7 +192,10 @@ class Agent:
                 agent_id=self.agent_id,
                 knowledge_config=knowledge_config,
                 generate_embeddings_fn=embedding_fn,
-                formation_config=formation_config
+                formation_config=formation_config,
+                # Task 3.1: Pass short-term memory from overlord for integration
+                short_term_memory=getattr(self.overlord, 'buffer_memory', None),
+                auto_inject_knowledge=True,
             )
 
             # Log successful knowledge initialization
@@ -233,50 +236,439 @@ class Agent:
         await self._initialize_knowledge(self._knowledge_config)
         self._knowledge_initialized = True
 
-    async def search_knowledge(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    async def search_knowledge(
+        self,
+        query: str,
+        limit: int = 5,
+        include_memory: bool = True,
+        unified: bool = False,
+        # Enhanced coordination features (always enabled)
+        deduplicate: bool = True,
+        context_budget: Optional[int] = None,
+    ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
         """
-        Search the agent's knowledge base for relevant information using semantic search.
+        Search the agent's knowledge base and memory for relevant information.
+
+        This method provides unified search across both domain knowledge sources
+        and conversational memory, with enhanced coordination features always enabled.
 
         Args:
             query: The search query string
-            limit: Maximum number of results to return
+            limit: Maximum number of results to return per source
+            include_memory: Whether to include memory search results
+            unified: Return full dictionary format with separate source results
+            deduplicate: Remove duplicate content between sources (always enabled)
+            context_budget: Total context budget to allocate across sources
 
         Returns:
-            List of knowledge results, empty list if no knowledge handler or no results
+            List of unified results (default) or dictionary with separate source results
         """
-        # Ensure knowledge is initialized
-        await self._ensure_knowledge_initialized()
-
         if not self.knowledge_handler:
-            return []
+            return {"knowledge": [], "memory": [], "unified": []} if unified else []
 
         try:
-            # Get embedding function from model for semantic search
-            embedding_fn = None
-            if hasattr(self.model, 'get_embedding'):
-                embedding_fn = self.model.get_embedding
-            elif hasattr(self.model, 'embed'):
-                embedding_fn = self.model.embed
+            # Smart query routing (always enabled)
+            strategy = self._analyze_query_for_routing(query)
 
-            results = await self.knowledge_handler.search(
+            # Dynamic context budget management (always enabled)
+            if context_budget:
+                knowledge_limit, memory_limit = self._allocate_context_budget(
+                    context_budget, strategy, limit
+                )
+            else:
+                # Use strategy-based limits when no budget specified
+                if strategy == "knowledge_only":
+                    knowledge_limit, memory_limit = limit, 0
+                elif strategy == "memory_only":
+                    knowledge_limit, memory_limit = 0, limit
+                else:  # strategy == "both"
+                    knowledge_limit, memory_limit = limit, limit
+
+            # Perform unified search with allocated limits
+            results = await self.knowledge_handler.search_unified(
                 query=query,
-                top_k=limit,
-                generate_embeddings_fn=embedding_fn
+                knowledge_limit=knowledge_limit,
+                memory_limit=memory_limit if include_memory else 0,
+                include_memory=include_memory,
             )
-            return results or []
+
+            # Content deduplication (always enabled)
+            if deduplicate and include_memory:
+                results = self._deduplicate_results(results)
+
+            # Enhanced unified ranking (always enabled)
+            if include_memory:
+                enhanced_unified = self._create_enhanced_unified_ranking(
+                    knowledge_results=results.get("knowledge", []),
+                    memory_results=results.get("memory", []),
+                    query=query,
+                    strategy=strategy,
+                    budget=context_budget or (limit * 2),
+                )
+                results["unified"] = enhanced_unified
+
+            # Return format based on unified parameter
+            if unified:
+                return results
+            else:
+                # Return enhanced unified results as the default
+                return results.get("unified", results.get("knowledge", []))
+
         except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.AGENT_PROCESSING_ERROR,
-                level=observability.EventLevel.WARNING,
-                data={
-                    "agent_id": self.agent_id,
-                    "error": str(e),
-                    "phase": "knowledge_search",
-                    "query": query[:100],
-                },
-                description=f"Knowledge search failed for agent {self.agent_id}: {str(e)}",
-            )
-            return []
+            self.logger.error(f"Error in enhanced knowledge search: {e}")
+            return {"knowledge": [], "memory": [], "unified": []} if unified else []
+
+    def _analyze_query_for_routing(self, query: str) -> str:
+        """
+        Analyze query to determine optimal search strategy.
+
+        This method implements Task 3.3 smart query routing by analyzing
+        the query content to determine whether it needs knowledge sources,
+        memory sources, or both.
+
+        Args:
+            query: The search query to analyze
+
+        Returns:
+            Search strategy: "knowledge_only", "memory_only", or "both"
+        """
+        query_lower = query.lower()
+
+        # Factual/domain knowledge indicators
+        knowledge_indicators = [
+            # Question words that typically need factual answers
+            "what is", "what are", "how does", "how do", "how to", "explain",
+            "define", "definition", "describe", "documentation", "specification",
+
+            # Technical/domain-specific terms
+            "api", "function", "method", "class", "algorithm", "process",
+            "procedure", "protocol", "standard", "requirement", "feature",
+
+            # Instructional queries
+            "tutorial", "guide", "example", "sample", "instruction", "step",
+            "configure", "setup", "install", "implement", "deploy",
+
+            # Reference queries
+            "reference", "manual", "documentation", "spec", "format",
+            "syntax", "parameter", "option", "setting", "configuration"
+        ]
+
+        # Conversational/personal context indicators
+        memory_indicators = [
+            # Personal references
+            "we discussed", "you mentioned", "i told you", "earlier", "before",
+            "previously", "last time", "remember when", "as we talked",
+
+            # Conversational continuity
+            "continue", "follow up", "regarding our", "about our conversation",
+            "back to", "returning to", "as i was saying", "to clarify",
+
+            # Personal preferences/history
+            "my preference", "i prefer", "i like", "i want", "my project",
+            "our project", "my situation", "my case", "for me", "in my context",
+
+            # Recent context references
+            "just now", "recently", "today", "this session", "current",
+            "ongoing", "in progress", "working on"
+        ]
+
+        # Count indicators
+        knowledge_score = sum(1 for indicator in knowledge_indicators if indicator in query_lower)
+        memory_score = sum(1 for indicator in memory_indicators if indicator in query_lower)
+
+        # Additional scoring based on query characteristics
+
+        # Questions starting with factual question words lean toward knowledge
+        if any(query_lower.startswith(q) for q in ["what", "how", "why", "when", "where"]):
+            knowledge_score += 1
+
+        # Personal pronouns lean toward memory
+        personal_pronouns = ["my", "our", "i ", "we ", "me ", "us "]
+        if any(pronoun in query_lower for pronoun in personal_pronouns):
+            memory_score += 1
+
+        # Past tense verbs lean toward memory
+        past_indicators = ["was", "were", "did", "had", "said", "told", "mentioned"]
+        if any(past in query_lower for past in past_indicators):
+            memory_score += 1
+
+        # Technical terms lean toward knowledge
+        if any(char in query for char in ["()", "{}", "[]", ".", "/"]) or \
+           len([word for word in query.split() if word.isupper()]) > 0:
+            knowledge_score += 1
+
+        # Determine strategy based on scores
+        if knowledge_score > memory_score + 1:
+            return "knowledge_only"
+        elif memory_score > knowledge_score + 1:
+            return "memory_only"
+        else:
+            return "both"
+
+    def _allocate_context_budget(
+        self, total_budget: int, strategy: str, base_limit: int
+    ) -> tuple[int, int]:
+        """
+        Allocate context budget between knowledge and memory sources.
+
+        This method implements Task 3.3 dynamic context budget management by
+        intelligently distributing the available context budget based on the
+        determined search strategy.
+
+        Args:
+            total_budget: Total context budget to allocate
+            strategy: Search strategy ("knowledge_only", "memory_only", or "both")
+            base_limit: Base limit per source when strategy is "both"
+
+        Returns:
+            Tuple of (knowledge_limit, memory_limit)
+        """
+        if strategy == "knowledge_only":
+            return (total_budget, 0)
+        elif strategy == "memory_only":
+            return (0, total_budget)
+        else:
+            # For "both" strategy, allocate based on a balanced approach
+            # Give slight preference to knowledge for factual queries
+            # but ensure both sources get meaningful allocation
+
+            if total_budget <= 2:
+                # Very small budget - give one to each
+                return (1, 1)
+            elif total_budget <= 4:
+                # Small budget - split evenly
+                half = total_budget // 2
+                return (half, total_budget - half)
+            else:
+                # Larger budget - use 60/40 split favoring knowledge
+                # but ensure minimum of 2 for each source
+                knowledge_portion = max(2, int(total_budget * 0.6))
+                memory_portion = max(2, total_budget - knowledge_portion)
+
+                # Adjust if we exceeded total budget
+                if knowledge_portion + memory_portion > total_budget:
+                    knowledge_portion = total_budget - memory_portion
+
+                return (knowledge_portion, memory_portion)
+
+    def _deduplicate_results(
+        self, results: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Remove duplicate content between knowledge and memory results.
+
+        This method implements Task 3.3 content deduplication by identifying
+        and removing semantically similar content between knowledge sources
+        and memory to avoid redundant information in the unified results.
+
+        Args:
+            results: Dictionary with 'knowledge' and 'memory' result lists
+
+        Returns:
+            Dictionary with deduplicated results
+        """
+        knowledge_results = results.get("knowledge", [])
+        memory_results = results.get("memory", [])
+
+        if not knowledge_results or not memory_results:
+            return results
+
+        # Simple text-based deduplication
+        # For more sophisticated deduplication, we could use embedding similarity
+        deduplicated_memory = []
+
+        # Extract content from knowledge results for comparison
+        knowledge_contents = set()
+        for k_result in knowledge_results:
+            content = k_result.get("content", "").strip().lower()
+            if content:
+                # Use first 100 characters as a fingerprint
+                knowledge_contents.add(content[:100])
+
+        # Filter memory results that don't significantly overlap with knowledge
+        for m_result in memory_results:
+            memory_content = m_result.get("content", "").strip().lower()
+            if not memory_content:
+                continue
+
+            # Check for significant overlap with knowledge content
+            memory_fingerprint = memory_content[:100]
+            is_duplicate = False
+
+            for k_fingerprint in knowledge_contents:
+                # Calculate simple overlap ratio
+                if len(memory_fingerprint) > 0 and len(k_fingerprint) > 0:
+                    # Simple string similarity check
+                    overlap = self._calculate_text_overlap(memory_fingerprint, k_fingerprint)
+                    if overlap > 0.7:  # 70% similarity threshold
+                        is_duplicate = True
+                        break
+
+            if not is_duplicate:
+                deduplicated_memory.append(m_result)
+
+        return {
+            "knowledge": knowledge_results,
+            "memory": deduplicated_memory
+        }
+
+    def _calculate_text_overlap(self, text1: str, text2: str) -> float:
+        """
+        Calculate simple text overlap ratio between two strings.
+
+        Args:
+            text1: First text string
+            text2: Second text string
+
+        Returns:
+            Overlap ratio between 0.0 and 1.0
+        """
+        if not text1 or not text2:
+            return 0.0
+
+        # Simple word-based overlap calculation
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+
+        if not words1 or not words2:
+            return 0.0
+
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+
+        return len(intersection) / len(union) if union else 0.0
+
+    def _create_enhanced_unified_ranking(
+        self,
+        knowledge_results: List[Dict[str, Any]],
+        memory_results: List[Dict[str, Any]],
+        query: str,
+        strategy: str,
+        budget: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Create enhanced unified ranking of knowledge and memory results.
+
+        This method implements Task 3.3 enhanced ranking by intelligently
+        combining and ranking results from both sources based on relevance,
+        recency, and the search strategy used.
+
+        Args:
+            knowledge_results: Results from knowledge sources
+            memory_results: Results from memory sources
+            query: Original search query for relevance scoring
+            strategy: Search strategy used
+            budget: Total context budget to respect
+
+        Returns:
+            List of unified results ranked by enhanced scoring
+        """
+        unified_results = []
+
+        # Add knowledge results with enhanced scoring
+        for result in knowledge_results:
+            enhanced_result = result.copy()
+            enhanced_result["source_type"] = "knowledge"
+
+            # Calculate enhanced score based on strategy
+            base_score = result.get("relevance", result.get("score", 0.5))
+
+            if strategy == "knowledge_only":
+                # Boost knowledge scores when it's the primary source
+                enhanced_score = min(1.0, base_score * 1.2)
+            elif strategy == "both":
+                # Standard scoring for balanced approach
+                enhanced_score = base_score
+            else:
+                # Lower knowledge scores when memory is preferred
+                enhanced_score = base_score * 0.8
+
+            enhanced_result["enhanced_score"] = enhanced_score
+            unified_results.append(enhanced_result)
+
+        # Add memory results with enhanced scoring
+        for result in memory_results:
+            enhanced_result = result.copy()
+            enhanced_result["source_type"] = "memory"
+
+            # Calculate enhanced score based on strategy
+            base_score = result.get("relevance", result.get("score", 0.5))
+
+            # Memory results often have recency bonus
+            recency_bonus = self._calculate_recency_bonus(result)
+
+            if strategy == "memory_only":
+                # Boost memory scores when it's the primary source
+                enhanced_score = min(1.0, (base_score + recency_bonus) * 1.2)
+            elif strategy == "both":
+                # Add recency bonus for balanced approach
+                enhanced_score = min(1.0, base_score + recency_bonus)
+            else:
+                # Lower memory scores when knowledge is preferred
+                enhanced_score = (base_score + recency_bonus) * 0.8
+
+            enhanced_result["enhanced_score"] = enhanced_score
+            unified_results.append(enhanced_result)
+
+        # Sort by enhanced score (descending)
+        unified_results.sort(key=lambda x: x.get("enhanced_score", 0), reverse=True)
+
+        # Respect context budget
+        if len(unified_results) > budget:
+            unified_results = unified_results[:budget]
+
+        # Add ranking metadata
+        for i, result in enumerate(unified_results):
+            result["unified_rank"] = i + 1
+            result["strategy_used"] = strategy
+
+        return unified_results
+
+    def _calculate_recency_bonus(self, result: Dict[str, Any]) -> float:
+        """
+        Calculate recency bonus for memory results.
+
+        Args:
+            result: Memory search result
+
+        Returns:
+            Recency bonus value between 0.0 and 0.3
+        """
+        # Look for timestamp in various possible fields
+        timestamp = result.get("timestamp") or result.get("created_at") or result.get("time")
+
+        if not timestamp:
+            return 0.0
+
+        try:
+            import time
+            current_time = time.time()
+
+            # Convert timestamp to float if it's not already
+            if isinstance(timestamp, str):
+                # Try to parse ISO format or other common formats
+                import datetime
+                try:
+                    dt = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    timestamp = dt.timestamp()
+                except (ValueError, TypeError):
+                    return 0.0
+
+            # Calculate age in hours
+            age_hours = (current_time - timestamp) / 3600
+
+            # Recency bonus decreases with age
+            if age_hours < 1:
+                return 0.3  # Very recent (last hour)
+            elif age_hours < 24:
+                return 0.2  # Recent (last day)
+            elif age_hours < 168:  # Last week
+                return 0.1
+            else:
+                return 0.0  # Older than a week
+
+        except (ValueError, TypeError, AttributeError):
+            return 0.0
 
     async def process_message(
         self, message: Union[str, MuxiResponse], user_id: Any = None
@@ -338,47 +730,61 @@ class Agent:
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
 
-        # Search knowledge if handler is available
-        knowledge_context = ""
+        # Search knowledge and memory if handler is available (Task 3.1 unified search)
+        context_enhancement = ""
         if self._knowledge_config:  # Check if knowledge config exists
             try:
-                # Ensure knowledge is initialized
-                await self._ensure_knowledge_initialized()
+                # Use unified search to get both knowledge and memory context
+                search_results = await self.search_knowledge(
+                    query=content,
+                    limit=5,
+                    include_memory=True,
+                    unified=True
+                )
 
-                if self.knowledge_handler:
-                    # Get embedding function from model for semantic search
-                    embedding_fn = None
-                    if hasattr(self.model, 'get_embedding'):
-                        embedding_fn = self.model.get_embedding
-                    elif hasattr(self.model, 'embed'):
-                        embedding_fn = self.model.embed
+                # Build enhanced context from unified results
+                knowledge_results = search_results.get("knowledge", [])
+                memory_results = search_results.get("memory", [])
 
-                    knowledge_results = await self.knowledge_handler.search(
-                        query=content,
-                        top_k=5,
-                        generate_embeddings_fn=embedding_fn
-                    )
+                if knowledge_results or memory_results:
+                    context_parts = []
+
+                    # Add domain knowledge context
                     if knowledge_results:
-                        knowledge_context = "\n\n--- Domain Knowledge ---\n"
+                        context_parts.append("--- Domain Knowledge ---")
                         for result in knowledge_results:
-                            knowledge_context += f"• {result.get('content', '')}\n"
-                        knowledge_context += "--- End Domain Knowledge ---\n\n"
+                            context_parts.append(f"• {result.get('content', '')}")
+                        context_parts.append("--- End Domain Knowledge ---")
 
-                        # Add knowledge context to the conversation
-                        enhanced_message = f"{content}\n{knowledge_context}"
-                        self._messages[-1]["content"] = enhanced_message
+                    # Add memory context
+                    if memory_results:
+                        context_parts.append("--- Recent Context ---")
+                        for result in memory_results:
+                            context_parts.append(f"• {result.get('content', '')}")
+                        context_parts.append("--- End Recent Context ---")
 
-                        # Log knowledge search success
-                        observability.observe(
-                            event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
-                            level=observability.EventLevel.INFO,
-                            data={
-                                "agent_id": self.agent_id,
-                                "knowledge_results_count": len(knowledge_results),
-                                "query": content[:100],
-                            },
-                            description=f"Knowledge search completed for agent {self.agent_id}",
-                        )
+                    context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
+
+                    # Add enhanced context to the conversation
+                    enhanced_message = f"{content}{context_enhancement}"
+                    self._messages[-1]["content"] = enhanced_message
+
+                    # Log unified search success
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "knowledge_results_count": len(knowledge_results),
+                            "memory_results_count": len(memory_results),
+                            "query": content[:100],
+                            "unified_search": True,
+                        },
+                        description=(
+                            f"Unified knowledge and memory search completed "
+                            f"for agent {self.agent_id}"
+                        ),
+                    )
             except Exception as e:
                 # Log error but don't fail message processing
                 observability.observe(

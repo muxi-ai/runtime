@@ -44,11 +44,8 @@
 #   # Create a knowledge handler with the sources
 #   handler = KnowledgeHandler([docs])
 #
-#   # Retrieve relevant information
-#   results = await handler.retrieve(
-#       query="How do I configure the API?",
-#       limit_per_source=3
-#   )
+#   # Add knowledge sources to the handler for processing
+#   await handler.add_knowledge_source(docs)
 # =============================================================================
 
 

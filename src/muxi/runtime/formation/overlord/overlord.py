@@ -87,7 +87,7 @@ import os
 
 from ..agents import Agent
 from ..background.request_tracker import RequestState, RequestStatus
-from ...services.observability import observability
+from ...services import observability
 from ...types.response import MuxiResponse
 from ...services.mcp.service import MCPService
 from ...services.memory.short_term import ShortTermMemory

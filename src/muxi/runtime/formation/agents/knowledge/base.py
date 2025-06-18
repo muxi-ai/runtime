@@ -43,11 +43,8 @@
 #   # Add additional sources
 #   handler.add_source(VectorKnowledge("embeddings_db", "db.sqlite"))
 #
-#   # Retrieve knowledge
-#   results = await handler.retrieve(
-#       query="How do I configure the API?",
-#       limit_per_source=3
-#   )
+#   # Process knowledge sources with hybrid architecture
+#   await handler.add_knowledge_source(product_docs)
 #
 # More sophisticated implementations would include vector databases,
 # API connectors, or other specialized knowledge sources.
@@ -59,6 +56,9 @@ from typing import Any, Dict, List, Optional
 
 # Import markitdown for document conversion
 from markitdown import MarkItDown
+
+# Import DocumentChunkManager for hybrid architecture integration
+from ...documents.storage.chunk_manager import DocumentChunkManager, DocumentChunk
 
 
 class KnowledgeSource:
@@ -87,30 +87,6 @@ class KnowledgeSource:
         """
         self.name = name
         self.description = description or f"Knowledge source: {name}"
-
-    async def retrieve(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        Retrieve relevant information based on a query.
-
-        This is an abstract method that must be implemented by subclasses.
-        Each implementation can use different strategies for finding and
-        ranking relevant information.
-
-        Args:
-            query: The search query string. This should be a question or set
-                of keywords that the source will use to find relevant information.
-            limit: Maximum number of results to return. Sources should respect
-                this limit to prevent overwhelming the caller with too much information.
-
-        Returns:
-            List of dictionaries containing relevant information. Each dictionary
-            should have at least a "content" field with the relevant text, and
-            optionally a "metadata" field with additional context.
-
-        Raises:
-            NotImplementedError: If not implemented by a subclass.
-        """
-        raise NotImplementedError("Subclasses must implement retrieve()")
 
 
 class FileKnowledge(KnowledgeSource):
@@ -329,77 +305,6 @@ class FileKnowledge(KnowledgeSource):
         print(f"Total files to process: {len(self._files)}")
         return self._files
 
-    async def retrieve(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
-        """
-        Retrieve relevant information from files based on a query.
-
-        This implementation processes files using markitdown for supported formats
-        and direct reading for text files. The content is converted to markdown
-        format for consistent processing downstream.
-
-        Args:
-            query: The search query. In this simple implementation, the query is not
-                actually used for filtering, but is required by the interface.
-            limit: Maximum number of files to return. If there are more files than
-                this limit, only the first 'limit' files are processed.
-
-        Returns:
-            List of retrieved knowledge items. Each item includes:
-            - source: The file path
-            - content: The processed file contents (converted to markdown if applicable)
-            - metadata: Additional information including file type, path, size, and
-                processing method
-        """
-        results = []
-        files = self._discover_files()
-
-        for i, file_path in enumerate(files[:limit]):
-            try:
-                # Check file size before reading
-                file_size = os.path.getsize(file_path)
-                if file_size > self.max_file_size:
-                    print(
-                        f"Skipping large file: {file_path} "
-                        f"({file_size} bytes > {self.max_file_size})"
-                    )
-                    continue
-
-                print(f"Processing file {i+1}/{min(len(files), limit)}: {file_path}")
-
-                # Load file content using appropriate method
-                content = self._load_file_content(file_path)
-
-                # Determine processing method for metadata
-                processing_method = "text"
-                if self._is_markitdown_supported(file_path):
-                    processing_method = "markitdown"
-                elif self._is_text_file(file_path):
-                    processing_method = "text"
-                else:
-                    processing_method = "fallback"
-
-                # Create a result item with file information
-                results.append(
-                    {
-                        "source": file_path,
-                        "content": content,
-                        "metadata": {
-                            "type": "file",
-                            "path": file_path,
-                            "size": len(content),
-                            "base_path": self.path,
-                            "extension": os.path.splitext(file_path)[1],
-                            "processing_method": processing_method,
-                            "markitdown_supported": self._is_markitdown_supported(file_path),
-                        },
-                    }
-                )
-            except Exception as e:
-                # Log errors but continue processing other files
-                print(f"Error reading file {file_path}: {str(e)}")
-
-        return results
-
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "FileKnowledge":
         """
@@ -421,6 +326,91 @@ class FileKnowledge(KnowledgeSource):
             max_file_size=config.get("max_file_size", 1024 * 1024),
             enable_markitdown=config.get("enable_markitdown", True),
         )
+
+    async def process_with_chunk_manager(
+        self,
+        chunk_manager: DocumentChunkManager,
+        file_limit: Optional[int] = None
+    ) -> List[DocumentChunk]:
+        """
+        Process files using DocumentChunkManager for hybrid architecture integration.
+
+        This method integrates FileKnowledge's advanced file processing capabilities
+        (including markitdown support for multiple file formats) with the hybrid
+        architecture's DocumentChunkManager for consistent chunking.
+
+        Args:
+            chunk_manager: DocumentChunkManager instance for chunking
+            file_limit: Optional limit on number of files to process
+
+        Returns:
+            List of DocumentChunk objects from all processed files
+        """
+        all_chunks = []
+        files = self._discover_files()
+
+        # Apply file limit if specified
+        if file_limit is not None:
+            files = files[:file_limit]
+
+        for file_path in files:
+            try:
+                # Check file size before processing
+                file_size = os.path.getsize(file_path)
+                if file_size > self.max_file_size:
+                    print(
+                        f"Skipping large file: {file_path} "
+                        f"({file_size} bytes > {self.max_file_size})"
+                    )
+                    continue
+
+                # Use FileKnowledge's advanced file loading (with markitdown support)
+                content = self._load_file_content(file_path)
+
+                if not content or len(content.strip()) < 10:
+                    continue
+
+                # Use DocumentChunkManager for consistent chunking
+                document_chunks = await chunk_manager.chunk_document(
+                    content=content,
+                    filename=os.path.basename(file_path),
+                    strategy="adaptive",  # Use adaptive strategy for optimal chunking
+                    document_id=file_path
+                )
+
+                # Add FileKnowledge-specific metadata to chunks
+                for chunk in document_chunks:
+                    chunk.metadata.update({
+                        "knowledge_source": self.name,
+                        "knowledge_description": self.description,
+                        "file_path": file_path,
+                        "processing_method": self._get_processing_method(file_path),
+                        "markitdown_supported": self._is_markitdown_supported(file_path),
+                        "file_extension": os.path.splitext(file_path)[1],
+                        "file_size": file_size,
+                    })
+
+                all_chunks.extend(document_chunks)
+                print(f"✓ Processed {file_path} -> {len(document_chunks)} chunks")
+
+            except Exception as e:
+                print(f"Error processing file {file_path}: {e}")
+                continue
+
+        return all_chunks
+
+    def _get_processing_method(self, file_path: str) -> str:
+        """Get the processing method used for a file."""
+        if self._is_markitdown_supported(file_path):
+            return "markitdown"
+        elif self._is_text_file(file_path):
+            return "text"
+        else:
+            return "fallback"
+
+    def get_files(self) -> List[str]:
+        """Get list of files from this knowledge source."""
+        return self._discover_files()
 
 
 class KnowledgeHandler:
@@ -456,60 +446,3 @@ class KnowledgeHandler:
                 KnowledgeSource or a subclass.
         """
         self.sources.append(source)
-
-    async def retrieve(
-        self, query: str, limit_per_source: int = 3, max_sources: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Retrieve information from all knowledge sources.
-
-        This method queries all registered knowledge sources and aggregates
-        their results into a single list. It handles errors in individual
-        sources gracefully, ensuring that a failure in one source doesn't
-        prevent results from other sources.
-
-        Args:
-            query: The search query to send to all knowledge sources. This should
-                be a question or keyword phrase that will be used to find relevant
-                information across all sources.
-            limit_per_source: Maximum number of results to retrieve from each source.
-                Controls the total volume of information by limiting each source's
-                contribution.
-            max_sources: Maximum number of sources to query. If None, all registered
-                sources are queried. If specified, only the first 'max_sources'
-                sources are used.
-
-        Returns:
-            List of retrieved knowledge items from all sources, each enriched with
-            metadata identifying its source. The format matches the KnowledgeSource
-            retrieve() method, with additional source identification metadata.
-        """
-        results = []
-
-        # Limit the number of sources if specified
-        sources = self.sources
-        if max_sources is not None:
-            sources = sources[:max_sources]
-
-        # Query each source
-        for source in sources:
-            try:
-                # Retrieve results from this source
-                source_results = await source.retrieve(query, limit=limit_per_source)
-
-                # Add source information to each result for attribution
-                for result in source_results:
-                    if "metadata" not in result:
-                        result["metadata"] = {}
-
-                    # Tag each result with its source information
-                    result["metadata"]["source_name"] = source.name
-                    result["metadata"]["source_description"] = source.description
-
-                # Add this source's results to the combined results
-                results.extend(source_results)
-            except Exception as e:
-                # Log errors but continue processing other sources
-                print(f"Error retrieving from source {source.name}: {str(e)}")
-
-        return results
