@@ -122,13 +122,13 @@ class WebhookManager:
             response_content = []
             if result:
                 if hasattr(result, "content"):
-                    # MCPMessage or similar object
+                    # MuxiResponse or similar object
                     content_str = str(result.content)
                 else:
                     content_str = str(result)
 
                 response_content: List[MuxiContentItem] = [
-                    {"type": "text", "text": content_str, "file": None}
+                    {"type": "text", "text": content_str}
                 ]
 
             unified_response = create_unified_response(

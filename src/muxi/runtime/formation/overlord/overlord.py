@@ -88,7 +88,7 @@ import os
 from ..agents import Agent
 from ..background.request_tracker import RequestState, RequestStatus
 from ...services.observability import observability
-from ...services.mcp.message import MCPMessage
+from ...types.response import MuxiResponse
 from ...services.mcp.service import MCPService
 from ...services.memory.short_term import ShortTermMemory
 from ...services.memory.long_term import LongTermMemory
@@ -3299,7 +3299,7 @@ class Overlord:
 
     async def _process_sync_chat(
         self, message: str, agent_name: Optional[str], user_id: Any
-    ) -> MCPMessage:
+    ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
 
@@ -3307,6 +3307,8 @@ class Overlord:
         infrastructure for agent selection and message processing. It maintains
         compatibility with the current system while providing a clean interface
         for both sync and async execution paths.
+
+        ENHANCED: Now detects and handles agent clarification requests.
         """
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
@@ -3340,7 +3342,230 @@ class Overlord:
         # Process the message using the agent
         result = await agent.process_message(message, user_id=user_id_int)
 
+        # NEW: Check if agent response contains clarification request
+        agent_clarification = await self._check_agent_clarification_request(result, user_id_int)
+        if agent_clarification:
+            # Agent needs clarification - transform it into user clarification
+            return await self._handle_agent_clarification_request(
+                agent_clarification, result, message, agent_name, user_id_int
+            )
+
         return result
+
+    async def _check_agent_clarification_request(
+        self, agent_response: MuxiResponse, user_id: Any
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if agent response contains a clarification request.
+
+        Args:
+            agent_response: The response from the agent
+            user_id: User identifier
+
+        Returns:
+            Clarification request metadata if found, None otherwise
+        """
+        try:
+            # Check if response has clarification metadata
+            if not hasattr(agent_response, 'metadata') or not agent_response.metadata:
+                return None
+
+            metadata = agent_response.metadata
+            if not isinstance(metadata, dict):
+                return None
+
+            # Check for agent clarification request structure
+            if (metadata.get("needs_clarification") and
+                    metadata.get("clarification_type") == "information_request"):
+                return metadata
+
+            return None
+
+        except Exception as e:
+            # Log error but don't block processing
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "phase": "agent_clarification_check",
+                },
+                description=f"Error checking agent clarification request: {str(e)}",
+            )
+            return None
+
+    async def _handle_agent_clarification_request(
+        self,
+        clarification_metadata: Dict[str, Any],
+        agent_response: MuxiResponse,
+        original_message: str,
+        agent_name: str,
+        user_id_int: Optional[int]
+    ) -> MuxiResponse:
+        """
+        Handle agent clarification request by converting it to user clarification.
+
+        Args:
+            clarification_metadata: The clarification request from agent
+            agent_response: Original agent response
+            original_message: User's original message
+            agent_name: Name of the agent requesting clarification
+            user_id_int: Internal user ID
+
+        Returns:
+            MuxiResponse with clarification question for user
+        """
+        try:
+            # Extract required information from agent request
+            required_info = clarification_metadata.get("required_info", {})
+            agent_reasoning = clarification_metadata.get("agent_reasoning", "")
+
+            # Generate clarification question for user
+            clarification_question = await self._generate_user_clarification_question(
+                required_info, agent_reasoning, agent_response.content
+            )
+
+            # Create clarification response
+            clarification_response = MuxiResponse(
+                role="assistant",
+                content=clarification_question,
+                metadata={
+                    "requires_clarification": True,
+                    "clarification_source": "agent_request",
+                    "agent_name": agent_name,
+                    "original_agent_response": agent_response.content,
+                    "required_info": required_info,
+                    "agent_reasoning": agent_reasoning,
+                    "original_message": original_message
+                }
+            )
+
+            # Emit clarification event
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_GENERATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_name": agent_name,
+                    "required_info_categories": list(required_info.keys()),
+                    "clarification_source": "agent_request",
+                },
+                description=f"Agent {agent_name} requested clarification from user",
+            )
+
+            return clarification_response
+
+        except Exception as e:
+            # Log error and return original response
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "agent_name": agent_name,
+                },
+                description=f"Failed to handle agent clarification request: {str(e)}",
+            )
+
+            # Return original agent response if clarification handling fails
+            return agent_response
+
+    async def _generate_user_clarification_question(
+        self,
+        required_info: Dict[str, str],
+        agent_reasoning: str,
+        original_agent_response: str
+    ) -> str:
+        """
+        Generate a user-friendly clarification question from agent requirements.
+
+        Args:
+            required_info: Dictionary of required information categories and questions
+            agent_reasoning: Agent's reasoning for needing clarification
+            original_agent_response: The agent's original response
+
+        Returns:
+            Formatted clarification question for the user
+        """
+        if not required_info:
+            return "I need some additional information to help you better. Could you provide more details?"
+
+        # Create introduction
+        intro = "I'd like to help you with that! To provide the most accurate response, I need some additional information:"
+
+        # Format questions
+        questions = []
+        for category, question in required_info.items():
+            # Ensure question ends with question mark
+            if not question.endswith("?"):
+                question += "?"
+            questions.append(f"• {question}")
+
+        # Combine parts
+        clarification_parts = [intro]
+        clarification_parts.extend(questions)
+
+        # Add reasoning if provided
+        if agent_reasoning:
+            clarification_parts.append(f"\n{agent_reasoning}")
+
+        return "\n\n".join(clarification_parts)
+
+    async def process_agent_clarification_response(
+        self,
+        clarification_response: str,
+        clarification_metadata: Dict[str, Any],
+        user_id: Any = None
+    ) -> MuxiResponse:
+        """
+        Process user's response to agent clarification request.
+
+        Args:
+            clarification_response: User's response to clarification questions
+            clarification_metadata: Original clarification metadata
+            user_id: User identifier
+
+        Returns:
+            Final response after re-processing with clarification
+        """
+        try:
+            # Extract original context
+            original_message = clarification_metadata.get("original_message", "")
+            agent_name = clarification_metadata.get("agent_name")
+
+            # Enhance original message with clarification response
+            enhanced_message = f"{original_message}\n\nAdditional context: {clarification_response}"
+
+            # Re-process with enhanced message
+            result = await self._process_sync_chat(enhanced_message, agent_name, user_id)
+
+            # Emit completion event
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_name": agent_name,
+                    "clarification_source": "agent_request",
+                },
+                description=f"Agent clarification completed for {agent_name}",
+            )
+
+            return result
+
+        except Exception as e:
+            # Log error and return error response
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                },
+                description=f"Failed to process agent clarification response: {str(e)}",
+            )
+
+            return MuxiResponse(
+                role="assistant",
+                content="I apologize, but I encountered an error processing your additional information. Please try again."
+            )
 
     async def _process_streaming_chat(
         self, message: str, agent_name: Optional[str], user_id: Any

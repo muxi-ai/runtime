@@ -55,7 +55,8 @@ from .handler import (
 )
 from .reconnect_handler import ReconnectingMCPHandler
 from .service import MCPService
-from .message import MCPMessage, MCPToolCall
+from ...types.response import MuxiResponse
+from .message import MCPToolCall
 from .parser import ToolParser, ToolCall
 
 __all__ = [
@@ -65,7 +66,7 @@ __all__ = [
     'MCPTimeoutError',
     'ReconnectingMCPHandler',
     'MCPService',
-    'MCPMessage',
+    'MuxiResponse',
     'MCPToolCall',
     'ToolParser',
     'ToolCall',

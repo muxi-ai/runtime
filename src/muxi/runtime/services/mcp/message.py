@@ -34,9 +34,34 @@
 # =============================================================================
 
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from pydantic import BaseModel, Field
+
+
+class FunctionCallModel(BaseModel):
+    """
+    Model representing a function/tool call.
+
+    This model defines the structure of a function or tool call within the MCP
+    system, including the name of the function and its parameters. It's used
+    to represent both agent-generated function calls and their results.
+    """
+
+    name: str = Field(..., description="Function/tool name")
+    parameters: Dict[str, Any] = Field(..., description="Function/tool parameters")
+    output: Optional[Any] = Field(None, description="Function/tool output (when available)")
+
+    class Config:
+        """Pydantic configuration for the model."""
+
+        json_schema_extra = {
+            "example": {
+                "name": "get_weather",
+                "parameters": {"location": "New York", "unit": "celsius", "include_forecast": True},
+                "output": {"temperature": 22, "conditions": "Partly cloudy", "humidity": 65},
+            }
+        }
 
 
 class ErrorCodes(int, Enum):
@@ -144,122 +169,6 @@ class JSONRPCErrorResponse(JSONRPCBaseResponse):
 
 
 JSONRPCResponse = Union[JSONRPCSuccessResponse, JSONRPCErrorResponse]
-
-
-class FunctionCallModel(BaseModel):
-    """
-    Model representing a function/tool call.
-
-    This model defines the structure of a function or tool call within the MCP
-    system, including the name of the function and its parameters. It's used
-    to represent both agent-generated function calls and their results.
-    """
-
-    name: str = Field(..., description="Function/tool name")
-    parameters: Dict[str, Any] = Field(..., description="Function/tool parameters")
-    output: Optional[Any] = Field(None, description="Function/tool output (when available)")
-
-    class Config:
-        """Pydantic configuration for the model."""
-
-        json_schema_extra = {
-            "example": {
-                "name": "get_weather",
-                "parameters": {"location": "New York", "unit": "celsius", "include_forecast": True},
-                "output": {"temperature": 22, "conditions": "Partly cloudy", "humidity": 65},
-            }
-        }
-
-
-class ContentItem(BaseModel):
-    """
-    Model representing a single content item in a message.
-
-    This model defines the structure of a content item within a message,
-    which can be either text content or a tool/function call. It supports
-    the LLM multi-modal content format.
-    """
-
-    type: str = Field(..., description="Content type ('text' or 'tool_calls')")
-    text: Optional[str] = Field(None, description="Text content (when type='text')")
-    tool_calls: Optional[List[FunctionCallModel]] = Field(
-        None, description="Tool calls (when type='tool_calls')"
-    )
-
-    def model_dump(self, **kwargs):
-        """
-        Convert model to dictionary with custom handling.
-
-        This method provides a custom serialization for ContentItem objects,
-        which ensures proper translation between the Pydantic model and the
-        format expected by the JSON-RPC protocol.
-
-        Returns:
-            Dict[str, Any]: Dictionary representation of the content item
-        """
-        if kwargs.get("mode") == "json":
-            # For JSON output
-            has_tool_calls = self.type == "tool_calls" and self.tool_calls
-            tool_calls_json = None
-            if has_tool_calls:
-                tool_calls_json = [tc.model_dump(mode="json") for tc in self.tool_calls]
-
-            return {
-                "type": self.type,
-                "text": self.text if self.type == "text" else None,
-                "tool_calls": tool_calls_json,
-            }
-        # For regular dict output
-        result = {"type": self.type}
-        if self.type == "text":
-            result["text"] = self.text
-        elif self.type == "tool_calls":
-            result["tool_calls"] = (
-                [tc.model_dump() for tc in self.tool_calls] if self.tool_calls else None
-            )
-        return result
-
-
-class MCPMessage(BaseModel):
-    """
-    Model representing a complete message with mixed content.
-
-    This model defines the structure of a complete message within the MCP
-    system, which includes a role (user, assistant, etc.) and content that
-    can be either a simple string or a list of content items supporting
-    multi-modal content.
-    """
-
-    role: str = Field(..., description="Message role (user, assistant, system, etc.)")
-    content: Union[str, List[ContentItem]] = Field(
-        ..., description="Message content (string or content items)"
-    )
-
-    def model_dump(self, **kwargs):
-        """
-        Convert model to dictionary with custom handling.
-
-        This method provides a custom serialization for Message objects,
-        which ensures proper translation between the Pydantic model and
-        the format expected by clients.
-
-        Returns:
-            Dict[str, Any]: Dictionary representation of the message
-        """
-        result = {"role": self.role}
-
-        # Handle different content types
-        if isinstance(self.content, str):
-            result["content"] = self.content
-        else:
-            mode = "json" if kwargs.get("mode") == "json" else None
-            result["content"] = [item.model_dump(mode=mode) for item in self.content]
-
-        return result
-
-
-# Alias Message as MCPMessage for backward compatibility
-# Message = MCPMessage
 
 
 class MCPToolCall(FunctionCallModel):
