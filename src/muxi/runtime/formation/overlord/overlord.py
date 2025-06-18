@@ -310,7 +310,7 @@ class Overlord:
 
         # Initialize agent storage
         self.agents: Dict[str, Agent] = {}
-        self.agent_descriptions: Dict[str, str] = {}  # Legacy compatibility
+        self.agent_descriptions: Dict[str, str] = {}  # Agent descriptions for routing
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
 
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
@@ -1115,8 +1115,7 @@ class Overlord:
         Create an agent from configuration dict.
 
         This method creates a new agent instance from a configuration dictionary and registers
-        it with the overlord. It handles both new and legacy configuration formats and sets up
-        all necessary metadata for agent routing and functionality.
+        it with the overlord. It sets up all necessary metadata for agent routing and functionality.
 
         Args:
             agent_config: Agent configuration dictionary containing agent parameters
@@ -1130,21 +1129,15 @@ class Overlord:
         if agent_id in self.agents:
             raise ValueError(f"Agent with ID '{agent_id}' already exists")
 
-        # Create model from configuration (support both new and legacy formats)
-        if "llm_models" in agent_config:
-            # New schema format
-            llm_models = agent_config["llm_models"]
-            if llm_models and len(llm_models) > 0:
-                text_model = llm_models[0]  # Use first model for text capability
-                model_name = text_model.get("text", "openai/gpt-4o-mini")
-                settings = text_model.get("settings", {})
-                model = await self.create_model(model=model_name, **settings)
-            else:
-                model = await self.create_model()
+        # Create model from configuration
+        llm_models = agent_config["llm_models"]
+        if llm_models and len(llm_models) > 0:
+            text_model = llm_models[0]  # Use first model for text capability
+            model_name = text_model.get("text", "openai/gpt-4o-mini")
+            settings = text_model.get("settings", {})
+            model = await self.create_model(model=model_name, **settings)
         else:
-            # Legacy model format
-            model_config = agent_config.get("model", {})
-            model = await self.create_model(**model_config)
+            model = await self.create_model()
 
         # Extract agent parameters
         system_message = agent_config.get("system_message")
@@ -1156,6 +1149,22 @@ class Overlord:
         a2a_internal = agent_config.get("a2a_internal", True)
         a2a_external = agent_config.get("a2a_external", True)
 
+        # Extract knowledge configuration
+        knowledge_config = agent_config.get("knowledge")
+        if knowledge_config:
+            try:
+                # Validate knowledge configuration
+                self._validate_knowledge_config(knowledge_config)
+                #  Info - TODO: add observability
+                # SystemEvents.AGENT_KNOWLEDGE_CONFIG_LOADED
+                _ = agent_id  # remove this after implementing observability
+            except Exception as e:
+                #  Warning - TODO: add observability
+                # SystemEvents.AGENT_KNOWLEDGE_CONFIG_INVALID
+                _ = e, agent_id  # remove this after implementing observability
+                # Continue without knowledge configuration
+                knowledge_config = None
+
         # Create agent with reference to overlord for memory access
         agent = Agent(
             model=model,
@@ -1165,6 +1174,7 @@ class Overlord:
             request_timeout=request_timeout,  # Pass timeout parameter
             a2a_internal=a2a_internal,
             a2a_external=a2a_external,
+            knowledge_config=knowledge_config,  # Pass knowledge configuration
         )
 
         # Set enhanced metadata attributes on the agent
@@ -1197,6 +1207,44 @@ class Overlord:
             if not hasattr(self, "pending_external_registrations"):
                 self.pending_external_registrations = set()
             self.pending_external_registrations.add(agent_id)
+
+    def _validate_knowledge_config(self, knowledge_config: Dict[str, Any]) -> None:
+        """
+        Validate knowledge configuration for agent creation.
+
+        This method validates that the knowledge configuration contains all required
+        fields and that the specified knowledge sources are accessible. It performs
+        basic validation without initializing the full knowledge system.
+
+        Args:
+            knowledge_config: Knowledge configuration dictionary containing sources
+                and other knowledge-related settings.
+
+        Raises:
+            ValueError: If the knowledge configuration is invalid or incomplete.
+            FileNotFoundError: If specified knowledge sources are not accessible.
+        """
+        if not isinstance(knowledge_config, dict):
+            raise ValueError("Knowledge configuration must be a dictionary")
+
+        # Validate sources field
+        sources = knowledge_config.get("sources")
+        if not sources:
+            raise ValueError("Knowledge configuration must contain 'sources' field")
+
+        if not isinstance(sources, list):
+            raise ValueError("Knowledge sources must be a list")
+
+        if len(sources) == 0:
+            raise ValueError("Knowledge sources list cannot be empty")
+
+        # Validate each source
+        for i, source in enumerate(sources):
+            if not isinstance(source, str):
+                raise ValueError(f"Knowledge source {i} must be a string path")
+
+            # Note: Path validation will be done by KnowledgeHandler during init
+            # We don't validate file existence here to avoid blocking agent creation
 
     async def _register_mcp_server_from_config(self, server_config: Dict[str, Any]) -> None:
         """
@@ -1278,137 +1326,54 @@ class Overlord:
             # Get overlord configuration from formation config
             overlord_config = self.formation_config.get("overlord", {})
 
-            # Set custom persona if provided (with legacy support) - check at top level first
+            # Set custom persona if provided
             overlord_persona = overlord_config.get("persona")
-            if not overlord_persona:
-                # Legacy support: fallback to system_message
-                overlord_persona = overlord_config.get("system_message")
+            self.routing_persona = overlord_persona
 
-            if overlord_persona:
-                self.routing_persona = overlord_persona
-            else:
-                self.routing_persona = None
-
-            # Try new overlord.llm structure first
+            # Get overlord.llm config structure
             llm_config = overlord_config.get("llm", {})
-            if llm_config:
-                # New overlord.llm config structure
-                self.routing_model = await self.create_model(
-                    model=llm_config.get("model", "openai/gpt-4o-mini"),
-                    temperature=llm_config.get("settings", {}).get("temperature", 0.2),
-                    max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
-                    api_key=llm_config.get("api_key"),
-                )
+            self.routing_model = await self.create_model(
+                model=llm_config.get("model", "openai/gpt-4o-mini"),
+                temperature=llm_config.get("settings", {}).get("temperature", 0.2),
+                max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
+                api_key=llm_config.get("api_key"),
+            )
 
-                # Configure overlord behavior from overlord.config
-                config_section = overlord_config.get("config", {})
+            # Configure overlord behavior from overlord.config
+            config_section = overlord_config.get("config", {})
 
-                # Caching configuration
-                caching_config = config_section.get("caching", {})
-                self.routing_cache_enabled = caching_config.get("enabled", True)
-                self.routing_cache_ttl = caching_config.get("ttl", 3600)
+            # Caching configuration
+            caching_config = config_section.get("caching", {})
+            self.routing_cache_enabled = caching_config.get("enabled", True)
+            self.routing_cache_ttl = caching_config.get("ttl", 3600)
 
-                # Additional configuration fields
-                self.max_extraction_tokens = config_section.get("max_extraction_tokens", 500)
-                self.max_tool_calls = config_section.get("max_tool_calls", -1)
+            # Additional configuration fields
+            self.max_extraction_tokens = config_section.get("max_extraction_tokens", 500)
+            self.max_tool_calls = config_section.get("max_tool_calls", -1)
 
-                # Response configuration (required nested structure)
-                response_config = config_section.get("response", {})
-                self.response_format = response_config.get("format", "markdown")
-                self.use_interactive_elements = response_config.get("interactive_elements", True)
+            # Response configuration
+            response_config = config_section.get("response", {})
+            self.response_format = response_config.get("format", "markdown")
+            self.use_interactive_elements = response_config.get("interactive_elements", True)
 
-                # Intelligence configuration
-                self.learn_user_preference = config_section.get("learn_user_preference", True)
-                self.adaptive_responses = config_section.get("adaptive_responses", True)
+            # Intelligence configuration
+            self.learn_user_preference = config_section.get("learn_user_preference", True)
+            self.adaptive_responses = config_section.get("adaptive_responses", True)
 
-                # Resilience configuration
-                self.circuit_breaker = config_section.get("circuit_breaker", True)
-                self.error_recovery = config_section.get("error_recovery", True)
+            # Resilience configuration
+            self.circuit_breaker = config_section.get("circuit_breaker", True)
+            self.error_recovery = config_section.get("error_recovery", True)
 
-                # Workflow configuration
-                self.auto_decomposition = config_section.get("auto_decomposition", True)
-                self.plan_approval_threshold = config_section.get("plan_approval_threshold", 7)
+            # Workflow configuration
+            self.auto_decomposition = config_section.get("auto_decomposition", True)
+            self.plan_approval_threshold = config_section.get("plan_approval_threshold", 7)
 
-                # Streaming configuration
-                self.streaming = overlord_config.get("streaming", True)
+            # Streaming configuration
+            self.streaming = overlord_config.get("streaming", True)
 
-                # Initialize cache expiry tracking if TTL is configured
-                if self.routing_cache_ttl > 0:
-                    self._routing_cache_expiry: Dict[str, float] = {}
-
-            else:
-                # Fall back to legacy overlord.routing structure for compatibility
-                routing_data = overlord_config.get("routing", {})
-                if routing_data:
-                    self.routing_model = await self.create_model(
-                        model=routing_data.get("model", "openai/gpt-4o-mini"),
-                        temperature=routing_data.get("settings", {}).get("temperature", 0.2),
-                        max_tokens=routing_data.get("settings", {}).get("max_tokens", 2000),
-                        api_key=routing_data.get("api_key"),
-                    )
-
-                    # Legacy caching config
-                    self.routing_cache_enabled = routing_data.get("use_caching", True)
-                    self.routing_cache_ttl = routing_data.get("cache_ttl", 3600)
-                    # Only override persona if not already set from top-level config
-                    if not self.routing_persona:
-                        self.routing_persona = routing_data.get("persona") or routing_data.get(
-                            "system_message"
-                        )
-
-                    # Default values for overlord config
-                    self.max_extraction_tokens = 500
-                    self.max_tool_calls = -1
-                    # Response config is now required - these are fallback defaults
-                    self.response_format = "markdown"
-                    self.use_interactive_elements = True
-                    self.learn_user_preference = True
-                    self.adaptive_responses = True
-                    self.circuit_breaker = True
-                    self.error_recovery = True
-                    self.auto_decomposition = True
-                    self.plan_approval_threshold = 7
-
-                    # Streaming configuration (default for legacy)
-                    self.streaming = overlord_config.get("streaming", True)
-
-                    # Initialize cache expiry tracking if TTL is configured
-                    if self.routing_cache_ttl > 0:
-                        self._routing_cache_expiry: Dict[str, float] = {}
-
-                else:
-                    # No overlord config - try to get text model from formation
-                    try:
-                        # Don't create a task, just set to None and handle later
-                        self.routing_model = None
-                        #  Routing model selection - TODO: add observability
-                        #  ROUTING_MODEL_SELECTED
-                    except Exception:
-                        # Fall back to create_model with defaults
-                        self.routing_model = await self.create_model()
-
-                    # Default caching settings
-                    self.routing_cache_enabled = True
-                    self.routing_cache_ttl = 3600
-                    # Only set to None if not already set from top-level config
-                    if not hasattr(self, "routing_persona"):
-                        self.routing_persona = None
-
-                    self.max_extraction_tokens = 500
-                    self.max_tool_calls = -1
-                    self.response_format = "markdown"
-                    self.use_interactive_elements = True
-                    self.learn_user_preference = True
-                    self.adaptive_responses = True
-                    self.circuit_breaker = True
-                    self.error_recovery = True
-                    self.auto_decomposition = True
-                    self.plan_approval_threshold = 7
-
-                    # Streaming configuration (default for no config)
-                    self.streaming = True
-
-                    self._routing_cache_expiry: Dict[str, float] = {}
+            # Initialize cache expiry tracking if TTL is configured
+            if self.routing_cache_ttl > 0:
+                self._routing_cache_expiry: Dict[str, float] = {}
 
             #  Info - TODO: add observability
             #  SystemEvents.STARTED (overlord routing)
@@ -1428,32 +1393,11 @@ class Overlord:
             # )
 
         except Exception as e:
-            # If initialization fails, log error but continue (routing will fall back to default)
-            #  Warning - TODO: add observability
+            # If initialization fails, log error and raise
+            #  Error - TODO: add observability
             # ErrorEvents.FAILED_INITIALIZATION (overlord routing)
             _ = e  # remove this after implementing observability
-            self.routing_model = None
-            self.routing_cache_enabled = True
-            self.routing_cache_ttl = 3600
-            # Only set to None if not already set from top-level config
-            if not hasattr(self, "routing_persona"):
-                self.routing_persona = None
-            self.max_extraction_tokens = 500
-            self.max_tool_calls = -1
-            # Response config requires proper nested structure
-            self.response_format = "markdown"
-            self.use_interactive_elements = True
-            self.learn_user_preference = True
-            self.adaptive_responses = True
-            self.circuit_breaker = True
-            self.error_recovery = True
-            self.auto_decomposition = True
-            self.plan_approval_threshold = 7
-
-            # Streaming configuration (default for error case)
-            self.streaming = True
-
-            self._routing_cache_expiry: Dict[str, float] = {}
+            raise RuntimeError("Failed to initialize routing model from overlord.llm config") from e
 
     async def create_model(
         self,
@@ -2034,40 +1978,27 @@ class Overlord:
         # Get enhanced agent descriptions with metadata
         agent_descriptions = []
         for agent_id in self.agents.keys():
-            # Use enhanced metadata if available, fall back to legacy description
-            if agent_id in self.agent_metadata:
-                metadata = self.agent_metadata[agent_id]
-                name = metadata["name"]
-                role = metadata["role"]
-                specialties = metadata["specialties"]
-                description = metadata["description"]
+            # Use enhanced metadata
+            metadata = self.agent_metadata[agent_id]
+            name = metadata["name"]
+            role = metadata["role"]
+            specialties = metadata["specialties"]
+            description = metadata["description"]
 
-                # Format: "ID: Name (Role) - Specialties: [list] - Description"
-                agent_line = f"{agent_id}: {name}"
-                if role:
-                    agent_line += f" ({role})"
-                if specialties:
-                    specialty_list = ", ".join(specialties)
-                    agent_line += f" - Specialties: {specialty_list}"
-                if description:
-                    agent_line += f" - {description}"
+            # Format: "ID: Name (Role) - Specialties: [list] - Description"
+            agent_line = f"{agent_id}: {name}"
+            if role:
+                agent_line += f" ({role})"
+            if specialties:
+                specialty_list = ", ".join(specialties)
+                agent_line += f" - Specialties: {specialty_list}"
+            if description:
+                agent_line += f" - {description}"
 
-                agent_descriptions.append(agent_line)
-            else:
-                # Fallback to legacy format
-                desc = self.agent_descriptions.get(agent_id, f"Agent {agent_id}")
-                agent_descriptions.append(f"{agent_id}: {desc}")
+            agent_descriptions.append(agent_line)
 
-        # Get persona from config or use default (with legacy support)
-        custom_persona = None
-        if hasattr(self, "routing_persona") and self.routing_persona:
-            custom_persona = self.routing_persona
-        else:
-            overlord_config = self.formation_config.get("overlord", {})
-            custom_persona = overlord_config.get("persona")
-            if not custom_persona:
-                # Legacy support: fallback to system_message
-                custom_persona = overlord_config.get("system_message")
+        # Get persona from config or use default
+        custom_persona = getattr(self, "routing_persona", None)
 
         # Create complete system message using persona
         complete_system_message = self._create_overlord_system_message(custom_persona)
@@ -2259,7 +2190,7 @@ class Overlord:
                 continue
 
             # Check if agent participates in internal A2A communication
-            # Default to True if not specified (backwards compatibility)
+            # Default to True if not specified
             if not getattr(agent, "a2a_internal", True):
                 continue
 
@@ -4173,7 +4104,7 @@ class Overlord:
                     RETURNING id
                     """
 
-                    # Generate a nano_id for the user_id column (for backward compatibility)
+                    # Generate a nano_id for the user_id column
                     nano_id = generate_nanoid()
 
                     if hasattr(db_connection, "fetchone"):

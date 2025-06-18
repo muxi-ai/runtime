@@ -71,6 +71,7 @@ class Agent:
         request_timeout: Optional[int] = None,
         a2a_internal: bool = True,
         a2a_external: bool = True,
+        knowledge_config: Optional[Dict[str, Any]] = None,
     ):
         """
         Initialize the agent with a model, overlord, and optional parameters.
@@ -92,6 +93,8 @@ class Agent:
                 communication. Default True.
             a2a_external: Whether this agent participates in external A2A
                 communication. Default True.
+            knowledge_config: Optional configuration for agent domain knowledge.
+                Contains sources and settings for the agent's knowledge base.
         """
         self.model = model
         self.overlord = overlord
@@ -125,6 +128,11 @@ class Agent:
         # Set up MCP service access
         self._mcp_service = MCPService.get_instance()
 
+        # Initialize knowledge handler
+        self.knowledge_handler: Optional[Any] = None  # Will be KnowledgeHandler when imported
+        self._knowledge_config = knowledge_config  # Store config for deferred initialization
+        self._knowledge_initialized = False
+
         # Initialize the context with system message
         self._messages = []
         if self.system_message:
@@ -140,6 +148,7 @@ class Agent:
                 "a2a_internal": self.a2a_internal,
                 "a2a_external": self.a2a_external,
                 "has_system_message": bool(self.system_message),
+                "has_knowledge_config": bool(knowledge_config),
             },
             description=f"Agent initialized: {self.agent_id}",
         )
@@ -154,6 +163,121 @@ class Agent:
         """
         return self._mcp_service
 
+    async def _initialize_knowledge(self, knowledge_config: Dict[str, Any]) -> None:
+        """
+        Initialize the knowledge handler from configuration.
+
+        Args:
+            knowledge_config: Configuration dictionary containing knowledge sources
+                and settings for the agent's knowledge base.
+        """
+        try:
+            # Import KnowledgeHandler here to avoid circular imports
+            from .knowledge.handler import KnowledgeHandler
+
+            # Get embedding function from model for semantic search
+            embedding_fn = None
+            if hasattr(self.model, 'get_embedding'):
+                embedding_fn = self.model.get_embedding
+            elif hasattr(self.model, 'embed'):
+                embedding_fn = self.model.embed
+
+            # Get formation config from overlord if available
+            formation_config = None
+            if hasattr(self.overlord, 'formation_config') and self.overlord.formation_config:
+                formation_config = self.overlord.formation_config
+
+            # Create knowledge handler using the factory method with formation config
+            self.knowledge_handler = await KnowledgeHandler.from_agent_config(
+                agent_id=self.agent_id,
+                knowledge_config=knowledge_config,
+                generate_embeddings_fn=embedding_fn,
+                formation_config=formation_config
+            )
+
+            # Log successful knowledge initialization
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "knowledge_sources": len(knowledge_config.get("sources", [])),
+                    "knowledge_config_keys": list(knowledge_config.keys()),
+                    "knowledge_handler_created": self.knowledge_handler is not None,
+                },
+                description=f"Knowledge handler initialized for agent {self.agent_id}",
+            )
+
+        except Exception as e:
+            # Log error but don't fail agent initialization
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZATION_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "phase": "knowledge_initialization",
+                },
+                description=f"Failed to initialize knowledge for agent {self.agent_id}: {str(e)}",
+            )
+            self.knowledge_handler = None
+
+    async def _ensure_knowledge_initialized(self) -> None:
+        """
+        Ensure knowledge handler is initialized if configuration is available.
+        This is called on first use since constructor can't be async.
+        """
+        if self._knowledge_initialized or not self._knowledge_config:
+            return
+
+        await self._initialize_knowledge(self._knowledge_config)
+        self._knowledge_initialized = True
+
+    async def search_knowledge(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Search the agent's knowledge base for relevant information using semantic search.
+
+        Args:
+            query: The search query string
+            limit: Maximum number of results to return
+
+        Returns:
+            List of knowledge results, empty list if no knowledge handler or no results
+        """
+        # Ensure knowledge is initialized
+        await self._ensure_knowledge_initialized()
+
+        if not self.knowledge_handler:
+            return []
+
+        try:
+            # Get embedding function from model for semantic search
+            embedding_fn = None
+            if hasattr(self.model, 'get_embedding'):
+                embedding_fn = self.model.get_embedding
+            elif hasattr(self.model, 'embed'):
+                embedding_fn = self.model.embed
+
+            results = await self.knowledge_handler.search(
+                query=query,
+                top_k=limit,
+                generate_embeddings_fn=embedding_fn
+            )
+            return results or []
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PROCESSING_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "phase": "knowledge_search",
+                    "query": query[:100],
+                },
+                description=f"Knowledge search failed for agent {self.agent_id}: {str(e)}",
+            )
+            return []
+
     async def process_message(
         self, message: Union[str, MuxiResponse], user_id: Any = None
     ) -> MuxiResponse:
@@ -164,10 +288,11 @@ class Agent:
         1. Converting input to MuxiResponse format
         2. Adding the message to memory via the overlord
         3. Updating conversation context
-        4. Processing the message with the model
-        5. Handling any tool calls in the response
-        6. Storing the response in memory
-        7. NEW: Supporting agent clarification requests to overlord
+        4. Searching domain knowledge (if available)
+        5. Processing the message with the model
+        6. Handling any tool calls in the response
+        7. Storing the response in memory
+        8. Supporting agent clarification requests to overlord
 
         Args:
             message: The message from the overlord, either as a string or an MuxiResponse.
@@ -212,6 +337,60 @@ class Agent:
 
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
+
+        # Search knowledge if handler is available
+        knowledge_context = ""
+        if self._knowledge_config:  # Check if knowledge config exists
+            try:
+                # Ensure knowledge is initialized
+                await self._ensure_knowledge_initialized()
+
+                if self.knowledge_handler:
+                    # Get embedding function from model for semantic search
+                    embedding_fn = None
+                    if hasattr(self.model, 'get_embedding'):
+                        embedding_fn = self.model.get_embedding
+                    elif hasattr(self.model, 'embed'):
+                        embedding_fn = self.model.embed
+
+                    knowledge_results = await self.knowledge_handler.search(
+                        query=content,
+                        top_k=5,
+                        generate_embeddings_fn=embedding_fn
+                    )
+                    if knowledge_results:
+                        knowledge_context = "\n\n--- Domain Knowledge ---\n"
+                        for result in knowledge_results:
+                            knowledge_context += f"• {result.get('content', '')}\n"
+                        knowledge_context += "--- End Domain Knowledge ---\n\n"
+
+                        # Add knowledge context to the conversation
+                        enhanced_message = f"{content}\n{knowledge_context}"
+                        self._messages[-1]["content"] = enhanced_message
+
+                        # Log knowledge search success
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "agent_id": self.agent_id,
+                                "knowledge_results_count": len(knowledge_results),
+                                "query": content[:100],
+                            },
+                            description=f"Knowledge search completed for agent {self.agent_id}",
+                        )
+            except Exception as e:
+                # Log error but don't fail message processing
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PROCESSING_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "knowledge_search",
+                    },
+                    description=f"Knowledge search failed for agent {self.agent_id}: {str(e)}",
+                )
 
         # Process the message with the model directly
         raw_response = await self.model.chat(self._messages)
@@ -345,7 +524,8 @@ class Agent:
 
                 # Uncertainty indicators
                 r"(?i)(?:i(?:'m| am) not sure|unclear|ambiguous|could mean)",
-                r"(?i)(?:depends on|varies based on|need(?:s)? more (?:information|details|context))",
+                r"(?i)(?:depends on|varies based on|need(?:s)? more "
+                r"(?:information|details|context))",
 
                 # Multiple options requiring choice
                 r"(?i)(?:several (?:options|ways|approaches)|multiple (?:possibilities|choices))",
