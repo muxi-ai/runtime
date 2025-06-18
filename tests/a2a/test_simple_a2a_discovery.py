@@ -72,7 +72,6 @@ def test_simple_a2a_discovery():
     print("1. Single source of truth: agent.a2a_internal")
     print("2. Simple check: getattr(agent, 'a2a_internal', True)")
     print("3. Clear configuration at agent creation time")
-    print("4. Backwards compatible (defaults to True)")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from src.muxi.runtime.llm import (  # noqa: E402
     LLM, LLMError, LLMErrorType, get_cache_stats, get_retry_stats,
     get_circuit_breaker_stats, clear_llm_cache, set_cache_ttl, reset_all_stats,
-    AuthenticationError, RateLimitError
+    OneLLMAuthenticationError, OneLLMRateLimitError
 )
 
 
@@ -206,7 +206,7 @@ class TestEnhancedLLM(unittest.TestCase):
 
         # Test authentication error
         with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
-            mock_create.side_effect = AuthenticationError("Invalid API key")
+            mock_create.side_effect = OneLLMAuthenticationError("Invalid API key")
 
             with self.assertRaises(LLMError) as exc_info:
                 await llm.chat([{"role": "user", "content": "test"}])
@@ -222,8 +222,8 @@ class TestEnhancedLLM(unittest.TestCase):
         # Mock the ChatCompletion.create method to fail twice then succeed
         with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
             mock_create.side_effect = [
-                RateLimitError("Rate limit"),
-                RateLimitError("Rate limit"),
+                OneLLMRateLimitError("Rate limit"),
+                OneLLMRateLimitError("Rate limit"),
                 {"choices": [{"message": {"content": "Success after retries"}}]}
             ]
 
