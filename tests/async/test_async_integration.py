@@ -6,14 +6,13 @@ WebhookManager, TimeEstimator, and all async decision logic.
 """
 
 import asyncio
-import json
 import pytest
 import time
 from unittest.mock import Mock, AsyncMock, patch
 
-from src.muxi.runtime.overlord.overlord import Overlord
-from src.muxi.runtime.overlord.async_patterns.request_tracker import RequestStatus
-from src.muxi.runtime.mcp.message import MCPMessage
+from src.muxi.runtime.formation.overlord.overlord import Overlord
+from src.muxi.runtime.formation.background.request_tracker import RequestStatus
+from src.muxi.runtime.types.response import MuxiResponse
 
 
 class TestAsyncIntegration:
@@ -70,8 +69,8 @@ class TestAsyncIntegration:
         async def mock_chat(message, agent_name=None, user_id=None, use_async=None, **kwargs):
             # Simulate sync processing logic
             if use_async is False or (use_async is None and 15.0 < 30):
-                # Return MCPMessage for sync response
-                return MCPMessage(
+                # Return MuxiResponse for sync response
+                return MuxiResponse(
                     content="Analysis complete: Found 42 insights in the data.",
                     metadata={'processing_mode': 'sync', 'processing_time': 15.0}
                 )
@@ -86,7 +85,7 @@ class TestAsyncIntegration:
         )
 
         # Verify sync response
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert response.content == "Analysis complete: Found 42 insights in the data."
         assert response.metadata['processing_mode'] == 'sync'
         assert response.metadata['processing_time'] == 15.0
@@ -138,7 +137,7 @@ class TestAsyncIntegration:
         async def mock_chat(message, agent_name=None, user_id=None, use_async=None, **kwargs):
             if use_async is False:
                 # Force sync even for long task
-                return MCPMessage(
+                return MuxiResponse(
                     content="Forced sync processing completed",
                     metadata={'processing_mode': 'sync', 'processing_time': 60.0}
                 )
@@ -152,7 +151,7 @@ class TestAsyncIntegration:
         )
 
         # Should return sync response despite long estimated time
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert response.metadata['processing_mode'] == 'sync'
 
     @pytest.mark.asyncio
@@ -283,7 +282,7 @@ class TestAsyncIntegration:
 
             if use_async is True or (use_async is None and 35.0 >= 30):
                 # Track request start
-                from src.muxi.runtime.overlord.async_patterns.request_tracker import RequestState
+                from src.muxi.runtime.formation.background.request_tracker import RequestState
                 state = RequestState(
                     id=request_id,
                     status=RequestStatus.PROCESSING,
@@ -418,7 +417,7 @@ class TestAsyncIntegration:
                         'processing_mode': 'async'
                     }
                 else:
-                    return MCPMessage(
+                    return MuxiResponse(
                         content="Sync processing",
                         metadata={'processing_mode': 'sync'}
                     )
@@ -435,7 +434,7 @@ class TestAsyncIntegration:
                 assert isinstance(response, dict)
                 assert response['processing_mode'] == 'async'
             else:
-                assert isinstance(response, MCPMessage)
+                assert isinstance(response, MuxiResponse)
                 assert response.metadata['processing_mode'] == 'sync'
 
     @pytest.mark.asyncio

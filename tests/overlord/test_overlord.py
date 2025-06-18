@@ -7,8 +7,8 @@ These tests verify that the Overlord implementation works correctly.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.mcp import MCPMessage
+from src.muxi.runtime.formation.overlord import Overlord
+from src.muxi.runtime.types.response import MuxiResponse
 
 
 class TestOverlord:
@@ -19,7 +19,7 @@ class TestOverlord:
         """Create a mock agent for testing."""
         mock = MagicMock()
         mock.name = "mock_agent"
-        mock.process_message = AsyncMock(return_value=MCPMessage(
+        mock.process_message = AsyncMock(return_value=MuxiResponse(
             role="assistant",
             content="Agent response"
         ))
@@ -145,7 +145,7 @@ class TestOverlord:
     async def test_process_message(self, overlord, mock_agent):
         """Test that a message can be processed by a specified agent."""
         # Create a message
-        message = MCPMessage(role="user", content="Hello, world!")
+        message = MuxiResponse(role="user", content="Hello, world!")
 
         # Process the message
         response = await overlord.process_message("mock_agent", message)
@@ -161,7 +161,7 @@ class TestOverlord:
     async def test_process_message_nonexistent_agent(self, overlord):
         """Test that processing a message for a nonexistent agent raises an error."""
         # Create a message
-        message = MCPMessage(role="user", content="Hello, world!")
+        message = MuxiResponse(role="user", content="Hello, world!")
 
         # Processing the message for a nonexistent agent should raise a ValueError
         with pytest.raises(ValueError):
@@ -177,7 +177,7 @@ class TestOverlord:
         research_agent = MagicMock()
         research_agent.name = "research"
         research_agent.process_message = AsyncMock(
-            return_value=MCPMessage(
+            return_value=MuxiResponse(
                 role="assistant",
                 content="Research information: ..."
             )
@@ -186,7 +186,7 @@ class TestOverlord:
         writing_agent = MagicMock()
         writing_agent.name = "writer"
         writing_agent.process_message = AsyncMock(
-            return_value=MCPMessage(
+            return_value=MuxiResponse(
                 role="assistant",
                 content="Final article: ..."
             )
@@ -197,11 +197,11 @@ class TestOverlord:
         overlord.register_agent(writing_agent)
 
         # Create messages
-        research_query = MCPMessage(
+        research_query = MuxiResponse(
             role="user",
             content="Find information about AI"
         )
-        writing_query = MCPMessage(
+        writing_query = MuxiResponse(
             role="user",
             content="Write an article about AI"
         )

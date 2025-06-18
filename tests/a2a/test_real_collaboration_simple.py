@@ -118,7 +118,7 @@ class RealCollaborationTester:
             "Provide key findings, statistics, and benefits."
         )
 
-        # Extract content from MCPMessage if needed
+        # Extract content from MuxiResponse if needed
         if hasattr(research_response, 'content'):
             research_content = research_response.content
         else:

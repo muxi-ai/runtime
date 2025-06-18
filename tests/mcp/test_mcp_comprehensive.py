@@ -28,7 +28,7 @@ sys.path.insert(0, root_dir)
 # Import after sys.path modification
 try:
     # Try direct import
-    from src.muxi.runtime.mcp.handler import (  # noqa: E402
+    from src.muxi.runtime.services.mcp.handler import (  # noqa: E402
         MCPHandler,
         MCPServerClient,
         HTTPSSETransport,
@@ -39,7 +39,7 @@ try:
         MCPRequestError,
         MCPCancelledError
     )
-    from src.muxi.runtime.mcp.message import MCPMessage  # noqa: E402
+    from src.muxi.runtime.types.response import MuxiResponse  # noqa: E402
     print("✅ Successfully imported MCP classes directly")
 except ImportError as e:
     print(f"❌ Direct import failed: {e}")
@@ -71,7 +71,7 @@ except ImportError as e:
         if msg_spec and msg_spec.loader:
             mcp_message = importlib.util.module_from_spec(msg_spec)
             msg_spec.loader.exec_module(mcp_message)
-            MCPMessage = mcp_message.MCPMessage
+            MuxiResponse = mcp_message.MuxiResponse
             print("✅ Successfully imported MCP classes via importlib")
         else:
             print("❌ Failed to load message module")

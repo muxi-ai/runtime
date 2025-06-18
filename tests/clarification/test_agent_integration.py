@@ -8,8 +8,8 @@ without breaking existing Agent functionality.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.muxi.runtime.agent import Agent
-from src.muxi.runtime.mcp.message import MCPMessage
+from src.muxi.runtime.formation.agents import Agent
+from src.muxi.runtime.types.response import MuxiResponse
 
 
 class TestAgentClarificationIntegration:
@@ -62,7 +62,7 @@ class TestAgentClarificationIntegration:
         response = await agent.process_message(user_message, user_id=1)
 
         # Verify response structure
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert response.role == "assistant"
         assert response.content == "Mock response"
 
@@ -83,7 +83,7 @@ class TestAgentClarificationIntegration:
         response = await agent.process_message(user_message, user_id=user_id)
 
         # Verify clarification response was handled
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert "risk tolerance" in response.content
 
         # Verify clarification handler was called
@@ -106,7 +106,7 @@ class TestAgentClarificationIntegration:
         response = await agent.process_message(user_message, user_id=user_id)
 
         # Verify clarification question was returned
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert "risk tolerance" in response.content
 
         # Verify clarification analyzer was called
@@ -123,7 +123,7 @@ class TestAgentClarificationIntegration:
         response = await agent.process_message(user_message, user_id=user_id)
 
         # Verify response was processed normally without clarification
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert response.content == "Mock response"
 
         # Verify model was called (normal processing path)
@@ -164,7 +164,7 @@ class TestAgentClarificationIntegration:
         response = await agent.process_message(user_message, user_id=user_id)
 
         # Verify Agent falls back to normal processing
-        assert isinstance(response, MCPMessage)
+        assert isinstance(response, MuxiResponse)
         assert response.content == "Mock response"
 
         # Verify model was still called

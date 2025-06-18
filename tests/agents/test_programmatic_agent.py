@@ -10,10 +10,10 @@ import os
 import asyncio
 from dotenv import load_dotenv
 
-from src.muxi.runtime.llm import LLM
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.memory.short_term import ShortTermMemory
-from src.muxi.runtime.mcp import MCPMessage
+from src.muxi.runtime.services.llm import LLM
+from src.muxi.runtime.formation.overlord import Overlord
+from src.muxi.runtime.services.memory.short_term import ShortTermMemory
+from src.muxi.runtime.types.response import MuxiResponse
 
 
 # Load environment variables from .env file
@@ -69,8 +69,8 @@ async def test_programmatic_agent():
     assert agent.model == model
     print("Agent has correct attributes: ✓")
 
-    # Test that we can create an MCPMessage and use it
-    message = MCPMessage(role="user", content="Hello, who are you?")
+    # Test that we can create an MuxiResponse and use it
+    message = MuxiResponse(role="user", content="Hello, who are you?")
     print("\nSending message to agent: 'Hello, who are you?'")
 
     try:
@@ -100,7 +100,7 @@ async def test_programmatic_agent():
             print(f"Initial chat attempt failed: {error_msg}")
 
             # Use process_message directly on the agent as a fallback
-            user_message = MCPMessage(role="user", content="Tell me a fact")
+            user_message = MuxiResponse(role="user", content="Tell me a fact")
             overlord_response = await agent.mcp_handler.process_message(user_message)
             print(f"Direct agent response: '{overlord_response.content}'")
             print("Direct agent messaging works: ✓")
