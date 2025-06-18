@@ -101,12 +101,9 @@ import os
 import hashlib
 import time
 from typing import Any, Callable, Dict, List, Optional, Union
-from collections import defaultdict
-from dataclasses import dataclass, field
-from threading import RLock
+
 
 import numpy as np
-from faissx import client as faiss
 
 # Hybrid architecture imports
 from ...documents.storage.chunk_manager import DocumentChunkManager
@@ -119,48 +116,6 @@ from ....utils.user_dirs import get_knowledge_dir
 
 # Short-term memory integration for Task 3.1
 from ....services.memory.short_term import ShortTermMemory
-
-
-# Task 5.2: Performance optimization data structures
-@dataclass
-class PerformanceMetrics:
-    """Performance metrics for knowledge operations"""
-    total_searches: int = 0
-    total_search_time: float = 0.0
-    cache_hits: int = 0
-    cache_misses: int = 0
-    avg_search_time: float = 0.0
-    cache_hit_rate: float = 0.0
-    last_reset: float = field(default_factory=time.time)
-
-    def update_search(self, search_time: float, cache_hit: bool = False):
-        """Update search metrics"""
-        self.total_searches += 1
-        self.total_search_time += search_time
-        self.avg_search_time = self.total_search_time / self.total_searches
-
-        if cache_hit:
-            self.cache_hits += 1
-        else:
-            self.cache_misses += 1
-
-        total_cache_attempts = self.cache_hits + self.cache_misses
-        self.cache_hit_rate = (
-            self.cache_hits / total_cache_attempts if total_cache_attempts > 0 else 0.0
-        )
-
-
-@dataclass
-class CachedSearchResult:
-    """Cached search result with timestamp"""
-    results: List[Dict[str, Any]]
-    timestamp: float
-    query_hash: str
-    top_k: int
-
-    def is_expired(self, max_age: float = 300.0) -> bool:
-        """Check if cached result is expired (default 5 minutes)"""
-        return time.time() - self.timestamp > max_age
 
 
 class KnowledgeHandler:
@@ -186,11 +141,6 @@ class KnowledgeHandler:
         # Task 3.1: Short-term memory integration
         short_term_memory: Optional[ShortTermMemory] = None,
         auto_inject_knowledge: bool = True,
-        # Task 5.2: Performance optimization parameters
-        enable_query_cache: bool = True,
-        cache_max_age: float = 300.0,  # 5 minutes
-        cache_max_size: int = 100,
-        optimized_search_params: bool = True,
     ):
         """
         Initialize the knowledge handler with hybrid architecture components and memory integration.
@@ -207,21 +157,7 @@ class KnowledgeHandler:
         # Task 3.1: Short-term memory integration
         self.short_term_memory = short_term_memory
         self.auto_inject_knowledge = auto_inject_knowledge
-        self._knowledge_injection_enabled = (
-            short_term_memory is not None and auto_inject_knowledge
-        )
-
-        # Task 5.2: Performance optimization initialization
-        self.enable_query_cache = enable_query_cache
-        self.cache_max_age = cache_max_age
-        self.cache_max_size = cache_max_size
-        self.optimized_search_params = optimized_search_params
-
-        # Performance monitoring
-        self.performance_metrics = PerformanceMetrics()
-        self._query_cache: Dict[str, CachedSearchResult] = {}
-        self._cache_lock = RLock()
-        self._frequent_queries = defaultdict(int)  # Track query frequency
+        self._knowledge_injection_enabled = short_term_memory is not None and auto_inject_knowledge
 
         # Create cache directory if it doesn't exist
         os.makedirs(cache_dir, exist_ok=True)
@@ -281,26 +217,6 @@ class KnowledgeHandler:
             remote_config=self.remote if self.mode == "remote" else None,
             index_path=semantic_index_path,
             persist_index=True,  # Enable persistence for agent knowledge
-        )
-
-    def _setup_faissx(self):
-        """Set up FAISSx based on mode."""
-        if self.mode == "remote":
-            faiss.configure(
-                server=self.remote.get("url", "tcp://localhost:45678"),
-                api_key=self.remote.get("api_key", "test_key"),
-                tenant_id=self.remote.get("tenant_id", "test_tenant"),
-            )
-
-        # Log FAISSx setup
-        observability.observe(
-            event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-            level=observability.EventLevel.INFO,
-            description="FAISSx setup completed",
-            data={
-                "mode": self.mode,
-                "remote_config": (self.remote if self.mode == "remote" else None),
-            },
         )
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
@@ -510,31 +426,6 @@ class KnowledgeHandler:
         """Search across all knowledge sources with performance optimization."""
         search_start_time = time.time()
 
-        # Task 5.2: Check query cache first
-        query_hash = hashlib.md5(f"{query}:{top_k}".encode()).hexdigest()
-
-        if self.enable_query_cache:
-            with self._cache_lock:
-                cached_result = self._query_cache.get(query_hash)
-                if cached_result and not cached_result.is_expired(self.cache_max_age):
-                    search_time = time.time() - search_start_time
-                    self.performance_metrics.update_search(search_time, cache_hit=True)
-                    self._frequent_queries[query_hash] += 1
-
-                    # Log cache hit
-                    observability.observe(
-                        event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
-                        level=observability.EventLevel.DEBUG,
-                        description="Knowledge search cache hit",
-                        data={
-                            "query_hash": query_hash,
-                            "cache_age": time.time() - cached_result.timestamp,
-                            "search_time": search_time,
-                            "cache_hit_rate": self.performance_metrics.cache_hit_rate,
-                        },
-                    )
-                    return cached_result.results
-
         # Log search start
         observability.observe(
             event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
@@ -545,8 +436,6 @@ class KnowledgeHandler:
                 "top_k": top_k,
                 "has_embedding_function": generate_embeddings_fn is not None,
                 "has_semantic_index": hasattr(self, "semantic_index"),
-                "cache_enabled": self.enable_query_cache,
-                "optimized_params": self.optimized_search_params,
             },
         )
 
@@ -572,12 +461,8 @@ class KnowledgeHandler:
             else:
                 query_vector = query_embedding
 
-            # Task 5.2: Use optimized search parameters for agent use cases
-            if self.optimized_search_params:
-                # Use larger search space for better relevance, then filter
-                search_k = min(top_k * 2, 20)  # Search 2x but cap at 20
-            else:
-                search_k = top_k
+            # Use standard search parameters
+            search_k = top_k
 
             # Use DocumentSemanticIndex for search
             search_results = await self.semantic_index.search_documents(
@@ -587,12 +472,9 @@ class KnowledgeHandler:
                 metadata_filter=None,  # No filtering
             )
 
-            # Convert search results to standard format with optimized filtering
+            # Convert search results to standard format
             results = []
             for i, result in enumerate(search_results):
-                # Task 5.2: Apply relevance threshold for better quality
-                if self.optimized_search_params and result.score < 0.3:
-                    continue  # Skip low-relevance results
 
                 content = result.content
                 if len(content) > 200:
@@ -619,40 +501,20 @@ class KnowledgeHandler:
                 knowledge_results=results, query=query, agent_id=str(self.agent_id_or_sources)
             )
 
-            # Task 5.2: Cache the results for future use
+            # Calculate search time for logging
             search_time = time.time() - search_start_time
-            self.performance_metrics.update_search(search_time, cache_hit=False)
 
-            if self.enable_query_cache and results:
-                with self._cache_lock:
-                    # Clean cache if it's getting too large
-                    if len(self._query_cache) >= self.cache_max_size:
-                        self._cleanup_query_cache()
-
-                    # Cache the results
-                    cached_result = CachedSearchResult(
-                        results=results,
-                        timestamp=time.time(),
-                        query_hash=query_hash,
-                        top_k=top_k
-                    )
-                    self._query_cache[query_hash] = cached_result
-                    self._frequent_queries[query_hash] += 1
-
-            # Log successful search with performance metrics
+            # Log successful search
             observability.observe(
                 event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
                 level=observability.EventLevel.INFO,
-                description="Knowledge semantic search completed with performance optimization",
+                description="Knowledge semantic search completed",
                 data={
                     "query": query,
                     "results_count": len(results),
                     "search_type": "semantic_search",
                     "top_k": top_k,
                     "search_time": search_time,
-                    "cache_hit_rate": self.performance_metrics.cache_hit_rate,
-                    "avg_search_time": self.performance_metrics.avg_search_time,
-                    "total_searches": self.performance_metrics.total_searches,
                 },
             )
 
@@ -1565,81 +1427,3 @@ class KnowledgeHandler:
             )
 
         return stats
-
-    # Task 5.2: Performance optimization methods
-    def _cleanup_query_cache(self) -> None:
-        """Clean up query cache by removing least frequently used and expired entries"""
-        # Remove expired entries first
-        expired_keys = [
-            key for key, cached_result in self._query_cache.items()
-            if cached_result.is_expired(self.cache_max_age)
-        ]
-
-        for key in expired_keys:
-            del self._query_cache[key]
-            if key in self._frequent_queries:
-                del self._frequent_queries[key]
-
-        # If still too large, remove least frequently used
-        if len(self._query_cache) >= self.cache_max_size:
-            # Sort by frequency (ascending) and remove least used
-            sorted_queries = sorted(
-                self._frequent_queries.items(),
-                key=lambda x: x[1]
-            )
-
-            remove_count = len(self._query_cache) - self.cache_max_size + 10
-            for key, _ in sorted_queries[:remove_count]:
-                if key in self._query_cache:
-                    del self._query_cache[key]
-                del self._frequent_queries[key]
-
-    def get_performance_metrics(self) -> Dict[str, Any]:
-        """Get current performance metrics"""
-        return {
-            "total_searches": self.performance_metrics.total_searches,
-            "avg_search_time": self.performance_metrics.avg_search_time,
-            "cache_hit_rate": self.performance_metrics.cache_hit_rate,
-            "cache_hits": self.performance_metrics.cache_hits,
-            "cache_misses": self.performance_metrics.cache_misses,
-            "cache_size": len(self._query_cache),
-            "cache_max_size": self.cache_max_size,
-            "cache_enabled": self.enable_query_cache,
-            "optimized_search_enabled": self.optimized_search_params,
-            "frequent_queries_count": len(self._frequent_queries),
-            "uptime": time.time() - self.performance_metrics.last_reset,
-        }
-
-    def reset_performance_metrics(self) -> None:
-        """Reset performance metrics"""
-        self.performance_metrics = PerformanceMetrics()
-
-    def clear_query_cache(self) -> int:
-        """Clear all cached queries and return count of cleared entries"""
-        with self._cache_lock:
-            cache_size = len(self._query_cache)
-            self._query_cache.clear()
-            self._frequent_queries.clear()
-            return cache_size
-
-    async def warm_up_cache(
-        self, common_queries: List[str], generate_embeddings_fn: Callable
-    ) -> None:
-        """Warm up the cache with common queries for better performance"""
-        if not self.enable_query_cache:
-            return
-
-        for query in common_queries:
-            # Perform search to populate cache
-            await self.search(query, top_k=5, generate_embeddings_fn=generate_embeddings_fn)
-
-        # Log cache warm-up
-        observability.observe(
-            event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-            level=observability.EventLevel.INFO,
-            description="Knowledge cache warmed up with common queries",
-            data={
-                "warmed_queries": len(common_queries),
-                "cache_size": len(self._query_cache),
-            },
-        )
