@@ -134,9 +134,7 @@ class KnowledgeHandler:
         # Task 3.1: Short-term memory integration
         self.short_term_memory = short_term_memory
         self.auto_inject_knowledge = auto_inject_knowledge
-        self._knowledge_injection_enabled = (
-            short_term_memory is not None and auto_inject_knowledge
-        )
+        self._knowledge_injection_enabled = short_term_memory is not None and auto_inject_knowledge
 
         # Create cache directory if it doesn't exist
         os.makedirs(cache_dir, exist_ok=True)
@@ -152,23 +150,23 @@ class KnowledgeHandler:
 
         # Log initialization
         observability.observe(
-                event_type=observability.ConversationEvents.SESSION_CREATED,
-                level=observability.EventLevel.INFO,
-                description=(
-                    "KnowledgeHandler initialized with hybrid architecture and memory integration"
-                ),
-                data={
-                    "agent_id_or_sources": str(agent_id_or_sources),
-                    "embedding_dimension": embedding_dimension,
-                    "mode": mode,
-                    "cache_dir": cache_dir,
-                    "max_files_per_source": max_files_per_source,
-                    "max_total_files": max_total_files,
-                    "hybrid_components": True,
-                    "memory_integration": self._knowledge_injection_enabled,
-                    "auto_inject_knowledge": auto_inject_knowledge,
-                },
-            )
+            event_type=observability.ConversationEvents.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description=(
+                "KnowledgeHandler initialized with hybrid architecture and memory integration"
+            ),
+            data={
+                "agent_id_or_sources": str(agent_id_or_sources),
+                "embedding_dimension": embedding_dimension,
+                "mode": mode,
+                "cache_dir": cache_dir,
+                "max_files_per_source": max_files_per_source,
+                "max_total_files": max_total_files,
+                "hybrid_components": True,
+                "memory_integration": self._knowledge_injection_enabled,
+                "auto_inject_knowledge": auto_inject_knowledge,
+            },
+        )
 
     def _init_document_components(self, formation_config: Optional[Dict[str, Any]] = None):
         """Initialize document processing components using formation configuration."""
@@ -209,44 +207,44 @@ class KnowledgeHandler:
 
         # Log FAISSx setup
         observability.observe(
-                event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-                level=observability.EventLevel.INFO,
-                description="FAISSx setup completed",
-                data={
-                    "mode": self.mode,
-                    "remote_config": (self.remote if self.mode == "remote" else None),
-                },
-                        )
+            event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+            level=observability.EventLevel.INFO,
+            description="FAISSx setup completed",
+            data={
+                "mode": self.mode,
+                "remote_config": (self.remote if self.mode == "remote" else None),
+            },
+        )
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
         """Add a knowledge source and process its content using hybrid architecture."""
         # Log knowledge source addition start
         observability.observe(
-                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
-                level=observability.EventLevel.INFO,
-                description="Starting knowledge source addition with hybrid architecture",
-                data={
-                    "source_path": getattr(source, "path", str(source)),
-                    "source_type": type(source).__name__,
-                    "current_sources_count": len(self.sources),
-                    "has_embedding_function": generate_embeddings_fn is not None,
-                },
-            )
+            event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+            level=observability.EventLevel.INFO,
+            description="Starting knowledge source addition with hybrid architecture",
+            data={
+                "source_path": getattr(source, "path", str(source)),
+                "source_type": type(source).__name__,
+                "current_sources_count": len(self.sources),
+                "has_embedding_function": generate_embeddings_fn is not None,
+            },
+        )
 
         if len(self.sources) >= 10:  # Limit total sources
             print(f"Skipping source - already have {len(self.sources)} sources")
 
             # Log source limit reached
             observability.observe(
-                    event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-                    level=observability.EventLevel.WARNING,
-                    description="Knowledge source limit reached",
-                    data={
-                        "current_sources_count": len(self.sources),
-                        "max_sources": 10,
-                        "skipped_source": getattr(source, "path", str(source)),
-                    },
-                )
+                event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+                level=observability.EventLevel.WARNING,
+                description="Knowledge source limit reached",
+                data={
+                    "current_sources_count": len(self.sources),
+                    "max_sources": 10,
+                    "skipped_source": getattr(source, "path", str(source)),
+                },
+            )
             return
 
         self.sources.append(source)
@@ -256,14 +254,14 @@ class KnowledgeHandler:
 
             # Log no embedding function
             observability.observe(
-                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
-                    level=observability.EventLevel.DEBUG,
-                    description="No embedding function provided for knowledge source",
-                    data={
-                        "source_path": getattr(source, "path", str(source)),
-                        "sources_count": len(self.sources),
-                    },
-                )
+                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                level=observability.EventLevel.DEBUG,
+                description="No embedding function provided for knowledge source",
+                data={
+                    "source_path": getattr(source, "path", str(source)),
+                    "sources_count": len(self.sources),
+                },
+            )
             return
 
         try:
@@ -271,8 +269,7 @@ class KnowledgeHandler:
             if isinstance(source, FileKnowledge):
                 # Use FileKnowledge's advanced processing with DocumentChunkManager
                 document_chunks = await source.process_with_chunk_manager(
-                    chunk_manager=self.chunk_manager,
-                    file_limit=self.max_files_per_source
+                    chunk_manager=self.chunk_manager, file_limit=self.max_files_per_source
                 )
 
                 # Limit total chunks processed
@@ -281,7 +278,7 @@ class KnowledgeHandler:
                         f"Limiting chunks to {self.max_total_files} "
                         f"(found {len(document_chunks)})"
                     )
-                    document_chunks = document_chunks[:self.max_total_files]
+                    document_chunks = document_chunks[: self.max_total_files]
 
                 # Generate embeddings for all chunks
                 if document_chunks:
@@ -297,17 +294,19 @@ class KnowledgeHandler:
                     for chunk, embedding in zip(document_chunks, embeddings):
                         try:
                             await self.semantic_index.add_document_chunks(
-                                chunks=[{
-                                    "content": chunk.content,
-                                    "chunk_id": chunk.chunk_id,
-                                    "document_id": chunk.document_id,
-                                    "metadata": chunk.metadata
-                                }],
+                                chunks=[
+                                    {
+                                        "content": chunk.content,
+                                        "chunk_id": chunk.chunk_id,
+                                        "document_id": chunk.document_id,
+                                        "metadata": chunk.metadata,
+                                    }
+                                ],
                                 embeddings=[embedding],
                                 document_metadata={
                                     "knowledge_source": source.name,
                                     "description": source.description,
-                                }
+                                },
                             )
                             chunks_added += 1
                         except Exception as e:
@@ -343,7 +342,7 @@ class KnowledgeHandler:
                             content=content,
                             filename=os.path.basename(file_path),
                             strategy="adaptive",
-                            document_id=file_path
+                            document_id=file_path,
                         )
 
                         if not document_chunks:
@@ -366,18 +365,20 @@ class KnowledgeHandler:
                                 break
 
                             await self.semantic_index.add_document_chunks(
-                                chunks=[{
-                                    "content": chunk.content,
-                                    "chunk_id": chunk.chunk_id,
-                                    "document_id": chunk.document_id,
-                                    "metadata": chunk.metadata
-                                }],
+                                chunks=[
+                                    {
+                                        "content": chunk.content,
+                                        "chunk_id": chunk.chunk_id,
+                                        "document_id": chunk.document_id,
+                                        "metadata": chunk.metadata,
+                                    }
+                                ],
                                 embeddings=[embedding],
                                 document_metadata={
                                     "source": file_path,
                                     "description": source.description,
                                     "source_type": type(source).__name__,
-                                }
+                                },
                             )
                             total_chunks_processed += 1
 
@@ -390,31 +391,31 @@ class KnowledgeHandler:
 
             # Log successful knowledge source addition
             observability.observe(
-                    event_type=observability.ConversationEvents.CONTENT_PROCESSED,
-                    level=observability.EventLevel.INFO,
-                    description="Knowledge source addition completed with hybrid architecture",
-                    data={
-                        "source_path": getattr(source, "path", str(source)),
-                        "files_processed": files_processed,
-                        "total_chunks": total_chunks_processed,
-                        "total_sources": len(self.sources),
-                    },
-                )
+                event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+                level=observability.EventLevel.INFO,
+                description="Knowledge source addition completed with hybrid architecture",
+                data={
+                    "source_path": getattr(source, "path", str(source)),
+                    "files_processed": files_processed,
+                    "total_chunks": total_chunks_processed,
+                    "total_sources": len(self.sources),
+                },
+            )
 
         except Exception as e:
             print(f"Failed to add knowledge source: {e}")
 
             # Log knowledge source addition error
             observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
-                    description="Failed to add knowledge source",
-                    data={
-                        "source_path": getattr(source, "path", str(source)),
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                )
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Failed to add knowledge source",
+                data={
+                    "source_path": getattr(source, "path", str(source)),
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
 
     async def search(
         self, query: str, top_k: int = 5, generate_embeddings_fn: Optional[Callable] = None
@@ -422,25 +423,25 @@ class KnowledgeHandler:
         """Search across all knowledge sources using hybrid architecture."""
         # Log search start
         observability.observe(
-                event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
-                level=observability.EventLevel.INFO,
-                description="Starting knowledge search with hybrid architecture",
-                data={
-                    "query_length": len(query),
-                    "top_k": top_k,
-                    "has_embedding_function": generate_embeddings_fn is not None,
-                    "has_semantic_index": hasattr(self, 'semantic_index'),
-                },
-            )
+            event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
+            level=observability.EventLevel.INFO,
+            description="Starting knowledge search with hybrid architecture",
+            data={
+                "query_length": len(query),
+                "top_k": top_k,
+                "has_embedding_function": generate_embeddings_fn is not None,
+                "has_semantic_index": hasattr(self, "semantic_index"),
+            },
+        )
 
         # Require embedding function for semantic search
         if generate_embeddings_fn is None:
             observability.observe(
-                    event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
-                    level=observability.EventLevel.WARNING,
-                    description="No embedding function provided for knowledge search",
-                    data={"query": query, "top_k": top_k},
-                )
+                event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
+                level=observability.EventLevel.WARNING,
+                description="No embedding function provided for knowledge search",
+                data={"query": query, "top_k": top_k},
+            )
             return []
 
         try:
@@ -470,35 +471,35 @@ class KnowledgeHandler:
                 if len(content) > 200:
                     content = content[:200] + "..."
 
-                results.append({
-                    "content": content,
-                    "relevance": result.score,
-                    "metadata": {
-                        **result.metadata,
-                        "document_id": result.document_id,
-                        "chunk_id": result.chunk_id,
-                    },
-                })
+                results.append(
+                    {
+                        "content": content,
+                        "relevance": result.score,
+                        "metadata": {
+                            **result.metadata,
+                            "document_id": result.document_id,
+                            "chunk_id": result.chunk_id,
+                        },
+                    }
+                )
 
             # Task 3.1: Inject knowledge results into short-term memory
             await self._inject_knowledge_into_memory(
-                knowledge_results=results,
-                query=query,
-                agent_id=str(self.agent_id_or_sources)
+                knowledge_results=results, query=query, agent_id=str(self.agent_id_or_sources)
             )
 
             # Log successful search
             observability.observe(
-                    event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
-                    level=observability.EventLevel.INFO,
-                    description="Knowledge semantic search completed successfully",
-                    data={
-                        "query": query,
-                        "results_count": len(results),
-                        "search_type": "semantic_search",
-                        "top_k": top_k,
-                    },
-                )
+                event_type=observability.ConversationEvents.CONTENT_RETRIEVED,
+                level=observability.EventLevel.INFO,
+                description="Knowledge semantic search completed successfully",
+                data={
+                    "query": query,
+                    "results_count": len(results),
+                    "search_type": "semantic_search",
+                    "top_k": top_k,
+                },
+            )
 
             return results
 
@@ -506,15 +507,15 @@ class KnowledgeHandler:
             print(f"Knowledge search failed: {e}")
             # Log search error
             observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
-                    description="Knowledge search operation failed",
-                    data={
-                        "query": query,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                )
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Knowledge search operation failed",
+                data={
+                    "query": query,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
             return []
 
     @classmethod
@@ -529,16 +530,16 @@ class KnowledgeHandler:
         """Create KnowledgeHandler from agent configuration with performance optimizations."""
         # Log configuration loading start
         observability.observe(
-                event_type=observability.ConversationEvents.SESSION_CREATED,
-                level=observability.EventLevel.INFO,
-                description="Starting KnowledgeHandler creation from agent config",
-                data={
-                    "agent_id": agent_id,
-                    "knowledge_enabled": knowledge_config.get("enabled", False),
-                    "sources_count": len(knowledge_config.get("sources", [])),
-                    "config_keys": list(knowledge_config.keys()),
-                },
-            )
+            event_type=observability.ConversationEvents.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description="Starting KnowledgeHandler creation from agent config",
+            data={
+                "agent_id": agent_id,
+                "knowledge_enabled": knowledge_config.get("enabled", False),
+                "sources_count": len(knowledge_config.get("sources", [])),
+                "config_keys": list(knowledge_config.keys()),
+            },
+        )
 
         # Check if knowledge is enabled
         if not knowledge_config.get("enabled", False):
@@ -546,11 +547,11 @@ class KnowledgeHandler:
 
             # Log knowledge disabled
             observability.observe(
-                    event_type=observability.ConversationEvents.SESSION_CREATED,
-                    level=observability.EventLevel.DEBUG,
-                    description="Knowledge disabled for agent",
-                    data={"agent_id": agent_id},
-                )
+                event_type=observability.ConversationEvents.SESSION_CREATED,
+                level=observability.EventLevel.DEBUG,
+                description="Knowledge disabled for agent",
+                data={"agent_id": agent_id},
+            )
             return None
 
         sources_config = knowledge_config.get("sources", [])
@@ -559,11 +560,11 @@ class KnowledgeHandler:
 
             # Log no sources
             observability.observe(
-                    event_type=observability.ConversationEvents.SESSION_CREATED,
-                    level=observability.EventLevel.WARNING,
-                    description="No knowledge sources configured for agent",
-                    data={"agent_id": agent_id},
-                )
+                event_type=observability.ConversationEvents.SESSION_CREATED,
+                level=observability.EventLevel.WARNING,
+                description="No knowledge sources configured for agent",
+                data={"agent_id": agent_id},
+            )
             return None
 
         print(f"Loading {len(sources_config)} knowledge sources for agent {agent_id}")
@@ -593,16 +594,16 @@ class KnowledgeHandler:
 
                     # Log source limit
                     observability.observe(
-                            event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-                            level=observability.EventLevel.WARNING,
-                            description="Knowledge sources limited for performance",
-                            data={
-                                "agent_id": agent_id,
-                                "total_sources": len(sources_config),
-                                "processed_sources": 3,
-                                "skipped_sources": skipped,
-                            },
-                        )
+                        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+                        level=observability.EventLevel.WARNING,
+                        description="Knowledge sources limited for performance",
+                        data={
+                            "agent_id": agent_id,
+                            "total_sources": len(sources_config),
+                            "processed_sources": 3,
+                            "skipped_sources": skipped,
+                        },
+                    )
                     break
 
                 try:
@@ -624,22 +625,22 @@ class KnowledgeHandler:
 
                     # Log source loading error
                     observability.observe(
-                            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                            level=observability.EventLevel.ERROR,
-                            description="Failed to load knowledge source from config",
-                            data={
-                                "agent_id": agent_id,
-                                "source_path": source_path,
-                                "error": str(e),
-                                "error_type": type(e).__name__,
-                            },
-                        )
+                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                        level=observability.EventLevel.ERROR,
+                        description="Failed to load knowledge source from config",
+                        data={
+                            "agent_id": agent_id,
+                            "source_path": source_path,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        },
+                    )
                     continue
 
             source_count = len(handler.sources)
             # Get document count from hybrid architecture components
             doc_count = 0
-            if hasattr(handler, 'semantic_index') and handler.semantic_index:
+            if hasattr(handler, "semantic_index") and handler.semantic_index:
                 doc_count = await handler.semantic_index.get_document_count()
 
             print(
@@ -648,27 +649,27 @@ class KnowledgeHandler:
 
             # Log successful handler creation
             observability.observe(
-                    event_type=observability.ConversationEvents.SESSION_CREATED,
-                    level=observability.EventLevel.INFO,
-                    description="KnowledgeHandler created successfully from agent config",
-                    data={
-                        "agent_id": agent_id,
-                        "sources_count": source_count,
-                        "documents_count": doc_count,
-                        "embedding_dimension": kwargs.get("embedding_dimension", 128),
-                    },
-                )
+                event_type=observability.ConversationEvents.SESSION_CREATED,
+                level=observability.EventLevel.INFO,
+                description="KnowledgeHandler created successfully from agent config",
+                data={
+                    "agent_id": agent_id,
+                    "sources_count": source_count,
+                    "documents_count": doc_count,
+                    "embedding_dimension": kwargs.get("embedding_dimension", 128),
+                },
+            )
 
             return handler
 
         except Exception as e:
             # Log handler creation error
             observability.observe(
-                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                    level=observability.EventLevel.ERROR,
-                    description="Failed to create KnowledgeHandler from agent config",
-                    data={"agent_id": agent_id, "error": str(e), "error_type": type(e).__name__},
-                )
+                event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                level=observability.EventLevel.ERROR,
+                description="Failed to create KnowledgeHandler from agent config",
+                data={"agent_id": agent_id, "error": str(e), "error_type": type(e).__name__},
+            )
             raise
 
     async def add_file(self, knowledge_source: FileKnowledge, generate_embeddings_fn) -> int:
@@ -694,14 +695,14 @@ class KnowledgeHandler:
 
         # Log file addition start
         observability.observe(
-                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                level=observability.EventLevel.INFO,
-                description="Starting knowledge file addition with hybrid architecture",
-                data={
-                    "file_path": file_path,
-                    "description": description,
-                },
-            )
+            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+            level=observability.EventLevel.INFO,
+            description="Starting knowledge file addition with hybrid architecture",
+            data={
+                "file_path": file_path,
+                "description": description,
+            },
+        )
 
         # Calculate MD5 hash for content-based caching (Task 4.1)
         file_md5 = self._calculate_file_md5(file_path)
@@ -717,11 +718,11 @@ class KnowledgeHandler:
         if existing_docs:
             # File already processed and hasn't changed (same content hash)
             observability.observe(
-                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                    level=observability.EventLevel.DEBUG,
-                    description="Knowledge file already processed and unchanged (same MD5 hash)",
-                    data={"file_path": file_path, "content_hash": file_md5},
-                )
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.DEBUG,
+                description="Knowledge file already processed and unchanged (same MD5 hash)",
+                data={"file_path": file_path, "content_hash": file_md5},
+            )
             return 0
 
         # Load and process the file using hybrid architecture
@@ -730,14 +731,14 @@ class KnowledgeHandler:
 
             if not content or len(content.strip()) < 10:
                 observability.observe(
-                        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
-                        level=observability.EventLevel.WARNING,
-                        description="No content found in knowledge file",
-                        data={
-                            "file_path": file_path,
-                            "content_length": len(content) if content else 0,
-                        },
-                    )
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    description="No content found in knowledge file",
+                    data={
+                        "file_path": file_path,
+                        "content_length": len(content) if content else 0,
+                    },
+                )
                 return 0
 
             # Use DocumentChunkManager to process the document
@@ -748,19 +749,19 @@ class KnowledgeHandler:
                     "source": file_path,
                     "description": description,
                     "content_hash": file_md5,
-                }
+                },
             )
 
             if not document_chunks:
                 observability.observe(
-                        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
-                        level=observability.EventLevel.WARNING,
-                        description="No chunks generated from knowledge file",
-                        data={
-                            "file_path": file_path,
-                            "content_length": len(content),
-                        },
-                    )
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    description="No chunks generated from knowledge file",
+                    data={
+                        "file_path": file_path,
+                        "content_length": len(content),
+                    },
+                )
                 return 0
 
             # Generate embeddings for chunks
@@ -779,21 +780,21 @@ class KnowledgeHandler:
                     chunk_id=chunk.chunk_id,
                     content=chunk.content,
                     embedding=embedding,
-                    metadata=chunk.metadata
+                    metadata=chunk.metadata,
                 )
                 chunks_added += 1
 
             # Log successful file addition
             observability.observe(
-                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                    level=observability.EventLevel.INFO,
-                    description="Knowledge file added successfully with hybrid architecture",
-                    data={
-                        "file_path": file_path,
-                        "chunks_added": chunks_added,
-                        "embeddings_generated": len(embeddings),
-                    },
-                )
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.INFO,
+                description="Knowledge file added successfully with hybrid architecture",
+                data={
+                    "file_path": file_path,
+                    "chunks_added": chunks_added,
+                    "embeddings_generated": len(embeddings),
+                },
+            )
 
             return chunks_added
 
@@ -803,11 +804,11 @@ class KnowledgeHandler:
 
             # Log file addition error
             observability.observe(
-                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    description="Failed to add knowledge file",
-                    data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
-                )
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
+                level=observability.EventLevel.ERROR,
+                description="Failed to add knowledge file",
+                data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
+            )
             return 0
 
     async def remove_file(self, file_path: str) -> bool:
@@ -825,11 +826,11 @@ class KnowledgeHandler:
         """
         # Log file removal start
         observability.observe(
-                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                level=observability.EventLevel.INFO,
-                description="Starting knowledge file removal with hybrid architecture",
-                data={"file_path": file_path},
-            )
+            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+            level=observability.EventLevel.INFO,
+            description="Starting knowledge file removal with hybrid architecture",
+            data={"file_path": file_path},
+        )
 
         try:
             # Remove documents from semantic index by source metadata
@@ -840,35 +841,35 @@ class KnowledgeHandler:
             if removed_count > 0:
                 # Log successful file removal
                 observability.observe(
-                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                        level=observability.EventLevel.INFO,
-                        description="Knowledge file removed successfully with hybrid architecture",
-                        data={
-                            "file_path": file_path,
-                            "documents_removed": removed_count,
-                        },
-                    )
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.INFO,
+                    description="Knowledge file removed successfully with hybrid architecture",
+                    data={
+                        "file_path": file_path,
+                        "documents_removed": removed_count,
+                    },
+                )
 
                 return True
             else:
                 # Log file not found for removal
                 observability.observe(
-                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                        level=observability.EventLevel.WARNING,
-                        description="Knowledge file not found for removal",
-                        data={"file_path": file_path},
-                    )
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.WARNING,
+                    description="Knowledge file not found for removal",
+                    data={"file_path": file_path},
+                )
 
                 return False
 
         except Exception as e:
             # Log file removal error
             observability.observe(
-                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    description="Failed to remove knowledge file",
-                    data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
-                )
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
+                level=observability.EventLevel.ERROR,
+                description="Failed to remove knowledge file",
+                data={"file_path": file_path, "error": str(e), "error_type": type(e).__name__},
+            )
             return False
 
     async def get_sources(self) -> List[str]:
@@ -970,9 +971,7 @@ class KnowledgeHandler:
 
                 # Add to short-term memory with knowledge namespace
                 await self.short_term_memory.add(
-                    text=content,
-                    metadata=memory_metadata,
-                    namespace="knowledge"
+                    text=content, metadata=memory_metadata, namespace="knowledge"
                 )
 
             # Log successful knowledge injection
@@ -1027,18 +1026,12 @@ class KnowledgeHandler:
         Returns:
             Dictionary with 'knowledge' and 'memory' keys containing respective results
         """
-        results = {
-            "knowledge": [],
-            "memory": [],
-            "unified": []
-        }
+        results = {"knowledge": [], "memory": [], "unified": []}
 
         try:
             # Search knowledge sources
             knowledge_results = await self.search(
-                query=query,
-                top_k=top_k,
-                generate_embeddings_fn=generate_embeddings_fn
+                query=query, top_k=top_k, generate_embeddings_fn=generate_embeddings_fn
             )
             results["knowledge"] = knowledge_results
 
@@ -1046,24 +1039,24 @@ class KnowledgeHandler:
             if include_memory and self.short_term_memory:
                 try:
                     memory_results = await self.short_term_memory.search(
-                        query=query,
-                        k=top_k,
-                        filter_metadata=None
+                        query=query, k=top_k, filter_metadata=None
                     )
 
                     # Convert memory results to standard format
                     formatted_memory_results = []
                     for result in memory_results:
-                        formatted_memory_results.append({
-                            "content": result.get("content", result.get("text", "")),
-                            "relevance": result.get("score", 0.0),
-                            "source": "memory",
-                            "metadata": {
-                                **result.get("metadata", {}),
-                                "source_type": "short_term_memory",
-                                "timestamp": result.get("metadata", {}).get("timestamp"),
+                        formatted_memory_results.append(
+                            {
+                                "content": result.get("content", result.get("text", "")),
+                                "relevance": result.get("score", 0.0),
+                                "source": "memory",
+                                "metadata": {
+                                    **result.get("metadata", {}),
+                                    "source_type": "short_term_memory",
+                                    "timestamp": result.get("metadata", {}).get("timestamp"),
+                                },
                             }
-                        })
+                        )
 
                     results["memory"] = formatted_memory_results
 
@@ -1194,25 +1187,29 @@ class KnowledgeHandler:
 
         try:
             import pickle
-            with open(cache_file, 'rb') as f:
+
+            with open(cache_file, "rb") as f:
                 cache_data = pickle.load(f)
 
-                        # Validate cache format
-            if (not isinstance(cache_data, dict) or 'hash' not in cache_data
-                    or 'embeddings' not in cache_data):
+            # Validate cache format
+            if (
+                not isinstance(cache_data, dict)
+                or "hash" not in cache_data
+                or "embeddings" not in cache_data
+            ):
                 # Invalid cache format, remove it
                 os.remove(cache_file)
                 return None
 
             # Check if hash matches (content unchanged)
-            cached_hash = cache_data.get('hash', '')
+            cached_hash = cache_data.get("hash", "")
             if cached_hash != current_hash:
                 # Content changed, remove stale cache
                 os.remove(cache_file)
                 return None
 
             # Cache is valid, return embeddings
-            return cache_data['embeddings']
+            return cache_data["embeddings"]
 
         except (pickle.PickleError, IOError, OSError):
             # Cache file corrupted or unreadable, remove it
@@ -1222,7 +1219,9 @@ class KnowledgeHandler:
                 pass
             return None
 
-    def _save_cached_embeddings(self, source_path: str, source_hash: str, embeddings: List[Dict[str, Any]]) -> None:
+    def _save_cached_embeddings(
+        self, source_path: str, source_hash: str, embeddings: List[Dict[str, Any]]
+    ) -> None:
         """
         Save embeddings to cache with source hash for validation.
 
@@ -1240,15 +1239,16 @@ class KnowledgeHandler:
         os.makedirs(os.path.dirname(cache_file), exist_ok=True)
 
         cache_data = {
-            'hash': source_hash,
-            'embeddings': embeddings,
-            'timestamp': time.time(),
-            'source_path': source_path
+            "hash": source_hash,
+            "embeddings": embeddings,
+            "timestamp": time.time(),
+            "source_path": source_path,
         }
 
         try:
             import pickle
-            with open(cache_file, 'wb') as f:
+
+            with open(cache_file, "wb") as f:
                 pickle.dump(cache_data, f)
         except (pickle.PickleError, IOError, OSError):
             # Failed to save cache, but don't fail the operation
@@ -1271,24 +1271,25 @@ class KnowledgeHandler:
 
         try:
             for cache_file in os.listdir(self.cache_dir):
-                if not cache_file.endswith('.cache'):
+                if not cache_file.endswith(".cache"):
                     continue
 
                 cache_path = os.path.join(self.cache_dir, cache_file)
 
                 try:
                     import pickle
-                    with open(cache_path, 'rb') as f:
+
+                    with open(cache_path, "rb") as f:
                         cache_data = pickle.load(f)
 
-                    if not isinstance(cache_data, dict) or 'source_path' not in cache_data:
+                    if not isinstance(cache_data, dict) or "source_path" not in cache_data:
                         # Invalid cache format
                         os.remove(cache_path)
                         cleaned_count += 1
                         continue
 
-                    source_path = cache_data['source_path']
-                    cached_hash = cache_data.get('hash', '')
+                    source_path = cache_data["source_path"]
+                    cached_hash = cache_data.get("hash", "")
 
                     # Check if source file still exists
                     if not os.path.exists(source_path):
@@ -1363,46 +1364,44 @@ class KnowledgeHandler:
             Dict[str, int]: Statistics about cache cleanup operation
         """
         stats = {
-            'stale_entries_removed': 0,
-            'total_cache_files': 0,
-            'valid_cache_files': 0,
-            'errors_encountered': 0
+            "stale_entries_removed": 0,
+            "total_cache_files": 0,
+            "valid_cache_files": 0,
+            "errors_encountered": 0,
         }
 
         try:
             # Count total cache files
             if os.path.exists(self.cache_dir):
                 all_files = os.listdir(self.cache_dir)
-                stats['total_cache_files'] = len([f for f in all_files if f.endswith('.cache')])
+                stats["total_cache_files"] = len([f for f in all_files if f.endswith(".cache")])
 
             # Clean up stale entries
-            stats['stale_entries_removed'] = self._cleanup_stale_cache_entries()
+            stats["stale_entries_removed"] = self._cleanup_stale_cache_entries()
 
             # Calculate valid cache files remaining
             if os.path.exists(self.cache_dir):
                 remaining_files = os.listdir(self.cache_dir)
-                stats['valid_cache_files'] = len([f for f in remaining_files if f.endswith('.cache')])
+                stats["valid_cache_files"] = len(
+                    [f for f in remaining_files if f.endswith(".cache")]
+                )
 
             # Log cache cleanup results
             observability.observe(
                 event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
                 level=observability.EventLevel.INFO,
                 description="Cache cleanup completed",
-                data=stats
+                data=stats,
             )
 
         except Exception as e:
-            stats['errors_encountered'] = 1
+            stats["errors_encountered"] = 1
             # Log cache cleanup error
             observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
                 level=observability.EventLevel.ERROR,
                 description="Cache cleanup failed",
-                data={
-                    "error": str(e),
-                    "error_type": type(e).__name__,
-                    **stats
-                }
+                data={"error": str(e), "error_type": type(e).__name__, **stats},
             )
 
         return stats
