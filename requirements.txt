@@ -16,7 +16,7 @@ mcp>=1.4.1  # Now available on PyPI
 # File processing and utilities
 aiofiles>=23.2.0
 python-magic>=0.4.27
-kafka>=1.3.0
+kafka-python-ng>=2.2.0
 
 # LLM Package
 onellm>=0.0.1
