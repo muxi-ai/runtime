@@ -84,7 +84,6 @@ from typing import Any, Dict, List, Optional, Union, AsyncGenerator
 import datetime
 import os
 
-
 from ..agents import Agent
 from ..background.request_tracker import RequestState, RequestStatus
 from ...services import observability
@@ -1546,7 +1545,7 @@ class Overlord:
             user_message, agent_response, user_id, agent_id, extraction_model
         )
 
-    async def get_user_context_memory(
+    async def get_user_context(
         self, user_id: Any, agent_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -1572,9 +1571,9 @@ class Overlord:
             Returns an empty dictionary if no context exists or if multi-user
             support is not enabled.
         """
-        return await self.user_context_manager.get_user_context_memory(user_id, agent_id)
+        return await self.user_context_manager.get_user_context(user_id, agent_id)
 
-    async def add_user_context_memory(
+    async def add_user_context(
         self,
         user_id: Any,
         knowledge: Dict[str, Any],
@@ -1606,11 +1605,11 @@ class Overlord:
             reference the specific memory items later.
             Returns an empty list if multi-user support is not enabled.
         """
-        return await self.user_context_manager.add_user_context_memory(
+        return await self.user_context_manager.add_user_context(
             user_id, knowledge, source, importance, agent_id
         )
 
-    async def clear_user_context_memory(
+    async def clear_user_context(
         self, user_id: Any, keys: Optional[List[str]] = None, agent_id: Optional[str] = None
     ) -> bool:
         """
@@ -1632,7 +1631,7 @@ class Overlord:
             True if successful, False otherwise (including if multi-user
             support is not enabled).
         """
-        return await self.user_context_manager.clear_user_context_memory(user_id, keys, agent_id)
+        return await self.user_context_manager.clear_user_context(user_id, keys, agent_id)
 
     async def register_mcp_server(
         self,
@@ -1804,7 +1803,7 @@ class Overlord:
             if role == "user":
                 try:
                     # Get user context memory
-                    context_memory = await self.get_user_context_memory(user_id=internal_user_id)
+                    context_memory = await self.get_user_context(user_id=internal_user_id)
 
                     # If context is available, enhance the message before storing
                     if context_memory:
@@ -3064,7 +3063,7 @@ class Overlord:
 
             user_context = {}
             if user_id_int:
-                user_context = await self.get_user_context_memory(user_id_int, agent_name)
+                user_context = await self.get_user_context(user_id_int, agent_name)
 
             # Analyze message for clarification needs
             from ..clarification import (

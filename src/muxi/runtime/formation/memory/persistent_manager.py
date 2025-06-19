@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from ...services import observability
 
+
 class PersistentMemoryManager:
     """
     Manages persistent memory operations for the Overlord.
@@ -309,7 +310,7 @@ class PersistentMemoryManager:
         if role == "user":
             try:
                 # Get user context memory
-                context_memory = await self.overlord.get_user_context_memory(user_id=internal_user_id)
+                context_memory = await self.overlord.get_user_context(user_id=internal_user_id)
 
                 # If context is available, enhance the message before storing
                 if context_memory:

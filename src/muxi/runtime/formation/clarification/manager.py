@@ -9,7 +9,7 @@ clarification process across multiple conversation turns.
 import time
 from typing import Dict, Optional, Any
 
-from .datatypes import (
+from ...datatypes import (
     ClarificationRequest,
     ClarificationResult,
     ClarificationResultStatus,
@@ -346,7 +346,7 @@ class ClarificationManager:
 
         # Add any context enrichment
         if self.overlord:
-            user_context = await self.overlord.get_user_context_memory(request.user_id)
+            user_context = await self.overlord.get_user_context(request.user_id)
             if user_context:
                 # Fill any remaining gaps from context
                 for key, value in user_context.items():

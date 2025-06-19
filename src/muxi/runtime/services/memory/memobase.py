@@ -558,7 +558,7 @@ class Memobase:
             )
             raise
 
-    async def add_user_context_memory(
+    async def add_user_context(
         self,
         user_id: Optional[int] = None,
         knowledge: Dict[str, Any] = None,
@@ -683,7 +683,7 @@ class Memobase:
             )
             raise
 
-    async def get_user_context_memory(
+    async def get_user_context(
         self,
         user_id: Optional[int] = None,
         keys: Optional[List[str]] = None,
@@ -693,7 +693,7 @@ class Memobase:
         Retrieve context memory about a user.
 
         This method fetches persistent user information that has been previously
-        stored with add_user_context_memory, optionally filtering to specific keys.
+        stored with add_user_context, optionally filtering to specific keys.
 
         Args:
             user_id: The user's ID. If None, uses the default user.
@@ -898,7 +898,7 @@ class Memobase:
                 raise ValueError(f"Unsupported format: {format}")
 
             # Add the knowledge
-            memory_ids = await self.add_user_context_memory(
+            memory_ids = await self.add_user_context(
                 user_id=user_id,
                 knowledge=data,
                 source=source,
@@ -936,7 +936,7 @@ class Memobase:
             )
             raise
 
-    async def clear_user_context_memory(
+    async def clear_user_context(
         self,
         user_id: Optional[int] = None,
         keys: Optional[List[str]] = None,
@@ -1105,10 +1105,10 @@ class Memobase:
 
         try:
             # First clear the existing key if it exists
-            await self.clear_user_context_memory(user_id=user_id, keys=[key])
+            await self.clear_user_context(user_id=user_id, keys=[key])
 
             # Then add the new value
-            memory_ids = await self.add_user_context_memory(
+            memory_ids = await self.add_user_context(
                 user_id=user_id,
                 knowledge={key: value},
                 source=source,

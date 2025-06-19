@@ -205,7 +205,7 @@ class MemoryExtractor:
             return True
 
         # Get existing context to find auto-extracted entries
-        context = await self.overlord.get_user_context_memory(user_id=user_id)
+        context = await self.overlord.get_user_context(user_id=user_id)
 
         # Look for keys that were created by automatic extraction
         to_delete = []
@@ -216,7 +216,7 @@ class MemoryExtractor:
 
         # Clear these specific keys
         if to_delete:
-            return await self.overlord.clear_user_context_memory(
+            return await self.overlord.clear_user_context(
                 user_id=user_id, keys=to_delete
             )
 
@@ -316,7 +316,7 @@ class MemoryExtractor:
             return
 
         # Get existing user context memory
-        existing_context = await self.overlord.get_user_context_memory(user_id=user_id)
+        existing_context = await self.overlord.get_user_context(user_id=user_id)
 
         # Process each extracted item
         knowledge_updates = {}
@@ -350,7 +350,7 @@ class MemoryExtractor:
 
         # Store updates in context memory if any exist
         if knowledge_updates:
-            await self.overlord.add_user_context_memory(
+            await self.overlord.add_user_context(
                 user_id=user_id,
                 knowledge=knowledge_updates,
                 source="automatic_extraction",

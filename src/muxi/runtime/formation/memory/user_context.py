@@ -26,7 +26,7 @@ class UserContextManager:
         """
         self.overlord = overlord
 
-    async def get_user_context_memory(
+    async def get_user_context(
         self, user_id: Any, agent_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -66,7 +66,7 @@ class UserContextManager:
             _ = e  # remove this after implementing observability
             return {}
 
-        context = await self.overlord.long_term_memory.get_user_context_memory(
+        context = await self.overlord.long_term_memory.get_user_context(
             user_id=internal_user_id
         )
 
@@ -76,7 +76,7 @@ class UserContextManager:
 
         return context
 
-    async def add_user_context_memory(
+    async def add_user_context(
         self,
         user_id: Any,
         knowledge: Dict[str, Any],
@@ -122,7 +122,7 @@ class UserContextManager:
             _ = e  # remove this after implementing observability
             return []
 
-        context = await self.overlord.long_term_memory.add_user_context_memory(
+        context = await self.overlord.long_term_memory.add_user_context(
             user_id=internal_user_id,
             knowledge=knowledge,
             source=source,
@@ -134,7 +134,7 @@ class UserContextManager:
 
         return context
 
-    async def clear_user_context_memory(
+    async def clear_user_context(
         self, user_id: Any, keys: Optional[List[str]] = None, agent_id: Optional[str] = None
     ) -> bool:
         """
@@ -171,7 +171,7 @@ class UserContextManager:
             _ = e  # remove this after implementing observability
             return False
 
-        context = await self.overlord.long_term_memory.clear_user_context_memory(
+        context = await self.overlord.long_term_memory.clear_user_context(
             user_id=internal_user_id, keys=keys
         )
 
