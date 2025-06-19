@@ -8,7 +8,7 @@ Uses pure LLM detection for multilingual support.
 
 from typing import Optional
 
-from .types import ProactiveRequest, ProactiveRequestType, MultiStepPlan
+from ...datatypes.clarification import ProactiveRequest, ProactiveRequestType, MultiStepPlan
 
 
 class ProactiveClarificationIntentDetector:

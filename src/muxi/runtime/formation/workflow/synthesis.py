@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 from ...services.llm import LLM
-from .types import Workflow, TaskStatus
+from ...datatypes.workflow import Workflow, TaskStatus
 
 
 class ResponseQuality(Enum):

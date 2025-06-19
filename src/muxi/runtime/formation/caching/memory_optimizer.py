@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from .types import MemoryStats
+from ...datatypes.caching import MemoryStats
 
 
 @dataclass

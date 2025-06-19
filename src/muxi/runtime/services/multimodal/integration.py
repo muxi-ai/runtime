@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import time
 
-from ...formation.workflow.types import Workflow, SubTask, TaskInput, TaskOutput
+from ...datatypes import Workflow, SubTask, TaskInput, TaskOutput
 from .fusion_engine import (
     MultiModalFusionEngine,
     MultiModalContent,

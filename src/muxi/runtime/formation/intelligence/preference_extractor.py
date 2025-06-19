@@ -10,7 +10,7 @@ import json
 import time
 from typing import List, Dict, Any, Optional
 from ...services.llm import LLM
-from .types import (
+from ...datatypes.intelligence import (
     Message,
     ExplicitPreference,
     PreferenceType,

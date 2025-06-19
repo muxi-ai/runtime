@@ -83,6 +83,14 @@ from onellm import ChatCompletion, Embedding
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
 
+# Import multimodal components
+from ..multimodal import (
+    MultiModalFusionEngine,
+    MultiModalContent,
+    ModalityType,
+    ProcessingMode,
+)
+
 
 # File processing configuration
 FILE_SIZE_LIMITS = {
@@ -640,8 +648,6 @@ class LLM:
         """Lazy initialize fusion engine for advanced multimodal processing"""
         if self._fusion_engine is None:
             try:
-                from ...formation.workflow.multimodal import MultiModalFusionEngine
-
                 self._fusion_engine = MultiModalFusionEngine(self)
                 observability.observe(
                     event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
@@ -662,8 +668,6 @@ class LLM:
     async def _convert_files_to_content(self, files: List[Union[str, Path]]):
         """Convert file paths to MultiModalContent objects for fusion engine"""
         try:
-            from ...formation.workflow.multimodal import MultiModalContent
-
             content_items = []
 
             for file_path in files:
@@ -691,8 +695,6 @@ class LLM:
     async def _detect_file_modality(self, file_path: Union[str, Path]):
         """Detect modality from file extension/type"""
         try:
-            from ...formation.workflow.multimodal import ModalityType
-
             import mimetypes
 
             mime_type, _ = mimetypes.guess_type(str(file_path))
@@ -879,8 +881,6 @@ class LLM:
         """Process files using advanced fusion engine"""
 
         try:
-            from ...formation.workflow.multimodal import ProcessingMode
-
             # Convert files to MultiModalContent format
             multimodal_content = await self._convert_files_to_content(files)
 

@@ -1,7 +1,7 @@
 from typing import Optional, Dict, Any, Tuple
 import re
 
-from .types import (
+from ...datatypes.workflow import (
     Workflow,
     SubTask,
     TaskStatus,

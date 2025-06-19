@@ -8,7 +8,7 @@ information where possible, reducing the need for clarifying questions.
 
 from typing import Dict, List, Optional, Any, Tuple
 
-from .types import (
+from .datatypes import (
     ParameterMapping,
     ContextEnrichmentError
 )

@@ -7,7 +7,7 @@ as specified in the intelligent parameter collection implementation plan.
 
 from typing import Dict, List, Optional, Any
 
-from .types import (
+from ...datatypes.clarification import (
     InformationAnalysis,
     ToolInformationAnalysis,
     ReasoningInformationAnalysis,

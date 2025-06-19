@@ -5,7 +5,7 @@ This module provides intelligent parallelization of workflow execution to reduce
 response times and optimize resource utilization across multiple agents.
 """
 
-from .types import (
+from ...datatypes.parallel import (
     ParallelGroup,
     ResourceAllocation,
     BottleneckInfo,

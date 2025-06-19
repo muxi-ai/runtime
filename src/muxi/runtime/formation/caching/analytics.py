@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Any
 import statistics
 
-from .types import CacheType
+from ...datatypes.caching import CacheType
 
 
 @dataclass

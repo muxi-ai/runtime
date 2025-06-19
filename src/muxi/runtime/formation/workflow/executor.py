@@ -3,7 +3,9 @@ from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 import json
 
-from .types import Workflow, SubTask, TaskStatus, WorkflowStatus, TaskResult, build_execution_phases
+from ...datatypes.workflow import (
+    Workflow, SubTask, TaskStatus, WorkflowStatus, TaskResult, build_execution_phases
+)
 from ..agents.agent import Agent
 
 

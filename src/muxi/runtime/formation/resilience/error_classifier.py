@@ -9,7 +9,7 @@ import re
 import asyncio
 from typing import Dict, List, Optional, Pattern
 
-from .resilience_types import (
+from ...datatypes.resilience import (
     ErrorType,
     ErrorSeverity,
     ErrorContext,

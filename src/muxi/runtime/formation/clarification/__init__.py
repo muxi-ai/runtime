@@ -54,7 +54,7 @@ Usage:
         )
 """
 
-from .types import (
+from ...datatypes.clarification import (
     # Core data types
     ClarificationRequest,
     ClarificationResult,

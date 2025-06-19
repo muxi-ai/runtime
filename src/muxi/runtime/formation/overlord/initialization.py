@@ -387,7 +387,7 @@ async def initialize_clarification_config(overlord) -> None:
         return
 
     try:
-        from ..clarification.types import ClarificationConfig, QuestionStyle
+        from ..clarification.datatypes import ClarificationConfig, QuestionStyle
 
         # Extract configuration with privacy-by-default approach
         max_questions = clarification_config.get("max_questions", 5)

@@ -88,7 +88,7 @@ import os
 from ..agents import Agent
 from ..background.request_tracker import RequestState, RequestStatus
 from ...services import observability
-from ...types.response import MuxiResponse
+from ...datatypes.response import MuxiResponse
 from ...services.mcp.service import MCPService
 from ...services.memory.short_term import ShortTermMemory
 from ...services.memory.long_term import LongTermMemory
@@ -137,13 +137,12 @@ from ..memory import (
 )
 
 # NEW: Import multimodal and synthesis components
-from ..workflow.multimodal import MultiModalFusionEngine, MultiModalWorkflowIntegrator
+from ...services.multimodal import MultiModalFusionEngine, WorkflowMultiModalProcessor
 from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
 
 # NEW: Import interactive elements and enhanced multimodal integration
 from ..workflow.interactive import InteractiveElementGenerator, ResponseFormatter, MediaIntegrator
-from ..workflow.multimodal_integration import (
-    WorkflowMultiModalProcessor,
+from ...services.multimodal import (
     TaskInputProcessor,
     TaskOutputProcessor,
 )
@@ -192,7 +191,7 @@ from ..background import (
 
 # Unified Response Components (Phase 3)
 from ...utils.response_converter import create_unified_response, extract_user_content
-from ..clarification.types import ClarificationConfig, QuestionStyle
+from ...datatypes.clarification import ClarificationConfig, QuestionStyle
 from ...utils.user_dirs import set_formation_id
 
 
@@ -422,7 +421,7 @@ class Overlord:
 
         # NEW: Initialize multimodal and synthesis components
         self.multimodal_fusion_engine = MultiModalFusionEngine(llm=extraction_model)
-        self.multimodal_integrator = MultiModalWorkflowIntegrator(
+        self.multimodal_integrator = WorkflowMultiModalProcessor(
             fusion_engine=self.multimodal_fusion_engine
         )
         self.quality_assessor = ResponseQualityAssessor(llm=extraction_model)

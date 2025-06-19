@@ -7,7 +7,7 @@ This module provides intelligent context understanding and adaptive response gen
 with automatic multi-user vs single-user mode detection based on deployment configuration.
 """
 
-from .types import (
+from ...datatypes.intelligence import (
     UserPreferences,
     ConversationContext,
     AdaptedResponse,

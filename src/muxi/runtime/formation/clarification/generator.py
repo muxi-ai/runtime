@@ -9,7 +9,7 @@ across different contexts and interaction styles.
 import uuid
 from typing import Dict, List, Any
 
-from .types import (
+from ...datatypes.clarification import (
     ClarificationQuestion,
     QuestionStyle,
     RequestType,
@@ -295,8 +295,10 @@ class ClarificationQuestionGenerator:
     ) -> str:
         """Generate reasoning question using templates"""
         templates = {
-            QuestionStyle.CONVERSATIONAL: "I'd be happy to help with {intent}. Could you tell me more about {context}?",
-            QuestionStyle.FORMAL: "To provide appropriate {intent} guidance, please provide information about {context}.",
+            QuestionStyle.CONVERSATIONAL: "I'd be happy to help with {intent}. "
+                                          "Could you tell me more about {context}?",
+            QuestionStyle.FORMAL: "To provide appropriate {intent} guidance, "
+                                  "please provide information about {context}.",
             QuestionStyle.BRIEF: "What's your {context} for {intent}?"
         }
 

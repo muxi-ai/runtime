@@ -10,13 +10,14 @@ import asyncio
 import time
 from typing import Any, Dict, Optional
 
-from .resilience_types import (
+from ...datatypes.resilience import (
     ResilienceConfig,
     ResilientWorkflowResult,
     WorkflowException,
     ErrorType,
     ErrorSeverity,
     RecoveryStrategy,
+    RecoveryResult,
 )
 
 from .error_classifier import ErrorClassifier
@@ -247,8 +248,6 @@ class ResilientWorkflowManager:
     ):
         """Execute a specific recovery strategy."""
 
-        from .resilience_types import RecoveryResult
-
         try:
             if strategy in [
                 RecoveryStrategy.IMMEDIATE_RETRY,
@@ -294,8 +293,6 @@ class ResilientWorkflowManager:
     ):
         """Execute retry-based recovery strategies."""
 
-        from .resilience_types import RecoveryResult
-
         # Calculate delay based on strategy
         if strategy == RecoveryStrategy.IMMEDIATE_RETRY:
             delay = 0
@@ -338,7 +335,6 @@ class ResilientWorkflowManager:
         """Execute fallback agent strategy."""
         # This would integrate with the agent selection system
         # For now, return a placeholder
-        from .resilience_types import RecoveryResult
 
         return RecoveryResult(
             success=False,
@@ -348,7 +344,6 @@ class ResilientWorkflowManager:
 
     async def _execute_fallback_model_strategy(self, workflow: Any, error_context):
         """Execute fallback model strategy."""
-        from .resilience_types import RecoveryResult
 
         return RecoveryResult(
             success=False,
@@ -358,7 +353,6 @@ class ResilientWorkflowManager:
 
     async def _execute_cached_response_strategy(self, workflow: Any, error_context):
         """Execute cached response strategy."""
-        from .resilience_types import RecoveryResult
 
         cached_response = await self.fallback_manager._get_cached_fallback(workflow)
         if cached_response:
@@ -374,7 +368,6 @@ class ResilientWorkflowManager:
 
     async def _execute_simplified_workflow_strategy(self, workflow: Any, error_context):
         """Execute simplified workflow strategy."""
-        from .resilience_types import RecoveryResult
 
         simplified_response = await self.fallback_manager._get_simplified_workflow_response(
             workflow
@@ -396,7 +389,6 @@ class ResilientWorkflowManager:
         self, strategy: RecoveryStrategy, workflow: Any, error_context
     ):
         """Execute escalation strategies."""
-        from .resilience_types import RecoveryResult
 
         # Log escalation
         #  Warning - TODO: add observability

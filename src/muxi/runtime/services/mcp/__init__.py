@@ -55,7 +55,7 @@ from .handler import (
 )
 from .reconnect_handler import ReconnectingMCPHandler
 from .service import MCPService
-from ...types.response import MuxiResponse
+from ...datatypes.response import MuxiResponse
 from .message import MCPToolCall
 from .parser import ToolParser, ToolCall
 

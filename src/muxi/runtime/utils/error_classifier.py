@@ -8,7 +8,7 @@ error codes for consistent error handling across the system.
 import asyncio
 from typing import Type, Dict
 
-from ..types.errors import ERROR_CODE_REGISTRY
+from ..datatypes.errors import ERROR_CODE_REGISTRY
 from ..services import observability
 
 

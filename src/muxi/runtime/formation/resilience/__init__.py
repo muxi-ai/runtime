@@ -13,7 +13,7 @@ Components:
 - ResilientWorkflowManager: Main orchestrator for resilient workflow execution
 """
 
-from .resilience_types import (
+from ...datatypes.resilience import (
     ErrorType,
     ErrorSeverity,
     RecoveryStrategy,

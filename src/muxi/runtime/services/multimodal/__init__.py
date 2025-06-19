@@ -14,7 +14,8 @@ from .fusion_engine import (
 )
 
 from .integration import (
-    MultiModalWorkflowIntegrator,
+    MultiModalTaskInput,
+    MultiModalTaskOutput,
     WorkflowMultiModalProcessor,
     TaskInputProcessor,
     TaskOutputProcessor
@@ -26,7 +27,8 @@ __all__ = [
     "ModalityType",
     "ProcessingMode",
     "MultiModalProcessingResult",
-    "MultiModalWorkflowIntegrator",
+    "MultiModalTaskInput",
+    "MultiModalTaskOutput",
     "WorkflowMultiModalProcessor",
     "TaskInputProcessor",
     "TaskOutputProcessor"

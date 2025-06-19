@@ -6,7 +6,7 @@ orchestration capabilities.
 """
 
 # Import all workflow types first
-from .types import (
+from ...datatypes.workflow import (
     # Core workflow data structures
     Workflow,
     SubTask,

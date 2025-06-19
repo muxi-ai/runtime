@@ -10,7 +10,7 @@ import time
 import asyncio
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Generic
 
-from .resilience_types import (
+from ...datatypes.resilience import (
     CircuitState,
     CircuitBreakerConfig,
     CircuitBreakerState,

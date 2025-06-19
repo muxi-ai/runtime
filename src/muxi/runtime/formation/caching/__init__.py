@@ -14,7 +14,7 @@ Key Components:
 from .cache_manager import IntelligentCacheManager
 from .analytics import CacheHitAnalyzer
 from .memory_optimizer import MemoryOptimizer
-from .types import (
+from ...datatypes.caching import (
     CacheType,
     CachedResponse,
     CacheKey,

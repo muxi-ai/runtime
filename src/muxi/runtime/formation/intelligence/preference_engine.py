@@ -7,7 +7,7 @@ Automatically detects multi-user vs single-user deployment mode and adapts behav
 
 import time
 from typing import List, Optional, Dict, Any
-from .types import (
+from ...datatypes.intelligence import (
     Message,
     FeedbackEvent,
     UserPreferences,

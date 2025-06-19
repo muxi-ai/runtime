@@ -8,7 +8,7 @@ and context propagation throughout the observability system.
 from contextvars import ContextVar
 from typing import Optional
 
-from .types import RequestContext
+from ...datatypes.observability import RequestContext
 
 
 # ===================================================================

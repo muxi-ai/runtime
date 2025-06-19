@@ -9,13 +9,13 @@ import time
 import traceback
 from typing import List, Optional, Dict, Any, Union
 
-from onellm.types.common import ContentItem as OneLLMContentItem
-from ..types.response import (
+from onellm.datatypes.common import ContentItem as OneLLMContentItem
+from ..datatypes.response import (
     MuxiContentItem,
     MuxiUnifiedResponse,
     MuxiErrorDetails
 )
-from ..types.errors import get_error_info
+from ..datatypes.errors import get_error_info
 from ..utils.error_classifier import classify_error_code
 from ..services import observability
 

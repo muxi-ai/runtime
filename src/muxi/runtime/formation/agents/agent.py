@@ -47,7 +47,7 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
-from ...types.response import MuxiResponse
+from ...datatypes.response import MuxiResponse
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...services import observability

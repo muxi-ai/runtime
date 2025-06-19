@@ -8,7 +8,7 @@ detection to create optimized parallel execution plans for complex workflows.
 import uuid
 from typing import Dict, List, Any, Optional
 
-from .types import ExecutionPlan, OptimizedWorkflow, AgentCapability
+from ...datatypes.parallel import ExecutionPlan, OptimizedWorkflow, AgentCapability
 from .dependency_analyzer import DependencyAnalyzer
 from .resource_manager import ResourceManager
 from .bottleneck_detector import BottleneckDetector

@@ -11,7 +11,7 @@ import asyncio
 from typing import Dict, List, Tuple, Any
 from collections import defaultdict, deque
 
-from .types import TaskNode, ParallelGroup, BottleneckInfo, BottleneckType
+from ...datatypes.parallel import TaskNode, ParallelGroup, BottleneckInfo, BottleneckType
 
 
 class DependencyAnalyzer:

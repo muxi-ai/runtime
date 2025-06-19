@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Dict, List, Any
 from collections import defaultdict
 
-from .types import (
+from ...datatypes.parallel import (
     ResourceAllocation,
     BottleneckInfo,
     BottleneckType,

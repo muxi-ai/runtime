@@ -9,7 +9,7 @@ import time
 import statistics
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict, Counter
-from .types import (
+from ...datatypes.intelligence import (
     Message,
     FeedbackEvent,
     ImplicitPreference,

@@ -7,7 +7,7 @@ error types, context, and historical success rates.
 
 from typing import Dict, List, Optional
 
-from .resilience_types import (
+from ...datatypes.resilience import (
     ErrorType,
     ErrorSeverity,
     RecoveryStrategy,

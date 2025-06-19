@@ -17,7 +17,7 @@ import numpy as np
 from scipy.spatial.distance import cosine
 from ...utils.user_dirs import get_memory_dir
 
-from .types import CachedResponse
+from ...datatypes.caching import CachedResponse
 
 
 class LRUCache:

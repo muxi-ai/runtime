@@ -11,7 +11,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
-from ...formation.workflow.types import Workflow, SubTask
+from ...datatypes import Workflow, SubTask
 
 from ...services.llm import LLM
 

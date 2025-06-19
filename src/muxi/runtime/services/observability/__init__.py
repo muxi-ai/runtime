@@ -20,7 +20,7 @@ Note: This implementation follows Task 5 Phase 1 specification with dual event a
 """
 
 # Import all types and classes
-from .types import (
+from ...datatypes.observability import (
     EventLevel,
     SystemEvents,
     ConversationEvents,

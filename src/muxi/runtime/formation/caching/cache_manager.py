@@ -12,7 +12,7 @@ import json
 import time
 from typing import Any, Dict, List, Optional
 
-from .types import CacheKey, CachedResponse, CacheType, CacheStatistics
+from ...datatypes.caching import CacheKey, CachedResponse, CacheType, CacheStatistics
 from .implementations import LRUCache, SizeBasedCache, PersistentCache, SemanticCache
 from .analytics import CacheHitAnalyzer
 from .memory_optimizer import MemoryOptimizer

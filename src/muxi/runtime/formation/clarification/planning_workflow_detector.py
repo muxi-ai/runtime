@@ -8,7 +8,7 @@ Uses pure LLM detection for multilingual support.
 
 from typing import Optional
 
-from .types import PlanningWorkflowRequest, PlanningWorkflowType, ClarificationContext
+from ...datatypes.clarification import PlanningWorkflowRequest, PlanningWorkflowType, ClarificationContext
 
 
 class PlanningWorkflowDetector:

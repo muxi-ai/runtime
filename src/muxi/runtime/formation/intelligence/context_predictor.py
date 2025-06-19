@@ -8,7 +8,7 @@ historical patterns, and environmental factors.
 import time
 from typing import Any, Dict, List, Optional
 
-from .types import (
+from ...datatypes.intelligence import (
     ContextualPreference,
     ContextPredictionResult,
     ConversationContext,

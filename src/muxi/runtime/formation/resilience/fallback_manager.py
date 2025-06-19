@@ -8,7 +8,7 @@ when primary recovery strategies fail.
 import asyncio
 from typing import Any, Dict, Optional
 
-from .resilience_types import (
+from ...datatypes.resilience import (
     ErrorType,
     FallbackFunction,
 )

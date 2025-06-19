@@ -9,7 +9,7 @@ import time
 import re
 from typing import Optional, List, Dict, Any
 
-from .types import (
+from ...datatypes.intelligence import (
     UserPreferences,
     ConversationContext,
     AdaptedResponse,

@@ -13,7 +13,7 @@ import aiohttp
 
 
 # Import unified response types
-from ...types.response import MuxiUnifiedResponse, MuxiContentItem, MuxiErrorDetails
+from ...datatypes.response import MuxiUnifiedResponse, MuxiContentItem, MuxiErrorDetails
 from ...utils.response_converter import create_unified_response
 
 

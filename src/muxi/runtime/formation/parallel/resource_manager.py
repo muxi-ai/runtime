@@ -9,7 +9,7 @@ import uuid
 from typing import Dict, List, Any
 from dataclasses import dataclass
 
-from .types import (
+from ...datatypes.parallel import (
     TaskNode,
     ParallelGroup,
     ResourceAllocation,

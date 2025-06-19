@@ -12,7 +12,7 @@ from typing import Dict, Optional
 
 from ...utils.id_generator import generate_nanoid as generate_id
 from .context import _current_request_context
-from .types import RequestContext
+from ...datatypes.observability import RequestContext
 
 
 class RequestContextManager:
