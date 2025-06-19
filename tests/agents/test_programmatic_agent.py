@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from src.muxi.runtime.services.llm import LLM
 from src.muxi.runtime.formation.overlord import Overlord
 from src.muxi.runtime.services.memory.short_term import ShortTermMemory
-from src.muxi.runtime.types.response import MuxiResponse
+from src.muxi.runtime.datatypes.response import MuxiResponse
 
 
 # Load environment variables from .env file

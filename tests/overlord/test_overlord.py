@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 
 from src.muxi.runtime.formation.overlord import Overlord
-from src.muxi.runtime.types.response import MuxiResponse
+from src.muxi.runtime.datatypes.response import MuxiResponse
 
 
 class TestOverlord:

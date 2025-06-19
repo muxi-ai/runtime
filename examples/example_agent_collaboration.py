@@ -21,11 +21,11 @@ import os
 
 # Handle imports with path management
 try:
-    from src.muxi.runtime.overlord import Overlord
+    from src.muxi.runtime.formation import Overlord
 except ImportError:
     # Add the runtime directory to the Python path
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'runtime'))
-    from src.muxi.runtime.overlord import Overlord
+    from src.muxi.runtime.formation import Overlord
 
 
 class MockLLM:

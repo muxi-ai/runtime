@@ -23,7 +23,7 @@ except ImportError as e:
     print(f"Failed to import MCP: {e}")
 
 try:
-    from src.muxi.runtime.types.response import MuxiResponse  # noqa: F401
+    from src.muxi.runtime.datatypes.response import MuxiResponse  # noqa: F401
     print("Successfully imported MuxiResponse")
 except ImportError as e:
     print(f"Failed to import MuxiResponse: {e}")

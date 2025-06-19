@@ -3,7 +3,7 @@ Unit tests for the error code registry.
 """
 
 import unittest
-from src.muxi.runtime.types.errors import (
+from src.muxi.runtime.datatypes.errors import (
     ErrorCodeInfo,
     ERROR_CODE_REGISTRY,
     get_error_info,

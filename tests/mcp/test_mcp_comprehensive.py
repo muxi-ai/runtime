@@ -39,7 +39,7 @@ try:
         MCPRequestError,
         MCPCancelledError
     )
-    from src.muxi.runtime.types.response import MuxiResponse  # noqa: E402
+    from src.muxi.runtime.datatypes.response import MuxiResponse  # noqa: E402
     print("✅ Successfully imported MCP classes directly")
 except ImportError as e:
     print(f"❌ Direct import failed: {e}")

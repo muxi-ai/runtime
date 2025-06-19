@@ -12,7 +12,7 @@ from unittest.mock import Mock, AsyncMock, patch
 
 from src.muxi.runtime.formation.overlord.overlord import Overlord
 from src.muxi.runtime.formation.background.request_tracker import RequestStatus
-from src.muxi.runtime.types.response import MuxiResponse
+from src.muxi.runtime.datatypes.response import MuxiResponse
 
 
 class TestAsyncIntegration:
