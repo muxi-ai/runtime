@@ -189,6 +189,21 @@ from .async_operations import (
     TimeoutError,
 )
 
+# Retry logic data types
+from .retry import (
+    RetryConfig,
+    RetryResult,
+    RetryAttempt,
+    RetryStrategy,
+    TransientError,
+    NetworkTransientError,
+    ServiceTransientError,
+    RateLimitTransientError,
+    TransientErrorType,
+    calculate_delay,
+    is_retryable_error,
+)
+
 __all__ = [
     # Core response and error types
     "MuxiFileContent",
@@ -349,4 +364,17 @@ __all__ = [
     "AsyncOperationResult",
     "CancellationError",
     "TimeoutError",
+
+    # Retry logic data types
+    "RetryConfig",
+    "RetryResult",
+    "RetryAttempt",
+    "RetryStrategy",
+    "TransientError",
+    "NetworkTransientError",
+    "ServiceTransientError",
+    "RateLimitTransientError",
+    "TransientErrorType",
+    "calculate_delay",
+    "is_retryable_error",
 ]

@@ -15,6 +15,14 @@ from .async_operation_manager import (
     set_timeout_config,
     execute_with_timeout,
 )
+from .retry_manager import (
+    RetryManager,
+    get_retry_manager,
+    set_default_retry_config,
+    retry_network_operation,
+    retry_api_call,
+    classify_error_as_transient,
+)
 
 __all__ = [
     "get_default_nanoid",
@@ -26,4 +34,10 @@ __all__ = [
     "get_operation_manager",
     "set_timeout_config",
     "execute_with_timeout",
+    "RetryManager",
+    "get_retry_manager",
+    "set_default_retry_config",
+    "retry_network_operation",
+    "retry_api_call",
+    "classify_error_as_transient",
 ]

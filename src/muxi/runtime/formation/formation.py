@@ -48,6 +48,10 @@ from ..utils import DependencyValidator
 from ..utils.async_operation_manager import get_operation_manager, execute_with_timeout
 from ..datatypes.async_operations import TimeoutConfig, CancellationToken
 
+# Retry logic imports
+from ..utils.retry_manager import get_retry_manager
+from ..datatypes.retry import RetryConfig, RetryStrategy, NetworkTransientError, ServiceTransientError
+
 # Exception imports
 from ..datatypes.exceptions import (
     ConfigurationNotFoundError,
@@ -80,7 +84,7 @@ class Formation:
     - Handles resource cleanup and shutdown
     """
 
-    def __init__(self, timeout_config: Optional[TimeoutConfig] = None):
+    def __init__(self, timeout_config: Optional[TimeoutConfig] = None, retry_config: Optional[RetryConfig] = None):
         """
         Initialize Formation platform.
 
@@ -90,6 +94,7 @@ class Formation:
 
         Args:
             timeout_config: Optional timeout configuration for async operations
+            retry_config: Optional retry configuration for transient failures
         """
         # Core state
         self.config: Optional[Dict[str, Any]] = None
@@ -107,6 +112,15 @@ class Formation:
         self._timeout_config = timeout_config or TimeoutConfig()
         self._operation_manager = get_operation_manager()
         self._formation_cancellation_token: Optional[CancellationToken] = None
+
+        # Retry logic management
+        self._retry_config = retry_config or RetryConfig(
+            max_attempts=3,
+            strategy=RetryStrategy.EXPONENTIAL_BACKOFF,
+            base_delay=1.0,
+            max_delay=30.0,
+        )
+        self._retry_manager = get_retry_manager()
 
         # Dependency validation
         self._dependency_validator = DependencyValidator()
@@ -333,7 +347,7 @@ class Formation:
 
     async def _load_config(self, config_path: str) -> Dict[str, Any]:
         """
-        Load formation configuration from file with timeout support.
+        Load formation configuration from file with timeout and retry support.
 
         Args:
             config_path: Path to formation configuration
@@ -342,50 +356,106 @@ class Formation:
             Loaded configuration dictionary
 
         Raises:
-            TimeoutError: If configuration loading times out
-            CancellationError: If operation is cancelled
+            ConfigurationLoadError: If configuration loading fails after retries
         """
         async def _load_operation():
-            formation_loader = FormationLoader()
-            return await formation_loader.load(config_path, self.secrets_manager)
+            """Load configuration with timeout and error handling for retry logic."""
+            async def _timeout_operation():
+                formation_loader = FormationLoader()
+                return await formation_loader.load(config_path, self.secrets_manager)
 
-        result = await execute_with_timeout(
+            result = await execute_with_timeout(
+                _timeout_operation,
+                operation_type="config_load",
+                description=f"Loading formation configuration from {config_path}",
+                timeout=self._timeout_config.config_load_timeout,
+                cancellation_token=self._formation_cancellation_token
+            )
+
+            if not result.is_success:
+                if result.was_timeout:
+                    raise NetworkTransientError(
+                        f"Configuration loading timed out after {result.elapsed_time:.1f}s",
+                        retry_after=2.0,
+                        details={
+                            "config_path": config_path,
+                            "timeout": self._timeout_config.config_load_timeout,
+                            "suggestion": "Try increasing config_load_timeout or check file system performance"
+                        }
+                    )
+                elif result.was_cancelled:
+                    raise ConfigurationLoadError(
+                        "❌ Configuration loading was cancelled",
+                        {
+                            "config_path": config_path,
+                            "suggestion": "Operation was cancelled - check if Formation is being shut down"
+                        }
+                    )
+                else:
+                    # Check if the error is retryable (e.g., network issues, file system issues)
+                    error_str = str(result.error).lower()
+                    if any(pattern in error_str for pattern in ['network', 'connection', 'timeout', 'temporary']):
+                        raise NetworkTransientError(
+                            f"Configuration loading failed: {result.error}",
+                            details={
+                                "config_path": config_path,
+                                "original_error": str(result.error)
+                            }
+                        )
+                    else:
+                        # Non-retryable error - re-raise as is
+                        raise result.error
+
+            return result.result
+
+        # Use retry logic for configuration loading
+        retry_result = await self._retry_manager.execute_with_retry(
             _load_operation,
-            operation_type="config_load",
-            description=f"Loading formation configuration from {config_path}",
-            timeout=self._timeout_config.config_load_timeout,
-            cancellation_token=self._formation_cancellation_token
+            config=self._retry_config,
+            operation_name="configuration_loading"
         )
 
-        if not result.is_success:
-            if result.was_timeout:
+        if retry_result.success:
+            if retry_result.was_retried:
+                print(f"✅ Configuration loaded successfully after {retry_result.total_attempts} attempts")
+            return retry_result.result
+        else:
+            error = retry_result.error
+
+            # Convert retry failure to ConfigurationLoadError with enhanced context
+            if isinstance(error, NetworkTransientError):
                 raise ConfigurationLoadError(
-                    f"❌ Configuration loading timed out after {result.elapsed_time:.1f}s",
+                    f"❌ Configuration loading failed after {retry_result.total_attempts} attempts: {error}",
                     {
                         "config_path": config_path,
-                        "timeout": self._timeout_config.config_load_timeout,
-                        "suggestion": "Try increasing config_load_timeout or check file system performance",
+                        "attempts": retry_result.total_attempts,
+                        "total_time": f"{retry_result.total_elapsed_time:.1f}s",
+                        "suggestion": error.details.get(
+                            "suggestion", "Check network connectivity and file accessibility"
+                        ),
                         "next_steps": [
                             f"Increase timeout: Formation(timeout_config=TimeoutConfig("
                             f"config_load_timeout={self._timeout_config.config_load_timeout * 2}))",
                             "Check if the configuration file is accessible",
-                            "Verify network connectivity if loading from remote location"
+                            "Verify network connectivity if loading from remote location",
+                            f"Increase retry attempts: Formation(retry_config=RetryConfig("
+                            f"max_attempts={self._retry_config.max_attempts * 2}))"
                         ]
                     }
                 )
-            elif result.was_cancelled:
-                raise ConfigurationLoadError(
-                    "❌ Configuration loading was cancelled",
-                    {
-                        "config_path": config_path,
-                        "suggestion": "Operation was cancelled - check if Formation is being shut down"
-                    }
-                )
             else:
-                # Re-raise the original error
-                raise result.error
-
-        return result.result
+                # Re-raise the original error if it's already a ConfigurationLoadError
+                if isinstance(error, ConfigurationLoadError):
+                    raise error
+                else:
+                    raise ConfigurationLoadError(
+                        f"❌ Configuration loading failed: {error}",
+                        {
+                            "config_path": config_path,
+                            "attempts": retry_result.total_attempts,
+                            "suggestion": "Check configuration file format and accessibility"
+                        }
+                    ) from error
 
     def _prepare_services(self) -> None:
         """
@@ -752,7 +822,7 @@ class Formation:
 
     async def ensure_secrets_manager(self) -> bool:
         """
-        Ensure the SecretsManager is initialized and ready to use with timeout support.
+        Ensure the SecretsManager is initialized and ready to use with timeout and retry support.
 
         Returns:
             bool: True if SecretsManager is available, False otherwise
@@ -761,12 +831,13 @@ class Formation:
             return False
 
         async def _initialize_operation():
-            await self.secrets_manager.initialize_encryption()
-            return True
+            """Initialize secrets manager with timeout support."""
+            async def _timeout_operation():
+                await self.secrets_manager.initialize_encryption()
+                return True
 
-        try:
             result = await execute_with_timeout(
-                _initialize_operation,
+                _timeout_operation,
                 operation_type="secrets_operation",
                 description="Initializing secrets manager encryption",
                 timeout=self._timeout_config.secrets_operation_timeout,
@@ -777,12 +848,44 @@ class Formation:
                 return result.result
             else:
                 if result.was_timeout:
-                    print(f"❌ Secrets manager initialization timed out after {result.elapsed_time:.1f}s")
-                    print("💡 Suggestion: Increase secrets_operation_timeout or check system performance")
+                    raise ServiceTransientError(
+                        f"Secrets manager initialization timed out after {result.elapsed_time:.1f}s",
+                        retry_after=2.0,
+                        details={
+                            "timeout": self._timeout_config.secrets_operation_timeout,
+                            "suggestion": "Increase secrets_operation_timeout or check system performance"
+                        }
+                    )
                 elif result.was_cancelled:
-                    print("❌ Secrets manager initialization was cancelled")
+                    raise ServiceTransientError(
+                        "Secrets manager initialization was cancelled",
+                        details={"suggestion": "Operation was cancelled - check if Formation is being shut down"}
+                    )
                 else:
-                    print(f"❌ Failed to initialize secrets manager: {result.error}")
+                    # Re-raise the original error for retry logic to handle
+                    raise result.error
+
+        try:
+            # Use retry logic for secrets manager initialization
+            retry_result = await self._retry_manager.execute_with_retry(
+                _initialize_operation,
+                config=self._retry_config,
+                operation_name="secrets_manager_initialization"
+            )
+
+            if retry_result.success:
+                if retry_result.was_retried:
+                    print(f"✅ Secrets manager initialized successfully after {retry_result.total_attempts} attempts")
+                return retry_result.result
+            else:
+                error = retry_result.error
+                print(f"❌ Failed to initialize secrets manager after {retry_result.total_attempts} attempts: {error}")
+
+                # Provide specific suggestions based on error type
+                if isinstance(error, ServiceTransientError):
+                    if error.details and "suggestion" in error.details:
+                        print(f"💡 Suggestion: {error.details['suggestion']}")
+                else:
                     print("💡 Suggestion: Check if encryption dependencies are properly installed")
                     print("   Try: pip install cryptography")
                 return False
@@ -1182,3 +1285,16 @@ class Formation:
             config: New timeout configuration to use
         """
         self._timeout_config = config
+
+    def get_retry_config(self) -> RetryConfig:
+        """Get the current retry configuration."""
+        return self._retry_config
+
+    def set_retry_config(self, config: RetryConfig) -> None:
+        """
+        Set new retry configuration.
+
+        Args:
+            config: New retry configuration to use
+        """
+        self._retry_config = config
