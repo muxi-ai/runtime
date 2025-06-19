@@ -8,7 +8,7 @@ the central coordination for the observability system.
 import socket
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional, List
-
+import time
 from .logger import EventLogger
 from .request_manager import RequestContextManager
 from .stream_processor import StreamProcessor
@@ -222,7 +222,7 @@ class ObservabilityManager:
             # Build event structure compatible with Phase 1 format
             event = {
                 "id": event_id,
-                "timestamp": int(__import__('time').time() * 1000),
+                "timestamp": int(time.time() * 1000),
                 "level": level.value,
                 "muxi_version": self.config.get("muxi_version", "1.0.0"),
                 "server": self._get_server_id(),
