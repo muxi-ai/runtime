@@ -7,7 +7,7 @@ Tests the core data classes and enums used throughout the clarification system.
 import pytest
 from dataclasses import fields
 
-from src.muxi.runtime.clarification.types import (
+from src.muxi.runtime.datatypes import (
     ClarificationRequest,
     ClarificationResult,
     ClarificationResultStatus,
