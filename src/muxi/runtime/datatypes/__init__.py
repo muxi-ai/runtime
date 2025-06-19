@@ -135,6 +135,8 @@ from .clarification import (
     InformationAnalysisError,
     ClarificationError,
     QuestionGenerationError,
+    ParameterExtractionError,
+    ContextEnrichmentError,
     ClarificationContext
 )
 
@@ -267,6 +269,7 @@ __all__ = [
     "InformationAnalysisError",
     "ClarificationError",
     "QuestionGenerationError",
+    "ParameterExtractionError",
     "ClarificationContext",
 
     # Parallel types
