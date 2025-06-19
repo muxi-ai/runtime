@@ -13,12 +13,12 @@ Key Components:
 - ClarificationResponseParser: Parses user responses to extract structured data
 - InformationRequirements: Standardized requirement definitions
 
-Phase 4: Proactive Clarification
+Proactive Clarification
 - ProactiveClarificationIntentDetector: Detects explicit turn-taking requests
 - ClarificationModeManager: Manages proactive questioning sessions
 - PlanAnalyzer: Analyzes multi-step user plans
 
-Phase 4B: Planning Workflow Detection & Continuity
+Planning Workflow Detection & Continuity
 - PlanningWorkflowDetector: Detects implicit planning workflows
 - WorkflowSynthesizer: Synthesizes tool results into decision insights
 - PlanningContinuationManager: Manages planning workflow sessions
@@ -77,7 +77,7 @@ from ...datatypes.clarification import (
     ClarificationMode,
     ProactiveRequestType,
 
-    # Phase 4: Proactive clarification types
+    # Proactive clarification types
     ProactiveRequest,
     MultiStepPlan,
     PlanStepAnalysis,
@@ -85,7 +85,7 @@ from ...datatypes.clarification import (
     GoalContext,
     ClarificationSession,
 
-    # Phase 4B: Planning workflow types
+    # Planning workflow types
     PlanningWorkflowType,
     WorkflowState,
     PlanningWorkflowRequest,
@@ -105,7 +105,7 @@ from ...datatypes.clarification import (
     ContextEnrichmentError,
 )
 
-# Core Phase 1-3 components
+# Core components
 from .analyzer import InformationAnalyzer
 from .manager import ClarificationManager
 from .generator import ClarificationQuestionGenerator
@@ -114,19 +114,19 @@ from .parser import ClarificationResponseParser
 from .requirements import InformationRequirements
 from .tool_processor import EnhancedToolProcessor
 
-# Phase 4: Proactive clarification components
+# Proactive clarification components
 from .proactive_detector import ProactiveClarificationIntentDetector
 from .mode_manager import ClarificationModeManager
 from .plan_analyzer import PlanAnalyzer
 
-# Phase 4B: Planning workflow components
+# Planning workflow components
 from .planning_workflow_detector import PlanningWorkflowDetector
 from .workflow_synthesizer import WorkflowSynthesizer
 from .planning_continuation_manager import PlanningContinuationManager
 
 # Public API
 __all__ = [
-    # Core classes (Phase 1-3)
+    # Core classes
     "InformationAnalyzer",
     "ClarificationManager",
     "ClarificationQuestionGenerator",
@@ -135,12 +135,12 @@ __all__ = [
     "InformationRequirements",
     "EnhancedToolProcessor",
 
-    # Phase 4: Proactive Clarification
+    # Proactive Clarification
     "ProactiveClarificationIntentDetector",
     "ClarificationModeManager",
     "PlanAnalyzer",
 
-    # Phase 4B: Planning Workflow
+    # Planning Workflow
     "PlanningWorkflowDetector",
     "WorkflowSynthesizer",
     "PlanningContinuationManager",
@@ -167,7 +167,7 @@ __all__ = [
     "ClarificationMode",
     "ProactiveRequestType",
 
-    # Phase 4: Proactive clarification types
+    # Proactive clarification types
     "ProactiveRequest",
     "MultiStepPlan",
     "PlanStepAnalysis",
@@ -175,7 +175,7 @@ __all__ = [
     "GoalContext",
     "ClarificationSession",
 
-    # Phase 4B: Planning workflow types
+    # Planning workflow types
     "PlanningWorkflowType",
     "WorkflowState",
     "PlanningWorkflowRequest",

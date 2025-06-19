@@ -219,7 +219,7 @@ class ObservabilityManager:
     ) -> None:
         """Emit event to stream processor."""
         try:
-            # Build event structure compatible with Phase 1 format
+            # Build event structure compatible with standard format
             event = {
                 "id": event_id,
                 "timestamp": int(time.time() * 1000),

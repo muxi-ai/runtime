@@ -194,7 +194,7 @@ class Agent:
                 knowledge_config=knowledge_config,
                 generate_embeddings_fn=embedding_fn,
                 formation_config=formation_config,
-                # Task 3.1: Pass short-term memory from overlord for integration
+
                 short_term_memory=getattr(self.overlord, 'buffer_memory', None),
                 auto_inject_knowledge=True,
             )
@@ -323,7 +323,7 @@ class Agent:
         """
         Analyze query to determine optimal search strategy.
 
-        This method implements Task 3.3 smart query routing by analyzing
+        Analyzes query to determine optimal search strategy by analyzing
         the query content to determine whether it needs knowledge sources,
         memory sources, or both.
 
@@ -412,7 +412,7 @@ class Agent:
         """
         Allocate context budget between knowledge and memory sources.
 
-        This method implements Task 3.3 dynamic context budget management by
+        Allocates context budget between knowledge and memory sources by
         intelligently distributing the available context budget based on the
         determined search strategy.
 
@@ -458,7 +458,7 @@ class Agent:
         """
         Remove duplicate content between knowledge and memory results.
 
-        This method implements Task 3.3 content deduplication by identifying
+        Removes duplicate content between knowledge and memory results by identifying
         and removing semantically similar content between knowledge sources
         and memory to avoid redundant information in the unified results.
 
@@ -550,7 +550,7 @@ class Agent:
         """
         Create enhanced unified ranking of knowledge and memory results.
 
-        This method implements Task 3.3 enhanced ranking by intelligently
+        Creates enhanced unified ranking of knowledge and memory results by intelligently
         combining and ranking results from both sources based on relevance,
         recency, and the search strategy used.
 
@@ -730,7 +730,7 @@ class Agent:
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
 
-        # Search knowledge and memory if handler is available (Task 3.1 unified search)
+        # Search knowledge and memory if handler is available
         context_enhancement = ""
         if self._knowledge_config:  # Check if knowledge config exists
             try:
@@ -831,7 +831,7 @@ class Agent:
             else:
                 content = response_str
 
-        # NEW: Check if agent needs clarification from user
+        # Check if agent needs clarification from user
         clarification_request = await self._check_agent_clarification_needs(
             content, message_obj.content
         )
@@ -839,7 +839,7 @@ class Agent:
         # Create response message
         response = MuxiResponse(role="assistant", content=content)
 
-        # NEW: Add clarification metadata if needed
+        # Add clarification metadata if needed
         if clarification_request:
             response.metadata = clarification_request
 

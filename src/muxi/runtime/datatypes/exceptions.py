@@ -160,7 +160,7 @@ class AgentValidationError(AgentError):
         self.validation_errors = validation_errors
 
 
-# Agent Management Errors (Phase 5: Dynamic Agent Management)
+# Agent Management Errors
 class AgentNotFoundError(AgentError):
     """Raised when attempting to operate on a non-existent agent."""
 

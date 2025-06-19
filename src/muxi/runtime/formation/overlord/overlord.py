@@ -153,7 +153,7 @@ from ..caching import IntelligentCacheManager
 # Import parallel workflow optimization
 from ..parallel import ParallelWorkflowOptimizer
 
-# Import Phase 3 intelligence components
+# Import intelligence components
 from ..intelligence import (
     UserPreferenceEngine,
     AdaptiveResponseGenerator,
@@ -2041,7 +2041,7 @@ class Overlord:
         context: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        Phase 1: Document Storage Foundation.7)
+        Document Storage Foundation
 
         Process and store documents with intelligent chunking and indexing.
         """
@@ -2130,7 +2130,7 @@ class Overlord:
         context: Optional[Dict[str, Any]],
     ) -> str:
         """
-        Phase 2: Document User Experience.8)
+        Document User Experience
 
         Generate persona-consistent acknowledgments and summaries.
         """
@@ -2168,7 +2168,7 @@ class Overlord:
         context: Optional[Dict[str, Any]],
     ) -> str:
         """
-        Phase 3: Document Workflow Integration.9)
+        Document Workflow Integration
 
         Create and execute document-enhanced workflows.
         """

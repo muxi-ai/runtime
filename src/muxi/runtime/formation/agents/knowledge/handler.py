@@ -26,13 +26,13 @@
 #    - Metadata filtering options
 #    - Performance optimization with query caching
 #
-# 4. Performance Optimization (Task 5.2)
+# 4. Performance Optimization
 #    - Query result caching for frequently accessed knowledge
 #    - Performance monitoring and metrics collection
 #    - Optimized vector search parameters for agent use cases
 #    - Batch processing for improved throughput
 #
-# 5. Memory Integration (Task 3.1)
+# 5. Memory Integration
 #    - Automatic injection of knowledge into short-term memory
 #    - Unified search across knowledge and memory
 #    - Context-aware knowledge retrieval
@@ -114,10 +114,10 @@ from .base import FileKnowledge
 from ....services import observability
 from ....utils.user_dirs import get_knowledge_dir
 
-# Short-term memory integration for Task 3.1
+# Short-term memory integration
 from ....services.memory.short_term import ShortTermMemory
 
-# Phase 2: Document-specific namespace constants
+# Document-specific namespace constants
 DOCUMENT_NAMESPACE = "documents"
 KNOWLEDGE_INJECTION_NAMESPACE = "knowledge"  # Keep existing behavior
 
@@ -142,7 +142,7 @@ class KnowledgeHandler:
         max_files_per_source: int = 10,
         max_total_files: int = 50,
         formation_config: Optional[Dict[str, Any]] = None,
-        # Task 3.1: Short-term memory integration
+        # Short-term memory integration
         short_term_memory: Optional[ShortTermMemory] = None,
         auto_inject_knowledge: bool = True,
     ):
@@ -158,7 +158,7 @@ class KnowledgeHandler:
         self.max_total_files = max_total_files
         self.formation_config = formation_config
 
-        # Task 3.1: Short-term memory integration
+        # Short-term memory integration
         self.short_term_memory = short_term_memory
         self.auto_inject_knowledge = auto_inject_knowledge
         self._knowledge_injection_enabled = short_term_memory is not None and auto_inject_knowledge
@@ -445,7 +445,7 @@ class KnowledgeHandler:
                 if len(results) >= top_k:
                     break
 
-            # Task 3.1: Inject knowledge results into short-term memory
+            # Inject knowledge results into short-term memory
             await self._inject_knowledge_into_memory(
                 knowledge_results=results, query=query, agent_id=str(self.agent_id_or_sources)
             )
@@ -547,7 +547,7 @@ class KnowledgeHandler:
                 max_total_files=kwargs.get("max_total_files", 10),  # Very conservative
                 # Pass formation config for document processing
                 formation_config=formation_config,
-                # Task 3.1: Short-term memory integration
+                # Short-term memory integration
                 short_term_memory=kwargs.get("short_term_memory"),
                 auto_inject_knowledge=kwargs.get("auto_inject_knowledge", True),
             )
@@ -673,7 +673,7 @@ class KnowledgeHandler:
             },
         )
 
-        # Calculate MD5 hash for content-based caching (Task 4.1)
+        # Calculate MD5 hash for content-based caching
         file_md5 = self._calculate_file_md5(file_path)
         if not file_md5:
             # File not found or error reading file
@@ -914,7 +914,7 @@ class KnowledgeHandler:
         """
         Inject knowledge search results into short-term memory for persistence.
 
-        This method implements Task 3.1 by automatically storing knowledge results
+        Automatically stores knowledge results
         in the formation's short-term memory system, enabling:
         - Knowledge context persistence across conversations
         - Unified search covering both knowledge and conversation content
@@ -997,7 +997,7 @@ class KnowledgeHandler:
         """
         Unified search across both knowledge sources and short-term memory.
 
-        This method implements the comprehensive search capability of Task 3.1,
+        Provides comprehensive search capability
         providing agents with both domain knowledge and conversational context
         in a single search operation.
 
@@ -1112,7 +1112,7 @@ class KnowledgeHandler:
 
     def _calculate_file_md5(self, file_path: str) -> str:
         """
-        Calculate MD5 hash of file content for Task 4.1: MD5-Based Cache Enhancement.
+        Calculate MD5 hash of file content for cache enhancement.
 
         This method replaces modification time-based caching with content-based
         MD5 hashing for more reliable cache invalidation. Files are only reprocessed
@@ -1155,7 +1155,7 @@ class KnowledgeHandler:
         """
         Load cached embeddings for a knowledge source with hash validation.
 
-        This method implements Task 4.2 hash-based cache validation to ensure
+        Implements hash-based cache validation to ensure
         cached embeddings are only used when the source content hasn't changed.
 
         Args:
@@ -1208,7 +1208,7 @@ class KnowledgeHandler:
         """
         Save embeddings to cache with source hash for validation.
 
-        This method implements Task 4.2 hash-based cache storage to enable
+        Implements hash-based cache storage to enable
         reliable cache invalidation based on content changes.
 
         Args:
@@ -1240,7 +1240,7 @@ class KnowledgeHandler:
         """
         Clean up stale cache entries for non-existent or changed files.
 
-        This method implements Task 4.2 cache cleanup functionality to remove
+        Implements cache cleanup functionality to remove
         cache entries for files that no longer exist or have been modified.
 
         Returns:
@@ -1302,7 +1302,7 @@ class KnowledgeHandler:
         """
         Update cache incrementally for modified knowledge sources.
 
-        This method implements Task 4.2 incremental cache updates to efficiently
+        Implements incremental cache updates to efficiently
         handle changes to knowledge sources without full reprocessing.
 
         Args:
@@ -1337,7 +1337,7 @@ class KnowledgeHandler:
         """
         Perform comprehensive cache cleanup and maintenance.
 
-        This method implements Task 4.2 comprehensive cache management by
+        Implements comprehensive cache management by
         cleaning up stale entries and providing cache statistics.
 
         Returns:

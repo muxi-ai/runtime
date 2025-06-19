@@ -1,5 +1,5 @@
 """
-Planning Continuation Manager for Phase 4B
+Planning Continuation Manager
 
 Manages the transition from information gathering to collaborative planning.
 Tracks workflow state and generates contextual follow-up interactions.
@@ -9,7 +9,7 @@ import time
 from typing import Dict, Optional
 from datetime import datetime
 
-from .datatypes import (
+from ...datatypes import (
     PlanningWorkflowSession,
     PlanningWorkflowRequest,
     ToolExecutionResult,

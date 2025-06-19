@@ -1,5 +1,5 @@
 """
-Workflow Synthesizer for Phase 4B
+Workflow Synthesizer
 
 Synthesizes tool execution results into decision-relevant insights for planning workflows.
 Converts raw data into structured options, trade-offs, and recommendations.
@@ -8,7 +8,7 @@ Converts raw data into structured options, trade-offs, and recommendations.
 import json
 from typing import Any, Dict, List
 
-from .datatypes import (
+from ...datatypes import (
     ToolExecutionResult,
     WorkflowSynthesis,
     PlanningWorkflowType,

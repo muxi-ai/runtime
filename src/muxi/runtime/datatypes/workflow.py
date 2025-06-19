@@ -78,7 +78,7 @@ class RequestAnalysis:
     """Analysis results for a user request"""
     complexity_score: float  # 1-10 scale
     requires_decomposition: bool
-    requires_approval: bool  # NEW: Plan preview needed
+    requires_approval: bool  # Plan preview needed
     implicit_subtasks: List[str]
     required_capabilities: List[str]
     acceptance_criteria: List[str]
@@ -105,9 +105,9 @@ class Workflow:
     tasks: Dict[str, SubTask]
     execution_graph: Optional[Dict[str, Set[str]]] = None  # DAG representation
     status: WorkflowStatus = WorkflowStatus.PENDING
-    requires_approval: bool = False  # NEW: Plan preview required
-    approval_status: ApprovalStatus = ApprovalStatus.PENDING  # NEW
-    plan_preview: Optional[str] = None  # NEW: Human-readable plan
+    requires_approval: bool = False  # Plan preview required
+    approval_status: ApprovalStatus = ApprovalStatus.PENDING
+    plan_preview: Optional[str] = None  # Human-readable plan
     created_at: datetime = field(default_factory=datetime.now)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

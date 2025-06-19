@@ -16,7 +16,7 @@ Event Routing:
 - SystemEvents events → Always stdout (for server monitoring)
 - ConversationEvents events → Configured output (stdout/file/stream/trail for observability)
 
-Note: This implementation follows Task 5 Phase 1 specification with dual event architecture.
+Note: This implementation follows the specification with dual event architecture.
 """
 
 # Import all types and classes

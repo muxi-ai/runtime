@@ -1,5 +1,5 @@
 """
-Planning Workflow Detection for Phase 4B
+Planning Workflow Detection
 
 Detects implicit planning requests that include information gathering components.
 Identifies scenarios where users want to make decisions but need data first.
