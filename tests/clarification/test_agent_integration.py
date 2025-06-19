@@ -28,7 +28,7 @@ class TestAgentClarificationIntegration:
         overlord = MagicMock()
         overlord.add_message_to_memory = AsyncMock()
         overlord.handle_user_information_extraction = AsyncMock()
-        overlord.get_user_context_memory = AsyncMock(return_value={})
+        overlord.get_user_context = AsyncMock(return_value={})
         return overlord
 
     @pytest.fixture

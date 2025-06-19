@@ -145,7 +145,7 @@ class TestClarificationModeManager:
     def mock_overlord(self):
         """Create mock overlord"""
         overlord = Mock()
-        overlord.get_user_context_memory = AsyncMock(return_value={})
+        overlord.get_user_context = AsyncMock(return_value={})
         return overlord
 
     @pytest.fixture
@@ -336,7 +336,6 @@ class TestProactiveIntegration:
         mock_agent._mode_manager.enter_proactive_mode = AsyncMock(return_value=mock_session)
 
         # Import and patch the actual method
-        from src.muxi.runtime.agent import Agent
 
         # Test that proactive detection would be triggered
         message = "Ask me questions until you understand my investment goals"

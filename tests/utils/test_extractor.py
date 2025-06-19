@@ -20,8 +20,8 @@ class TestMemoryExtractor(unittest.TestCase):
         """Set up test fixtures."""
         # Create a mock overlord
         self.mock_overlord = MagicMock()
-        self.mock_overlord.get_user_context_memory = AsyncMock(return_value={})
-        self.mock_overlord.add_user_context_memory = AsyncMock(return_value=["123"])
+        self.mock_overlord.get_user_context = AsyncMock(return_value={})
+        self.mock_overlord.add_user_context = AsyncMock(return_value=["123"])
 
         # Create a mock model that returns extraction results
         self.mock_model = MagicMock()
@@ -297,7 +297,7 @@ class TestAgentExtraction(unittest.TestCase):
         self.mock_overlord.handle_user_information_extraction = AsyncMock()
         self.mock_overlord.add_to_buffer_memory = MagicMock()
         self.mock_overlord.add_to_long_term_memory = AsyncMock()
-        self.mock_overlord.get_user_context_memory = AsyncMock(return_value={})
+        self.mock_overlord.get_user_context = AsyncMock(return_value={})
         self.mock_overlord.add_message_to_memory = AsyncMock()
 
         # Create mock MCP server
