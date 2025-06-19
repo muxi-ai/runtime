@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import time
 
-from .types import Workflow, SubTask, TaskInput, TaskOutput
-from .multimodal import (
+from ...formation.workflow.types import Workflow, SubTask, TaskInput, TaskOutput
+from .fusion_engine import (
     MultiModalFusionEngine,
     MultiModalContent,
     ModalityType,
