@@ -1,9 +1,11 @@
 import asyncio
 from typing import Optional, List, Dict, Any
+
 # Loguru import removed - add observability import
 
 from ...datatypes.workflow import RequestAnalysis
 from ...services.llm import LLM
+import json
 
 
 class RequestAnalyzer:
@@ -26,9 +28,7 @@ class RequestAnalyzer:
         self.complexity_threshold = 7.0  # Configurable threshold for decomposition
 
     async def analyze_request(
-        self,
-        user_message: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
     ) -> RequestAnalysis:
         """
         Determine if request needs decomposition and extract requirements.
@@ -76,7 +76,7 @@ class RequestAnalyzer:
                 implicit_subtasks=[],
                 required_capabilities=["general"],
                 acceptance_criteria=[],
-                confidence_score=0.3
+                confidence_score=0.3,
             )
 
     async def should_decompose(self, analysis: RequestAnalysis) -> bool:
@@ -95,15 +95,13 @@ class RequestAnalyzer:
 
         # Original complexity-based logic
         return (
-            analysis.complexity_score >= self.complexity_threshold or
-            len(analysis.implicit_subtasks) > 2 or
-            len(analysis.required_capabilities) > 1
+            analysis.complexity_score >= self.complexity_threshold
+            or len(analysis.implicit_subtasks) > 2
+            or len(analysis.required_capabilities) > 1
         )
 
     async def requires_user_approval(
-        self,
-        user_message: str,
-        analysis: Optional[RequestAnalysis] = None
+        self, user_message: str, analysis: Optional[RequestAnalysis] = None
     ) -> bool:
         """
         Detect if user wants to review plan before execution.
@@ -139,7 +137,7 @@ class RequestAnalyzer:
             "what steps will you take",
             "how do you plan to",
             "what's your methodology",
-            "break down your process"
+            "break down your process",
         ]
 
         message_lower = user_message.lower()
@@ -177,7 +175,6 @@ class RequestAnalyzer:
             "integrate": 8,
             "migrate": 9,
             "refactor": 8,
-
             # Medium complexity (5-7)
             "configure": 6,
             "setup": 5,
@@ -188,7 +185,6 @@ class RequestAnalyzer:
             "debug": 6,
             "test": 6,
             "deploy": 6,
-
             # Low complexity (1-4)
             "show": 3,
             "display": 3,
@@ -205,7 +201,7 @@ class RequestAnalyzer:
             "how": 3,
             "where": 2,
             "when": 2,
-            "who": 2
+            "who": 2,
         }
 
         # Calculate complexity score
@@ -224,8 +220,14 @@ class RequestAnalyzer:
 
         # Multi-step indicators
         multi_step_indicators = [
-            "and then", "after that", "once", "first", "second",
-            "finally", "also", "additionally"
+            "and then",
+            "after that",
+            "once",
+            "first",
+            "second",
+            "finally",
+            "also",
+            "additionally",
         ]
         if any(indicator in message_lower for indicator in multi_step_indicators):
             complexity_score += 1
@@ -239,7 +241,7 @@ class RequestAnalyzer:
             "data_analysis": ["analyze", "process", "calculate", "statistics", "data"],
             "coding": ["code", "program", "script", "function", "implement"],
             "file_operations": ["file", "save", "load", "read", "write"],
-            "communication": ["email", "message", "send", "notify", "contact"]
+            "communication": ["email", "message", "send", "notify", "contact"],
         }
 
         for capability, keywords in capability_keywords.items():
@@ -281,13 +283,11 @@ class RequestAnalyzer:
             implicit_subtasks=implicit_subtasks,
             required_capabilities=required_capabilities,
             acceptance_criteria=acceptance_criteria,
-            confidence_score=0.7  # Heuristic confidence
+            confidence_score=0.7,  # Heuristic confidence
         )
 
     async def _llm_analyze_request(
-        self,
-        user_message: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
     ) -> RequestAnalysis:
         """
         Use LLM to analyze request complexity and requirements.
@@ -311,9 +311,7 @@ class RequestAnalyzer:
             return self._heuristic_analyze_request(user_message)
 
     def _create_analysis_prompt(
-        self,
-        user_message: str,
-        context: Optional[Dict[str, Any]] = None
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
     ) -> str:
         """
         Create prompt for LLM-based request analysis.
@@ -368,24 +366,22 @@ Focus on identifying:
             Parsed RequestAnalysis object
         """
         try:
-            import json
-
             # Extract JSON from response
-            json_start = response.find('{')
-            json_end = response.rfind('}') + 1
+            json_start = response.find("{")
+            json_end = response.rfind("}") + 1
 
             if json_start >= 0 and json_end > json_start:
                 json_str = response[json_start:json_end]
                 data = json.loads(json_str)
 
                 return RequestAnalysis(
-                    complexity_score=float(data.get('complexity_score', 5.0)),
+                    complexity_score=float(data.get("complexity_score", 5.0)),
                     requires_decomposition=False,  # Will be set by should_decompose
                     requires_approval=False,  # Will be set by requires_user_approval
-                    implicit_subtasks=data.get('implicit_subtasks', []),
-                    required_capabilities=data.get('required_capabilities', ["general"]),
-                    acceptance_criteria=data.get('acceptance_criteria', []),
-                    confidence_score=float(data.get('confidence_score', 0.8))
+                    implicit_subtasks=data.get("implicit_subtasks", []),
+                    required_capabilities=data.get("required_capabilities", ["general"]),
+                    acceptance_criteria=data.get("acceptance_criteria", []),
+                    confidence_score=float(data.get("confidence_score", 0.8)),
                 )
             else:
                 raise ValueError("No valid JSON found in response")
@@ -401,7 +397,7 @@ Focus on identifying:
                 implicit_subtasks=[],
                 required_capabilities=["general"],
                 acceptance_criteria=[],
-                confidence_score=0.3
+                confidence_score=0.3,
             )
 
     # Helper methods for testing

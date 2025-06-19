@@ -64,16 +64,10 @@ class HealthMonitor:
                 elif dest.startswith("kafka://"):
                     dest_configs.append({"destination": dest, "protocol": "kafka"})
                 elif dest.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
-                    dest_configs.append({
-                        "destination": dest,
-                        "protocol": "zmq"
-                    })
+                    dest_configs.append({"destination": dest, "protocol": "zmq"})
                 else:
                     # Assume file destination
-                    dest_configs.append({
-                        "destination": dest,
-                        "transport": "file"
-                    })
+                    dest_configs.append({"destination": dest, "transport": "file"})
 
             self.configure_destinations(dest_configs)
 
@@ -103,7 +97,9 @@ class HealthMonitor:
         """Start monitoring using multitasking process isolation."""
 
         @multitasking.task
-        def check_destination_health(dest_config: Dict[str, Any]) -> Tuple[str, bool, Optional[str]]:
+        def check_destination_health(
+            dest_config: Dict[str, Any],
+        ) -> Tuple[str, bool, Optional[str]]:
             """
             Process-isolated health check for a single destination.
 
@@ -118,7 +114,9 @@ class HealthMonitor:
                     return _check_http_health(destination, dest_config)
                 elif protocol == "kafka" or destination.startswith("kafka://"):
                     return _check_kafka_health(destination, dest_config)
-                elif protocol == "zmq" or destination.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
+                elif protocol == "zmq" or destination.startswith(
+                    ("tcp://", "tcps://", "ipc://", "ipcs://")
+                ):
                     return _check_zmq_health(destination, dest_config)
                 elif dest_config.get("transport") == "file":
                     return _check_file_health(destination, dest_config)
@@ -165,7 +163,9 @@ class HealthMonitor:
 
                 # Wait for all checks with timeout
                 timeout = min(self.check_interval - 5, 25)
-                await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=timeout)
+                await asyncio.wait_for(
+                    asyncio.gather(*tasks, return_exceptions=True), timeout=timeout
+                )
 
                 # Update last_checked timestamp
                 await self.health_manager.update_last_checked()
@@ -190,7 +190,9 @@ class HealthMonitor:
                 result = await self._check_http_health_async(destination, dest_config)
             elif protocol == "kafka" or destination.startswith("kafka://"):
                 result = await self._check_kafka_health_async(destination, dest_config)
-            elif protocol == "zmq" or destination.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
+            elif protocol == "zmq" or destination.startswith(
+                ("tcp://", "tcps://", "ipc://", "ipcs://")
+            ):
                 result = await self._check_zmq_health_async(destination, dest_config)
             elif dest_config.get("transport") == "file":
                 result = await self._check_file_health_async(destination, dest_config)
@@ -205,7 +207,9 @@ class HealthMonitor:
             destination = dest_config.get("destination", "unknown")
             await self.health_manager.update_destination_health(destination, False, str(e))
 
-    async def _check_http_health_async(self, destination: str, config: Dict[str, Any]) -> Tuple[str, bool, Optional[str]]:
+    async def _check_http_health_async(
+        self, destination: str, config: Dict[str, Any]
+    ) -> Tuple[str, bool, Optional[str]]:
         """Async HTTP health check."""
         try:
             # Prepare headers
@@ -232,7 +236,9 @@ class HealthMonitor:
         except Exception as e:
             return destination, False, str(e)
 
-    async def _check_kafka_health_async(self, destination: str, config: Dict[str, Any]) -> Tuple[str, bool, Optional[str]]:
+    async def _check_kafka_health_async(
+        self, destination: str, config: Dict[str, Any]
+    ) -> Tuple[str, bool, Optional[str]]:
         """Async Kafka health check."""
         try:
             # For now, return healthy (Kafka health checks require kafka-python in async context)
@@ -241,7 +247,9 @@ class HealthMonitor:
         except Exception as e:
             return destination, False, str(e)
 
-    async def _check_zmq_health_async(self, destination: str, config: Dict[str, Any]) -> Tuple[str, bool, Optional[str]]:
+    async def _check_zmq_health_async(
+        self, destination: str, config: Dict[str, Any]
+    ) -> Tuple[str, bool, Optional[str]]:
         """Async ZMQ health check."""
         try:
             # For now, return healthy (ZMQ health checks require zmq.asyncio)
@@ -250,7 +258,9 @@ class HealthMonitor:
         except Exception as e:
             return destination, False, str(e)
 
-    async def _check_file_health_async(self, destination: str, config: Dict[str, Any]) -> Tuple[str, bool, Optional[str]]:
+    async def _check_file_health_async(
+        self, destination: str, config: Dict[str, Any]
+    ) -> Tuple[str, bool, Optional[str]]:
         """Async file health check."""
         try:
             file_path = Path(destination)
@@ -289,6 +299,7 @@ def _check_http_health(destination: str, config: Dict[str, Any]) -> Tuple[str, b
         if not destination.endswith(("/health", "/ping", "/status")):
             # Try common health check endpoints
             from urllib.parse import urlparse
+
             parsed = urlparse(destination)
             health_url = f"{parsed.scheme}://{parsed.netloc}/health"
 
@@ -302,7 +313,9 @@ def _check_http_health(destination: str, config: Dict[str, Any]) -> Tuple[str, b
         return destination, False, str(e)
 
 
-def _check_kafka_health(destination: str, config: Dict[str, Any]) -> Tuple[str, bool, Optional[str]]:
+def _check_kafka_health(
+    destination: str, config: Dict[str, Any]
+) -> Tuple[str, bool, Optional[str]]:
     """Process-isolated Kafka health check."""
     try:
         # Parse Kafka brokers from destination
@@ -314,10 +327,9 @@ def _check_kafka_health(destination: str, config: Dict[str, Any]) -> Tuple[str, 
         # Try to connect to Kafka (requires kafka-python)
         try:
             from kafka import KafkaProducer
+
             producer = KafkaProducer(
-                bootstrap_servers=brokers,
-                request_timeout_ms=10000,
-                api_version=(0, 10, 1)
+                bootstrap_servers=brokers, request_timeout_ms=10000, api_version=(0, 10, 1)
             )
             # Test connection
             producer.bootstrap_connected()
@@ -339,6 +351,7 @@ def _check_zmq_health(destination: str, config: Dict[str, Any]) -> Tuple[str, bo
         # Try to create a ZMQ socket and connect
         try:
             import zmq
+
             context = zmq.Context()
             socket = context.socket(zmq.REQ)
             socket.setsockopt(zmq.LINGER, 0)
@@ -351,7 +364,7 @@ def _check_zmq_health(destination: str, config: Dict[str, Any]) -> Tuple[str, bo
 
             # Try to receive (will timeout if no response)
             try:
-                response = socket.recv_string()
+                _ = socket.recv_string()
                 socket.close()
                 context.term()
                 return destination, True, None

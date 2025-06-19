@@ -41,10 +41,7 @@ class StreamTransport(BaseTransport):
 
         # Convert simplified token to auth config
         if "token" in config:
-            self.auth_config = {
-                "type": "bearer",
-                "token": config["token"]
-            }
+            self.auth_config = {"type": "bearer", "token": config["token"]}
 
     def _detect_protocol(self) -> str:
         """Auto-detect protocol from destination URL."""
@@ -86,10 +83,12 @@ class StreamTransport(BaseTransport):
         """Initialize the event formatter."""
         try:
             from ..formatters import create_formatter
+
             self.formatter = create_formatter(self.format_type, self.config)
         except Exception:
             # Fallback to JSON Lines if formatter fails
             from ..formatters.jsonl import JSONLFormatter
+
             self.formatter = JSONLFormatter(self.config)
 
     async def _initialize_http(self) -> bool:
@@ -108,8 +107,7 @@ class StreamTransport(BaseTransport):
                     headers["X-API-Key"] = api_key
 
             self.session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=30),
-                headers=headers
+                timeout=aiohttp.ClientTimeout(total=30), headers=headers
             )
 
             self.status = TransportStatus.HEALTHY
@@ -135,26 +133,26 @@ class StreamTransport(BaseTransport):
                 producer_config = {
                     "bootstrap_servers": brokers,
                     "value_serializer": lambda v: (
-                        v if isinstance(v, bytes) else str(v).encode('utf-8')
-                    )
+                        v if isinstance(v, bytes) else str(v).encode("utf-8")
+                    ),
                 }
             else:
                 # Text formats
                 producer_config = {
                     "bootstrap_servers": brokers,
-                    "value_serializer": lambda v: (
-                        v.encode('utf-8') if isinstance(v, str) else v
-                    )
+                    "value_serializer": lambda v: (v.encode("utf-8") if isinstance(v, str) else v),
                 }
 
             # Add SASL authentication if configured
             if self.auth_config.get("type") == "sasl":
-                producer_config.update({
-                    "security_protocol": "SASL_PLAINTEXT",
-                    "sasl_mechanism": "PLAIN",
-                    "sasl_plain_username": self.auth_config.get("username"),
-                    "sasl_plain_password": self.auth_config.get("password")
-                })
+                producer_config.update(
+                    {
+                        "security_protocol": "SASL_PLAINTEXT",
+                        "sasl_mechanism": "PLAIN",
+                        "sasl_plain_username": self.auth_config.get("username"),
+                        "sasl_plain_password": self.auth_config.get("password"),
+                    }
+                )
 
             self.kafka_producer = KafkaProducer(**producer_config)
             self.status = TransportStatus.HEALTHY
@@ -228,7 +226,7 @@ class StreamTransport(BaseTransport):
             except Exception as e:
                 self.last_error = str(e)
                 if attempt < max_attempts - 1:
-                    await asyncio.sleep(backoff_seconds * (2 ** attempt))
+                    await asyncio.sleep(backoff_seconds * (2**attempt))
                     continue
 
         self.error_count += 1
@@ -250,16 +248,10 @@ class StreamTransport(BaseTransport):
 
             # Send as appropriate data type
             if isinstance(formatted_data, bytes):
-                async with self.session.post(
-                    self.destination,
-                    data=formatted_data
-                ) as response:
+                async with self.session.post(self.destination, data=formatted_data) as response:
                     return response.status < 400
             else:
-                async with self.session.post(
-                    self.destination,
-                    data=formatted_data
-                ) as response:
+                async with self.session.post(self.destination, data=formatted_data) as response:
                     return response.status < 400
 
         except Exception:
@@ -293,7 +285,7 @@ class StreamTransport(BaseTransport):
             for event in events:
                 formatted_data = self.formatter.format_event(event)
                 if isinstance(formatted_data, str):
-                    message = formatted_data.encode('utf-8')
+                    message = formatted_data.encode("utf-8")
                 else:
                     message = formatted_data
                 await self.zmq_socket.send(message)

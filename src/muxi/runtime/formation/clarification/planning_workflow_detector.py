@@ -8,7 +8,11 @@ Uses pure LLM detection for multilingual support.
 
 from typing import Optional
 
-from ...datatypes.clarification import PlanningWorkflowRequest, PlanningWorkflowType, ClarificationContext
+from ...datatypes.clarification import (
+    PlanningWorkflowRequest,
+    PlanningWorkflowType,
+    ClarificationContext,
+)
 
 
 class PlanningWorkflowDetector:
@@ -113,7 +117,8 @@ class PlanningWorkflowDetector:
         Respond with JSON only:
         {{
             "is_planning_workflow": boolean,
-            "workflow_type": "travel_planning|investment_planning|business_planning|product_selection|event_planning|general_planning",
+            "workflow_type": "travel_planning|investment_planning|business_planning|"
+                         "product_selection|event_planning|general_planning",
             "planning_goal": "brief description of what user wants to plan/decide",
             "information_requests": ["list", "of", "information", "user", "needs"],
             "detected_tools": ["list", "of", "likely", "tools", "needed"],

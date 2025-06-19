@@ -115,3 +115,20 @@ def observe(
         # Silently fail if observability unavailable
         pass
 
+
+def emit_event(
+    event_type: Union[SystemEvents, ConversationEvents, str],
+    level: EventLevel = EventLevel.INFO,
+    data: Optional[Dict[str, Any]] = None,
+    description: str = "",
+) -> None:
+    """
+    Alias for observe() function for backward compatibility.
+
+    Args:
+        event_type: The event type enum or string
+        level: Event level (defaults to INFO)
+        data: Additional event data
+        description: Human-readable description
+    """
+    observe(event_type, level, data, description)

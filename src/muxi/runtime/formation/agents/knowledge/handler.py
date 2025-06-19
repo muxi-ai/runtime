@@ -102,6 +102,7 @@ import hashlib
 import time
 from typing import Any, Callable, Dict, List, Optional, Union
 
+import pickle
 
 import numpy as np
 
@@ -216,14 +217,14 @@ class KnowledgeHandler:
         # Ensure we have ShortTermMemory for document storage
         if not self.short_term_memory:
             self.short_term_memory = ShortTermMemory(
-                max_size=2000,      # Large context window for documents
+                max_size=2000,  # Large context window for documents
                 buffer_multiplier=20,  # 40,000 total capacity for documents
                 dimension=self.embedding_dimension,
                 model=None,  # We provide embeddings directly via add_with_embedding
                 mode=self.mode,
                 remote=self.remote,
                 max_memory_mb=5000,  # 5GB limit for document storage
-                fifo_interval_min=30  # Less frequent cleanup for documents
+                fifo_interval_min=30,  # Less frequent cleanup for documents
             )
 
     async def add_knowledge_source(self, source, generate_embeddings_fn: Optional[Callable] = None):
@@ -302,8 +303,7 @@ class KnowledgeHandler:
             # Limit total chunks processed
             if len(document_chunks) > self.max_total_files:
                 print(
-                    f"Limiting chunks to {self.max_total_files} "
-                    f"(found {len(document_chunks)})"
+                    f"Limiting chunks to {self.max_total_files} " f"(found {len(document_chunks)})"
                 )
                 document_chunks = document_chunks[: self.max_total_files]
 
@@ -325,14 +325,14 @@ class KnowledgeHandler:
                             "chunk_id": chunk.chunk_id,
                             "knowledge_source": source.name,
                             "description": source.description,
-                            **chunk.metadata
+                            **chunk.metadata,
                         }
 
                         await self.short_term_memory.add_with_embedding(
                             text=chunk.content,
                             embedding=embedding,
                             metadata=metadata,
-                            namespace=DOCUMENT_NAMESPACE
+                            namespace=DOCUMENT_NAMESPACE,
                         )
                         chunks_added += 1
                     except Exception as e:
@@ -349,7 +349,7 @@ class KnowledgeHandler:
                 data={
                     "source_path": getattr(source, "path", str(source)),
                     "chunks_processed": len(document_chunks) if document_chunks else 0,
-                    "chunks_added": chunks_added if 'chunks_added' in locals() else 0,
+                    "chunks_added": chunks_added if "chunks_added" in locals() else 0,
                     "total_sources": len(self.sources),
                 },
             )
@@ -419,7 +419,7 @@ class KnowledgeHandler:
                 query_vector=query_vector.tolist(),
                 limit=search_k * 2,  # Get more results for filtering
                 recency_bias=0.05,  # Very low for documents - favor semantic similarity
-                namespace=DOCUMENT_NAMESPACE
+                namespace=DOCUMENT_NAMESPACE,
             )
 
             # Convert to standard format
@@ -608,8 +608,7 @@ class KnowledgeHandler:
             doc_count = 0
             if handler.short_term_memory:
                 all_docs = handler.short_term_memory.get_items_by_metadata(
-                    metadata_filter={},
-                    namespace=DOCUMENT_NAMESPACE
+                    metadata_filter={}, namespace=DOCUMENT_NAMESPACE
                 )
                 doc_count = len(all_docs)
 
@@ -683,7 +682,7 @@ class KnowledgeHandler:
         # Check if document already exists in ShortTermMemory with same content hash
         existing_docs = self.short_term_memory.get_items_by_metadata(
             metadata_filter={"source": file_path, "content_hash": file_md5},
-            namespace=DOCUMENT_NAMESPACE
+            namespace=DOCUMENT_NAMESPACE,
         )
 
         if existing_docs:
@@ -752,14 +751,14 @@ class KnowledgeHandler:
                     "source": file_path,
                     "content_hash": file_md5,
                     "description": description,
-                    **chunk.metadata
+                    **chunk.metadata,
                 }
 
                 await self.short_term_memory.add_with_embedding(
                     text=chunk.content,
                     embedding=embedding,
                     metadata=metadata,
-                    namespace=DOCUMENT_NAMESPACE
+                    namespace=DOCUMENT_NAMESPACE,
                 )
                 chunks_added += 1
 
@@ -819,8 +818,7 @@ class KnowledgeHandler:
         try:
             # Remove documents from ShortTermMemory by source metadata
             removed_count = self.short_term_memory.remove_by_metadata(
-                metadata_filter={"source": file_path},
-                namespace=DOCUMENT_NAMESPACE
+                metadata_filter={"source": file_path}, namespace=DOCUMENT_NAMESPACE
             )
 
             if removed_count > 0:
@@ -869,8 +867,7 @@ class KnowledgeHandler:
         """
         # Get unique source paths from ShortTermMemory documents namespace
         all_documents = self.short_term_memory.get_items_by_metadata(
-            metadata_filter={},  # Get all documents
-            namespace=DOCUMENT_NAMESPACE
+            metadata_filter={}, namespace=DOCUMENT_NAMESPACE  # Get all documents
         )
         sources = set()
         for doc in all_documents:
@@ -1174,8 +1171,6 @@ class KnowledgeHandler:
             return None
 
         try:
-            import pickle
-
             with open(cache_file, "rb") as f:
                 cache_data = pickle.load(f)
 
@@ -1234,7 +1229,6 @@ class KnowledgeHandler:
         }
 
         try:
-            import pickle
 
             with open(cache_file, "wb") as f:
                 pickle.dump(cache_data, f)
@@ -1265,8 +1259,6 @@ class KnowledgeHandler:
                 cache_path = os.path.join(self.cache_dir, cache_file)
 
                 try:
-                    import pickle
-
                     with open(cache_path, "rb") as f:
                         cache_data = pickle.load(f)
 

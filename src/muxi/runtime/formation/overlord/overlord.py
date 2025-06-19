@@ -96,6 +96,7 @@ from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
+from ..config.validation import validate_formation
 
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
@@ -683,7 +684,6 @@ class Overlord:
             Dict[str, Any]: Validation results with 'is_valid', 'errors', 'warnings', 'suggestions'
         """
         try:
-            from ..config.validation import validate_formation
 
             validation_result = validate_formation(formation_path, self.secrets_manager)
 

@@ -396,7 +396,6 @@ class BottleneckDetector:
         for bottleneck in bottlenecks:
             # Enhance severity score based on impact and resolution confidence
             impact_factor = bottleneck.estimated_delay / 60.0  # Convert to minutes
-            confidence_factor = bottleneck.resolution_confidence
 
             # Adjust severity score
             bottleneck.severity_score = min(

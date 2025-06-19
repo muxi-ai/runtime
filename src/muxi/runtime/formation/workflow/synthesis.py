@@ -100,8 +100,6 @@ class ResponseQualityAssessor:
         Returns:
             Detailed quality assessment
         """
-        start_time = time.time()
-
         try:
             # Generate assessment prompt
             assessment_prompt = self._create_assessment_prompt(

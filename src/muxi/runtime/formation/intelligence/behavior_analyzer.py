@@ -18,6 +18,7 @@ from ...datatypes.intelligence import (
     BehaviorAnalysisResult,
 )
 import re
+import numpy as np
 
 
 class UserBehaviorAnalyzer:
@@ -315,11 +316,9 @@ class UserBehaviorAnalyzer:
             return {}
 
         feedback_types = Counter(f.feedback_type for f in feedback)
-        feedback_timing = [f.timestamp for f in feedback]
 
         # Analyze feedback content for common themes
         positive_feedback = [f for f in feedback if f.feedback_type == "positive"]
-        negative_feedback = [f for f in feedback if f.feedback_type == "negative"]
         corrections = [f for f in feedback if f.feedback_type == "correction"]
 
         return {
@@ -484,7 +483,6 @@ class UserBehaviorAnalyzer:
 
                 if msg_feedback:
                     positive_count = sum(1 for f in msg_feedback if f.feedback_type == "positive")
-                    negative_count = sum(1 for f in msg_feedback if f.feedback_type == "negative")
                     total_feedback = len(msg_feedback)
 
                     if total_feedback > 0:
@@ -506,8 +504,6 @@ class UserBehaviorAnalyzer:
             return 0.0
 
         try:
-            import numpy as np
-
             correlation = np.corrcoef(lengths, engagement_scores)[0, 1]
             return correlation if not np.isnan(correlation) else 0.0
         except ImportError:

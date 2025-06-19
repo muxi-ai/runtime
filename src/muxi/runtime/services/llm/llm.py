@@ -695,8 +695,6 @@ class LLM:
     async def _detect_file_modality(self, file_path: Union[str, Path]):
         """Detect modality from file extension/type"""
         try:
-            import mimetypes
-
             mime_type, _ = mimetypes.guess_type(str(file_path))
 
             if mime_type:

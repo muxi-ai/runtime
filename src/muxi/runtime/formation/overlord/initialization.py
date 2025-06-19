@@ -4,9 +4,12 @@ Configuration initialization utilities for the Overlord.
 This module contains all the initialization logic extracted from the main Overlord class
 to improve maintainability and separation of concerns.
 """
+
 from typing import Any, Dict, Optional
 
 from ...services.observability.utils import detect_stream_protocol
+from ...services.memory.short_term import ShortTermMemory
+from ...datatypes import ClarificationConfig, QuestionStyle
 
 
 async def initialize_llm_config(overlord) -> None:
@@ -115,8 +118,6 @@ async def initialize_memory_config(overlord) -> None:
 async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> None:
     """Initialize buffer memory from configuration."""
     try:
-        from ...services.memory.short_term import ShortTermMemory
-
         # Extract buffer configuration
         size = buffer_config.get("size", 10)
         multiplier = buffer_config.get("multiplier", 10)
@@ -387,8 +388,6 @@ async def initialize_clarification_config(overlord) -> None:
         return
 
     try:
-        from ..clarification.datatypes import ClarificationConfig, QuestionStyle
-
         # Extract configuration with privacy-by-default approach
         max_questions = clarification_config.get("max_questions", 5)
         style_str = clarification_config.get("style", "conversational")
@@ -455,4 +454,5 @@ async def initialize_document_processing_config(overlord) -> None:
 
         # Fall back to default configuration
         from ..config.document_processing import DocumentProcessingConfig
+
         overlord.document_processing_config = DocumentProcessingConfig({})

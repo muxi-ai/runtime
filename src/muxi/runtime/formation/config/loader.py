@@ -42,6 +42,7 @@ import re
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
+import yaml
 
 
 class ConfigLoader:
@@ -83,13 +84,6 @@ class ConfigLoader:
             content = f.read()
 
             if file_path.suffix.lower() in [".yaml", ".yml"]:
-                try:
-                    import yaml
-                except ImportError:
-                    raise ImportError(
-                        "PyYAML is required to load YAML files. "
-                        "Install it with: pip install pyyaml"
-                    )
                 return yaml.safe_load(content)
 
             elif file_path.suffix.lower() == ".json":

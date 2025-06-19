@@ -155,11 +155,6 @@ class DependencyAnalyzer:
             distances[task_id] = 0.0
             predecessors[task_id] = None
 
-        # Find tasks with no dependencies (starting points)
-        start_tasks = [
-            task_id for task_id, task in self.dependency_graph.items() if not task.dependencies
-        ]
-
         # Use a modified Bellman-Ford algorithm for longest path
         for _ in range(len(self.dependency_graph)):
             updated = False

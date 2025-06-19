@@ -264,7 +264,6 @@ class MemoryOptimizer:
         Returns:
             Bytes freed by the cleanup operation
         """
-        start_stats = self.get_memory_stats()
         start_time = time.time()
 
         if not force:

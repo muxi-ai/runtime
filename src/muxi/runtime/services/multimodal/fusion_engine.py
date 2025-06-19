@@ -8,12 +8,14 @@ context fusion, cross-modal attention mechanisms, and unified task processing.
 import asyncio
 import json
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
 from ...datatypes import Workflow, SubTask
+import re
 
-from ...services.llm import LLM
+if TYPE_CHECKING:
+    from ...services.llm import LLM
 
 
 class ModalityType(Enum):
@@ -95,7 +97,7 @@ class MultiModalProcessingResult:
 class ModalityProcessor:
     """Base class for modality-specific processors"""
 
-    def __init__(self, llm: LLM, modality: ModalityType):
+    def __init__(self, llm: "LLM", modality: ModalityType):
         self.llm = llm
         self.modality = modality
         self.processing_cache: Dict[str, Any] = {}
@@ -116,7 +118,7 @@ class ModalityProcessor:
 class TextProcessor(ModalityProcessor):
     """Advanced text processing with semantic analysis"""
 
-    def __init__(self, llm: LLM):
+    def __init__(self, llm: "LLM"):
         super().__init__(llm, ModalityType.TEXT)
 
     async def process(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -252,8 +254,6 @@ Analyze and provide as JSON:
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON response from LLM"""
         try:
-            import re
-
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group(0))
@@ -268,7 +268,7 @@ Analyze and provide as JSON:
 class ImageProcessor(ModalityProcessor):
     """Advanced image processing with vision analysis"""
 
-    def __init__(self, llm: LLM):
+    def __init__(self, llm: "LLM"):
         super().__init__(llm, ModalityType.IMAGE)
 
     async def process(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -409,7 +409,7 @@ class ImageProcessor(ModalityProcessor):
 class AudioProcessor(ModalityProcessor):
     """Advanced audio processing with speech and sound analysis"""
 
-    def __init__(self, llm: LLM):
+    def __init__(self, llm: "LLM"):
         super().__init__(llm, ModalityType.AUDIO)
 
     async def process(self, content: MultiModalContent) -> Dict[str, Any]:
@@ -523,7 +523,7 @@ class MultiModalFusionEngine:
     intelligent context integration.
     """
 
-    def __init__(self, llm: LLM):
+    def __init__(self, llm: "LLM"):
         self.llm = llm
 
         # Initialize modality processors
@@ -697,8 +697,6 @@ class MultiModalFusionEngine:
             )
 
         except Exception as e:
-            source_name = source_modality.name
-            target_name = target_modality.name
             #  Multimodal error - TODO: add observability
             _ = e  # remove this after implementing observability
             return CrossModalAttention(
@@ -924,8 +922,6 @@ Create a comprehensive fusion analysis as JSON:
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
         """Parse JSON response from LLM"""
         try:
-            import re
-
             json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group(0))
