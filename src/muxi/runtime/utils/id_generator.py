@@ -7,9 +7,6 @@ across the application.
 
 from nanoid import generate
 
-# Observability integration
-from ..services import observability
-
 
 def generate_nanoid(size: int = 21) -> str:
     """
@@ -20,27 +17,12 @@ def generate_nanoid(size: int = 21) -> str:
 
     Returns:
         A new Nano ID string.
+
+    Raises:
+        Exception: If nanoid generation fails.
     """
-
-    try:
-        alphabet = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        nano_id = generate(alphabet, size)
-        return nano_id
-
-    except Exception as e:
-        observability.observe(
-            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-            level=observability.EventLevel.ERROR,
-            description="Nano ID generation failed with error",
-            data={
-                "operation": "generate_nanoid",
-                "size": size,
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
-        )
-
-        raise
+    alphabet = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    return generate(alphabet, size)
 
 
 def get_default_nanoid() -> str:
@@ -50,20 +32,8 @@ def get_default_nanoid() -> str:
 
     Returns:
         A new Nano ID string of standard length.
-    """
-    try:
-        nano_id = generate_nanoid()
-        return nano_id
 
-    except Exception as e:
-        observability.observe(
-            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-            level=observability.EventLevel.ERROR,
-            description="Default Nano ID generation failed with error",
-            data={
-                "operation": "get_default_nanoid",
-                "error": str(e),
-                "error_type": type(e).__name__,
-            },
-        )
-        raise
+    Raises:
+        Exception: If nanoid generation fails.
+    """
+    return generate_nanoid()

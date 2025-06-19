@@ -13,9 +13,9 @@ from typing import Any, Dict, List, Optional, Union
 import aiofiles
 import aiohttp
 
-from ...utils.id_generator import generate_nanoid as generate_id
 from ...datatypes.observability import ConversationEvents, SystemEvents, EventLevel, RequestContext
 from ...utils.user_dirs import get_observability_dir
+from ...utils.id_generator import generate_nanoid
 
 
 class EventLogger:
@@ -82,7 +82,7 @@ class EventLogger:
             return ""
 
         # Generate event ID
-        event_id = generate_id()
+        event_id = f"evt_{generate_nanoid()}"
 
         # Build event structure
         event = {

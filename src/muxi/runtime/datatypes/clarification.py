@@ -187,10 +187,13 @@ class ContextAnalysis:
 class ClarificationRequest:
     """Tracks a multi-turn clarification request"""
 
-    request_id: Optional[str] = None
+    # Required fields (no defaults)
     user_id: str
     agent_id: str
     request_type: RequestType
+
+    # Optional fields (with defaults)
+    request_id: Optional[str] = None
     tool_name: Optional[str] = None
     intent: str = ""
     provided_info: Dict[str, Any] = field(default_factory=dict)
@@ -339,10 +342,13 @@ class GoalContext:
 class ClarificationSession:
     """Extended session for proactive clarification"""
 
-    session_id: Optional[str] = None
+    # Required fields (no defaults)
     user_id: str
     agent_id: str
     mode: ClarificationMode
+
+    # Optional fields (with defaults)
+    session_id: Optional[str] = None
     proactive_request: Optional[ProactiveRequest] = None
     goal_context: Optional[GoalContext] = None
     plan_analysis: Optional[PlanAnalysis] = None
@@ -401,11 +407,14 @@ class WorkflowSynthesis:
 class PlanningWorkflowSession:
     """Active planning workflow session"""
 
-    session_id: Optional[str] = None
+    # Required fields (no defaults)
     user_id: str
     agent_id: str
     workflow_request: PlanningWorkflowRequest
     current_state: WorkflowState
+
+    # Optional fields (with defaults)
+    session_id: Optional[str] = None
     executed_tools: List[ToolExecutionResult] = field(default_factory=list)
     synthesis: Optional[WorkflowSynthesis] = None
     planning_context: Dict[str, Any] = field(default_factory=dict)

@@ -9,7 +9,7 @@ import time
 import traceback
 from typing import List, Optional, Dict, Any, Union
 
-from onellm.datatypes.common import ContentItem as OneLLMContentItem
+from onellm.types.common import ContentItem as OneLLMContentItem
 from ..datatypes.response import (
     MuxiContentItem,
     MuxiUnifiedResponse,
