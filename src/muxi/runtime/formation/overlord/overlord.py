@@ -254,185 +254,142 @@ class Overlord:
 
     def __init__(
         self,
+        # Pre-configured services from Formation
+        secrets_manager: Optional[SecretsManager] = None,
+        formation_config: Optional[Dict[str, Any]] = None,
+        configured_services: Optional[Dict[str, Any]] = None,
+        api_keys: Optional[Dict[str, str]] = None,
+
+        # Intelligence-specific parameters
         buffer_memory: Optional[ShortTermMemory] = None,
         long_term_memory: Optional[Union[LongTermMemory, Memobase]] = None,
         auto_extract_user_info: bool = True,
         extraction_model: Optional[LLM] = None,
         request_timeout: int = 60,
-        user_api_key: Optional[str] = None,
-        admin_api_key: Optional[str] = None,
-        formation_config: Optional[Dict[str, Any]] = None,
-        formation_path: Optional[str] = None,
-        # Enhanced workflow parameters
+
+        # Enhanced workflow parameters (intelligence concerns)
         enable_workflow_by_default: bool = False,
         complexity_threshold: float = 7.0,
     ):
         """
-        Initialize the overlord with optional centralized memory systems and enhanced workflow
-        capabilities.
+        Initialize the overlord with pre-configured services from Formation.
 
-        The constructor sets up the Overlord with the specified memory systems and
-        configuration. It initializes agent storage, memory systems, extraction settings,
-        and API keys. If memory systems are not provided, the Overlord will still
-        function but with limited memory capabilities.
+        The overlord constructor now focuses purely on intelligence concerns.
+        All operational setup (configuration loading, service initialization,
+        resource management) is handled by Formation before creating the overlord.
 
         Args:
+            secrets_manager: Pre-configured SecretsManager instance from Formation
+            formation_config: Formation configuration dict from Formation
+            configured_services: Pre-configured service instances from Formation
+            api_keys: Pre-generated API keys from Formation
+
             buffer_memory: Optional buffer memory for short-term context across all agents.
-                This memory system stores recent messages and provides context for ongoing
-                conversations.
             long_term_memory: Optional long-term memory for persistent storage across all agents.
-                This can be either a LongTermMemory (for basic vector storage) or a Memobase
-                (for multi-user support with structured knowledge).
-            auto_extract_user_info: Whether to automatically extract user information from
-                conversations. When enabled, the system will analyze conversations to identify
-                and store user preferences, facts, and other relevant information.
+            auto_extract_user_info: Whether to automatically extract user information from conversations.
             extraction_model: Optional model to use for automatic information extraction.
-                If not provided but auto_extract_user_info is True, a default model will be used.
-            request_timeout: Default timeout in seconds for MCP server requests. This controls
-                how long to wait for external tools to respond before timing out.
-            user_api_key: Optional API key for user-level access. If not provided, a random
-                key will be generated.
-            admin_api_key: Optional API key for admin-level access. If not provided, a random
-                key will be generated.
-            formation_config: Optional formation configuration dict containing A2A settings
-                and other configuration. Used to initialize external registry client.
-            formation_path: Optional path to formation configuration for secrets management.
-            enable_workflow_by_default: Whether to enable intelligent workflow orchestration
-                by default for complex requests. When False, traditional agent routing is used
-                unless explicitly overridden.
-            complexity_threshold: Complexity threshold (1-10 scale) for automatically triggering
-                workflow orchestration. Requests scoring above this threshold will be decomposed
-                into multi-agent workflows.
+            request_timeout: Default timeout in seconds for MCP server requests.
+
+            enable_workflow_by_default: Whether to enable intelligent workflow orchestration by default.
+            complexity_threshold: Complexity threshold (1-10 scale) for automatically triggering workflow orchestration.
         """
 
-        #  Info - TODO: add observability
-        #  SystemEvents.INITIALIZING (overlord)
+        # ===================================================================
+        # INTELLIGENCE CONCERNS - Agent management and routing
+        # ===================================================================
 
-        # Initialize agent storage
+        # Initialize agent storage and metadata (intelligence concerns)
         self.agents: Dict[str, Agent] = {}
         self.agent_descriptions: Dict[str, str] = {}  # Agent descriptions for routing
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
-
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
+        self._user_id_cache = {}  # User ID caching for routing
+        self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
 
-        # ENHANCE existing initialization instead of adding separate service
-        self._user_id_cache = {}  # Add to existing overlord caching
+        # ===================================================================
+        # PRE-CONFIGURED SERVICES - Accept from Formation
+        # ===================================================================
 
-        # Store formation configuration for A2A and other features
+        # Accept pre-configured services from Formation
+        self.secrets_manager = secrets_manager
         self.formation_config = formation_config or {}
+        self._configured_services = configured_services or {}
 
         # Set formation_id for unified response format
         self.formation_id = self.formation_config.get("formation_id", "default-formation")
         set_formation_id(self.formation_id)
 
-        # Initialize SecretsManager if formation_path is provided
-        self.secrets_manager: Optional[SecretsManager] = None
-        if formation_path:
-            self.secrets_manager = SecretsManager(formation_path)
+        # Accept pre-generated API keys from Formation
+        api_keys = api_keys or {}
+        self.user_api_key = api_keys.get("user")
+        self.admin_api_key = api_keys.get("admin")
 
-        # Store centralized memory systems
+        # Track whether keys were provided or need generation
+        self._user_key_auto_generated = self.user_api_key is None
+        self._admin_key_auto_generated = self.admin_api_key is None
+
+        # Generate keys if not provided by Formation
+        if self.user_api_key is None:
+            self.user_api_key = generate_api_key("user")
+        if self.admin_api_key is None:
+            self.admin_api_key = generate_api_key("admin")
+
+        # ===================================================================
+        # MEMORY COORDINATION - Intelligence concerns
+        # ===================================================================
+
+        # Store centralized memory systems for intelligence coordination
         self.buffer_memory = buffer_memory
         self.long_term_memory = long_term_memory
 
-        # Configure extraction settings
+        # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
         self.extraction_model = extraction_model
-        self.memory_extractor = None
+        self.memory_extractor = None  # Will be initialized later
 
-        # Track message counts per user for extraction
+        # Track message counts per user for extraction (intelligence)
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
 
-        # Initialize clarification configuration with defaults
-        self.clarification_config = ClarificationConfig(
-            max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
-        )
+        # ===================================================================
+        # WORKFLOW ORCHESTRATION - Intelligence concerns
+        # ===================================================================
 
-        # Initialize external registry clients (will be set up later)
-        # For discovery (outbound)
-        self.external_registry_client: Optional[A2ARegistryClient] = None
-        # For registration (inbound)
-        self.inbound_registry_client: Optional[A2ARegistryClient] = None
-
-        # Initialize A2A Formation Server (will be set up based on config)
-        self.a2a_server: Optional[A2AServer] = None
-
-        # Initialize external registries if configured in formation
-        # Initialize external registry clients for inbound/outbound
-        self._initialize_external_registry_client()
-        self._initialize_inbound_registry_client()
-
-        # Initialize agent tracking for delayed external registration
-        self.pending_external_registrations = set()
-
-        # Initialize the A2A Formation Server
-        self._initialize_a2a_server()
-
-        # Note: Outbound services will be initialized asynchronously when needed
-
-        # Conditional initialize memory extractor
-        self._initialize_memory_extractor()
-
-        # Get/Initialize the MCP service
-        self.mcp_service = MCPService.get_instance()
-
-        # Note: Routing model will be initialized in start() method (async)
-
-        # Set request timeout
-        self.request_timeout = request_timeout
-
-        # Set or generate API keys
-        self.user_api_key = user_api_key
-        self.admin_api_key = admin_api_key
-
-        # Generate API keys if not provided
-        if self.user_api_key is None:
-            self.user_api_key = generate_api_key("user")
-            self._user_key_auto_generated = True
-        else:
-            self._user_key_auto_generated = False
-
-        if self.admin_api_key is None:
-            self.admin_api_key = generate_api_key("admin")
-            self._admin_key_auto_generated = True
-        else:
-            self._admin_key_auto_generated = False
-
-        # Add expertise registry
-        self._agent_expertise: Dict[str, Dict[str, Any]] = {}
-
-        # Initialize model cache and capability models for LLM config
-        self._model_cache: Dict[str, LLM] = {}
-        self._capability_models: Dict[str, str] = {}
-
-        # Load default persona from file
-        self._load_default_persona()
-
-        # Initialize enhanced workflow capabilities
+        # Initialize enhanced workflow capabilities (intelligence concerns)
         self.enable_workflow_by_default = enable_workflow_by_default
         self.complexity_threshold = complexity_threshold
 
-        # Initialize workflow components
+        # Initialize workflow components (intelligence concerns)
         self.request_analyzer = RequestAnalyzer(llm=extraction_model)
         self.request_analyzer.complexity_threshold = complexity_threshold
-
         self.task_decomposer = TaskDecomposer(llm=extraction_model)
         self.workflow_executor = WorkflowExecutor(agent_registry=self.agents)
         self.approval_manager = ApprovalManager()
         self.progress_tracker = ProgressTracker()
 
-        # NEW: Initialize multimodal and synthesis components
+        # Active workflows tracking (intelligence concerns)
+        self.active_workflows: Dict[str, Workflow] = {}
+        self.pending_approvals: Dict[str, Workflow] = {}
+
+        # Setup progress tracking
+        self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
+
+        # ===================================================================
+        # MULTIMODAL INTELLIGENCE - Intelligence concerns
+        # ===================================================================
+
+        # Initialize multimodal and synthesis components (intelligence concerns)
         self.multimodal_fusion_engine = MultiModalFusionEngine(llm=extraction_model)
         self.quality_assessor = ResponseQualityAssessor(llm=extraction_model)
         self.response_synthesizer = AdvancedResponseSynthesizer(
             llm=extraction_model, quality_assessor=self.quality_assessor
         )
 
-        # NEW: Initialize interactive elements and enhanced multimodal integration
+        # Initialize interactive elements and enhanced multimodal integration (intelligence concerns)
         self.interactive_generator = InteractiveElementGenerator()
         self.response_formatter = ResponseFormatter(self.interactive_generator)
         self.media_integrator = MediaIntegrator()
 
-        # Enhanced multimodal processors
+        # Enhanced multimodal processors (intelligence concerns)
         self.workflow_multimodal_processor = WorkflowMultiModalProcessor(
             fusion_engine=self.multimodal_fusion_engine
         )
@@ -441,33 +398,38 @@ class Overlord:
             fusion_engine=self.multimodal_fusion_engine
         )
 
-        # NEW: Initialize intelligent caching system
+        # ===================================================================
+        # CACHING AND OPTIMIZATION - Intelligence concerns
+        # ===================================================================
+
+        # Initialize intelligent caching system (intelligence concerns)
         self.cache_manager = IntelligentCacheManager(
             enable_analytics=True,
             enable_memory_optimization=True,
             embedding_service=self.extraction_model,  # Use extraction model for embeddings
         )
 
-        # NEW: Initialize parallel workflow optimizer
+        # Initialize parallel workflow optimizer (intelligence concerns)
         self.parallel_optimizer = ParallelWorkflowOptimizer(sensitivity_threshold=0.5)
 
-        # NEW: Initialize Phase 3 User Experience Intelligence components
+        # ===================================================================
+        # USER EXPERIENCE INTELLIGENCE - Intelligence concerns
+        # ===================================================================
+
+        # Initialize User Experience Intelligence components (intelligence concerns)
         self.user_preference_engine = UserPreferenceEngine(overlord=self)
         self.adaptive_response_generator = AdaptiveResponseGenerator(overlord=self)
 
-        # NEW: Initialize Phase 4.1 resilience components
+        # Initialize resilience components (intelligence concerns)
         resilience_config = ResilienceConfig(**self.formation_config.get("resilience", {}))
         self.resilient_workflow_manager = ResilientWorkflowManager(resilience_config)
 
-        # Active workflows tracking
-        self.active_workflows: Dict[str, Workflow] = {}
-        self.pending_approvals: Dict[str, Workflow] = {}
+        # ===================================================================
+        # DOCUMENT PROCESSING INTELLIGENCE - Intelligence concerns
+        # ===================================================================
 
-        # Setup progress tracking
-        self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
-
-        # NEW: Initialize document processing components (Tasks 3.7-3.9)
-        # These will be properly initialized after _apply_formation_config() is called
+        # Initialize document processing components (intelligence concerns)
+        # These will be properly configured from Formation services
         self.document_chunker: Optional[DocumentChunkManager] = None
         self.document_metadata_store: Optional[DocumentMetadataStore] = None
         self.document_reference_system: Optional[DocumentReferenceSystem] = None
@@ -478,7 +440,11 @@ class Overlord:
         self.document_cross_referencer: Optional[DocumentCrossReferenceManager] = None
         self.document_context_preserver: Optional[DocumentContextPreserver] = None
 
-        # NEW: Initialize async request-response components (Task 4)
+        # ===================================================================
+        # ASYNC REQUEST HANDLING - Intelligence concerns
+        # ===================================================================
+
+        # Initialize async request-response components (intelligence concerns)
         self.request_tracker = RequestTracker()
         async_config = self.formation_config.get("async", {})
         self.webhook_manager = WebhookManager(
@@ -487,17 +453,67 @@ class Overlord:
         )
         self.time_estimator = TimeEstimator(self.request_analyzer)
 
-        # Async configuration
+        # Async configuration (intelligence concerns)
         self.async_threshold_seconds = async_config.get("threshold_seconds", 30)
         self.async_enable_estimation = async_config.get("enable_estimation", True)
         self.async_webhook_url = async_config.get("webhook_url")
 
-        # Initialize extracted configuration and memory managers
+        # ===================================================================
+        # CLARIFICATION INTELLIGENCE - Intelligence concerns
+        # ===================================================================
+
+        # Initialize clarification configuration with defaults (intelligence concerns)
+        self.clarification_config = ClarificationConfig(
+            max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
+        )
+
+        # ===================================================================
+        # SERVICE REFERENCES - References to pre-configured services
+        # ===================================================================
+
+        # Service references (will be configured from Formation)
+        self.external_registry_client: Optional[A2ARegistryClient] = None
+        self.inbound_registry_client: Optional[A2ARegistryClient] = None
+        self.a2a_server: Optional[A2AServer] = None
+        self.mcp_service = MCPService.get_instance()  # Get existing instance
+
+        # Initialize agent tracking for delayed external registration
+        self.pending_external_registrations = set()
+
+        # Set request timeout
+        self.request_timeout = request_timeout
+
+        # ===================================================================
+        # INTELLIGENCE COORDINATORS - Intelligence concerns
+        # ===================================================================
+
+        # Initialize intelligence coordination managers
         self.secrets_interpolator = SecretsInterpolator(self)
         self.buffer_memory_manager = BufferMemoryManager(self)
         self.persistent_memory_manager = PersistentMemoryManager(self)
         self.user_context_manager = UserContextManager(self)
         self.extraction_coordinator = ExtractionCoordinator(self)
+
+        # ===================================================================
+        # INTELLIGENCE MODELS AND CACHE - Intelligence concerns
+        # ===================================================================
+
+        # Initialize model cache and capability models for intelligence routing
+        self._model_cache: Dict[str, LLM] = {}
+        self._capability_models: Dict[str, str] = {}
+
+        # Load default persona from file (intelligence concerns)
+        self._load_default_persona()
+
+        # ===================================================================
+        # POST-INITIALIZATION SETUP
+        # ===================================================================
+
+        # Initialize memory extractor (intelligence concerns)
+        self._initialize_memory_extractor()
+
+        # NOTE: Service initialization will be handled by Formation
+        # The overlord constructor now focuses purely on intelligence setup
 
     async def start(self) -> None:
         """Start all overlord services including cache manager."""

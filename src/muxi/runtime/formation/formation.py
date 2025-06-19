@@ -24,8 +24,9 @@
 #   response = muxi.chat("Hello!")
 #
 #   # Cleanup
-#   formation.stop_overlord()  # Graceful shutdown
-#   formation.stop()           # Full cleanup
+#   formation.stop_overlord()    # Graceful shutdown
+#   # formation.kill_overlord()  # Immediate shutdown
+#   formation.stop()             # Full cleanup
 #
 # =============================================================================
 
@@ -70,7 +71,7 @@ class Formation:
         """
         # Core state
         self.config: Optional[Dict[str, Any]] = None
-        self.overlord = None
+        self._overlord = None  # Will hold the running overlord instance
 
         # Operational services
         self.formation_id: str = "default-formation"
@@ -103,7 +104,7 @@ class Formation:
         services - call start_overlord() to boot the intelligence layer.
 
         Args:
-            config_path: Path to formation YAML file or directory
+            config_path: Path to formation YAML file or directory structure
 
         Raises:
             ValueError: If configuration is invalid or cannot be loaded
@@ -121,14 +122,17 @@ class Formation:
                 description=f"Starting formation loading from {config_path}",
             )
 
+            # Normalize and validate config path (file or directory)
+            normalized_path = self._normalize_config_path(config_path)
+
             # Store formation path for secrets management
-            self._formation_path = config_path
+            self._formation_path = normalized_path
 
             # Initialize secrets manager
-            self.secrets_manager = SecretsManager(config_path)
+            self.secrets_manager = SecretsManager(normalized_path)
 
-            # Validate configuration
-            validation_result = self._validate_config(config_path)
+            # Validate configuration (fail fast with detailed messages)
+            validation_result = self._validate_config(normalized_path)
             if not validation_result["is_valid"]:
                 error_msg = f"Formation validation failed:\n{validation_result['detailed_report']}"
                 raise ValueError(error_msg)
@@ -139,7 +143,7 @@ class Formation:
                 raise ValueError(error_msg)
 
             # Load configuration
-            self.config = asyncio.run(self._load_config(config_path))
+            self.config = asyncio.run(self._load_config(normalized_path))
 
             # Set formation ID
             self.formation_id = self.config.get("formation_id", "default-formation")
@@ -153,6 +157,46 @@ class Formation:
             self.config = None
             self.secrets_manager = None
             raise
+
+    def _normalize_config_path(self, config_path: str) -> str:
+        """
+        Normalize config path to handle both file and directory inputs.
+
+        Args:
+            config_path: Path to formation YAML file or directory
+
+        Returns:
+            str: Normalized path to formation.yaml file
+
+        Raises:
+            FileNotFoundError: If neither file nor directory exists
+            ValueError: If directory exists but has no formation.yaml
+        """
+        import os
+
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(f"Formation path does not exist: {config_path}")
+
+        # If it's a file, return as-is
+        if os.path.isfile(config_path):
+            if not config_path.endswith(('.yaml', '.yml')):
+                raise ValueError(f"Formation file must be YAML format (.yaml or .yml): {config_path}")
+            return config_path
+
+        # If it's a directory, look for formation.yaml
+        if os.path.isdir(config_path):
+            formation_file = os.path.join(config_path, "formation.yaml")
+            if os.path.isfile(formation_file):
+                return formation_file
+
+            # Try formation.yml as fallback
+            formation_file_yml = os.path.join(config_path, "formation.yml")
+            if os.path.isfile(formation_file_yml):
+                return formation_file_yml
+
+            raise ValueError(f"Directory exists but contains no formation.yaml or formation.yml: {config_path}")
+
+        raise ValueError(f"Config path must be a file or directory: {config_path}")
 
     def _validate_config(self, config_path: str) -> Dict[str, Any]:
         """
@@ -442,14 +486,61 @@ class Formation:
         a fully configured overlord instance. The overlord receives pre-configured
         services and is ready for intelligent operations.
 
+        Note: One formation = one overlord. If overlord is already running,
+        returns the existing instance with a soft warning.
+
         Returns:
             Configured Overlord instance ready for intelligent operations
 
         Raises:
-            RuntimeError: If no configuration loaded or overlord already running
+            RuntimeError: If no configuration loaded
         """
-        # TODO: Phase 3 - Implement service handoff to overlord
-        raise NotImplementedError("Overlord startup will be implemented in Phase 3")
+        if not self.config:
+            raise RuntimeError("No configuration loaded. Call load() first.")
+
+        # Return existing overlord if already running (one formation = one overlord)
+        if self._is_running and self._overlord is not None:
+            print("⚠️  Warning: Overlord is already running. Returning existing instance.")
+            print("   Use stop_overlord() first if you need to restart with new configuration.")
+            return self._overlord
+
+        try:
+            # Import overlord when needed to avoid circular imports
+            from .overlord.overlord import Overlord
+
+            # Prepare services for handoff
+            self._prepare_services()
+
+            # Create overlord with pre-configured services
+            self._overlord = Overlord(
+                # Pre-configured services from Formation
+                secrets_manager=self.secrets_manager,
+                formation_config=self.config,
+                configured_services=self._configured_services,
+                api_keys=self._api_keys,
+
+                # Intelligence-specific parameters from configuration
+                buffer_memory=None,  # Will be configured by overlord based on our config
+                long_term_memory=None,  # Will be configured by overlord based on our config
+                auto_extract_user_info=self.config.get("auto_extract_user_info", True),
+                extraction_model=None,  # Will be configured by overlord based on our config
+                request_timeout=self.config.get("request_timeout", 60),
+
+                # Enhanced workflow parameters from configuration
+                enable_workflow_by_default=self.config.get("enable_workflow_by_default", False),
+                complexity_threshold=self.config.get("complexity_threshold", 7.0),
+            )
+
+            # Mark as running
+            self._is_running = True
+
+            return self._overlord
+
+        except Exception:
+            # Clean up on failure
+            self._is_running = False
+            self._overlord = None
+            raise
 
     def stop_overlord(self) -> None:
         """
@@ -459,8 +550,20 @@ class Formation:
         and perform graceful shutdown. This is the preferred method for stopping
         the overlord in production environments.
         """
-        # TODO: Phase 3 - Implement graceful overlord shutdown
-        raise NotImplementedError("Graceful shutdown will be implemented in Phase 3")
+        if not self._is_running or not self._overlord:
+            return  # Already stopped or never started
+
+        try:
+            # TODO: Implement graceful shutdown when overlord has cleanup methods
+            # For now, we'll just clean up the references
+            self._overlord = None
+            self._is_running = False
+
+        except Exception as e:
+            print(f"Warning: Error during graceful overlord shutdown: {e}")
+            # Force cleanup even if graceful shutdown fails
+            self._overlord = None
+            self._is_running = False
 
     def kill_overlord(self) -> None:
         """
@@ -470,8 +573,19 @@ class Formation:
         conversations to complete or state to be saved. Use for emergency
         situations or when graceful shutdown fails.
         """
-        # TODO: Phase 3 - Implement immediate overlord termination
-        raise NotImplementedError("Immediate termination will be implemented in Phase 3")
+        if not self._is_running or not self._overlord:
+            return  # Already stopped or never started
+
+        try:
+            # Force immediate cleanup without waiting
+            self._overlord = None
+            self._is_running = False
+
+        except Exception as e:
+            print(f"Warning: Error during immediate overlord termination: {e}")
+            # Force cleanup regardless of errors
+            self._overlord = None
+            self._is_running = False
 
     def stop(self) -> None:
         """
