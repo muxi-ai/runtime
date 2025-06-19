@@ -116,10 +116,10 @@ from ..utils import (
     normalize_external_id,
 )
 
-# Configuration Management (Phase 2)
+# Configuration Management
 from .secrets_manager import SecretsInterpolator
 
-# Memory Management (Phase 3)
+# Memory Management
 from ..memory import (
     BufferMemoryManager,
     PersistentMemoryManager,
@@ -127,7 +127,7 @@ from ..memory import (
     ExtractionCoordinator,
 )
 
-# Phase 5: Dynamic Agent Management
+# Dynamic Agent Management
 from .active_agents_tracker import ActiveAgentsTracker
 from ...datatypes.exceptions import (
     AgentNotFoundError,
@@ -136,36 +136,36 @@ from ...datatypes.exceptions import (
     NoAvailableAgentsError,
 )
 
-# NEW: Import multimodal and synthesis components
+# Import multimodal and synthesis components
 from ...services.multimodal import MultiModalFusionEngine, WorkflowMultiModalProcessor
 from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
 
-# NEW: Import interactive elements and enhanced multimodal integration
+# Import interactive elements and enhanced multimodal integration
 from ..workflow.interactive import InteractiveElementGenerator, ResponseFormatter, MediaIntegrator
 from ...services.multimodal import (
     TaskInputProcessor,
     TaskOutputProcessor,
 )
 
-# NEW: Import intelligent caching system
+# Import intelligent caching system
 from ..caching import IntelligentCacheManager
 
-# NEW: Import parallel workflow optimization
+# Import parallel workflow optimization
 from ..parallel import ParallelWorkflowOptimizer
 
-# NEW: Import Phase 3 intelligence components
+# Import Phase 3 intelligence components
 from ..intelligence import (
     UserPreferenceEngine,
     AdaptiveResponseGenerator,
 )
 
-# NEW: Import Phase 4.1 resilience components
+# Resilience components
 from ..resilience import (
     ResilientWorkflowManager,
     ResilienceConfig,
 )
 
-# Document Processing Components (Tasks 3.7-3.9)
+# Document Processing Components
 from ..documents.storage import (
     DocumentChunkManager,
     DocumentMetadataStore,
@@ -182,14 +182,14 @@ from ..documents.workflow import (
     DocumentContextPreserver,
 )
 
-# Async Orchestration Components (Task 4)
+# Async Orchestration Components
 from ..background import (
     RequestTracker,
     WebhookManager,
     TimeEstimator,
 )
 
-# Unified Response Components (Phase 3)
+# Unified Response Components
 from ...utils.response_converter import create_unified_response, extract_user_content
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
 from ...utils.user_dirs import set_formation_id
@@ -303,7 +303,7 @@ class Overlord:
         self._user_id_cache = {}  # User ID caching for routing
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
 
-        # Phase 5: Dynamic Agent Management - Ultra-simple "delete when done" tracking
+        # Dynamic Agent Management - Ultra-simple "delete when done" tracking
         self.active_agent_tracker = ActiveAgentsTracker()
 
         # Set up callbacks for actual deletion
@@ -1940,7 +1940,7 @@ class Overlord:
             # ConversationEvents.MEMORY_LONG_TERM_ENHANCED
 
     # ===================================================================
-    # DOCUMENT PROCESSING ORCHESTRATION (Tasks 3.7-3.9)
+    # DOCUMENT PROCESSING ORCHESTRATION
     # ===================================================================
 
     async def process_document_upload(
@@ -1956,16 +1956,16 @@ class Overlord:
         This is the main orchestration method that coordinates all document processing
         components through the three phases defined in the implementation plan:
 
-        Phase 1: Document Storage Foundation (Task 3.7)
+        Document Storage Foundation
         - Parse and chunk documents using DocumentChunkManager
         - Store in enhanced buffer memory with DocumentAwareBufferMemory
         - Index for semantic search with ShortTermMemory
 
-        Phase 2: Document User Experience (Task 3.8)
+        Document User Experience
         - Generate persona-consistent acknowledgments
         - Provide document summaries and error handling
 
-        Phase 3: Document Workflow Integration (Task 3.9)
+        Document Workflow Integration
         - Create document-enhanced workflows
         - Execute with document context and cross-references
         - Generate final response with proper citations
@@ -1995,17 +1995,17 @@ class Overlord:
             #     f"{user_request[:100]}..."
             # )
 
-            # Phase 1: Document Storage Foundation (Task 3.7)
+            # Document Storage Foundation.7)
             processed_docs = await self._process_document_storage_phase(
                 attachments, user_id, context
             )
 
-            # Phase 2: Document User Experience (Task 3.8)
+            # Document User Experience.8)
             acknowledgment = await self._process_document_experience_phase(
                 processed_docs, user_request, context
             )
 
-            # Phase 3: Document Workflow Integration (Task 3.9)
+            # Document Workflow Integration.9)
             to_return = acknowledgment  # default return value
             if self._requires_document_workflow(user_request):
                 workflow_result = await self._process_document_workflow_phase(
@@ -2041,7 +2041,7 @@ class Overlord:
         context: Optional[Dict[str, Any]],
     ) -> List[Dict[str, Any]]:
         """
-        Phase 1: Document Storage Foundation (Task 3.7)
+        Phase 1: Document Storage Foundation.7)
 
         Process and store documents with intelligent chunking and indexing.
         """
@@ -2130,7 +2130,7 @@ class Overlord:
         context: Optional[Dict[str, Any]],
     ) -> str:
         """
-        Phase 2: Document User Experience (Task 3.8)
+        Phase 2: Document User Experience.8)
 
         Generate persona-consistent acknowledgments and summaries.
         """
@@ -2168,7 +2168,7 @@ class Overlord:
         context: Optional[Dict[str, Any]],
     ) -> str:
         """
-        Phase 3: Document Workflow Integration (Task 3.9)
+        Phase 3: Document Workflow Integration.9)
 
         Create and execute document-enhanced workflows.
         """
@@ -2283,7 +2283,7 @@ class Overlord:
         return any(keyword in user_request_lower for keyword in WORKFLOW_KEYWORDS)
 
     # ===================================================================
-    # ASYNC REQUEST-RESPONSE ORCHESTRATION (Task 4)
+    # ASYNC REQUEST-RESPONSE ORCHESTRATION)
     # ===================================================================
 
     async def chat(
@@ -2494,7 +2494,7 @@ class Overlord:
         try:
             start_time = time.time()
 
-            # NEW: Check if clarification is needed before processing
+            # Check if clarification is needed before processing
             clarification_result = await self._check_clarification_needs_async(
                 message, user_id, agent_name
             )
@@ -2571,8 +2571,8 @@ class Overlord:
                     request_id=request_id,
                     result=result_content,
                     processing_time=processing_time,
-                    processing_mode="async",  # NEW: indicate this was async processing
-                    user_id=user_id,  # NEW: include user identifier
+                    processing_mode="async",  # indicate this was async processing
+                    user_id=user_id,  # include user identifier
                 )
                 if success:
                     #  Info - TODO: add observability
@@ -2605,8 +2605,8 @@ class Overlord:
                     webhook_url=webhook_url,
                     request_id=request_id,
                     error=str(e),
-                    processing_mode="async",  # NEW: indicate this was async processing
-                    user_id=user_id,  # NEW: include user identifier
+                    processing_mode="async",  # indicate this was async processing
+                    user_id=user_id,  # include user identifier
                 )
                 #  Info - TODO: add observability
                 # ConversationEvents.WEBHOOK_DELIVERED + ConversationEvents.RESPONSE_DELIVERED
@@ -2676,7 +2676,7 @@ class Overlord:
             await self.active_agent_tracker.mark_agent_idle(agent_name)
             raise
 
-        # NEW: Check if agent response contains clarification request
+        # Check if agent response contains clarification request
         agent_clarification = await self._check_agent_clarification_request(result, user_id_int)
         if agent_clarification:
             # Agent needs clarification - transform it into user clarification
