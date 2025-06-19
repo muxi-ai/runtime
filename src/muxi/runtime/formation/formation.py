@@ -44,6 +44,10 @@ from ..services.secrets.secrets_manager import SecretsManager
 # Validation imports
 from ..utils import DependencyValidator
 
+# Async operation imports
+from ..utils.async_operation_manager import get_operation_manager, execute_with_timeout
+from ..datatypes.async_operations import TimeoutConfig, CancellationToken
+
 # Exception imports
 from ..datatypes.exceptions import (
     ConfigurationNotFoundError,
@@ -76,13 +80,16 @@ class Formation:
     - Handles resource cleanup and shutdown
     """
 
-    def __init__(self):
+    def __init__(self, timeout_config: Optional[TimeoutConfig] = None):
         """
         Initialize Formation platform.
 
         Sets up the operational foundation for the Muxi runtime without
         loading any specific configuration. Call load() to load a formation
         configuration and start_overlord() to boot the intelligence layer.
+
+        Args:
+            timeout_config: Optional timeout configuration for async operations
         """
         # Core state
         self.config: Optional[Dict[str, Any]] = None
@@ -95,6 +102,11 @@ class Formation:
         # Service management
         self.secrets_manager: Optional[SecretsManager] = None
         self._formation_path: Optional[str] = None
+
+        # Async operation management
+        self._timeout_config = timeout_config or TimeoutConfig()
+        self._operation_manager = get_operation_manager()
+        self._formation_cancellation_token: Optional[CancellationToken] = None
 
         # Dependency validation
         self._dependency_validator = DependencyValidator()
@@ -321,16 +333,59 @@ class Formation:
 
     async def _load_config(self, config_path: str) -> Dict[str, Any]:
         """
-        Load formation configuration from file.
+        Load formation configuration from file with timeout support.
 
         Args:
             config_path: Path to formation configuration
 
         Returns:
             Loaded configuration dictionary
+
+        Raises:
+            TimeoutError: If configuration loading times out
+            CancellationError: If operation is cancelled
         """
-        formation_loader = FormationLoader()
-        return await formation_loader.load(config_path, self.secrets_manager)
+        async def _load_operation():
+            formation_loader = FormationLoader()
+            return await formation_loader.load(config_path, self.secrets_manager)
+
+        result = await execute_with_timeout(
+            _load_operation,
+            operation_type="config_load",
+            description=f"Loading formation configuration from {config_path}",
+            timeout=self._timeout_config.config_load_timeout,
+            cancellation_token=self._formation_cancellation_token
+        )
+
+        if not result.is_success:
+            if result.was_timeout:
+                raise ConfigurationLoadError(
+                    f"❌ Configuration loading timed out after {result.elapsed_time:.1f}s",
+                    {
+                        "config_path": config_path,
+                        "timeout": self._timeout_config.config_load_timeout,
+                        "suggestion": "Try increasing config_load_timeout or check file system performance",
+                        "next_steps": [
+                            f"Increase timeout: Formation(timeout_config=TimeoutConfig("
+                            f"config_load_timeout={self._timeout_config.config_load_timeout * 2}))",
+                            "Check if the configuration file is accessible",
+                            "Verify network connectivity if loading from remote location"
+                        ]
+                    }
+                )
+            elif result.was_cancelled:
+                raise ConfigurationLoadError(
+                    "❌ Configuration loading was cancelled",
+                    {
+                        "config_path": config_path,
+                        "suggestion": "Operation was cancelled - check if Formation is being shut down"
+                    }
+                )
+            else:
+                # Re-raise the original error
+                raise result.error
+
+        return result.result
 
     def _prepare_services(self) -> None:
         """
@@ -697,7 +752,7 @@ class Formation:
 
     async def ensure_secrets_manager(self) -> bool:
         """
-        Ensure the SecretsManager is initialized and ready to use.
+        Ensure the SecretsManager is initialized and ready to use with timeout support.
 
         Returns:
             bool: True if SecretsManager is available, False otherwise
@@ -705,13 +760,35 @@ class Formation:
         if not self.secrets_manager:
             return False
 
-        try:
+        async def _initialize_operation():
             await self.secrets_manager.initialize_encryption()
             return True
+
+        try:
+            result = await execute_with_timeout(
+                _initialize_operation,
+                operation_type="secrets_operation",
+                description="Initializing secrets manager encryption",
+                timeout=self._timeout_config.secrets_operation_timeout,
+                cancellation_token=self._formation_cancellation_token
+            )
+
+            if result.is_success:
+                return result.result
+            else:
+                if result.was_timeout:
+                    print(f"❌ Secrets manager initialization timed out after {result.elapsed_time:.1f}s")
+                    print("💡 Suggestion: Increase secrets_operation_timeout or check system performance")
+                elif result.was_cancelled:
+                    print("❌ Secrets manager initialization was cancelled")
+                else:
+                    print(f"❌ Failed to initialize secrets manager: {result.error}")
+                    print("💡 Suggestion: Check if encryption dependencies are properly installed")
+                    print("   Try: pip install cryptography")
+                return False
+
         except Exception as e:
-            print(f"❌ Failed to initialize secrets manager: {e}")
-            print("💡 Suggestion: Check if encryption dependencies are properly installed")
-            print("   Try: pip install cryptography")
+            print(f"❌ Unexpected error initializing secrets manager: {e}")
             return False
 
     async def store_secret(self, name: str, value: str) -> bool:
@@ -1026,6 +1103,10 @@ class Formation:
         to ensure complete cleanup.
         """
         try:
+            # Cancel all active operations first
+            if self._formation_cancellation_token:
+                self._formation_cancellation_token.cancel()
+
             # Stop overlord if still running (gracefully)
             if self._is_running:
                 self.stop_overlord()
@@ -1035,6 +1116,9 @@ class Formation:
             self.secrets_manager = None
             self._configured_services.clear()
             self._api_keys.clear()
+
+            # Clean up async operation management
+            self._formation_cancellation_token = None
 
             # Clear individual service configurations
             self._llm_config.clear()
@@ -1062,3 +1146,39 @@ class Formation:
     def get_config(self) -> Optional[Dict[str, Any]]:
         """Get the loaded configuration (read-only)."""
         return self.config.copy() if self.config else None
+
+    def create_cancellation_token(self) -> CancellationToken:
+        """
+        Create a new cancellation token for async operations.
+
+        Returns:
+            CancellationToken: Token that can be used to cancel operations
+        """
+        return self._operation_manager.create_cancellation_token()
+
+    def set_formation_cancellation_token(self, token: Optional[CancellationToken]) -> None:
+        """
+        Set the formation-wide cancellation token.
+
+        Args:
+            token: Cancellation token to use for formation operations
+        """
+        self._formation_cancellation_token = token
+
+    def cancel_all_operations(self) -> None:
+        """Cancel all active async operations in this formation."""
+        if self._formation_cancellation_token:
+            self._formation_cancellation_token.cancel()
+
+    def get_timeout_config(self) -> TimeoutConfig:
+        """Get the current timeout configuration."""
+        return self._timeout_config
+
+    def set_timeout_config(self, config: TimeoutConfig) -> None:
+        """
+        Set new timeout configuration.
+
+        Args:
+            config: New timeout configuration to use
+        """
+        self._timeout_config = config

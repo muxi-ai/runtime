@@ -178,6 +178,17 @@ from .validation import (
     ValidationResult,
 )
 
+# Async operation data types
+from .async_operations import (
+    OperationStatus,
+    OperationContext,
+    CancellationToken,
+    TimeoutConfig,
+    AsyncOperationResult,
+    CancellationError,
+    TimeoutError,
+)
+
 __all__ = [
     # Core response and error types
     "MuxiFileContent",
@@ -329,4 +340,13 @@ __all__ = [
     # Validation data types
     "ServiceDependency",
     "ValidationResult",
+
+    # Async operation data types
+    "OperationStatus",
+    "OperationContext",
+    "CancellationToken",
+    "TimeoutConfig",
+    "AsyncOperationResult",
+    "CancellationError",
+    "TimeoutError",
 ]
