@@ -160,6 +160,53 @@ class AgentValidationError(AgentError):
         self.validation_errors = validation_errors
 
 
+# Agent Management Errors (Phase 5: Dynamic Agent Management)
+class AgentNotFoundError(AgentError):
+    """Raised when attempting to operate on a non-existent agent."""
+
+    def __init__(self, agent_id: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Agent '{agent_id}' not found"
+        super().__init__(message, details)
+        self.agent_id = agent_id
+
+
+class AgentHasDependentsError(AgentError):
+    """Raised when attempting to remove an agent that has dependent agents."""
+
+    def __init__(self, agent_id: str, dependent_agents: List[str], details: Optional[Dict[str, Any]] = None):
+        deps_str = ', '.join(dependent_agents)
+        message = f"Cannot remove agent '{agent_id}' - other agents depend on it: {deps_str}"
+        super().__init__(message, details)
+        self.agent_id = agent_id
+        self.dependent_agents = dependent_agents
+
+
+class OverlordShuttingDownError(OverlordError):
+    """Raised when overlord is shutting down and cannot accept new requests."""
+
+    def __init__(self, details: Optional[Dict[str, Any]] = None):
+        message = "Overlord is shutting down - not accepting new requests"
+        super().__init__(message, details)
+
+
+class NoAvailableAgentsError(OverlordError):
+    """Raised when no agents are available to handle requests."""
+
+    def __init__(self, reason: str = "No agents available", details: Optional[Dict[str, Any]] = None):
+        message = f"No available agents: {reason}"
+        super().__init__(message, details)
+        self.reason = reason
+
+
+class FormationNotRunningError(OverlordError):
+    """Raised when attempting to operate on a formation that is not running."""
+
+    def __init__(self, operation: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Formation not running - cannot perform operation: {operation}"
+        super().__init__(message, details)
+        self.operation = operation
+
+
 # Secrets Management Errors
 class SecretsError(FormationError):
     """Base class for secrets management errors."""
