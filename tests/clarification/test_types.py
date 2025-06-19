@@ -269,7 +269,7 @@ class TestExceptions:
 
     def test_exception_inheritance(self):
         """Test that all clarification exceptions inherit from ClarificationError"""
-        from src.muxi.runtime.clarification.types import (
+        from src.muxi.runtime.datatypes import (
             InformationAnalysisError,
             QuestionGenerationError,
             ParameterExtractionError,
