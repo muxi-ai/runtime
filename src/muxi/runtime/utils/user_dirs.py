@@ -115,6 +115,15 @@ def get_knowledge_dir() -> str:
     return get_cache_dir("knowledge")
 
 
+def get_a2a_cache_dir() -> str:
+    """Get cache directory for A2A operations.
+
+    Returns:
+        Full path to the A2A cache directory as a string
+    """
+    return get_cache_dir("a2a")
+
+
 def get_a2a_cards_dir() -> str:
     """Get cache directory for A2A service discovery cards.
 

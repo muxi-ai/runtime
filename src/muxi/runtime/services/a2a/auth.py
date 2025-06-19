@@ -18,7 +18,7 @@ import hmac
 import hashlib
 import uuid
 from enum import Enum
-from typing import Dict, Optional, Tuple, Any, TYPE_CHECKING
+from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 
 import base64
@@ -27,9 +27,7 @@ import base64
 import jwt
 from cryptography.hazmat.primitives import serialization
 
-# Avoid circular imports
-if TYPE_CHECKING:
-    from ..secrets import SecretsManager
+from ..secrets import SecretsManager
 
 from .. import observability
 
@@ -155,7 +153,7 @@ class A2AAuthManager:
     No fallbacks to environment variables or test values.
     """
 
-    def __init__(self, secrets_manager: "SecretsManager"):
+    def __init__(self, secrets_manager: SecretsManager):
         """
         Initialize A2A authentication manager with SecretsManager.
 
@@ -1415,7 +1413,7 @@ class A2AAuthManager:
 _auth_manager = None
 
 
-def get_auth_manager(secrets_manager: "SecretsManager") -> A2AAuthManager:
+def get_auth_manager(secrets_manager: SecretsManager) -> A2AAuthManager:
     """
     Get the global authentication manager instance with SecretsManager.
 

@@ -6,8 +6,12 @@ with configurable outputs and routing.
 """
 
 import json
+import socket
 import time
 from typing import Any, Dict, List, Optional, Union
+
+import aiofiles
+import aiohttp
 
 from ...utils.id_generator import generate_nanoid as generate_id
 from .types import ConversationEvents, SystemEvents, EventLevel, RequestContext
@@ -34,8 +38,6 @@ class EventLogger:
 
     def _get_server_id(self) -> str:
         """Get server identifier for event tracking."""
-        import socket
-
         try:
             return socket.gethostname()
         except Exception:
@@ -155,15 +157,8 @@ class EventLogger:
     async def _emit_to_file(self, event_line: str) -> None:
         """Emit event to file output."""
         file_path = self.output_config.get("path",  f"{get_observability_dir()}/muxi.jsonl")
-        try:
-            import aiofiles
-
-            async with aiofiles.open(file_path, "a") as f:
-                await f.write(event_line + "\n")
-        except ImportError:
-            # Fallback to synchronous file write
-            with open(file_path, "a") as f:
-                f.write(event_line + "\n")
+        async with aiofiles.open(file_path, "a") as f:
+            await f.write(event_line + "\n")
 
     async def _emit_to_stream(self, event_line: str) -> None:
         """Emit event to stream output."""
@@ -172,8 +167,6 @@ class EventLogger:
             return
 
         try:
-            import aiohttp
-
             async with aiohttp.ClientSession() as session:
                 await session.post(
                     stream_url,
@@ -194,8 +187,6 @@ class EventLogger:
             return
 
         try:
-            import aiohttp
-
             headers = {"Content-Type": "application/x-ndjson"}
 
             # Add authentication if configured

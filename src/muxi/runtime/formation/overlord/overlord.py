@@ -3881,8 +3881,6 @@ class Overlord:
                     )
 
                     # Schedule background processing continuation
-                    import asyncio
-
                     asyncio.create_task(
                         self._execute_async_request(
                             request_id,

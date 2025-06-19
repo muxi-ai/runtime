@@ -1,26 +1,10 @@
 import asyncio
 from typing import Dict, Any, List, Optional
+import aiohttp
+from kafka import KafkaProducer
+import zmq
+import zmq.asyncio
 from .base import BaseTransport, TransportStatus
-
-# Optional imports for different protocols
-try:
-    import aiohttp
-    AIOHTTP_AVAILABLE = True
-except ImportError:
-    AIOHTTP_AVAILABLE = False
-
-try:
-    from kafka import KafkaProducer
-    KAFKA_AVAILABLE = True
-except ImportError:
-    KAFKA_AVAILABLE = False
-
-try:
-    import zmq
-    import zmq.asyncio
-    ZMQ_AVAILABLE = True
-except ImportError:
-    ZMQ_AVAILABLE = False
 
 
 class StreamTransport(BaseTransport):
@@ -110,11 +94,6 @@ class StreamTransport(BaseTransport):
 
     async def _initialize_http(self) -> bool:
         """Initialize HTTP transport."""
-        if not AIOHTTP_AVAILABLE:
-            self.last_error = "aiohttp not available for HTTP transport"
-            self.status = TransportStatus.FAILED
-            return False
-
         try:
             headers = {"Content-Type": self.formatter.content_type}
 
@@ -143,11 +122,6 @@ class StreamTransport(BaseTransport):
 
     async def _initialize_kafka(self) -> bool:
         """Initialize Kafka transport."""
-        if not KAFKA_AVAILABLE:
-            self.last_error = "kafka-python not available for Kafka transport"
-            self.status = TransportStatus.FAILED
-            return False
-
         try:
             # Parse Kafka brokers from destination
             if self.destination.startswith("kafka://"):
@@ -193,23 +167,27 @@ class StreamTransport(BaseTransport):
 
     async def _initialize_zmq(self) -> bool:
         """Initialize ZeroMQ transport."""
-        if not ZMQ_AVAILABLE:
-            self.last_error = "pyzmq not available for ZMQ transport"
-            self.status = TransportStatus.FAILED
-            return False
-
         try:
             self.zmq_context = zmq.asyncio.Context()
-            socket_type = self.config.get("socket_type", "push")
 
-            if socket_type.lower() == "push":
-                self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
-            elif socket_type.lower() == "pub":
-                self.zmq_socket = self.zmq_context.socket(zmq.PUB)
+            # Determine socket type from URL scheme
+            if self.destination.startswith(("tcps://", "ipcs://")):
+                # Secure protocols - use CURVE encryption
+                socket_type = zmq.PUSH
             else:
-                self.zmq_socket = self.zmq_context.socket(zmq.PUSH)
+                socket_type = zmq.PUSH
 
-            self.zmq_socket.connect(self.destination)
+            self.zmq_socket = self.zmq_context.socket(socket_type)
+
+            # Configure security if needed
+            if self.destination.startswith(("tcps://", "ipcs://")):
+                # TODO: Implement CURVE encryption setup
+                pass
+
+            # Connect to destination
+            zmq_url = self.destination.replace("tcps://", "tcp://").replace("ipcs://", "ipc://")
+            self.zmq_socket.connect(zmq_url)
+
             self.status = TransportStatus.HEALTHY
             return True
 

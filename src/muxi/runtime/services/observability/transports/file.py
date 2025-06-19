@@ -3,14 +3,9 @@ import os
 import asyncio
 from pathlib import Path
 from typing import Dict, Any, List
+import aiofiles
 from .base import BaseTransport, TransportStatus
 from ....utils.user_dirs import get_observability_dir
-
-try:
-    import aiofiles
-    AIOFILES_AVAILABLE = True
-except ImportError:
-    AIOFILES_AVAILABLE = False
 
 
 class FileTransport(BaseTransport):
@@ -32,15 +27,11 @@ class FileTransport(BaseTransport):
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Open file for writing
-            if AIOFILES_AVAILABLE:
-                self.current_file = await aiofiles.open(
-                    self.file_path,
-                    mode='a',
-                    encoding='utf-8'
-                )
-            else:
-                # Fallback to sync file operations
-                self.current_file = open(self.file_path, 'a', encoding='utf-8')
+            self.current_file = await aiofiles.open(
+                self.file_path,
+                mode='a',
+                encoding='utf-8'
+            )
 
             self.status = TransportStatus.HEALTHY
             return True
@@ -68,12 +59,8 @@ class FileTransport(BaseTransport):
                 # Write events
                 for event in events:
                     line = json.dumps(event, separators=(",", ":")) + '\n'
-                    if AIOFILES_AVAILABLE:
-                        await self.current_file.write(line)
-                        await self.current_file.flush()
-                    else:
-                        self.current_file.write(line)
-                        self.current_file.flush()
+                    await self.current_file.write(line)
+                    await self.current_file.flush()
 
                 return True
 
@@ -103,10 +90,7 @@ class FileTransport(BaseTransport):
         """Rotate log file."""
         try:
             # Close current file
-            if AIOFILES_AVAILABLE:
-                await self.current_file.close()
-            else:
-                self.current_file.close()
+            await self.current_file.close()
 
             # Rotate existing files
             for i in range(self.max_files - 1, 0, -1):
@@ -125,14 +109,11 @@ class FileTransport(BaseTransport):
                 self.file_path.rename(rotated_file)
 
             # Open new file
-            if AIOFILES_AVAILABLE:
-                self.current_file = await aiofiles.open(
-                    self.file_path,
-                    mode='w',
-                    encoding='utf-8'
-                )
-            else:
-                self.current_file = open(self.file_path, 'w', encoding='utf-8')
+            self.current_file = await aiofiles.open(
+                self.file_path,
+                mode='w',
+                encoding='utf-8'
+            )
 
         except Exception as e:
             self.last_error = f"Rotation failed: {e}"
@@ -142,10 +123,7 @@ class FileTransport(BaseTransport):
         """Clean up file resources."""
         if self.current_file:
             try:
-                if AIOFILES_AVAILABLE:
-                    await self.current_file.close()
-                else:
-                    self.current_file.close()
+                await self.current_file.close()
             except Exception:
                 pass
             self.current_file = None

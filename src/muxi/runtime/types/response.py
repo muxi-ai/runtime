@@ -8,7 +8,6 @@ modes (sync, async, webhooks) with multi-modal support and OpenAI compatibility.
 from typing import Optional, List, Literal, TypedDict, Union, TYPE_CHECKING
 from pydantic import BaseModel, Field
 
-# Import FunctionCallModel only for type checking to avoid circular imports
 if TYPE_CHECKING:
     from ..services.mcp.message import FunctionCallModel
 

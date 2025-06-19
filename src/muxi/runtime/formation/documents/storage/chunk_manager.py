@@ -11,9 +11,11 @@ Supports:
 - Paragraph-based chunking for articles
 """
 
+import hashlib
 import re
-from typing import List, Dict, Any, Optional
+import time
 from dataclasses import dataclass
+from typing import List, Dict, Any, Optional
 
 from ...config.document_processing import DocumentProcessingConfig
 
@@ -375,9 +377,6 @@ class DocumentChunkManager:
 
     def _generate_document_id(self, filename: str) -> str:
         """Generate a unique document ID from filename"""
-        import hashlib
-        import time
-
         # Create unique ID from filename and timestamp
         timestamp = str(int(time.time() * 1000))
         content = f"{filename}_{timestamp}"

@@ -15,7 +15,7 @@ from .discovery import (
     AgentRegistration
 )
 from .registry_client import A2ARegistryClient
-from .formation_server import A2AServer
+from .server import A2AServer
 
 __all__ = [
     # Models

@@ -11,12 +11,14 @@ Features:
 - Source attribution
 """
 
-import time
+import datetime
+import hashlib
 import json
+import time
 import uuid
-from typing import Dict, List, Any, Optional, Set
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Any, Optional, Set
 
 
 @dataclass
@@ -411,14 +413,10 @@ class DocumentReferenceSystem:
 
     def _hash_content(self, content: str) -> str:
         """Generate hash for content"""
-        import hashlib
-
         return hashlib.md5(content.encode()).hexdigest()
 
     def _format_timestamp(self, timestamp: float) -> str:
         """Format timestamp for display"""
-        import datetime
-
         dt = datetime.datetime.fromtimestamp(timestamp)
         return dt.strftime("%Y-%m-%d %H:%M")
 

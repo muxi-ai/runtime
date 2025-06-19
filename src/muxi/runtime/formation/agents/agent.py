@@ -43,6 +43,7 @@
 import datetime
 import json
 import re
+import time
 import uuid
 from typing import Any, Dict, List, Optional, Union
 
@@ -641,7 +642,6 @@ class Agent:
             return 0.0
 
         try:
-            import time
             current_time = time.time()
 
             # Convert timestamp to float if it's not already

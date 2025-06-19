@@ -5,6 +5,7 @@ This module contains the ObservabilityManager class which provides
 the central coordination for the observability system.
 """
 
+import socket
 from contextlib import asynccontextmanager
 from typing import Any, Dict, Optional, List
 
@@ -14,6 +15,7 @@ from .stream_processor import StreamProcessor
 from .health import HealthManager, HealthMonitor, HealthStatusAPI
 from .types import ConversationEvents, SystemEvents, EventLevel, RequestContext
 from ...utils.user_dirs import get_observability_dir
+
 
 class ObservabilityManager:
     """Central manager for the observability system."""
@@ -261,7 +263,6 @@ class ObservabilityManager:
 
     def _get_server_id(self) -> str:
         """Get server identifier for event tracking."""
-        import socket
         try:
             return socket.gethostname()
         except Exception:

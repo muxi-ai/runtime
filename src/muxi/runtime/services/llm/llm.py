@@ -64,11 +64,12 @@ import asyncio
 import base64
 import hashlib
 import mimetypes
+import random
+import re
 import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
-import random
 
 from .. import observability
 
@@ -1068,8 +1069,6 @@ Provide a helpful, conversational response that directly addresses what the user
                 response_str = str(response)
                 if "content" in response_str:
                     # Try to extract content using regex
-                    import re
-
                     match = re.search(r"'content':\s*'([^']*)'", response_str)
                     if match:
                         content = match.group(1)

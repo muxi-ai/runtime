@@ -11,15 +11,13 @@ import base64
 import hashlib
 import hmac
 import time
-from typing import Dict, Optional, Tuple, Any, TYPE_CHECKING
+from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from enum import Enum
 from fastapi import Request, Header
 
 from .. import observability
-
-if TYPE_CHECKING:
-    from ..secrets import SecretsManager
+from ..secrets import SecretsManager
 
 
 class InboundAuthType(str, Enum):
@@ -48,7 +46,7 @@ class A2AInboundAuthenticator:
     Uses SecretsManager exclusively for credential storage.
     """
 
-    def __init__(self, auth_mode: str = "none", secrets_manager: Optional["SecretsManager"] = None):
+    def __init__(self, auth_mode: str = "none", secrets_manager: Optional[SecretsManager] = None):
         """
         Initialize the inbound authenticator
 

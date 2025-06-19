@@ -19,6 +19,7 @@ def get_version() -> str:
     """
     # Default version
     default_version = "unknown"
+    version = default_version  # Initialize version variable
 
     # Try to read from package.json if it exists
     version_file = os.path.join(os.path.dirname(__file__), "..", "..", ".version")
