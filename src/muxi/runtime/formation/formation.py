@@ -1150,20 +1150,41 @@ class Formation:
                 },
             ) from e
 
-    def stop_overlord(self) -> None:
+    def stop_overlord(self, timeout_seconds: float = 30.0) -> None:
         """
         Gracefully stop overlord - finish conversations and cleanup.
 
         Allows the overlord to complete any ongoing conversations, save state,
-        and perform graceful shutdown. This is the preferred method for stopping
-        the overlord in production environments.
+        and perform graceful shutdown. Uses the ActiveAgentsTracker to wait for
+        all agents to finish their current work before shutting down.
+
+        Args:
+            timeout_seconds: Maximum time to wait for graceful shutdown before forcing termination
         """
         if not self._is_running or not self._overlord:
             return  # Already stopped or never started
 
         try:
-            # TODO: Implement graceful shutdown when overlord has cleanup methods
-            # For now, we'll just clean up the references
+            # Use the new graceful shutdown functionality
+            asyncio.run(self._overlord.active_agent_tracker.mark_overlord_for_shutdown())
+
+            # Wait for graceful shutdown with timeout
+            start_time = asyncio.get_event_loop().time()
+
+            async def wait_for_shutdown():
+                tracker = self._overlord.active_agent_tracker
+                while not tracker.overlord_shutting_down or not tracker.is_idle():
+                    await asyncio.sleep(0.1)
+                    if asyncio.get_event_loop().time() - start_time > timeout_seconds:
+                        raise TimeoutError(f"Graceful shutdown timed out after {timeout_seconds} seconds")
+
+            try:
+                asyncio.run(wait_for_shutdown())
+                print("✅ Overlord shutdown gracefully - all agents finished their work")
+            except TimeoutError:
+                print(f"⚠️  Graceful shutdown timed out after {timeout_seconds}s - forcing termination")
+
+            # Clean up references
             self._overlord = None
             self._is_running = False
 
@@ -1298,3 +1319,105 @@ class Formation:
             config: New retry configuration to use
         """
         self._retry_config = config
+
+    # =============================================================================
+    # PHASE 5: DYNAMIC AGENT MANAGEMENT
+    # =============================================================================
+
+    def add_agent(self, agent, agent_id: Optional[str] = None, description: Optional[str] = None) -> str:
+        """
+        Add an agent to the running overlord.
+
+        Args:
+            agent: The agent instance to add
+            agent_id: Optional custom agent ID (auto-generated if not provided)
+            description: Optional description for the agent
+
+        Returns:
+            The agent ID of the added agent
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "add_agent", "agent_id": agent_id},
+            )
+
+        return self._overlord.add_agent(agent, agent_id=agent_id, description=description)
+
+    def remove_agent(self, agent_id: str) -> bool:
+        """
+        Remove an agent from the running overlord using the "delete when done" pattern.
+
+        The agent will be marked for deletion and actually removed when it finishes
+        any current work. This ensures no active requests are interrupted.
+
+        Args:
+            agent_id: The ID of the agent to remove
+
+        Returns:
+            True if the agent was successfully marked for removal
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            AgentNotFoundError: If no agent with the given ID exists
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "remove_agent", "agent_id": agent_id},
+            )
+
+        return asyncio.run(self._overlord.remove_agent(agent_id))
+
+    def list_agents(self) -> Dict[str, Dict[str, Any]]:
+        """
+        List all agents in the running overlord with their status.
+
+        Returns:
+            Dictionary mapping agent IDs to their information including status
+            (idle/busy/pending_deletion)
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "list_agents"},
+            )
+
+        return self._overlord.list_agents()
+
+    def get_agent_status(self, agent_id: str) -> Dict[str, Any]:
+        """
+        Get detailed status information for a specific agent.
+
+        Args:
+            agent_id: The ID of the agent to get status for
+
+        Returns:
+            Dictionary containing agent status information
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            AgentNotFoundError: If no agent with the given ID exists
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_agent_status", "agent_id": agent_id},
+            )
+
+        agents = self._overlord.list_agents()
+        if agent_id not in agents:
+            from ..datatypes.exceptions import AgentNotFoundError
+            raise AgentNotFoundError(agent_id)
+
+        return agents[agent_id]

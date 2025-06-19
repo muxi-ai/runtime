@@ -127,6 +127,15 @@ from ..memory import (
     ExtractionCoordinator,
 )
 
+# Phase 5: Dynamic Agent Management
+from .active_agents_tracker import ActiveAgentsTracker
+from ...datatypes.exceptions import (
+    AgentNotFoundError,
+    AgentHasDependentsError,
+    OverlordShuttingDownError,
+    NoAvailableAgentsError,
+)
+
 # NEW: Import multimodal and synthesis components
 from ...services.multimodal import MultiModalFusionEngine, WorkflowMultiModalProcessor
 from ..workflow.synthesis import AdvancedResponseSynthesizer, ResponseQualityAssessor
@@ -293,6 +302,13 @@ class Overlord:
         self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
         self._user_id_cache = {}  # User ID caching for routing
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
+
+        # Phase 5: Dynamic Agent Management - Ultra-simple "delete when done" tracking
+        self.active_agent_tracker = ActiveAgentsTracker()
+
+        # Set up callbacks for actual deletion
+        self.active_agent_tracker._delete_agent = self._actually_delete_agent
+        self.active_agent_tracker._shutdown_overlord = self._actually_shutdown_overlord
 
         # ===================================================================
         # PRE-CONFIGURED SERVICES - Accept from Formation
@@ -1056,46 +1072,89 @@ class Overlord:
 
         return self.agents[agent_id]
 
-    def remove_agent(self, agent_id: str) -> bool:
+    async def remove_agent(self, agent_id: str) -> bool:
         """
-        Remove an agent from the overlord.
+        Remove agent using "delete when done" pattern - actual deletion happens when safe.
 
-        This method unregisters an agent and updates the default agent if necessary.
-        If external registry client is configured, it also automatically deregisters
-        the agent from all external registries.
+        This method marks an agent for removal but only deletes it when it's not busy
+        handling requests. This prevents dangling request IDs and ensures graceful
+        agent removal.
 
         Args:
             agent_id: The ID of the agent to remove.
 
         Returns:
-            True if the agent was removed successfully.
+            True if the agent was marked for removal successfully.
 
         Raises:
-            ValueError: If no agent with the given ID exists.
+            AgentNotFoundError: If no agent with the given ID exists.
+            AgentHasDependentsError: If other agents depend on this agent.
         """
         if agent_id not in self.agents:
-            raise ValueError(f"No agent with ID '{agent_id}' exists")
+            raise AgentNotFoundError(f"Agent '{agent_id}' not found")
 
-        # Deregister from external registries if configured
-        if self.external_registry_client:
-            try:
-                # Run deregistration in background - don't block removal
-                asyncio.create_task(self.deregister_agent_from_external_registry(agent_id))
-            except Exception as e:
-                # Log warning but don't fail the removal
-                #  Error - TODO: add observability
-                # ErrorEvents.INTERNAL_ERROR
-                _ = e  # remove this after implementing observability
+        # Check for dependent agents
+        dependent_agents = self._get_dependent_agents(agent_id)
+        if dependent_agents:
+            raise AgentHasDependentsError(
+                f"Cannot remove agent '{agent_id}' - other agents depend on it: {dependent_agents}"
+            )
 
-        # Remove the agent
-        del self.agents[agent_id]
+        # Mark for deletion - actual removal happens when no longer active
+        await self.active_agent_tracker.mark_agent_for_deletion(agent_id)
 
-        # Update default agent if necessary
-        if self.default_agent_id == agent_id:
-            # Set the first available agent as default, or None if no agents remain
-            self.default_agent_id = next(iter(self.agents)) if self.agents else None
+        if self.active_agent_tracker.is_agent_busy(agent_id):
+            print(f"⏳ Agent '{agent_id}' marked for deletion - will be removed when current request completes")
+        else:
+            print(f"✅ Agent '{agent_id}' removed immediately (not busy)")
 
         return True
+
+    async def _actually_delete_agent(self, agent_id: str):
+        """Actually delete the agent (called by active_agent_tracker)."""
+        if agent_id in self.agents:
+            # Deregister from external registries if configured
+            if hasattr(self, 'external_registry_client') and self.external_registry_client:
+                try:
+                    # Run deregistration in background - don't block removal
+                    asyncio.create_task(self.deregister_agent_from_external_registry(agent_id))
+                except Exception as e:
+                    # Log warning but don't fail the removal
+                    #  Error - TODO: add observability
+                    # ErrorEvents.INTERNAL_ERROR
+                    _ = e  # remove this after implementing observability
+
+            # Cleanup agent if it has cleanup logic
+            agent = self.agents[agent_id]
+            if hasattr(agent, 'cleanup'):
+                await agent.cleanup()
+
+            # Remove the agent
+            del self.agents[agent_id]
+
+            # Update default agent if necessary
+            if hasattr(self, 'default_agent_id') and self.default_agent_id == agent_id:
+                # Set the first available agent as default, or None if no agents remain
+                self.default_agent_id = next(iter(self.agents)) if self.agents else None
+
+            print(f"✅ Agent '{agent_id}' deleted")
+
+    async def _actually_shutdown_overlord(self):
+        """Actually shutdown overlord (called by active_agent_tracker)."""
+        print("✅ Overlord shutdown complete - no active requests remaining")
+        # Additional cleanup logic here if needed
+
+    def _get_dependent_agents(self, agent_id: str) -> List[str]:
+        """Find agents that depend on the given agent."""
+        dependents = []
+        for other_agent_id, other_agent in self.agents.items():
+            if other_agent_id != agent_id:
+                # Check if other agent has dependencies configuration
+                if hasattr(other_agent, 'config') and isinstance(other_agent.config, dict):
+                    dependencies = other_agent.config.get('dependencies', [])
+                    if agent_id in dependencies:
+                        dependents.append(other_agent_id)
+        return dependents
 
     def set_default_agent(self, agent_id: str) -> None:
         """
@@ -1167,11 +1226,17 @@ class Overlord:
         """
         # If there are no agents, raise an error
         if not self.agents:
-            raise ValueError("No agents available")
+            raise NoAvailableAgentsError("No agents available")
 
-        # If there's only one agent, use it
-        if len(self.agents) == 1:
-            return next(iter(self.agents))
+        # Get available agents (not marked for deletion)
+        available_agents = self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
+
+        if not available_agents:
+            raise NoAvailableAgentsError("No agents available for new requests")
+
+        # If there's only one available agent, use it
+        if len(available_agents) == 1:
+            return available_agents[0]
 
         # Get caching configuration
         overlord_config = self.formation_config.get("overlord", {})
@@ -1321,7 +1386,8 @@ class Overlord:
         Intelligently select the best available agent based on message content.
 
         This method uses simple heuristics to match message content with agent
-        descriptions when the routing model fails or is unavailable.
+        descriptions when the routing model fails or is unavailable. Only considers
+        agents that are not marked for deletion.
 
         Args:
             message: The message to analyze for agent selection
@@ -1329,12 +1395,15 @@ class Overlord:
         Returns:
             The ID of the best matching agent
         """
-        if not self.agents:
-            raise ValueError("No agents available")
+        # Get available agents (not marked for deletion)
+        available_agents = self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
 
-        # If only one agent, return it
-        if len(self.agents) == 1:
-            return next(iter(self.agents))
+        if not available_agents:
+            raise NoAvailableAgentsError("No agents available for new requests")
+
+        # If only one available agent, return it
+        if len(available_agents) == 1:
+            return available_agents[0]
 
         # Keywords for simple agent matching heuristics
         AGENT_MATCHING_KEYWORDS = {
@@ -1352,7 +1421,8 @@ class Overlord:
         best_match = None
         best_score = 0
 
-        for agent_id, description in self.agent_descriptions.items():
+        for agent_id in available_agents:
+            description = self.agent_descriptions.get(agent_id, "")
             if not description:
                 continue
 
@@ -1368,8 +1438,8 @@ class Overlord:
                 best_score = score
                 best_match = agent_id
 
-        # If no good match found, return the first agent
-        best_match = best_match or next(iter(self.agents))
+        # If no good match found, return the first available agent
+        best_match = best_match or available_agents[0]
 
         #  Info - TODO: add observability
         # ConversationEvents.OVERLORD_ROUTING_COMPLETED
@@ -1420,31 +1490,52 @@ class Overlord:
 
     def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
-        List all registered agents and their basic information.
+        List all registered agents with their status information.
 
         Returns a dictionary containing information about all registered agents
-        including their descriptions and registration status. This is useful for
-        getting an overview of available agents in the formation.
+        including their descriptions, registration status, and current activity status.
+        This is useful for getting an overview of available agents in the formation.
 
         Returns:
             Dict[str, Dict[str, Any]]: Dictionary where keys are agent IDs and values
-                contain agent information including 'description' and 'default' status.
+                contain agent information including 'description', 'default' status,
+                'status' (idle/busy/pending_deletion), and 'is_busy' flag.
 
         Example:
             >>> agents = overlord.list_agents()
             >>> print(agents)
             {
-                'assistant': {'description': 'General purpose assistant', 'default': True},
-                'researcher': {'description': 'Research specialist', 'default': False}
+                'assistant': {
+                    'description': 'General purpose assistant',
+                    'default': True,
+                    'status': 'idle',
+                    'is_busy': False
+                },
+                'researcher': {
+                    'description': 'Research specialist',
+                    'default': False,
+                    'status': 'busy',
+                    'is_busy': True
+                }
             }
         """
-        return {
-            agent_id: {
+        agent_info = {}
+        for agent_id in self.agents.keys():
+            is_busy = self.active_agent_tracker.is_agent_busy(agent_id)
+            is_pending_deletion = agent_id in self.active_agent_tracker.pending_deletions
+
+            status = "busy" if is_busy else "idle"
+            if is_pending_deletion:
+                status = "pending_deletion"
+
+            agent_info[agent_id] = {
                 "description": self.agent_descriptions.get(agent_id, ""),
-                "default": agent_id == self.default_agent_id,
+                "default": agent_id == getattr(self, 'default_agent_id', None),
+                "status": status,
+                "is_busy": is_busy,
             }
-            for agent_id in self.agents.keys()
-        }
+
+        return agent_info
 
     def get_available_agents_for_a2a(
         self, requesting_agent_id: str, capability_filter: Optional[List[str]] = None
@@ -2557,17 +2648,33 @@ class Overlord:
                 description=f"Agent selection completed: {agent_name}",
             )
 
+        # Check if overlord is accepting new requests
+        if not self.active_agent_tracker.can_accept_new_requests():
+            raise OverlordShuttingDownError("❌ Overlord is shutting down - not accepting new requests")
+
         # Get the selected agent and process the message
         agent = self.get_agent(agent_name)
 
-        # ENHANCED: Convert user_id to int using flexible user ID handling
-        user_id_int = None
-        if user_id is not None:
-            # Use enhanced conversion that accepts any external user ID format
-            user_id_int = await self._enhance_existing_user_id_conversion(user_id)
+        # Mark agent as busy
+        await self.active_agent_tracker.mark_agent_busy(agent_name)
 
-        # Process the message using the agent
-        result = await agent.process_message(message, user_id=user_id_int)
+        try:
+            # ENHANCED: Convert user_id to int using flexible user ID handling
+            user_id_int = None
+            if user_id is not None:
+                # Use enhanced conversion that accepts any external user ID format
+                user_id_int = await self._enhance_existing_user_id_conversion(user_id)
+
+            # Process the message using the agent
+            result = await agent.process_message(message, user_id=user_id_int)
+
+            # Mark agent as idle
+            await self.active_agent_tracker.mark_agent_idle(agent_name)
+
+        except Exception:
+            # On error, still mark agent as idle
+            await self.active_agent_tracker.mark_agent_idle(agent_name)
+            raise
 
         # NEW: Check if agent response contains clarification request
         agent_clarification = await self._check_agent_clarification_request(result, user_id_int)
