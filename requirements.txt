@@ -11,7 +11,7 @@ colorama>=0.4.6
 platformdirs>=4.0.0
 
 # MCP Package
-mcp>=1.4.1  # Now available on PyPI
+mcp>=1.9.1
 
 # File processing and utilities
 aiofiles>=23.2.0
