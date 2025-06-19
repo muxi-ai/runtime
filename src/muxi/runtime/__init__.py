@@ -11,15 +11,16 @@
 # available when importing from muxi.runtime. It exports:
 #
 # Core Components
-#  - Overlord for direct agent and memory management
+#  - Formation for operational lifecycle management
 #  - LLM for language model interactions
 #
 # The runtime package provides the essential components for building
-# AI agent applications with direct programmatic access.
+# AI agent applications. Formation manages the complete lifecycle including
+# creating and configuring Overlord instances internally.
 # =============================================================================
 
 # Import core classes for direct access
-from .formation.overlord import Overlord
+from .formation import Formation
 from .services.llm import LLM
 from .utils.version import get_version
 
@@ -35,14 +36,15 @@ __url__ = "https://github.com/muxi-ai"
 
 # Explicitly define what's available when using "from muxi.runtime import *"
 __all__ = [
-    "Overlord",
+    "Formation",
     "LLM",
     "observability",
 ]
 
-# Public API methods for Overlord (exposed when importing Overlord directly):
-# - overlord.run_agent() - for development/testing specific agents
-# - overlord.get_agent() - for getting agent references
-# - overlord.list_agents() - for viewing available agents
-# - overlord.load_formation_from_path() - for loading formation configs
-# Agent creation should only happen via formation YAML files
+# Usage:
+# from muxi.runtime import Formation
+# formation = Formation()
+# formation.load("formation.yaml")
+# muxi = formation.start_overlord()  # Returns Overlord instance
+# response = muxi.chat("Hello!")
+# formation.stop_overlord()

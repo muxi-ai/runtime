@@ -1,3 +1,5 @@
 """Formation package for MUXI runtime."""
 
-__all__ = []
+from .formation import Formation
+
+__all__ = ["Formation"]
