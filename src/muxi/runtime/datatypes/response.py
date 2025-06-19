@@ -116,6 +116,8 @@ class MuxiMessageContent(BaseModel):
             has_tool_calls = self.type == "tool_calls" and self.tool_calls
             tool_calls_json = None
             if has_tool_calls:
+                if not isinstance(self.tool_calls, list):
+                    raise ValueError("tool_calls must be a list when type is 'tool_calls'")
                 # Serialize each tool call in JSON mode
                 tool_calls_json = [tc.model_dump(mode="json") for tc in self.tool_calls]
 

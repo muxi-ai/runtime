@@ -139,28 +139,35 @@ def validate_workflow_dag(workflow: Workflow) -> bool:
     Returns:
         True if valid DAG, False if cycles detected
     """
-    # Build adjacency list for dependency graph
+    # Build proper graph representation
     graph = {}
     in_degree = {}
+    reverse_graph = {}  # task_id -> list of tasks that depend on it
 
     for task_id, task in workflow.tasks.items():
-        graph[task_id] = task.dependencies.copy()
+        graph[task_id] = set(task.dependencies)
         in_degree[task_id] = len(task.dependencies)
+        reverse_graph[task_id] = []
+
+    # Build reverse graph for efficient dependency removal
+    for task_id, task in workflow.tasks.items():
+        for dep in task.dependencies:
+            if dep in reverse_graph:
+                reverse_graph[dep].append(task_id)
 
     # Kahn's algorithm for cycle detection
-    queue = [task_id for task_id, degree in in_degree.items() if degree == 0]
+    queue = [tid for tid, deg in in_degree.items() if deg == 0]
     processed = 0
 
     while queue:
         current = queue.pop(0)
         processed += 1
 
-        # Remove this node from all dependency lists
-        for task_id, task in workflow.tasks.items():
-            if current in task.dependencies:
-                in_degree[task_id] -= 1
-                if in_degree[task_id] == 0:
-                    queue.append(task_id)
+        # Update in-degree for dependent tasks
+        for dependent in reverse_graph[current]:
+            in_degree[dependent] -= 1
+            if in_degree[dependent] == 0:
+                queue.append(dependent)
 
     # If we processed all tasks, no cycles exist
     return processed == len(workflow.tasks)

@@ -239,6 +239,7 @@ __all__ = [
     "ClarificationQuestion",
     "ClarificationConfig",
     "ClarificationStatus",
+    "ContextEnrichmentError",
     "RequestType",
     "QuestionStyle",
     "ClarificationMode",

@@ -104,7 +104,7 @@ class SystemEvents(Enum):
     A2A_HEALTH_CHECK_FAILED = "a2a.health.check.failed"
     # When A2A health check fails
 
-    A2A_REGISTRED = "a2a.registration.completed"
+    A2A_REGISTERED = "a2a.registration.completed"
     # When agent is successfully registered with A2A registry
 
     A2A_REGISTRATION_FAILED = "a2a.registration.failed"

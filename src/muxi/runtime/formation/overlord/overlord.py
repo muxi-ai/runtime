@@ -422,9 +422,6 @@ class Overlord:
 
         # NEW: Initialize multimodal and synthesis components
         self.multimodal_fusion_engine = MultiModalFusionEngine(llm=extraction_model)
-        self.multimodal_integrator = WorkflowMultiModalProcessor(
-            fusion_engine=self.multimodal_fusion_engine
-        )
         self.quality_assessor = ResponseQualityAssessor(llm=extraction_model)
         self.response_synthesizer = AdvancedResponseSynthesizer(
             llm=extraction_model, quality_assessor=self.quality_assessor

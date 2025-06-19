@@ -230,16 +230,115 @@ Analyze and provide as JSON:
             if hasattr(self.llm, "get_embedding"):
                 return await self.llm.get_embedding(text)
             else:
-                # Fallback: simple hash-based embedding
-                import hashlib
-
-                hash_value = int(hashlib.md5(text.encode()).hexdigest(), 16)
-                return [(hash_value >> i) % 2 for i in range(512)]
+                # Fallback: semantic feature-based embedding
+                return self._generate_semantic_fallback_embedding(text)
 
         except Exception as e:
             #  Multimodal error - TODO: add observability
             _ = e  # remove this after implementing observability
             return [0.0] * 512  # Zero embedding as fallback
+
+    def _generate_semantic_fallback_embedding(self, text: str) -> List[float]:
+        """
+        Generate a semantically meaningful fallback embedding based on
+        linguistic and statistical features instead of random hash bits.
+        """
+        import re
+        import math
+
+        # Normalize text
+        text_lower = text.lower()
+        words = re.findall(r'\b\w+\b', text_lower)
+
+        # Initialize embedding vector (512 dimensions)
+        embedding = [0.0] * 512
+
+        # 1. Basic statistical features (dimensions 0-63)
+        embedding[0] = min(len(words) / 100.0, 1.0)  # Word count (normalized)
+        embedding[1] = min(len(text) / 1000.0, 1.0)  # Character count
+        embedding[2] = len(set(words)) / max(len(words), 1)  # Vocabulary diversity
+        embedding[3] = sum(len(word) for word in words) / max(len(words), 1) / 10.0  # Avg word length
+
+        # Count sentence markers
+        sentence_count = len(re.findall(r'[.!?]+', text))
+        embedding[4] = min(sentence_count / 20.0, 1.0)
+
+        # Question/exclamation indicators
+        embedding[5] = 1.0 if '?' in text else 0.0
+        embedding[6] = 1.0 if '!' in text else 0.0
+
+        # 2. Character frequency features (dimensions 64-127)
+        char_freq = {}
+        for char in text_lower:
+            if char.isalpha():
+                char_freq[char] = char_freq.get(char, 0) + 1
+
+        total_chars = sum(char_freq.values())
+        if total_chars > 0:
+            # Map character frequencies to embedding dimensions
+            for i, char in enumerate('abcdefghijklmnopqrstuvwxyz'):
+                if i < 26:  # Ensure we don't exceed bounds
+                    freq = char_freq.get(char, 0) / total_chars
+                    embedding[64 + i] = freq
+
+        # 3. Common word pattern features (dimensions 128-255)
+        common_words = {
+            'the': 0, 'and': 1, 'is': 2, 'in': 3, 'to': 4, 'of': 5, 'a': 6, 'that': 7,
+            'it': 8, 'with': 9, 'for': 10, 'as': 11, 'was': 12, 'on': 13, 'are': 14,
+            'you': 15, 'this': 16, 'be': 17, 'at': 18, 'have': 19, 'or': 20, 'not': 21,
+            'from': 22, 'they': 23, 'we': 24, 'can': 25, 'will': 26, 'would': 27,
+            'there': 28, 'what': 29, 'about': 30, 'which': 31, 'when': 32, 'where': 33,
+            'how': 34, 'why': 35, 'who': 36, 'if': 37, 'then': 38, 'now': 39,
+            'get': 40, 'make': 41, 'go': 42, 'see': 43, 'know': 44, 'take': 45,
+            'think': 46, 'come': 47, 'give': 48, 'work': 49, 'time': 50, 'way': 51,
+            'good': 52, 'new': 53, 'first': 54, 'last': 55, 'long': 56, 'great': 57,
+            'little': 58, 'own': 59, 'other': 60, 'old': 61, 'right': 62, 'big': 63
+        }
+
+        word_total = len(words)
+        if word_total > 0:
+            for word, idx in common_words.items():
+                if idx < 64:  # Ensure we don't exceed allocated space
+                    count = words.count(word)
+                    embedding[128 + idx] = count / word_total
+
+        # 4. Semantic category indicators (dimensions 256-383)
+        semantic_patterns = {
+            'technical': r'\b(?:system|process|data|algorithm|function|method|code|software|technology)\b',
+            'emotional': r'\b(?:feel|emotion|happy|sad|angry|love|hate|excited|worried|calm)\b',
+            'temporal': r'\b(?:yesterday|today|tomorrow|now|then|before|after|during|while)\b',
+            'spatial': r'\b(?:here|there|above|below|left|right|near|far|inside|outside)\b',
+            'quantitative': r'\b(?:many|few|more|less|all|some|most|several|number|amount)\b',
+            'modal': r'\b(?:must|should|could|would|might|may|can|will|shall)\b',
+            'negative': r'\b(?:not|no|never|nothing|nobody|nowhere|neither|nor)\b',
+            'positive': r'\b(?:yes|good|great|excellent|wonderful|amazing|perfect|best)\b'
+        }
+
+        for i, (category, pattern) in enumerate(semantic_patterns.items()):
+            if i < 64:  # Limit to available dimensions
+                matches = len(re.findall(pattern, text_lower))
+                embedding[256 + i] = min(matches / max(word_total, 1), 1.0)
+
+        # 5. N-gram features (dimensions 384-511)
+        # Simple bigram frequency for common patterns
+        if len(words) > 1:
+            bigrams = [f"{words[i]}_{words[i+1]}" for i in range(len(words)-1)]
+            bigram_counts = {}
+            for bigram in bigrams:
+                bigram_counts[bigram] = bigram_counts.get(bigram, 0) + 1
+
+            # Use hash of bigrams for consistent but distributed representation
+            for bigram, count in list(bigram_counts.items())[:64]:  # Limit to 64 bigrams
+                bigram_hash = hash(bigram) % 128  # Map to remaining dimensions
+                if 384 + bigram_hash < 512:
+                    embedding[384 + bigram_hash] += count / len(bigrams)
+
+        # 6. Normalize the embedding to unit length for better similarity computation
+        magnitude = math.sqrt(sum(x * x for x in embedding))
+        if magnitude > 0:
+            embedding = [x / magnitude for x in embedding]
+
+        return embedding
 
     async def generate_description(self, content: MultiModalContent) -> str:
         """Generate description of text content"""
@@ -252,16 +351,37 @@ Analyze and provide as JSON:
         return f"Text content ({words} words, {lang} language, {tone} tone)"
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON response from LLM"""
-        try:
-            json_match = re.search(r"\{.*\}", response, re.DOTALL)
+        """Parse JSON response from LLM with improved error handling and observability"""
+        if not response or not response.strip():
+            return {}
+
+        # Try to extract JSON from markdown code blocks first (common LLM pattern)
+        markdown_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
+        if markdown_match:
+            json_str = markdown_match.group(1).strip()
+        else:
+            # Improved regex for balanced braces to avoid greedy matching
+            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response)
             if json_match:
-                return json.loads(json_match.group(0))
+                json_str = json_match.group(0).strip()
             else:
+                # TODO: Log via observability system that no JSON was found in response
                 return {}
-        except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+
+        try:
+            parsed = json.loads(json_str)
+            if isinstance(parsed, dict):
+                return parsed
+            else:
+                # TODO: Log via observability that JSON was not a dict
+                return {}
+        except json.JSONDecodeError:
+            # TODO: Log JSON parsing error via observability system
+            # Include: json_str[:100], error details, response context
+            return {}
+        except Exception:
+            # TODO: Log unexpected error via observability system
+            # Include: error type, error details, response context
             return {}
 
 
@@ -920,16 +1040,37 @@ Create a comprehensive fusion analysis as JSON:
         return 0.3  # Placeholder value
 
     def _parse_json_response(self, response: str) -> Dict[str, Any]:
-        """Parse JSON response from LLM"""
-        try:
-            json_match = re.search(r"\{.*\}", response, re.DOTALL)
+        """Parse JSON response from LLM with improved error handling and observability"""
+        if not response or not response.strip():
+            return {}
+
+        # Try to extract JSON from markdown code blocks first (common LLM pattern)
+        markdown_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", response, re.DOTALL)
+        if markdown_match:
+            json_str = markdown_match.group(1).strip()
+        else:
+            # Improved regex for balanced braces to avoid greedy matching
+            json_match = re.search(r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", response)
             if json_match:
-                return json.loads(json_match.group(0))
+                json_str = json_match.group(0).strip()
             else:
+                # TODO: Log via observability system that no JSON was found in response
                 return {}
-        except Exception as e:
-            #  Multimodal error - TODO: add observability
-            _ = e  # remove this after implementing observability
+
+        try:
+            parsed = json.loads(json_str)
+            if isinstance(parsed, dict):
+                return parsed
+            else:
+                # TODO: Log via observability that JSON was not a dict
+                return {}
+        except json.JSONDecodeError:
+            # TODO: Log JSON parsing error via observability system
+            # Include: json_str[:100], error details, response context
+            return {}
+        except Exception:
+            # TODO: Log unexpected error via observability system
+            # Include: error type, error details, response context
             return {}
 
     def _create_fallback_result(

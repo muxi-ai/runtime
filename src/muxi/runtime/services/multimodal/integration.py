@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from pathlib import Path
 import time
+from urllib.parse import urlparse
 
 from ...datatypes import Workflow, SubTask, TaskInput, TaskOutput
 from .fusion_engine import (
@@ -19,6 +20,11 @@ from .fusion_engine import (
     ModalityType,
     MultiModalProcessingResult,
 )
+
+# Security constants
+MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024  # 100MB
+ALLOWED_URL_SCHEMES = {"http", "https"}
+BLOCKED_URL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}  # Block local network access
 
 
 @dataclass
@@ -395,7 +401,7 @@ class TaskInputProcessor:
         )
 
     async def _process_file_input(self, file_path: str) -> Optional[MultiModalContent]:
-        """Process file input into MultiModalContent"""
+        """Process file input into MultiModalContent with security validations"""
         try:
             # Detect file type
             mime_type, _ = mimetypes.guess_type(file_path)
@@ -405,27 +411,44 @@ class TaskInputProcessor:
                 #  Warning - TODO: add observability
                 return None
 
-            # Read file content
+            # Handle local file vs URL
             if Path(file_path).exists():
+                # Validate file size before reading
+                file_path_obj = Path(file_path)
+                file_size = file_path_obj.stat().st_size
+
+                if file_size > MAX_FILE_SIZE_BYTES:
+                    #  Warning - TODO: add observability
+                    # File too large, reject for security
+                    return None
+
+                # Read file content (now that we've validated size)
                 with open(file_path, "rb") as f:
                     content = f.read()
+
+                # Create MultiModalContent for local file
+                content_item = MultiModalContent(
+                    modality=modality,
+                    content=content,
+                    mime_type=mime_type,
+                    metadata={"source": file_path, "filename": file_path_obj.name},
+                )
+                content_item.size_bytes = file_size
+
             else:
-                # Handle URL or remote file
-                content = file_path  # Store URL for later processing
+                # Validate URL before storing
+                if not self._validate_url(file_path):
+                    #  Warning - TODO: add observability
+                    # Invalid or malicious URL, reject for security
+                    return None
 
-            # Create MultiModalContent
-            content_item = MultiModalContent(
-                modality=modality,
-                content=content,
-                mime_type=mime_type,
-                metadata={"source": file_path},
-            )
-
-            # Add file-specific metadata
-            if Path(file_path).exists():
-                file_path_obj = Path(file_path)
-                content_item.size_bytes = file_path_obj.stat().st_size
-                content_item.metadata["filename"] = file_path_obj.name
+                # Create MultiModalContent for URL (store URL for later processing)
+                content_item = MultiModalContent(
+                    modality=modality,
+                    content=file_path,  # Store validated URL for later processing
+                    mime_type=mime_type,
+                    metadata={"source": file_path, "is_url": True},
+                )
 
             return content_item
 
@@ -433,6 +456,39 @@ class TaskInputProcessor:
             #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return None
+
+    def _validate_url(self, url: str) -> bool:
+        """Validate URL for security concerns"""
+        try:
+            parsed = urlparse(url)
+
+            # Check if scheme is allowed
+            if parsed.scheme not in ALLOWED_URL_SCHEMES:
+                return False
+
+            # Check if host is blocked (prevent local network access)
+            if parsed.hostname and parsed.hostname.lower() in BLOCKED_URL_HOSTS:
+                return False
+
+            # Check for basic URL structure
+            if not parsed.netloc:
+                return False
+
+            # Additional security checks
+            if parsed.hostname:
+                # Block IP addresses in private ranges
+                hostname_lower = parsed.hostname.lower()
+                private_ranges = [
+                    "192.168.", "10.", "172.16.", "172.31.", "localhost"
+                ]
+                if any(hostname_lower.startswith(prefix) for prefix in private_ranges):
+                    return False
+
+            return True
+
+        except Exception:
+            # If URL parsing fails, consider it invalid
+            return False
 
     def _detect_modality_from_mime(self, mime_type: Optional[str]) -> Optional[ModalityType]:
         """Detect modality from MIME type"""

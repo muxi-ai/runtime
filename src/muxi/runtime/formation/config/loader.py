@@ -73,7 +73,6 @@ class ConfigLoader:
         Raises:
             ValueError: If the file format is not supported
             FileNotFoundError: If the file does not exist
-            ImportError: If PyYAML is required but not installed
         """
         file_path = Path(path)
 

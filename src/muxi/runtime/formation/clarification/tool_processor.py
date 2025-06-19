@@ -9,7 +9,7 @@ intelligent clarification system to handle incomplete or unclear tool calls.
 from typing import Dict, List, Any, Optional, Tuple
 
 from ...services.mcp.parser import ToolParser, ToolCall
-from .datatypes import ToolInformationAnalysis
+from ...datatypes import ToolInformationAnalysis
 
 
 class EnhancedToolProcessor:
