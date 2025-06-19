@@ -10,6 +10,7 @@ from dataclasses import fields
 from src.muxi.runtime.clarification.types import (
     ClarificationRequest,
     ClarificationResult,
+    ClarificationResultStatus,
     ClarificationQuestion,
     ClarificationConfig,
     ToolCall,
@@ -132,12 +133,12 @@ class TestDataClasses:
     def test_clarification_result_creation(self):
         """Test ClarificationResult creation"""
         result = ClarificationResult(
-            status="complete",
+            status=ClarificationResultStatus.COMPLETE,
             complete_params={"location": "New York", "party_size": 4},
             confidence=0.9
         )
 
-        assert result.status == "complete"
+        assert result.status == ClarificationResultStatus.COMPLETE
         assert result.complete_params["location"] == "New York"
         assert result.complete_params["party_size"] == 4
         assert result.confidence == 0.9
