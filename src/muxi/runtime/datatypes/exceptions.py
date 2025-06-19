@@ -1,0 +1,292 @@
+"""
+Formation Exception Hierarchy
+
+Provides specific exception types for different Formation operations to enable
+better error handling, debugging, and user experience.
+"""
+
+from typing import Optional, Dict, Any, List
+
+
+# Base Formation Exception
+class FormationError(Exception):
+    """Base exception for all Formation-related errors."""
+
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.details = details or {}
+
+
+# Configuration Errors
+class FormationConfigurationError(FormationError):
+    """Base class for configuration-related errors."""
+    pass
+
+
+class ConfigurationNotFoundError(FormationConfigurationError):
+    """Raised when formation configuration file/directory cannot be found."""
+
+    def __init__(self, path: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Formation configuration not found: {path}"
+        super().__init__(message, details)
+        self.path = path
+
+
+class ConfigurationValidationError(FormationConfigurationError):
+    """Raised when formation configuration fails validation."""
+
+    def __init__(self, errors: List[str], details: Optional[Dict[str, Any]] = None):
+        message = f"Configuration validation failed: {'; '.join(errors)}"
+        super().__init__(message, details)
+        self.validation_errors = errors
+
+
+class ConfigurationLoadError(FormationConfigurationError):
+    """Raised when formation configuration cannot be loaded."""
+
+    def __init__(self, path: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Failed to load configuration from {path}: {reason}"
+        super().__init__(message, details)
+        self.path = path
+        self.reason = reason
+
+
+# Service Errors
+class FormationServiceError(FormationError):
+    """Base class for service-related errors."""
+    pass
+
+
+class ServiceConfigurationError(FormationServiceError):
+    """Raised when service configuration is invalid."""
+
+    def __init__(self, service_name: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Invalid {service_name} service configuration: {reason}"
+        super().__init__(message, details)
+        self.service_name = service_name
+        self.reason = reason
+
+
+class ServiceStartupError(FormationServiceError):
+    """Raised when a service fails to start."""
+
+    def __init__(self, service_name: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Failed to start {service_name} service: {reason}"
+        super().__init__(message, details)
+        self.service_name = service_name
+        self.reason = reason
+
+
+class ServiceDependencyError(FormationServiceError):
+    """Raised when service dependencies are not met."""
+
+    def __init__(self, service_name: str, missing_dependencies: List[str], details: Optional[Dict[str, Any]] = None):
+        deps = ', '.join(missing_dependencies)
+        message = f"Service {service_name} missing dependencies: {deps}"
+        super().__init__(message, details)
+        self.service_name = service_name
+        self.missing_dependencies = missing_dependencies
+
+
+# Overlord Errors
+class OverlordError(FormationError):
+    """Base class for overlord-related errors."""
+    pass
+
+
+class OverlordImportError(OverlordError):
+    """Raised when Overlord class cannot be imported."""
+
+    def __init__(self, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Failed to import Overlord class: {reason}"
+        super().__init__(message, details)
+        self.reason = reason
+
+
+class OverlordStartupError(OverlordError):
+    """Raised when overlord fails to start."""
+
+    def __init__(self, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Failed to start overlord: {reason}"
+        super().__init__(message, details)
+        self.reason = reason
+
+
+class OverlordStateError(OverlordError):
+    """Raised when overlord is in an invalid state for the requested operation."""
+
+    def __init__(self, current_state: str, required_state: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Overlord in {current_state} state, but {required_state} required"
+        super().__init__(message, details)
+        self.current_state = current_state
+        self.required_state = required_state
+
+
+# Agent Errors
+class AgentError(FormationError):
+    """Base class for agent-related errors."""
+    pass
+
+
+class AgentConfigurationError(AgentError):
+    """Raised when agent configuration is invalid."""
+
+    def __init__(self, agent_id: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Invalid configuration for agent '{agent_id}': {reason}"
+        super().__init__(message, details)
+        self.agent_id = agent_id
+        self.reason = reason
+
+
+class DuplicateAgentError(AgentError):
+    """Raised when duplicate agent IDs are found."""
+
+    def __init__(self, agent_id: str, positions: List[int], details: Optional[Dict[str, Any]] = None):
+        pos_str = ', '.join(map(str, positions))
+        message = f"Duplicate agent ID '{agent_id}' found at positions: {pos_str}"
+        super().__init__(message, details)
+        self.agent_id = agent_id
+        self.positions = positions
+
+
+class AgentValidationError(AgentError):
+    """Raised when agent validation fails."""
+
+    def __init__(self, agent_id: str, validation_errors: List[str], details: Optional[Dict[str, Any]] = None):
+        errors_str = '; '.join(validation_errors)
+        message = f"Agent '{agent_id}' validation failed: {errors_str}"
+        super().__init__(message, details)
+        self.agent_id = agent_id
+        self.validation_errors = validation_errors
+
+
+# Secrets Management Errors
+class SecretsError(FormationError):
+    """Base class for secrets management errors."""
+    pass
+
+
+class SecretsManagerNotAvailableError(SecretsError):
+    """Raised when secrets manager is not available or initialized."""
+
+    def __init__(self, details: Optional[Dict[str, Any]] = None):
+        message = "Secrets manager not available or failed to initialize"
+        super().__init__(message, details)
+
+
+class SecretNotFoundError(SecretsError):
+    """Raised when a requested secret is not found."""
+
+    def __init__(self, secret_name: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Secret '{secret_name}' not found"
+        super().__init__(message, details)
+        self.secret_name = secret_name
+
+
+class SecretPermissionError(SecretsError):
+    """Raised when permission is denied for secret operations."""
+
+    def __init__(self, operation: str, secret_name: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Permission denied for {operation} operation on secret '{secret_name}'"
+        super().__init__(message, details)
+        self.operation = operation
+        self.secret_name = secret_name
+
+
+class SecretsManagementError(SecretsError):
+    """Raised when general secrets management operations fail."""
+
+    def __init__(self, operation: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Secrets management {operation} failed: {reason}"
+        super().__init__(message, details)
+        self.operation = operation
+        self.reason = reason
+
+
+# Resource Management Errors
+class ResourceError(FormationError):
+    """Base class for resource management errors."""
+    pass
+
+
+class ResourceCleanupError(ResourceError):
+    """Raised when resource cleanup fails."""
+
+    def __init__(self, resource_type: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Failed to cleanup {resource_type} resources: {reason}"
+        super().__init__(message, details)
+        self.resource_type = resource_type
+        self.reason = reason
+
+
+class ResourceNotAvailableError(ResourceError):
+    """Raised when a required resource is not available."""
+
+    def __init__(self, resource_name: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Required resource not available: {resource_name}"
+        super().__init__(message, details)
+        self.resource_name = resource_name
+
+
+# Dependency Errors
+class DependencyError(FormationError):
+    """Base class for dependency-related errors."""
+    pass
+
+
+class CircularDependencyError(DependencyError):
+    """Raised when circular dependencies are detected."""
+
+    def __init__(self, dependency_chain: List[str], details: Optional[Dict[str, Any]] = None):
+        chain_str = ' -> '.join(dependency_chain)
+        message = f"Circular dependency detected: {chain_str}"
+        super().__init__(message, details)
+        self.dependency_chain = dependency_chain
+
+
+class MissingDependencyError(DependencyError):
+    """Raised when required dependencies are missing."""
+
+    def __init__(self, dependent: str, missing_deps: List[str], details: Optional[Dict[str, Any]] = None):
+        deps_str = ', '.join(missing_deps)
+        message = f"'{dependent}' requires missing dependencies: {deps_str}"
+        super().__init__(message, details)
+        self.dependent = dependent
+        self.missing_dependencies = missing_deps
+
+
+class DependencyValidationError(DependencyError):
+    """Raised when dependency validation fails."""
+
+    def __init__(self, validation_errors: List[str], details: Optional[Dict[str, Any]] = None):
+        message = f"Dependency validation failed: {'; '.join(validation_errors)}"
+        super().__init__(message, details)
+        self.validation_errors = validation_errors
+
+
+# Utility function for error context
+def add_error_context(exception: Exception, context: Dict[str, Any]) -> FormationError:
+    """
+    Convert a generic exception to a FormationError with additional context.
+
+    Args:
+        exception: The original exception
+        context: Additional context information
+
+    Returns:
+        FormationError with context information
+    """
+    if isinstance(exception, FormationError):
+        # Already a FormationError, just add context
+        exception.details.update(context)
+        return exception
+
+    # Convert to FormationError with context
+    return FormationError(
+        message=str(exception),
+        details={
+            "original_exception": type(exception).__name__,
+            "original_message": str(exception),
+            **context
+        }
+    )

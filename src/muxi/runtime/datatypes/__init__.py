@@ -24,6 +24,25 @@ from .errors import (
     create_error_details,
 )
 
+from .exceptions import (
+    FormationError,
+    ConfigurationNotFoundError,
+    ConfigurationValidationError,
+    ConfigurationLoadError,
+    ServiceConfigurationError,
+    ServiceStartupError,
+    ServiceDependencyError,
+    OverlordImportError,
+    OverlordStartupError,
+    OverlordStateError,
+    AgentConfigurationError,
+    AgentValidationError,
+    SecretsManagementError,
+    ResourceCleanupError,
+    DependencyValidationError,
+    add_error_context,
+)
+
 # Workflow types
 from .workflow import (
     Workflow,
@@ -151,6 +170,12 @@ from .parallel import (
     TaskNode,
     AgentCapability,
     BottleneckType
+)
+
+# Validation data types
+from .validation import (
+    ServiceDependency,
+    ValidationResult,
 )
 
 __all__ = [
@@ -282,4 +307,26 @@ __all__ = [
     "TaskNode",
     "AgentCapability",
     "BottleneckType",
+
+    # Exception classes
+    "FormationError",
+    "ConfigurationNotFoundError",
+    "ConfigurationValidationError",
+    "ConfigurationLoadError",
+    "ServiceConfigurationError",
+    "ServiceStartupError",
+    "ServiceDependencyError",
+    "OverlordImportError",
+    "OverlordStartupError",
+    "OverlordStateError",
+    "AgentConfigurationError",
+    "AgentValidationError",
+    "SecretsManagementError",
+    "ResourceCleanupError",
+    "DependencyValidationError",
+    "add_error_context",
+
+    # Validation data types
+    "ServiceDependency",
+    "ValidationResult",
 ]
