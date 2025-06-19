@@ -104,6 +104,7 @@ from .caching import (
 from .clarification import (
     ClarificationRequest,
     ClarificationResult,
+    ClarificationResultStatus,
     ClarificationQuestion,
     ClarificationConfig,
     ClarificationStatus,
@@ -234,6 +235,7 @@ __all__ = [
     # Clarification types
     "ClarificationRequest",
     "ClarificationResult",
+    "ClarificationResultStatus",
     "ClarificationQuestion",
     "ClarificationConfig",
     "ClarificationStatus",

@@ -3857,13 +3857,14 @@ class Overlord:
             # Process the clarification response
             if request_state.clarification_request_id:
                 from ..clarification import ClarificationManager
+                from ...datatypes.clarification import ClarificationResultStatus
 
                 manager = ClarificationManager(overlord=self)
                 result = await manager.process_user_response(
                     request_state.clarification_request_id, clarification_response
                 )
 
-                if result.status == "complete":
+                if result.status == ClarificationResultStatus.COMPLETE:
                     # Resume processing with complete parameters
                     #  Info - TODO: add observability
                     # ConversationEvents.CLARIFICATION_COMPLETED
@@ -3890,7 +3891,7 @@ class Overlord:
                     )
                     return True
 
-                elif result.status == "continue":
+                elif result.status == ClarificationResultStatus.CONTINUE:
                     # Update stored clarification question
                     request_state.clarification_question = result.next_question
 

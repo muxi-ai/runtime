@@ -12,6 +12,7 @@ from typing import Dict, Optional, Any
 from .datatypes import (
     ClarificationRequest,
     ClarificationResult,
+    ClarificationResultStatus,
     ClarificationStatus,
     RequestType,
     ClarificationError
@@ -105,13 +106,13 @@ class ClarificationManager:
             request = self.active_requests.get(request_id)
             if not request:
                 return ClarificationResult(
-                    status="error",
+                    status=ClarificationResultStatus.ERROR,
                     error_message="Clarification request not found"
                 )
 
             if request.status != ClarificationStatus.CLARIFYING:
                 return ClarificationResult(
-                    status="error",
+                    status=ClarificationResultStatus.ERROR,
                     error_message="Clarification request is not active"
                 )
 
@@ -132,7 +133,7 @@ class ClarificationManager:
                 complete_params = await self._compile_complete_parameters(request)
 
                 return ClarificationResult(
-                    status="complete",
+                    status=ClarificationResultStatus.COMPLETE,
                     complete_params=complete_params,
                     confidence=0.9,
                     extracted_info=extracted_info
@@ -143,7 +144,7 @@ class ClarificationManager:
 
             if next_question:
                 return ClarificationResult(
-                    status="continue",
+                    status=ClarificationResultStatus.CONTINUE,
                     next_question=next_question,
                     confidence=0.7,
                     extracted_info=extracted_info
@@ -152,7 +153,7 @@ class ClarificationManager:
                 # No more questions but still missing info - fail gracefully
                 request.status = ClarificationStatus.FAILED
                 return ClarificationResult(
-                    status="error",
+                    status=ClarificationResultStatus.ERROR,
                     error_message="Unable to collect all required information",
                     extracted_info=extracted_info
                 )
@@ -160,7 +161,7 @@ class ClarificationManager:
         except Exception as e:
             #  Error - TODO: add observability
             return ClarificationResult(
-                status="error",
+                status=ClarificationResultStatus.ERROR,
                 error_message=f"Failed to process response: {e}"
             )
 

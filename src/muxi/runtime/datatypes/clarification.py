@@ -10,6 +10,7 @@ from typing import Dict, List, Optional, Any
 from enum import Enum
 import time
 import uuid
+from ..utils.id_generator import generate_nanoid
 
 
 class ClarificationStatus(Enum):
@@ -76,6 +77,14 @@ class WorkflowState(Enum):
     OPTION_PRESENTATION = "option_presentation"  # Presenting choices to user
     DECISION_REFINEMENT = "decision_refinement"  # Helping user refine choices
     PLANNING_COMPLETE = "planning_complete"  # Workflow finished
+
+
+class ClarificationResultStatus(Enum):
+    """Status of a clarification result"""
+
+    COMPLETE = "complete"
+    CONTINUE = "continue"
+    ERROR = "error"
 
 
 @dataclass
@@ -178,7 +187,7 @@ class ContextAnalysis:
 class ClarificationRequest:
     """Tracks a multi-turn clarification request"""
 
-    request_id: str
+    request_id: Optional[str] = None
     user_id: str
     agent_id: str
     request_type: RequestType
@@ -194,15 +203,15 @@ class ClarificationRequest:
     status: ClarificationStatus = ClarificationStatus.CLARIFYING
 
     def __post_init__(self):
-        if not self.request_id:
-            self.request_id = str(uuid.uuid4())
+        if self.request_id is None:
+            self.request_id = str(f"req_{generate_nanoid()}")
 
 
 @dataclass
 class ClarificationResult:
     """Result of processing a clarification response"""
 
-    status: str  # "complete", "continue", "error"
+    status: ClarificationResultStatus
     complete_params: Optional[Dict[str, Any]] = None
     next_question: Optional[str] = None
     error_message: Optional[str] = None
@@ -330,7 +339,7 @@ class GoalContext:
 class ClarificationSession:
     """Extended session for proactive clarification"""
 
-    session_id: str
+    session_id: Optional[str] = None
     user_id: str
     agent_id: str
     mode: ClarificationMode
@@ -344,8 +353,8 @@ class ClarificationSession:
     updated_at: float = field(default_factory=time.time)
 
     def __post_init__(self):
-        if not self.session_id:
-            self.session_id = str(uuid.uuid4())
+        if self.session_id is None:
+            self.session_id = str(f"ssn_{generate_nanoid()}")
 
 
 @dataclass
@@ -392,7 +401,7 @@ class WorkflowSynthesis:
 class PlanningWorkflowSession:
     """Active planning workflow session"""
 
-    session_id: str
+    session_id: Optional[str] = None
     user_id: str
     agent_id: str
     workflow_request: PlanningWorkflowRequest
@@ -406,8 +415,8 @@ class PlanningWorkflowSession:
     updated_at: float = field(default_factory=time.time)
 
     def __post_init__(self):
-        if not self.session_id:
-            self.session_id = str(uuid.uuid4())
+        if self.session_id is None:
+            self.session_id = str(f"ssn_{generate_nanoid()}")
 
 
 @dataclass

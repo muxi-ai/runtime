@@ -58,6 +58,7 @@ from ...datatypes.clarification import (
     # Core data types
     ClarificationRequest,
     ClarificationResult,
+    ClarificationResultStatus,
     ClarificationQuestion,
     ClarificationConfig,
     ToolCall,
@@ -147,6 +148,7 @@ __all__ = [
     # Data types
     "ClarificationRequest",
     "ClarificationResult",
+    "ClarificationResultStatus",
     "ClarificationQuestion",
     "ClarificationConfig",
     "ToolCall",
