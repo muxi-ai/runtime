@@ -146,6 +146,31 @@ class BaseTransport:
     MCP servers regardless of the underlying transport mechanism.
     """
 
+    def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
+        """
+        Initialize the base transport.
+
+        Args:
+            url: MCP server URL (must include protocol)
+            request_timeout: Default timeout for requests in seconds
+            auth: Optional authentication configuration
+        """
+        self.url = url.rstrip('/')
+        self.request_timeout = request_timeout
+        self.auth = auth
+        self.connected = False
+        self.connect_time = None
+        self.last_activity = None
+
+        # Connection statistics
+        self.connection_stats = {
+            'requests_sent': 0,
+            'responses_received': 0,
+            'errors_encountered': 0,
+            'bytes_sent': 0,
+            'bytes_received': 0
+        }
+
     async def connect(self) -> bool:
         """
         Connect to the MCP server.
@@ -184,3 +209,18 @@ class BaseTransport:
             NotImplementedError: Subclasses must implement this method
         """
         raise NotImplementedError("Subclasses must implement disconnect()")
+
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """
+        Get connection statistics and performance metrics.
+
+        Returns:
+            Dict containing connection statistics
+        """
+        return {
+            "url": self.url,
+            "connected": self.connected,
+            "connect_time": self.connect_time.isoformat() if self.connect_time else None,
+            "last_activity": self.last_activity.isoformat() if self.last_activity else None,
+            **self.connection_stats
+        }

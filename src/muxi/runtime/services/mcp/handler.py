@@ -114,9 +114,11 @@ class MCPServerClient:
         Raises:
             MCPConnectionError: If connection fails
         """
-        observability.emit_event(
-            observability.SystemEvents.MCP_SERVER_CONNECTING,
-            {"server_name": self.name, "url": self.url, "command": self.command},
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_SERVER_CONNECTING,
+            level=observability.EventLevel.INFO,
+            description=f"Connecting to MCP server '{self.name}'",
+            data={"server_name": self.name, "url": self.url, "command": self.command},
         )
 
         try:
@@ -134,9 +136,11 @@ class MCPServerClient:
                 self.connected = True
                 self.last_activity = datetime.now()
 
-                observability.emit_event(
-                    observability.SystemEvents.MCP_SERVER_CONNECTED,
-                    {
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_CONNECTED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Successfully connected to MCP server '{self.name}'",
+                    data={
                         "server_name": self.name,
                         "url": self.url,
                         "command": self.command,
@@ -147,9 +151,11 @@ class MCPServerClient:
             return success
 
         except Exception as e:
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
-                {
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to connect to MCP server '{self.name}': {str(e)}",
+                data={
                     "server_name": self.name,
                     "url": self.url,
                     "command": self.command,
@@ -178,9 +184,11 @@ class MCPServerClient:
             success = await self.transport.disconnect()
             self.connected = False
 
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_DISCONNECTED,
-                {
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
+                level=observability.EventLevel.INFO,
+                description=f"Disconnected from MCP server '{self.name}'",
+                data={
                     "server_name": self.name,
                     "url": self.url,
                     "command": self.command,
@@ -191,9 +199,11 @@ class MCPServerClient:
             return success
 
         except Exception as e:
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_DISCONNECTION_FAILED,
-                {
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to disconnect from MCP server '{self.name}': {str(e)}",
+                data={
                     "server_name": self.name,
                     "url": self.url,
                     "command": self.command,
@@ -237,9 +247,11 @@ class MCPServerClient:
             "params": params,
         }
 
-        observability.emit_event(
-            observability.SystemEvents.MCP_MESSAGE_SENT,
-            {
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_MESSAGE_SENT,
+            level=observability.EventLevel.DEBUG,
+            description=f"Sending MCP message '{method}' to server '{self.name}'",
+            data={
                 "server_name": self.name,
                 "method": method,
                 "request_id": request_data["id"],
@@ -251,9 +263,11 @@ class MCPServerClient:
             response = await self.transport.send_request(request_data, cancellation_token)
             self.last_activity = datetime.now()
 
-            observability.emit_event(
-                observability.SystemEvents.MCP_MESSAGE_RECEIVED,
-                {
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_MESSAGE_RECEIVED,
+                level=observability.EventLevel.DEBUG,
+                description=f"Received MCP response for '{method}' from server '{self.name}'",
+                data={
                     "server_name": self.name,
                     "method": method,
                     "request_id": request_data["id"],
@@ -264,9 +278,11 @@ class MCPServerClient:
             return response
 
         except Exception as e:
-            observability.emit_event(
-                observability.SystemEvents.MCP_MESSAGE_FAILED,
-                {
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"MCP message '{method}' failed for server '{self.name}': {str(e)}",
+                data={
                     "server_name": self.name,
                     "method": method,
                     "request_id": request_data["id"],
@@ -372,9 +388,11 @@ class MCPHandler:
             raise ValueError("Must provide exactly one of 'url' or 'command'")
 
         if name in self.servers:
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_RECONNECTING,
-                {"server_name": name, "existing_connection": True},
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_RECONNECTING,
+                level=observability.EventLevel.WARNING,
+                description=f"Reconnecting to existing MCP server '{name}'",
+                data={"server_name": name, "existing_connection": True},
             )
             # Disconnect existing server first
             await self.disconnect_server(name)
@@ -392,16 +410,20 @@ class MCPHandler:
             success = await server.connect()
             if success:
                 self.servers[name] = server
-                observability.emit_event(
-                    observability.SystemEvents.MCP_SERVER_REGISTERED,
-                    {"server_name": name, "total_servers": len(self.servers)},
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Successfully registered MCP server '{name}' (total: {len(self.servers)})",
+                    data={"server_name": name, "total_servers": len(self.servers)},
                 )
             return success
 
         except Exception as e:
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                {"server_name": name, "error": str(e)},
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to register MCP server '{name}': {str(e)}",
+                data={"server_name": name, "error": str(e)},
             )
             raise
 
@@ -427,17 +449,21 @@ class MCPHandler:
             success = await server.disconnect()
             del self.servers[name]
 
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_UNREGISTERED,
-                {"server_name": name, "remaining_servers": len(self.servers)},
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_UNREGISTERED,
+                level=observability.EventLevel.INFO,
+                description=f"Unregistered MCP server '{name}' (remaining: {len(self.servers)})",
+                data={"server_name": name, "remaining_servers": len(self.servers)},
             )
 
             return success
 
         except Exception as e:
-            observability.emit_event(
-                observability.SystemEvents.MCP_SERVER_UNREGISTRATION_FAILED,
-                {"server_name": name, "error": str(e)},
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_UNREGISTRATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to unregister MCP server '{name}': {str(e)}",
+                data={"server_name": name, "error": str(e)},
             )
             raise
 

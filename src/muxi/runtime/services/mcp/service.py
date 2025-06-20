@@ -34,7 +34,7 @@ import asyncio
 from typing import Any, Dict, Optional
 
 from ..llm import LLM
-from .handler import MCPHandler
+from .handler import MCPHandler, MCPConnectionError
 from .transports import TransportDetector, ModernProtocolFeatures
 from .. import observability
 
@@ -397,7 +397,6 @@ class MCPService:
 
                 if transport_type == transports_to_try[-1]:
                     # Last transport failed
-                    from .handler import MCPConnectionError
                     raise MCPConnectionError(
                         f"Unable to connect to {server_id} with any transport",
                         {
