@@ -11,7 +11,7 @@ colorama>=0.4.6
 platformdirs>=4.0.0
 
 # MCP Package
-mcp>=1.9.1
+mcp>=1.9.0
 
 # File processing and utilities
 aiofiles>=23.2.0
