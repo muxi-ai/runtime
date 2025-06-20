@@ -80,10 +80,13 @@ class StreamableHTTPTransport(BaseTransport):
             error_details["error"] = str(e)
             raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
 
-    async def send_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    async def send_request(self, request: Dict[str, Any], timeout: Optional[int] = None) -> Dict[str, Any]:
         """Send request via HTTP POST."""
         if not self.session or not self.connection_stats.get("connected", False):
             raise MCPConnectionError("Not connected to MCP server")
+
+        # Use provided timeout or fall back to instance default
+        request_timeout = timeout or self.request_timeout
 
         try:
             # For streamable HTTP, send all requests to the base URL with JSON-RPC method in body
@@ -106,7 +109,7 @@ class StreamableHTTPTransport(BaseTransport):
                 }
 
             # Send HTTP request to base URL (streamable servers handle routing via JSON-RPC method)
-            raw_response = await self._send_http_request(self.url, json_request)
+            raw_response = await self._send_http_request(self.url, json_request, request_timeout)
 
             # Parse the response using the message handler to get consistent format
             parsed_response = self.message_handler.parse_response(raw_response)
@@ -138,7 +141,7 @@ class StreamableHTTPTransport(BaseTransport):
 
         return endpoint_map.get(method, method.replace("/", "/"))
 
-    async def _send_http_request(self, url: str, json_request: dict) -> dict:
+    async def _send_http_request(self, url: str, json_request: dict, timeout: int) -> dict:
         """Send HTTP POST request to MCP server."""
         try:
             # Send HTTP POST request using asyncio.wait_for for Python 3.10 compatibility
@@ -154,11 +157,11 @@ class StreamableHTTPTransport(BaseTransport):
                         response_text = await response.text()
                         raise MCPRequestError(f"HTTP {response.status} for {url}: {response_text}")
 
-            return await asyncio.wait_for(make_request(), timeout=self.request_timeout)
+            return await asyncio.wait_for(make_request(), timeout=timeout)
 
         except asyncio.TimeoutError:
             self.connection_stats['errors_encountered'] += 1
-            raise MCPRequestError(f"Request timeout after {self.request_timeout}s")
+            raise MCPRequestError(f"Request timeout after {timeout}s")
         except Exception as e:
             self.connection_stats['errors_encountered'] += 1
             raise MCPRequestError(f"Request failed: {e}")

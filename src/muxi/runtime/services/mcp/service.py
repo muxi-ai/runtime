@@ -32,6 +32,7 @@
 
 import asyncio
 from typing import Any, Dict, Optional
+from datetime import datetime
 
 from ..llm import LLM
 from .handler import MCPHandler, MCPConnectionError
@@ -170,7 +171,7 @@ class MCPService:
 
         This method establishes an actual connection to the MCP server and
         discovers available tools. It handles both HTTP/SSE and command-line
-        based MCP servers with intelligent transport detection.
+        based MCP servers with intelligent transport detection and caching.
 
         Args:
             server_id: Unique identifier for the MCP server
@@ -205,10 +206,21 @@ class MCPService:
             description=f"MCP server registration started: {server_id}",
         )
 
-        # Auto-detect transport if not explicitly specified
+        # Handle command-line transport directly
+        if command or transport_type == "command":
+            return await self._connect_single_transport(
+                server_id, url, command, "command", credentials, model, request_timeout
+            )
+
+        # Enhanced auto-detection with caching for HTTP-based servers
         if url and transport_type == "auto":
             try:
-                detected_transport = await TransportDetector.detect_best_transport(url)
+                # Use enhanced transport detector with caching
+                detected_transport, detection_metadata = await TransportDetector.detect_with_fallback(
+                    url=url,
+                    timeout=min(request_timeout // 2, 30),  # Use reasonable timeout for detection
+                    use_cache=True
+                )
 
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
@@ -216,29 +228,48 @@ class MCPService:
                     data={
                         "server_id": server_id,
                         "detected_transport": detected_transport,
-                        "url": url
+                        "url": url,
+                        "cache_used": detection_metadata.get("cache_used", False),
+                        "detection_method": detection_metadata.get("metadata", {}).get("detection_method", "unknown")
                     },
                     description=f"MCP transport detected: {detected_transport} for {server_id}",
                 )
 
-                transport_type = detected_transport
+                # Get recommended URL for the detected transport
+                recommended_url = TransportDetector.get_recommended_url(url, detected_transport)
 
-            except Exception as e:
-                # If detection fails, default to Streamable HTTP with fallback
+                return await self._connect_single_transport(
+                    server_id, recommended_url, command, detected_transport, credentials, model, request_timeout
+                )
+
+            except MCPConnectionError as e:
+                # Enhanced error handling with suggestion for manual override
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTION_FAILED,
-                    level=observability.EventLevel.WARNING,
+                    level=observability.EventLevel.ERROR,
                     data={
                         "server_id": server_id,
                         "error": str(e),
-                        "fallback_strategy": "streamable_http_with_fallback"
+                        "url": url,
+                        "suggestion": "Try specifying transport_type explicitly"
                     },
-                    description=f"Transport detection failed for {server_id}, using fallback",
+                    description=f"Transport detection failed for {server_id}: {e}",
                 )
 
-                return await self._connect_with_fallback(server_id, url, credentials, model, request_timeout)
+                raise MCPConnectionError(
+                    f"Failed to auto-detect transport for {server_id}: {e}",
+                    {
+                        "server_id": server_id,
+                        "url": url,
+                        "suggestion": (
+                            "Try specifying transport_type explicitly "
+                            "('streamable_http', 'http_sse', or 'command')"
+                        ),
+                        "available_transports": ["streamable_http", "http_sse", "command"]
+                    }
+                )
 
-        # Proceed with determined transport type
+        # Proceed with explicitly specified transport type
         return await self._connect_single_transport(
             server_id, url, command, transport_type, credentials, model, request_timeout
         )
@@ -937,3 +968,129 @@ class MCPService:
             }
 
         return await self.capabilities_negotiator.initialize_connection(transport, client_info)
+
+    def get_transport_cache_stats(self) -> Dict[str, Any]:
+        """
+        Get transport detection cache statistics.
+
+        Returns:
+            Dictionary with cache statistics and performance metrics
+        """
+        cache_stats = TransportDetector.get_cache_stats()
+
+        return {
+            "cache_statistics": cache_stats,
+            "performance_impact": {
+                "cache_hit_benefit": "Skips transport detection (~2-10 seconds)",
+                "cache_miss_cost": "Performs transport detection tests",
+                "cache_ttl_minutes": cache_stats.get("cache_ttl_minutes", 60)
+            },
+            "recommendations": {
+                "clear_cache_if": "Transport detection seems incorrect",
+                "disable_cache_if": "Debugging transport issues",
+                "cache_is_helpful_when": "Connecting to same servers repeatedly"
+            }
+        }
+
+    def clear_transport_cache(self) -> Dict[str, Any]:
+        """
+        Clear all cached transport detection data.
+
+        Use this if transport detection seems to be using incorrect cached results.
+
+        Returns:
+            Status of cache clearing operation
+        """
+        try:
+            old_stats = TransportDetector.get_cache_stats()
+            TransportDetector.clear_transport_cache()
+
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_TRANSPORT_CACHE_CLEARED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "cleared_entries": old_stats.get("total_entries", 0),
+                    "reason": "manual_clear_requested"
+                },
+                description="MCP transport cache cleared manually",
+            )
+
+            return {
+                "status": "success",
+                "cleared_entries": old_stats.get("total_entries", 0),
+                "message": "Transport cache cleared successfully"
+            }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "message": "Failed to clear transport cache"
+            }
+
+    async def test_transport_connectivity(
+        self,
+        url: str,
+        transport_type: Optional[str] = None,
+        timeout: int = 10
+    ) -> Dict[str, Any]:
+        """
+        Test connectivity to an MCP server with specific or auto-detected transport.
+
+        This is useful for debugging connectivity issues before registering a server.
+
+        Args:
+            url: Server URL to test
+            transport_type: Specific transport to test, or None for auto-detection
+            timeout: Timeout in seconds for the test
+
+        Returns:
+            Detailed connectivity test results
+        """
+        test_results = {
+            "url": url,
+            "timestamp": datetime.utcnow().isoformat(),
+            "timeout": timeout,
+            "tests_performed": [],
+            "recommended_action": None
+        }
+
+        try:
+            if transport_type:
+                # Test specific transport
+                test_passed = await TransportDetector._test_transport(url, transport_type, timeout)
+
+                test_results["tests_performed"].append({
+                    "transport_type": transport_type,
+                    "passed": test_passed,
+                    "method": "specific_transport_test"
+                })
+
+                if test_passed:
+                    recommended_url = TransportDetector.get_recommended_url(url, transport_type)
+                    test_results["status"] = "success"
+                    test_results["recommended_transport"] = transport_type
+                    test_results["recommended_url"] = recommended_url
+                    test_results["recommended_action"] = f"Use transport_type='{transport_type}'"
+                else:
+                    test_results["status"] = "failed"
+                    test_results["recommended_action"] = "Try auto-detection or different transport"
+
+            else:
+                # Auto-detect best transport
+                detected_transport, detection_metadata = await TransportDetector.detect_with_fallback(
+                    url, timeout, use_cache=False  # Don't use cache for testing
+                )
+
+                test_results["status"] = "success"
+                test_results["recommended_transport"] = detected_transport
+                test_results["recommended_url"] = TransportDetector.get_recommended_url(url, detected_transport)
+                test_results["detection_metadata"] = detection_metadata
+                test_results["recommended_action"] = f"Use transport_type='{detected_transport}' or 'auto'"
+
+        except Exception as e:
+            test_results["status"] = "error"
+            test_results["error"] = str(e)
+            test_results["recommended_action"] = "Check server is running and accessible"
+
+        return test_results

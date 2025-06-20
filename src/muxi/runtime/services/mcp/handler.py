@@ -358,6 +358,7 @@ class MCPHandler:
         """
         self.model = model
         self.servers: Dict[str, MCPServerClient] = {}
+        self.active_connections: Dict[str, MCPServerClient] = {}
 
     async def connect_server(
         self,
@@ -410,6 +411,8 @@ class MCPHandler:
             success = await server.connect()
             if success:
                 self.servers[name] = server
+                self.active_connections[name] = server
+
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
                     level=observability.EventLevel.INFO,
@@ -448,6 +451,8 @@ class MCPHandler:
         try:
             success = await server.disconnect()
             del self.servers[name]
+            if name in self.active_connections:
+                del self.active_connections[name]
 
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_UNREGISTERED,
@@ -562,7 +567,42 @@ class MCPHandler:
 
         server = self.servers[server_name]
         response = await server.send_message("tools/list", {})
-        return response.get("tools", [])
+
+        # Handle nested JSON-RPC response structure
+        # Response structure: {"status": "success", "result": {"jsonrpc": "2.0",
+        # "id": "...", "result": {"tools": [...]}}}
+        tools = []
+
+        if response.get("status") == "success":
+            result = response.get("result", {})
+
+            # Handle different response structures
+            if "result" in result and isinstance(result["result"], dict):
+                # Nested JSON-RPC response
+                tools = result["result"].get("tools", [])
+            elif "tools" in result:
+                # Direct tools in result
+                tools = result.get("tools", [])
+            elif isinstance(result, list):
+                # Direct list of tools
+                tools = result
+
+        # Fallback: try to extract from any level of the response
+        if not tools:
+            # Deep search for tools in the response
+            def find_tools(obj):
+                if isinstance(obj, dict):
+                    if "tools" in obj and isinstance(obj["tools"], list):
+                        return obj["tools"]
+                    for value in obj.values():
+                        result = find_tools(value)
+                        if result:
+                            return result
+                return []
+
+            tools = find_tools(response)
+
+        return tools if isinstance(tools, list) else []
 
     def _get_server_for_tool(self, tool_name: str) -> Optional[str]:
         """
