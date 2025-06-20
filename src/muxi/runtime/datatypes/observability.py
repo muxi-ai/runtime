@@ -48,6 +48,24 @@ class SystemEvents(Enum):
     # When MCP server tool discovery finishes
 
     # ===================================================================
+    # MCP TRANSPORT EVENTS (Added for Streamable HTTP implementation)
+    # ===================================================================
+    MCP_TRANSPORT_DETECTED = "mcp.transport.detected"
+    # When transport type is auto-detected for MCP server
+
+    MCP_TRANSPORT_DETECTION_FAILED = "mcp.transport.detection.failed"
+    # When transport auto-detection fails
+
+    MCP_TRANSPORT_ATTEMPT = "mcp.transport.attempt"
+    # When attempting to connect with specific transport type
+
+    MCP_TRANSPORT_FAILED = "mcp.transport.failed"
+    # When specific transport connection fails
+
+    MCP_TRANSPORT_FALLBACK_SUCCESS = "mcp.transport.fallback.success"
+    # When fallback transport succeeds after primary fails
+
+    # ===================================================================
     # AGENT SYSTEM EVENTS
     # ===================================================================
     AGENT_INITIALIZED = "agent.initialized"

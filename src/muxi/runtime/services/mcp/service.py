@@ -35,6 +35,7 @@ from typing import Any, Dict, Optional
 
 from ..llm import LLM
 from .handler import MCPHandler
+from .transports import TransportDetector, ModernProtocolFeatures
 from .. import observability
 
 
@@ -146,6 +147,7 @@ class MCPService:
         server_id: str,
         url: Optional[str] = None,
         command: Optional[str] = None,
+        transport_type: Optional[str] = "auto",
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: int = 60,
@@ -155,12 +157,13 @@ class MCPService:
 
         This method establishes an actual connection to the MCP server and
         discovers available tools. It handles both HTTP/SSE and command-line
-        based MCP servers.
+        based MCP servers with intelligent transport detection.
 
         Args:
             server_id: Unique identifier for the MCP server
             url: URL for HTTP/SSE MCP servers
             command: Command for command-line MCP servers
+            transport_type: Transport type selection ("auto", "streamable_http", "http_sse", "command")
             credentials: Optional credentials for authentication
             model: Optional model to use for this MCP handler
             request_timeout: Timeout in seconds for requests to this server
@@ -182,105 +185,50 @@ class MCPService:
                 "server_id": server_id,
                 "url": url,
                 "command": command,
+                "transport_type": transport_type,
                 "has_credentials": bool(credentials),
                 "request_timeout": request_timeout,
             },
             description=f"MCP server registration started: {server_id}",
         )
 
-        # Initialize the handler
-        async with self.locks[server_id]:
+        # Auto-detect transport if not explicitly specified
+        if url and transport_type == "auto":
             try:
-                # Create and initialize the MCP handler
-                handler = MCPHandler(model=model)
+                detected_transport = await TransportDetector.detect_best_transport(url)
 
-                # Set up connection with the transport factory
-                # This establishes actual connection to the server
-                server_name = server_id.replace("-", "_").lower()
-
-                # Connect to the server using the appropriate transport
-                await handler.connect_server(
-                    name=server_name,
-                    url=url,
-                    command=command,
-                    credentials=credentials,
-                    request_timeout=request_timeout,  # Pass the timeout parameter
-                )
-
-                # Store the handler
-                self.handlers[server_id] = handler
-                self.connections[server_id] = {
-                    "status": "connected",
-                    "url": url,
-                    "command": command,
-                    "credentials": credentials,
-                    "server_name": server_name,
-                    "request_timeout": request_timeout,
-                }
-
-                # Discover available tools
-                try:
-                    tools = await handler.list_tools(server_name)
-                    self.tool_registry[server_id] = {
-                        tool.get("name", f"unknown_{i}"): tool for i, tool in enumerate(tools)
-                    }
-                    # Emit tool discovery completed event
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "server_id": server_id,
-                            "tools_count": len(tools),
-                            "tools": [
-                                tool.get("name", f"unknown_{i}") for i, tool in enumerate(tools)
-                            ],
-                        },
-                        description=(f"Discovered {len(tools)} tools from MCP server: {server_id}"),
-                    )
-                except Exception as e:
-                    # Emit tool discovery failed event
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
-                        level=observability.EventLevel.WARNING,
-                        data={"server_id": server_id, "error": str(e), "tools_count": 0},
-                        description=f"Unable to discover tools from MCP server {server_id}: {str(e)}",
-                    )
-                    self.tool_registry[server_id] = {}
-
-                # Emit MCP server registration completed event
                 observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                    event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
                     level=observability.EventLevel.INFO,
                     data={
                         "server_id": server_id,
-                        "tools_discovered": len(self.tool_registry.get(server_id, {})),
-                        "connection_status": "connected",
+                        "detected_transport": detected_transport,
+                        "url": url
                     },
-                    description=f"mcp server registration completed: {server_id}",
+                    description=f"MCP transport detected: {detected_transport} for {server_id}",
                 )
 
-                # Final registration success event already emitted above
-                return server_id
+                transport_type = detected_transport
 
             except Exception as e:
-                # Emit MCP server registration failed event
+                # If detection fails, default to Streamable HTTP with fallback
                 observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.ERROR,
+                    event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTION_FAILED,
+                    level=observability.EventLevel.WARNING,
                     data={
                         "server_id": server_id,
                         "error": str(e),
-                        "url": url,
-                        "command": command,
+                        "fallback_strategy": "streamable_http_with_fallback"
                     },
-                    description=f"MCP server registration failed: {server_id} - {e}",
+                    description=f"Transport detection failed for {server_id}, using fallback",
                 )
 
-                # Clean up if something went wrong
-                if server_id in self.locks:
-                    del self.locks[server_id]
-                # Error event already emitted above
-                raise
+                return await self._connect_with_fallback(server_id, url, credentials, model, request_timeout)
+
+        # Proceed with determined transport type
+        return await self._connect_single_transport(
+            server_id, url, command, transport_type, credentials, model, request_timeout
+        )
 
     async def invoke_tool(
         self,
@@ -351,7 +299,7 @@ class MCPService:
                         client.request_timeout = timeout
                         restore_timeout = True
 
-                # Process the tool call through the handler directly to the server
+                # Enhanced tool execution with modern protocol support
                 result = await handler.execute_tool(
                     server_name=server_name,
                     tool_name=tool_name,
@@ -359,20 +307,29 @@ class MCPService:
                     cancellation_token=None,
                 )
 
-                # Emit MCP tool invocation completed event
+                # Process result using modern protocol features
+                processed_result = ModernProtocolFeatures.process_structured_output(result)
+
+                # Enhanced observability with structured output info
                 observability.observe(
                     event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
                     level=observability.EventLevel.INFO,
                     data={
                         "server_id": server_id,
                         "tool_name": tool_name,
-                        "result_type": type(result).__name__,
-                        "success": True,
+                        "result_type": processed_result["type"],
+                        "has_links": len(processed_result["links"]) > 0,
+                        "is_error": processed_result["isError"],
+                        "success": not processed_result["isError"],
+                        "protocol_version": "2025-06-18"
                     },
-                    description=(f"MCP tool invocation completed: {tool_name} on {server_id}"),
+                    description=f"MCP tool invocation completed with modern protocol: {tool_name} on {server_id}",
                 )
 
-                return {"result": result, "status": "success"}
+                return {
+                    "result": processed_result,
+                    "status": "success" if not processed_result["isError"] else "error"
+                }
 
             except Exception as e:
                 # Emit MCP tool invocation failed event
@@ -394,6 +351,193 @@ class MCPService:
                 # Restore the original timeout if we changed it
                 if restore_timeout and server_name in handler.active_connections:
                     handler.active_connections[server_name].request_timeout = original_timeout
+
+    async def _connect_with_fallback(
+        self,
+        server_id: str,
+        url: str,
+        credentials: Optional[Dict[str, Any]] = None,
+        model: Optional[LLM] = None,
+        request_timeout: int = 60,
+    ) -> str:
+        """
+        Attempt connection with automatic fallback between transports.
+        """
+        transports_to_try = ["streamable_http", "http_sse"]
+
+        for transport_type in transports_to_try:
+            try:
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_TRANSPORT_ATTEMPT,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "server_id": server_id,
+                        "transport_type": transport_type,
+                        "attempt_number": transports_to_try.index(transport_type) + 1
+                    },
+                    description=f"Attempting {transport_type} transport for {server_id}",
+                )
+
+                return await self._connect_single_transport(
+                    server_id, url, None, transport_type, credentials, model, request_timeout
+                )
+
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_TRANSPORT_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "server_id": server_id,
+                        "transport_type": transport_type,
+                        "error": str(e),
+                        "will_retry": transport_type != transports_to_try[-1]
+                    },
+                    description=f"Transport {transport_type} failed for {server_id}",
+                )
+
+                if transport_type == transports_to_try[-1]:
+                    # Last transport failed
+                    from .handler import MCPConnectionError
+                    raise MCPConnectionError(
+                        f"Unable to connect to {server_id} with any transport",
+                        {
+                            "tried_transports": transports_to_try,
+                            "last_error": str(e)
+                        }
+                    )
+
+                continue  # Try next transport
+
+    async def _connect_single_transport(
+        self,
+        server_id: str,
+        url: Optional[str],
+        command: Optional[str],
+        transport_type: str,
+        credentials: Optional[Dict[str, Any]] = None,
+        model: Optional[LLM] = None,
+        request_timeout: int = 60,
+    ) -> str:
+        """
+        Connect using a specific transport type.
+        """
+        # Initialize the handler
+        async with self.locks[server_id]:
+            try:
+                # Create and initialize the MCP handler
+                handler = MCPHandler(model=model)
+
+                # Set up connection with the transport factory
+                server_name = server_id.replace("-", "_").lower()
+
+                # Connect to the server using the specified transport type
+                await handler.connect_server(
+                    name=server_name,
+                    url=url,
+                    command=command,
+                    credentials=credentials,
+                    request_timeout=request_timeout,
+                )
+
+                # Store the handler
+                self.handlers[server_id] = handler
+                self.connections[server_id] = {
+                    "status": "connected",
+                    "url": url,
+                    "command": command,
+                    "credentials": credentials,
+                    "server_name": server_name,
+                    "transport_type": transport_type,
+                    "request_timeout": request_timeout,
+                }
+
+                # Discover available tools with modern protocol features
+                try:
+                    tools = await handler.list_tools(server_name)
+
+                    # Enhanced tool registry with display names and metadata
+                    self.tool_registry[server_id] = {}
+                    for i, tool in enumerate(tools):
+                        tool_name = tool.get("name", f"unknown_{i}")
+
+                        # Use modern protocol features for better UX
+                        self.tool_registry[server_id][tool_name] = {
+                            **tool,
+                            "display_name": ModernProtocolFeatures.extract_display_name(tool),
+                            "supports_structured_output": True,  # Assume modern servers support this
+                            "supports_elicitation": True,        # New 2025-06-18 feature
+                            "_meta": tool.get("_meta", {}),
+                            "protocol_version": "2025-06-18"
+                        }
+
+                    # Enhanced observability with modern features
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "server_id": server_id,
+                            "tools_count": len(tools),
+                            "transport_type": transport_type,
+                            "protocol_features": {
+                                "structured_output": True,
+                                "elicitation": True,
+                                "resource_links": True,
+                                "title_fields": True
+                            },
+                            "tools": [
+                                {
+                                    "name": tool.get("name", f"unknown_{i}"),
+                                    "display_name": ModernProtocolFeatures.extract_display_name(tool)
+                                }
+                                for i, tool in enumerate(tools)
+                            ]
+                        },
+                        description=(f"Discovered {len(tools)} tools with modern protocol features from {server_id}"),
+                    )
+                except Exception as e:
+                    # Emit tool discovery failed event
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
+                        level=observability.EventLevel.WARNING,
+                        data={"server_id": server_id, "error": str(e), "tools_count": 0},
+                        description=f"Unable to discover tools from MCP server {server_id}: {str(e)}",
+                    )
+                    self.tool_registry[server_id] = {}
+
+                # Emit MCP server registration completed event
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "server_id": server_id,
+                        "transport_type": transport_type,
+                        "tools_discovered": len(self.tool_registry.get(server_id, {})),
+                        "connection_status": "connected",
+                    },
+                    description=f"MCP server registration completed: {server_id}",
+                )
+
+                return server_id
+
+            except Exception as e:
+                # Emit MCP server registration failed event
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_id,
+                        "transport_type": transport_type,
+                        "error": str(e),
+                        "url": url,
+                        "command": command,
+                    },
+                    description=f"MCP server registration failed: {server_id} - {e}",
+                )
+
+                # Clean up if something went wrong
+                if server_id in self.locks:
+                    del self.locks[server_id]
+                raise
 
     async def disconnect_server(self, server_id: str) -> bool:
         """

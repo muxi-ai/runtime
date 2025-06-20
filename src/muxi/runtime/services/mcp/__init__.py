@@ -50,8 +50,11 @@
 # =============================================================================
 
 # Re-export key classes
-from .handler import (
-    MCPHandler, MCPConnectionError, MCPRequestError, MCPTimeoutError
+from .handler import MCPHandler
+from .transports import (
+    MCPConnectionError,
+    MCPRequestError,
+    MCPTimeoutError
 )
 from .reconnect_handler import ReconnectingMCPHandler
 from .service import MCPService
