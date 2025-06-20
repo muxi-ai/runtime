@@ -94,14 +94,12 @@ class TransportDetector:
             True if Streamable HTTP is supported, False otherwise
         """
         try:
+            # Test streamable HTTP by attempting to create connection
             async with asyncio.timeout(timeout):
-                # Attempt minimal Streamable HTTP connection
-                client = streamablehttp_client(url=url, timeout=timeout)
-                await client.connect()
-
-                # Basic connection test - if we got here, it worked
-                await client.disconnect()
-                return True
+                session = streamablehttp_client(url)
+                async with session as (read_stream, write_stream, session_id):
+                    # If we got here, connection was successful
+                    return True
 
         except Exception:
             # Any exception means Streamable HTTP is not supported
@@ -123,11 +121,24 @@ class TransportDetector:
             async with asyncio.timeout(timeout):
                 # Test SSE endpoint availability
                 async with httpx.AsyncClient(timeout=timeout) as client:
-                    sse_url = f"{url.rstrip('/')}/sse"
-                    response = await client.get(sse_url, headers={
-                        "Accept": "text/event-stream"
-                    })
-                    return response.status_code == 200
+                    # Try common SSE endpoints
+                    sse_endpoints = [
+                        f"{url.rstrip('/')}/sse",
+                        f"{url.rstrip('/')}/events",
+                        url  # Some servers use the base URL
+                    ]
+
+                    for sse_url in sse_endpoints:
+                        try:
+                            response = await client.get(sse_url, headers={
+                                "Accept": "text/event-stream"
+                            })
+                            if response.status_code == 200:
+                                return True
+                        except Exception:
+                            continue
+
+                    return False
 
         except Exception:
             # Any exception means HTTP+SSE is not supported

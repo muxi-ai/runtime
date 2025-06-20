@@ -36,6 +36,11 @@ from typing import Any, Dict, Optional
 from ..llm import LLM
 from .handler import MCPHandler, MCPConnectionError
 from .transports import TransportDetector, ModernProtocolFeatures
+from .resources.discovery import MCPResourceDiscovery
+from .prompts.discovery import MCPPromptDiscovery
+from .sampling.creator import MCPSamplingCreator
+from .templates.discovery import MCPTemplateDiscovery
+from .health.monitor import MCPHealthMonitor, MCPCapabilitiesNegotiator
 from .. import observability
 
 
@@ -71,7 +76,7 @@ class MCPService:
         Initialize the MCP service.
 
         Sets up the internal data structures for tracking servers, handlers,
-        connections, and tools.
+        connections, and tools. Also initializes the new MCP specification features.
         """
         # Dictionary of registered servers
         self.servers = {}
@@ -90,6 +95,14 @@ class MCPService:
 
         # Dictionary to store discovered tools
         self.tool_registry = {}
+
+        # Initialize MCP specification feature handlers
+        self.resource_discovery = MCPResourceDiscovery()
+        self.prompt_discovery = MCPPromptDiscovery()
+        self.sampling_creator = MCPSamplingCreator()
+        self.template_discovery = MCPTemplateDiscovery()
+        self.health_monitor = MCPHealthMonitor()
+        self.capabilities_negotiator = MCPCapabilitiesNegotiator()
 
     async def register_server(
         self,
@@ -587,3 +600,340 @@ class MCPService:
                     description=f"Error disconnecting from MCP server {server_id}: {str(e)}",
                 )
                 return False
+
+    # =============================
+    # MCP Specification Features
+    # =============================
+
+    async def list_resources(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
+        """List available resources from an MCP server.
+
+        Args:
+            server_id: The ID of the server to query
+            cursor: Optional cursor for pagination
+
+        Returns:
+            Dictionary containing resources list and optional nextCursor
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.resource_discovery.list_resources(transport, cursor)
+
+    async def read_resource(self, server_id: str, uri: str) -> Dict[str, Any]:
+        """Read a specific resource from an MCP server.
+
+        Args:
+            server_id: The ID of the server to query
+            uri: URI of the resource to read
+
+        Returns:
+            Resource content with text/blob data and metadata
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.resource_discovery.read_resource(transport, uri)
+
+    async def list_prompts(self, server_id: str) -> list[Dict[str, Any]]:
+        """List available prompts from an MCP server.
+
+        Args:
+            server_id: The ID of the server to query
+
+        Returns:
+            List of prompt definitions
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.prompt_discovery.list_prompts(transport)
+
+    async def get_prompt(self, server_id: str, name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Get a specific prompt from an MCP server.
+
+        Args:
+            server_id: The ID of the server to query
+            name: Name of the prompt to retrieve
+            arguments: Optional arguments for prompt template substitution
+
+        Returns:
+            Prompt content with messages and metadata
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.prompt_discovery.get_prompt(transport, name, arguments)
+
+    async def create_message(
+        self,
+        server_id: str,
+        messages: list[Dict[str, Any]],
+        model_preferences: Optional[Dict[str, Any]] = None,
+        system_prompt: Optional[str] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Create a message using MCP sampling/createMessage.
+
+        Args:
+            server_id: The ID of the server to use
+            messages: List of messages for the conversation
+            model_preferences: Optional model preferences
+            system_prompt: Optional system prompt
+            temperature: Optional temperature setting (0.0-1.0)
+            max_tokens: Optional maximum tokens to generate
+
+        Returns:
+            Response containing the generated message and metadata
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.sampling_creator.create_message(
+            transport=transport,
+            messages=messages,
+            model_preferences=model_preferences,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+
+    async def list_templates(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
+        """List available templates from an MCP server.
+
+        Args:
+            server_id: The ID of the server to query
+            cursor: Optional cursor for pagination
+
+        Returns:
+            Dictionary containing templates list and optional nextCursor
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.template_discovery.list_templates(transport, cursor)
+
+    async def get_template(self, server_id: str, name: str) -> Dict[str, Any]:
+        """Get a specific template from an MCP server.
+
+        Args:
+            server_id: The ID of the server to query
+            name: Name of the template to retrieve
+
+        Returns:
+            Template content with template data and metadata
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.template_discovery.get_template(transport, name)
+
+    async def ping_server(self, server_id: str, data: Optional[str] = None) -> Dict[str, Any]:
+        """Send a ping to an MCP server.
+
+        Args:
+            server_id: The ID of the server to ping
+            data: Optional data to include with ping
+
+        Returns:
+            Response containing pong and timing information
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        return await self.health_monitor.ping(transport, data)
+
+    async def start_health_monitoring(self, server_id: str, ping_interval: float = 30.0) -> None:
+        """Start continuous health monitoring for a server.
+
+        Args:
+            server_id: The ID of the server to monitor
+            ping_interval: Interval between ping requests in seconds
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        # Update health monitor settings
+        self.health_monitor.ping_interval = ping_interval
+
+        # Start monitoring with connection lost callback
+        async def on_connection_lost():
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_LOST,
+                level=observability.EventLevel.WARNING,
+                data={"server_id": server_id},
+                description=f"Connection lost to MCP server: {server_id}",
+            )
+
+        await self.health_monitor.start_monitoring(transport, on_connection_lost)
+
+    async def stop_health_monitoring(self) -> None:
+        """Stop health monitoring."""
+        await self.health_monitor.stop_monitoring()
+
+    def get_health_stats(self) -> Dict[str, Any]:
+        """Get health monitoring statistics.
+
+        Returns:
+            Dictionary containing health stats
+        """
+        return self.health_monitor.get_health_stats()
+
+    async def initialize_server_capabilities(
+        self,
+        server_id: str,
+        client_info: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Initialize MCP connection with capabilities negotiation.
+
+        Args:
+            server_id: The ID of the server to initialize
+            client_info: Optional client information and capabilities
+
+        Returns:
+            Server capabilities and information
+
+        Raises:
+            ValueError: If the server ID is not valid
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        transport = client.transport
+
+        # Default client info if not provided
+        if client_info is None:
+            client_info = {
+                "name": "MUXI MCP Client",
+                "version": "1.0.0",
+                "protocolVersion": "2024-11-05",
+                "capabilities": self.capabilities_negotiator.get_supported_capabilities()
+            }
+
+        return await self.capabilities_negotiator.initialize_connection(transport, client_info)

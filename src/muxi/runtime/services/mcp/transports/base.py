@@ -183,12 +183,13 @@ class BaseTransport:
         """
         raise NotImplementedError("Subclasses must implement connect()")
 
-    async def send_request(self, request_obj: Any) -> Dict[str, Any]:
+    async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
         """
         Send a request to the MCP server.
 
         Args:
             request_obj: The request object to send
+            timeout: Optional timeout in seconds (overrides default)
 
         Returns:
             Dict: The response from the server
