@@ -10,7 +10,7 @@ import uuid
 from typing import Any, Dict
 
 import httpx
-# Loguru import removed - add observability import if needed
+from loguru import logger
 from mcp.client.session import ClientSession as MCPClient
 from mcp import JSONRPCRequest
 

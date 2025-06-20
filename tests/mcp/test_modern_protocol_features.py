@@ -42,7 +42,7 @@ from unittest.mock import Mock
 if os.path.join(os.path.dirname(__file__), '../../src') not in sys.path:
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
-from muxi.runtime.services.mcp.transports import ModernProtocolFeatures
+from src.muxi.runtime.services.mcp.transports import ModernProtocolFeatures
 
 
 class TestModernProtocolFeatures:

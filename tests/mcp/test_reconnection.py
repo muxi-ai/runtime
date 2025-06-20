@@ -10,9 +10,9 @@ import logging
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.muxi.runtime.mcp.handler import MCPConnectionError
-from src.muxi.runtime.mcp.reconnect_handler import ReconnectingMCPHandler
-from src.muxi.runtime.mcp.reconnection import RetryConfiguration
+from src.muxi.runtime.services.mcp.handler import MCPConnectionError
+from src.muxi.runtime.services.mcp.reconnect_handler import ReconnectingMCPHandler
+from src.muxi.runtime.services.mcp.reconnection import RetryConfiguration
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -128,14 +128,14 @@ class TestReconnection(unittest.TestCase):
             self.transport_factory_patch.stop()
 
         self.transport_factory_patch = patch(
-            "muxi.runtime.mcp.handler.MCPTransportFactory", transport_factory_mock
+            "muxi.runtime.services.mcp.handler.MCPTransportFactory", transport_factory_mock
         )
         self.transport_factory_patch.start()
 
         # Patch MCPHandler.list_tools to properly handle refresh parameter
         # We need to check if this method expects refresh parameter
         self.list_tools_original = patch(
-            "muxi.runtime.mcp.handler.MCPHandler.list_tools", new=self._mock_list_tools
+            "muxi.runtime.services.mcp.handler.MCPHandler.list_tools", new=self._mock_list_tools
         )
         self.list_tools_original.start()
 

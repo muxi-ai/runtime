@@ -116,7 +116,7 @@ class TestTransportDetection:
     async def test_streamable_http_detection_logic(self):
         """Test the internal Streamable HTTP detection logic."""
 
-        with patch('muxi.runtime.services.mcp.transport_detector.streamablehttp_client') as mock_client_factory:
+        with patch('muxi.runtime.services.mcp.transports.detector.streamablehttp_client') as mock_client_factory:
             mock_client = AsyncMock()
             mock_client_factory.return_value = mock_client
 
@@ -134,7 +134,7 @@ class TestTransportDetection:
     async def test_streamable_http_detection_failure(self):
         """Test Streamable HTTP detection failure scenarios."""
 
-        with patch('muxi.runtime.services.mcp.transport_detector.streamablehttp_client') as mock_client_factory:
+        with patch('muxi.runtime.services.mcp.transports.detector.streamablehttp_client') as mock_client_factory:
             mock_client = AsyncMock()
             mock_client_factory.return_value = mock_client
 
@@ -148,35 +148,36 @@ class TestTransportDetection:
             mock_client.connect.assert_called_once()
 
     async def test_streamable_http_detection_timeout(self):
-        """Test Streamable HTTP detection timeout."""
+        """Test Streamable HTTP detection with timeout."""
 
-        with patch('muxi.runtime.services.mcp.transport_detector.streamablehttp_client') as mock_client_factory:
+        with patch('muxi.runtime.services.mcp.transports.detector.streamablehttp_client') as mock_client_factory:
             mock_client = AsyncMock()
             mock_client_factory.return_value = mock_client
 
-            # Mock timeout during connection
-            mock_client.connect = AsyncMock(side_effect=asyncio.TimeoutError("Connection timeout"))
+            # Mock timeout during connect
+            mock_client.connect = AsyncMock(side_effect=asyncio.TimeoutError())
 
             result = await TransportDetector._test_streamable_http("https://test.example.com", 5)
 
             assert result is False
+            mock_client_factory.assert_called_once()
 
     async def test_http_sse_detection_logic(self):
         """Test the internal HTTP+SSE detection logic."""
 
-        with patch('muxi.runtime.services.mcp.transport_detector.httpx.AsyncClient') as mock_client_class:
+        with patch('muxi.runtime.services.mcp.transports.detector.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-
-            # Mock successful SSE endpoint response
             mock_response = AsyncMock()
             mock_response.status_code = 200
-            mock_client.get.return_value = mock_response
+
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value = mock_client
 
             result = await TransportDetector._test_http_sse("https://test.example.com", 10)
 
             assert result is True
-            # Verify the correct SSE endpoint was tested
             mock_client.get.assert_called_once_with(
                 "https://test.example.com/sse",
                 headers={"Accept": "text/event-stream"}
@@ -185,28 +186,29 @@ class TestTransportDetection:
     async def test_http_sse_detection_failure(self):
         """Test HTTP+SSE detection failure scenarios."""
 
-        with patch('muxi.runtime.services.mcp.transport_detector.httpx.AsyncClient') as mock_client_class:
+        with patch('muxi.runtime.services.mcp.transports.detector.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-
-            # Mock 404 response (SSE endpoint not found)
             mock_response = AsyncMock()
             mock_response.status_code = 404
-            mock_client.get.return_value = mock_response
+
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_client_class.return_value = mock_client
 
             result = await TransportDetector._test_http_sse("https://test.example.com", 10)
 
             assert result is False
 
     async def test_http_sse_detection_exception(self):
-        """Test HTTP+SSE detection with connection exception."""
+        """Test HTTP+SSE detection with network exception."""
 
-        with patch('muxi.runtime.services.mcp.transport_detector.httpx.AsyncClient') as mock_client_class:
+        with patch('muxi.runtime.services.mcp.transports.detector.httpx.AsyncClient') as mock_client_class:
             mock_client = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_client
-
-            # Mock connection exception
+            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_client.__aexit__ = AsyncMock(return_value=None)
             mock_client.get = AsyncMock(side_effect=Exception("Network error"))
+            mock_client_class.return_value = mock_client
 
             result = await TransportDetector._test_http_sse("https://test.example.com", 10)
 
@@ -234,9 +236,7 @@ class TestTransportDetection:
     async def test_custom_timeout_parameter(self):
         """Test detection with custom timeout values."""
 
-        with patch.object(TransportDetector, '_test_streamable_http') as mock_streamable, \
-             patch.object(TransportDetector, '_test_http_sse') as mock_sse:
-
+        with patch.object(TransportDetector, '_test_streamable_http') as mock_streamable:
             mock_streamable.return_value = True
 
             # Test with custom timeout

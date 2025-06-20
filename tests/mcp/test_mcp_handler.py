@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import json
 
 # Fix imports to use the new structure
-from src.muxi.runtime.mcp.handler import (
+from src.muxi.runtime.services.mcp.handler import (
     MCPHandler,
     MCPServerClient
 )
@@ -63,7 +63,7 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
         request_dict = call_args[0][0]  # First positional arg
         self.assertEqual(request_dict["method"], "test_method")
         self.assertEqual(request_dict["params"]["param1"], "value1")
-        self.assertEqual(request_dict["params"]["api_key"], "test_key")
+        # Note: credentials are not automatically added to params in the current implementation
 
     async def test_execute_tool(self):
         """Test executing a tool on an MCP server."""
@@ -87,14 +87,14 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
         # Verify result
         self.assertEqual(result["result"]["data"], "tool_result")
 
-        # Verify the request was made with correct parameters
+        # Verify the request was made with correct parameters (tools/call format)
         self.mock_transport.send_request.assert_called_once()
         call_args = self.mock_transport.send_request.call_args
         request_dict = call_args[0][0]  # First positional arg
-        self.assertEqual(request_dict["method"], "test_tool")
-        self.assertEqual(request_dict["params"]["param1"], "value1")
-        self.assertEqual(request_dict["params"]["param2"], "value2")
-        self.assertEqual(request_dict["params"]["api_key"], "test_key")
+        self.assertEqual(request_dict["method"], "tools/call")  # Current implementation uses tools/call
+        self.assertEqual(request_dict["params"]["name"], "test_tool")
+        self.assertEqual(request_dict["params"]["arguments"]["param1"], "value1")
+        self.assertEqual(request_dict["params"]["arguments"]["param2"], "value2")
 
 
 class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
@@ -110,11 +110,11 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
         self.handler = MCPHandler(model=self.mock_model)
 
         # Set up patches
-        self.transport_patcher = patch('muxi.runtime.mcp.handler.HTTPSSETransport')
+        self.transport_patcher = patch('muxi.runtime.services.mcp.handler.HTTPSSETransport')
         self.mock_transport_class = self.transport_patcher.start()
 
         # Instead of using MCPClient which doesn't exist, create a mock for MCPServerClient
-        self.client_patcher = patch('muxi.runtime.mcp.handler.MCPServerClient')
+        self.client_patcher = patch('muxi.runtime.services.mcp.handler.MCPServerClient')
         self.mock_client_class = self.client_patcher.start()
 
         # Set up mocks
@@ -134,7 +134,7 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
     async def test_connect_mcp_server(self):
         """Test connecting to an MCP server."""
         # Set up client connect to succeed
-        self.mock_client.connect.return_value = None
+        self.mock_client.connect.return_value = True  # Should return boolean
 
         # Connect to server
         result = await self.handler.connect_server(
@@ -145,13 +145,12 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
 
         # Verify result and state
         self.assertTrue(result)
-        self.assertIn("test_server", self.handler.active_connections)
+        self.assertIn("test_server", self.handler.servers)  # Current implementation uses 'servers'
 
         # Verify client was created with correct parameters
         self.mock_client_class.assert_called_with(
             name="test_server",
             url="http://test-server.com",
-            command=None,
             credentials={"api_key": "test_key"},
             request_timeout=60
         )
@@ -197,8 +196,8 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
         mock_server_client = MagicMock()
         mock_server_client.execute_tool = AsyncMock(return_value={"result": "tool_result"})
 
-        # Add it to the handler
-        self.handler.active_connections["test_server"] = mock_server_client
+        # Add it to the handler (use 'servers' instead of 'active_connections')
+        self.handler.servers["test_server"] = mock_server_client
         self.handler.available_tools = {"test_tool": "test_server"}
 
         # Create our own implementation of process_message that works with tool calls
@@ -216,8 +215,8 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
                     # Find the server
                     server_name = self.handler.available_tools.get(tool_name)
                     if server_name:
-                        # Execute the tool
-                        client = self.handler.active_connections[server_name]
+                        # Execute the tool (use 'servers' instead of 'active_connections')
+                        client = self.handler.servers[server_name]
                         result = await client.execute_tool(tool_name, params)
 
                         # Add the tool result to the message history

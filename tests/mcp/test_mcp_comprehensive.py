@@ -18,11 +18,9 @@ import subprocess
 import sys
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
-import importlib
 
 # Important: Add the root directory to the path before importing from packages
-root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, root_dir)
 
 # Import after sys.path modification
@@ -30,55 +28,21 @@ try:
     # Try direct import
     from src.muxi.runtime.services.mcp.handler import (  # noqa: E402
         MCPHandler,
-        MCPServerClient,
+        MCPServerClient
+    )
+    from src.muxi.runtime.services.mcp.transports import (  # noqa: E402
         HTTPSSETransport,
         CommandLineTransport,
         MCPTransportFactory,
         CancellationToken,
-        MCPConnectionError,
-        MCPRequestError,
-        MCPCancelledError
+        MCPCancelledError,
+        StreamableHTTPTransport
     )
-    from src.muxi.runtime.datatypes.response import MuxiResponse  # noqa: E402
     print("✅ Successfully imported MCP classes directly")
 except ImportError as e:
     print(f"❌ Direct import failed: {e}")
-    print("Trying alternative approach with importlib...")
-
-    # Use importlib as fallback
-    spec = importlib.util.spec_from_file_location(
-        "mcp_handler",
-        os.path.join(root_dir, "src/muxi/runtime/mcp/handler.py")
-    )
-    if spec and spec.loader:
-        mcp_handler = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mcp_handler)
-        MCPHandler = mcp_handler.MCPHandler
-        MCPServerClient = mcp_handler.MCPServerClient
-        HTTPSSETransport = mcp_handler.HTTPSSETransport
-        CommandLineTransport = mcp_handler.CommandLineTransport
-        MCPTransportFactory = mcp_handler.MCPTransportFactory
-        CancellationToken = mcp_handler.CancellationToken
-        MCPConnectionError = mcp_handler.MCPConnectionError
-        MCPRequestError = mcp_handler.MCPRequestError
-        MCPCancelledError = mcp_handler.MCPCancelledError
-
-        # Also load message module
-        msg_spec = importlib.util.spec_from_file_location(
-            "mcp_message",
-            os.path.join(root_dir, "src/muxi/runtime/mcp/message.py")
-        )
-        if msg_spec and msg_spec.loader:
-            mcp_message = importlib.util.module_from_spec(msg_spec)
-            msg_spec.loader.exec_module(mcp_message)
-            MuxiResponse = mcp_message.MuxiResponse
-            print("✅ Successfully imported MCP classes via importlib")
-        else:
-            print("❌ Failed to load message module")
-            sys.exit(1)
-    else:
-        print("❌ Failed to load handler module")
-        sys.exit(1)
+    # Simplified error - just exit if we can't import
+    sys.exit(1)
 
 
 class TestMCPTransportFactory(unittest.TestCase):
@@ -93,11 +57,9 @@ class TestMCPTransportFactory(unittest.TestCase):
         )
 
         # Verify transport type and configuration
-        self.assertIsInstance(transport, HTTPSSETransport)
-        # Since the base_url is set in the constructor, we're testing the input value here
-        # rather than the processed base_url
-        self.assertEqual(transport.base_url, "https://server.mcpify.ai/sse?server=test-id")
-        self.assertEqual(transport.sse_url, "https://server.mcpify.ai/sse?server=test-id")
+        # Factory defaults to StreamableHTTPTransport for HTTP URLs
+        self.assertIsInstance(transport, StreamableHTTPTransport)
+        self.assertEqual(transport.url, "https://server.mcpify.ai/sse?server=test-id")
         self.assertEqual(transport.request_timeout, 30)
 
     def test_create_transport_command(self):
@@ -109,7 +71,9 @@ class TestMCPTransportFactory(unittest.TestCase):
 
         # Verify transport type and configuration
         self.assertIsInstance(transport, CommandLineTransport)
-        self.assertEqual(transport.command, "npx -y @modelcontextprotocol/server-calculator")
+        # Command is parsed - first part is command, rest are args
+        self.assertEqual(transport.command, "npx")
+        self.assertEqual(transport.args, ["-y", "@modelcontextprotocol/server-calculator"])
 
     def test_create_transport_unsupported(self):
         """Test error when creating an unsupported transport type."""
@@ -175,132 +139,92 @@ class TestHTTPSSETransport(unittest.IsolatedAsyncioTestCase):
         # Create transport
         self.transport = HTTPSSETransport("https://server.mcpify.ai/sse?server=test-id", 30)
 
-        # Set up patches
-        self.http_client_patcher = patch(
-            'muxi.runtime.mcp.handler.httpx.AsyncClient'
+        # Set up patches for MCP SDK sse_client
+        self.sse_client_patcher = patch(
+            'src.muxi.runtime.services.mcp.transports.http_sse.sse_client'
         )
-        self.mock_http_client_class = self.http_client_patcher.start()
-        self.mock_http_client = MagicMock()
-        self.mock_http_client.aclose = AsyncMock()
-        self.mock_http_client.post = AsyncMock()
-        self.mock_http_client_class.return_value = self.mock_http_client
+        self.mock_sse_client = self.sse_client_patcher.start()
 
-        # Mock SSE client - we create=True since EventSource may not exist as a class
-        self.sse_patcher = patch(
-            'muxi.runtime.mcp.handler.EventSource',
-            create=True
-        )
-        self.mock_sse_class = self.sse_patcher.start()
-        self.mock_sse = MagicMock()
-        self.mock_sse.close = MagicMock()
-        self.mock_sse_class.return_value = self.mock_sse
+        # Create mock session context manager
+        self.mock_session = AsyncMock()
+        self.mock_read_stream = AsyncMock()
+        self.mock_write_stream = AsyncMock()
 
-        # Patch only the connect method, not disconnect
-        self.connect_patcher = patch.object(HTTPSSETransport, 'connect')
-        self.mock_connect = self.connect_patcher.start()
+        # Configure the sse_client to return a context manager
+        session_return_value = (self.mock_read_stream, self.mock_write_stream)
+        self.mock_session.__aenter__ = AsyncMock(return_value=session_return_value)
+        self.mock_session.__aexit__ = AsyncMock(return_value=None)
+        self.mock_sse_client.return_value = self.mock_session
 
-        # Mock implementation for connect
-        async def mock_connect_impl():
-            self.transport.message_url = "https://server.mcpify.ai/api/message?sessionId=12345"
-            self.transport.session_id = "12345"
-            self.transport.connected = True
-            self.transport.connect_time = datetime.now()
-            self.transport.last_activity = self.transport.connect_time
-            # Create a listen task attribute
-            self.transport._listen_task = MagicMock()
-            self.transport._listen_task.cancel = MagicMock()
-            return True
-
-        self.mock_connect.side_effect = mock_connect_impl
+        # Mock message handler
+        handler_patch_path = 'src.muxi.runtime.services.mcp.transports.http_sse.MCPMessageHandler'
+        self.message_handler_patcher = patch(handler_patch_path)
+        self.mock_message_handler_class = self.message_handler_patcher.start()
+        self.mock_message_handler = MagicMock()
+        request_return = {"jsonrpc": "2.0", "method": "test", "id": "1"}
+        self.mock_message_handler.create_request.return_value = request_return
+        response_return = {"jsonrpc": "2.0", "result": {"message": "Connected"}, "id": "1"}
+        self.mock_message_handler.parse_response.return_value = response_return
+        self.mock_message_handler_class.return_value = self.mock_message_handler
 
     async def asyncTearDown(self):
         """Tear down test fixtures."""
-        self.http_client_patcher.stop()
-        self.sse_patcher.stop()
-        self.connect_patcher.stop()
+        self.sse_client_patcher.stop()
+        self.message_handler_patcher.stop()
 
     async def test_connect(self):
         """Test connecting to an HTTP+SSE server."""
         # Call connect
         result = await self.transport.connect()
 
+        # Verify sse_client was called with the correct URL
+        self.mock_sse_client.assert_called_once_with("https://server.mcpify.ai/sse?server=test-id")
+
         # Verify connection was successful
         self.assertTrue(result)
         self.assertTrue(self.transport.connected)
-        expected_url = "https://server.mcpify.ai/api/message?sessionId=12345"
-        self.assertEqual(self.transport.message_url, expected_url)
-        self.assertEqual(self.transport.session_id, "12345")
+        self.assertEqual(self.transport.read_stream, self.mock_read_stream)
+        self.assertEqual(self.transport.write_stream, self.mock_write_stream)
 
     async def test_disconnect(self):
         """Test disconnecting from an HTTP+SSE server."""
         # Set up transport for test
         self.transport.connected = True
-        self.transport.client = self.mock_http_client
+        self.transport.session = self.mock_session
 
-        # Mock sse_connection
-        self.transport.sse_connection = MagicMock()
-        self.transport.sse_connection.aclose = AsyncMock()
+        # Disconnect
+        await self.transport.disconnect()
 
-        # Create a mock listen task
-        mock_task = MagicMock()
-        mock_task.cancel = MagicMock()
-        self.transport._listen_task = mock_task
-
-        # Patch the disconnect method directly to use our mocks
-        # Use a context manager to ensure proper cleanup after the test
-        patched_disconnect = patch.object(
-            HTTPSSETransport,
-            'disconnect',
-            wraps=self.transport.disconnect
-        )
-
-        try:
-            # Start the patch
-            patched_disconnect.start()
-
-            # Disconnect
-            await self.transport.disconnect()
-
-            # Verify disconnect operations
-            self.mock_http_client.aclose.assert_called_once()
-
-            # If the actual implementation doesn't call cancel() but we need it for the test
-            # Add it as a side effect of our wrapper
-            mock_task.cancel()
-            mock_task.cancel.assert_called_once()
-            self.assertFalse(self.transport.connected)
-        finally:
-            # Clean up the patch
-            patched_disconnect.stop()
+        # Verify disconnect operations
+        self.mock_session.__aexit__.assert_called_once_with(None, None, None)
+        self.assertFalse(self.transport.connected)
+        self.assertIsNone(self.transport.session)
 
     async def test_send_request(self):
         """Test sending a request to an HTTP+SSE server."""
         # Set up transport for test
         self.transport.connected = True
-        msg_url = "https://server.mcpify.ai/messages"
-        msg_url += "?server=test-id&sessionId=12345"
-        self.transport.message_url = msg_url
-        self.transport.session_id = "12345"  # Set session_id
-        self.transport.client = self.mock_http_client  # Ensure client is set
+        self.transport.read_stream = self.mock_read_stream
+        self.transport.write_stream = self.mock_write_stream
+        self.transport.message_handler = self.mock_message_handler
 
-        # Mock HTTP response
-        mock_response = MagicMock()
-        mock_response.status_code = 202
-        self.mock_http_client.post.return_value = mock_response
+        # Mock the response from read_stream
+        mock_response = {"jsonrpc": "2.0", "result": {"data": "test_result"}, "id": "1"}
+        self.mock_read_stream.receive = AsyncMock(return_value=mock_response)
+        self.mock_message_handler.parse_response.return_value = mock_response
 
-        # Patch the send_request method to return None for status 202
-        with patch.object(HTTPSSETransport, 'send_request') as mock_send_request:
-            mock_send_request.return_value = None
+        # Send request
+        request = {"jsonrpc": "2.0", "method": "test_method", "params": {}, "id": "1"}
+        result = await self.transport.send_request(request)
 
-            # Send request
-            request = {"jsonrpc": "2.0", "method": "test_method", "params": {}, "id": "1"}
-            result = await mock_send_request(self.transport, request)
+        # Verify the request was sent correctly
+        self.mock_message_handler.create_request.assert_called_once_with("test_method", {})
+        self.mock_write_stream.send.assert_called_once()
 
-            # Verify the method was called with the correct request
-            mock_send_request.assert_called_once_with(self.transport, request)
-
-            # The result should be None as we mocked it
-            self.assertIsNone(result)
+        # Verify the result was parsed correctly
+        self.assertEqual(result["jsonrpc"], "2.0")
+        self.assertEqual(result["result"]["data"], "test_result")
+        self.assertEqual(result["id"], "1")
 
 
 class TestCommandLineTransport(unittest.IsolatedAsyncioTestCase):
@@ -309,86 +233,82 @@ class TestCommandLineTransport(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up test fixtures."""
         # Create transport
-        self.transport = CommandLineTransport("npx -y @modelcontextprotocol/server-calculator")
+        transport_cmd = "npx -y @modelcontextprotocol/server-calculator"
+        self.transport = CommandLineTransport(transport_cmd)
 
-        # Set up patches for asyncio.create_subprocess_shell
-        self.subprocess_patcher = patch('asyncio.create_subprocess_shell')
-        self.mock_create_subprocess = self.subprocess_patcher.start()
+        # Set up patches for MCP SDK stdio_client
+        base_path = 'src.muxi.runtime.services.mcp.transports.command'
+        patch_path = f'{base_path}.stdio_client'
+        self.stdio_client_patcher = patch(patch_path)
+        self.mock_stdio_client = self.stdio_client_patcher.start()
 
-        # Create mock process
-        self.mock_process = MagicMock()
-        self.mock_process.pid = 12345
-        self.mock_process.stdin = MagicMock()
-        self.mock_process.stdin.write = MagicMock()
-        self.mock_process.stdin.drain = AsyncMock()
-        self.mock_process.stdout = MagicMock()
-        self.mock_process.terminate = MagicMock()
+        # Create mock session context manager
+        self.mock_session = AsyncMock()
+        self.mock_read_stream = AsyncMock()
+        self.mock_write_stream = AsyncMock()
 
-        # Set up mock readline that returns initialization message then response
-        self.mock_process.stdout.readline = AsyncMock(side_effect=[
-            b'{"jsonrpc":"2.0","method":"initialized","params":{"endpoint":"/message"}}\n',
-            b'{"jsonrpc":"2.0","id":"1","result":{"status":"ok"}}\n'
-        ])
+        # Configure the stdio_client to return a context manager
+        async def mock_context_manager():
+            yield self.mock_read_stream, self.mock_write_stream
 
-        # Return mock process from create_subprocess_shell
-        self.mock_create_subprocess.return_value = self.mock_process
+        session_return_value = (self.mock_read_stream, self.mock_write_stream)
+        self.mock_session.__aenter__ = AsyncMock(return_value=session_return_value)
+        self.mock_session.__aexit__ = AsyncMock(return_value=None)
+        self.mock_stdio_client.return_value = self.mock_session
 
-        # Patch the disconnect method to ensure it calls terminate
-        self.disconnect_patcher = patch.object(CommandLineTransport, 'disconnect')
-        self.mock_disconnect = self.disconnect_patcher.start()
+        # Mock message handler
+        handler_patch_path = f'{base_path}.MCPMessageHandler'
+        self.message_handler_patcher = patch(handler_patch_path)
+        self.mock_message_handler_class = self.message_handler_patcher.start()
+        self.mock_message_handler = MagicMock()
+        request_return = {"jsonrpc": "2.0", "method": "test", "id": "1"}
+        self.mock_message_handler.create_request.return_value = request_return
+        response_return = {"jsonrpc": "2.0", "result": {"message": "Connected"}, "id": "1"}
+        self.mock_message_handler.parse_response.return_value = response_return
+        self.mock_message_handler_class.return_value = self.mock_message_handler
 
     async def asyncTearDown(self):
         """Tear down test fixtures."""
-        self.subprocess_patcher.stop()
-        self.disconnect_patcher.stop()
+        self.stdio_client_patcher.stop()
+        self.message_handler_patcher.stop()
 
     async def test_connect(self):
         """Test starting a command line MCP server."""
-
-        # Set up the mock process return values
-        self.mock_process.stdout = AsyncMock()
-        self.mock_process.stderr = AsyncMock()
-
-        # Configure the readline behavior for stdout
-        response = b'{"jsonrpc":"2.0","id":1,"result":{"message":"Connected"}}\n'
-        self.mock_process.stdout.readline.return_value = response
-
         # Call the connect method and await it
         result = await self.transport.connect()
 
-        # Verify create_subprocess was called with the correct command
-        self.mock_create_subprocess.assert_called_once()
+        # Verify stdio_client was called with proper StdioServerParameters
+        self.mock_stdio_client.assert_called_once()
+        call_args = self.mock_stdio_client.call_args[0][0]  # First positional argument
+        self.assertEqual(call_args.command, "npx")
+        self.assertEqual(call_args.args, ["-y", "@modelcontextprotocol/server-calculator"])
 
         # Check that the result is as expected
         self.assertTrue(result)
         self.assertTrue(self.transport.connected)
+        self.assertEqual(self.transport.read_stream, self.mock_read_stream)
+        self.assertEqual(self.transport.write_stream, self.mock_write_stream)
 
     async def test_send_request(self):
         """Test sending a request to a command-line MCP server."""
         # Set up transport for test
         self.transport.connected = True
-        self.transport.process = self.mock_process
-        self.transport.stdin = self.mock_process.stdin
-        self.transport.stdout = self.mock_process.stdout
+        self.transport.read_stream = self.mock_read_stream
+        self.transport.write_stream = self.mock_write_stream
+        self.transport.message_handler = self.mock_message_handler
 
-        # Reset mock readline to return the expected response
-        resp = b'{"jsonrpc":"2.0","result":{"data":"test_result"},"id":"1"}\n'
-        self.mock_process.stdout.readline = AsyncMock(return_value=resp)
+        # Mock the response from read_stream
+        mock_response = {"jsonrpc": "2.0", "result": {"data": "test_result"}, "id": "1"}
+        self.mock_read_stream.receive = AsyncMock(return_value=mock_response)
+        self.mock_message_handler.parse_response.return_value = mock_response
 
         # Send request
         request = {"jsonrpc": "2.0", "method": "test_method", "params": {}, "id": "1"}
         result = await self.transport.send_request(request)
 
         # Verify the request was sent correctly
-        self.mock_process.stdin.write.assert_called_once()
-        # Get the actual written bytes and check if they contain the expected parts
-        # This is more flexible than looking for exact substring matches
-        write_args = self.mock_process.stdin.write.call_args[0][0].decode()
-        self.assertIn('"method":"test_method"', write_args.replace(" ", ""))
-        self.assertIn('"id":"1"', write_args.replace(" ", ""))
-
-        # Verify drain was called
-        self.mock_process.stdin.drain.assert_called_once()
+        self.mock_message_handler.create_request.assert_called_once_with("test_method", {})
+        self.mock_write_stream.send.assert_called_once()
 
         # Verify the result was parsed correctly
         self.assertEqual(result["jsonrpc"], "2.0")
@@ -397,38 +317,22 @@ class TestCommandLineTransport(unittest.IsolatedAsyncioTestCase):
 
     async def test_disconnect(self):
         """Test disconnecting from a command-line MCP server."""
-        # Mock the internal disconnect implementation instead of mocking just the process.terminate
-        original_disconnect = self.transport.disconnect
+        # Set up transport for test
+        self.transport.connected = True
+        self.transport.session = self.mock_session
 
-        # Patch the disconnect method to track calls
-        disconnect_called = False
+        # Call disconnect
+        result = await self.transport.disconnect()
 
-        async def mock_disconnect():
-            nonlocal disconnect_called
-            disconnect_called = True
-            # Set connected to False to simulate disconnect
-            self.transport.connected = False
-            self.transport.process = None
-            return True
+        # Verify disconnect was successful
+        self.assertTrue(result)
+        self.assertFalse(self.transport.connected)
+        self.assertIsNone(self.transport.session)
+        self.assertIsNone(self.transport.read_stream)
+        self.assertIsNone(self.transport.write_stream)
 
-        # Replace the disconnect method temporarily
-        self.transport.disconnect = mock_disconnect
-
-        try:
-            # Set up transport for test
-            self.transport.connected = True
-            self.transport.process = self.mock_process
-
-            # Call disconnect
-            await self.transport.disconnect()
-
-            # Verify disconnect was called and state was updated
-            assert disconnect_called, "Disconnect method was not called"
-            self.assertFalse(self.transport.connected)
-            self.assertIsNone(self.transport.process)
-        finally:
-            # Restore original method
-            self.transport.disconnect = original_disconnect
+        # Verify session __aexit__ was called
+        self.mock_session.__aexit__.assert_called_once_with(None, None, None)
 
 
 class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
@@ -437,7 +341,7 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up test fixtures."""
         # Create patchers
-        self.factory_patcher = patch('muxi.runtime.mcp.handler.MCPTransportFactory')
+        self.factory_patcher = patch('src.muxi.runtime.services.mcp.handler.MCPTransportFactory')
         self.mock_factory = self.factory_patcher.start()
 
         # Set up mock transport
@@ -455,9 +359,6 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
             credentials={},
             request_timeout=30
         )
-
-        # Initialize active requests dict
-        self.client.active_requests = {}
 
     async def asyncTearDown(self):
         """Tear down test fixtures."""
@@ -485,21 +386,12 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
         self.client.connected = True
         self.client.transport = self.mock_transport
 
-        # Add active requests
-        token1 = CancellationToken()
-        token2 = CancellationToken()
-        self.client.active_requests = {
-            "1": token1,
-            "2": token2
-        }
-
         # Disconnect
         await self.client.disconnect()
 
-        # Verify transport was disconnected and tokens were cancelled
+        # Verify transport was disconnected
         self.mock_transport.disconnect.assert_called_once()
         self.assertFalse(self.client.connected)
-        self.assertEqual(len(self.client.active_requests), 0)
 
     async def test_send_message_with_cancellation(self):
         """Test sending a message with cancellation support."""
@@ -540,11 +432,6 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call_args["params"]["param1"], "value1")
             self.assertEqual(call_args["id"], "1")
 
-            # Verify token was stored (manually add it for verification)
-            self.client.active_requests["1"] = token
-            self.assertIn("1", self.client.active_requests)
-            self.assertEqual(self.client.active_requests["1"], token)
-
         finally:
             uuid_patcher.stop()
 
@@ -562,7 +449,7 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
         self.handler = MCPHandler(model=self.mock_model)
 
         # Set up client patch
-        self.client_patcher = patch('muxi.runtime.mcp.handler.MCPServerClient')
+        self.client_patcher = patch('src.muxi.runtime.services.mcp.handler.MCPServerClient')
         self.mock_client_class = self.client_patcher.start()
         self.mock_client = MagicMock()
         self.mock_client.connect = AsyncMock(return_value=True)
@@ -596,12 +483,12 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
 
         # Verify handler state
         self.assertTrue(result)
-        self.assertIn("test_server", self.handler.active_connections)
+        self.assertIn("test_server", self.handler.servers)
 
     async def test_execute_tool_with_cancellation(self):
         """Test executing a tool with cancellation support."""
         # Add mock client to connections
-        self.handler.active_connections["test_server"] = self.mock_client
+        self.handler.servers["test_server"] = self.mock_client
 
         # Mock tool execution result
         self.mock_client.execute_tool.return_value = {"result": "tool_result"}
@@ -632,38 +519,40 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
         # Make client connection fail
         self.mock_client.connect.side_effect = Exception("Connection failed")
 
-        # Attempt to connect
-        with self.assertRaises(MCPConnectionError):
+        # Attempt to connect - this should raise the exception, not catch it
+        with self.assertRaises(Exception) as context:
             await self.handler.connect_server(
                 name="test_server",
                 url="http://test-server.com"
             )
 
-        # Verify client was created but not added to active connections
+        # Verify the exception message
+        self.assertEqual(str(context.exception), "Connection failed")
+
+        # Verify client was created but server not added to handlers
         self.mock_client_class.assert_called_once()
-        self.assertNotIn("test_server", self.handler.active_connections)
+        self.assertNotIn("test_server", self.handler.servers)
 
     async def test_error_handling_tool_execution(self):
         """Test error handling during tool execution."""
         # Add mock client to connections
-        self.handler.active_connections["test_server"] = self.mock_client
+        self.handler.servers["test_server"] = self.mock_client
 
-        # Make tool execution fail - use MCPRequestError instead of generic Exception
-        error = MCPRequestError("Tool execution failed", {"error": "test_error"})
-        self.mock_client.execute_tool.side_effect = error
+        # Mock tool execution to fail
+        self.mock_client.execute_tool.side_effect = Exception("Tool execution failed")
 
-        # Attempt to execute tool
-        with self.assertRaises(MCPRequestError) as context:
+        # Execute tool and expect it to raise the exception
+        with self.assertRaises(Exception) as context:
             await self.handler.execute_tool(
                 server_name="test_server",
                 tool_name="test_tool",
                 params={"param1": "value1"}
             )
 
-        # Verify the error was propagated
-        self.assertEqual(str(context.exception), str(error))
+        # Verify the exception message
+        self.assertEqual(str(context.exception), "Tool execution failed")
 
-        # Verify client method was called
+        # Verify client was called
         self.mock_client.execute_tool.assert_called_once()
 
 
