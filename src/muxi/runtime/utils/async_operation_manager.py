@@ -15,7 +15,7 @@ from ..datatypes.async_operations import (
     TimeoutConfig,
     AsyncOperationResult,
     CancellationError,
-    TimeoutError,
+    OperationTimeoutError,
 )
 
 T = TypeVar('T')
@@ -108,15 +108,29 @@ class AsyncOperationManager:
             # Execute with timeout and cancellation handling
             context.status = OperationStatus.RUNNING
 
-            # Create task for the operation
-            task = asyncio.create_task(operation(*args, **kwargs))
+            # Create task for the operation with exception safety
+            task = None
+            try:
+                task = asyncio.create_task(operation(*args, **kwargs))
 
-            # Register task with cancellation token if provided
-            if cancellation_token:
-                cancellation_token.register_task(task)
+                # Register task with cancellation token if provided
+                if cancellation_token:
+                    cancellation_token.register_task(task)
 
-            # Register with global cancellation token
-            self._global_cancellation_token.register_task(task)
+                # Register with global cancellation token
+                self._global_cancellation_token.register_task(task)
+
+            except Exception:
+                # If registration fails, ensure task is still registered with global token
+                # to prevent orphaned tasks
+                if task is not None:
+                    try:
+                        self._global_cancellation_token.register_task(task)
+                    except Exception:
+                        # Suppress registration errors during cleanup
+                        pass
+                # Re-raise the original exception
+                raise
 
             try:
                 # Wait for operation with timeout
@@ -134,7 +148,7 @@ class AsyncOperationManager:
 
             except asyncio.TimeoutError:
                 context.status = OperationStatus.TIMEOUT
-                context.error = TimeoutError(
+                context.error = OperationTimeoutError(
                     f"Operation '{description}' timed out after {timeout}s",
                     timeout,
                     operation_id
@@ -175,8 +189,12 @@ class AsyncOperationManager:
             )
 
         finally:
-            # Clean up operation tracking
-            self._active_operations.pop(operation_id, None)
+            # Clean up operation tracking - suppress exceptions to avoid masking original errors
+            try:
+                self._active_operations.pop(operation_id, None)
+            except Exception:
+                # Suppress cleanup errors to prevent masking original exceptions
+                pass
 
     def _get_default_timeout(self, operation_type: str) -> float:
         """Get default timeout for an operation type."""

@@ -6,7 +6,7 @@ tracking only which agents are currently busy to prevent removal of active agent
 """
 
 import asyncio
-from typing import Set, List, Callable, Optional
+from typing import Set, List, Callable, Optional, Awaitable
 
 
 class ActiveAgentsTracker:
@@ -19,8 +19,8 @@ class ActiveAgentsTracker:
         self._lock = asyncio.Lock()
 
         # Callbacks for actual deletion (set by overlord)
-        self._delete_agent: Optional[Callable[[str], None]] = None
-        self._shutdown_overlord: Optional[Callable[[], None]] = None
+        self._delete_agent: Optional[Callable[[str], Awaitable[None]]] = None
+        self._shutdown_overlord: Optional[Callable[[], Awaitable[None]]] = None
 
     async def mark_agent_busy(self, agent_id: str):
         """Mark agent as busy handling a request."""
@@ -47,36 +47,49 @@ class ActiveAgentsTracker:
             self.overlord_shutting_down = True
             await self._process_pending_deletions()
 
-    def is_agent_busy(self, agent_id: str) -> bool:
+    async def is_agent_busy(self, agent_id: str) -> bool:
         """Check if agent is currently busy."""
-        return agent_id in self.busy_agents
+        async with self._lock:
+            return agent_id in self.busy_agents
 
-    def can_accept_new_requests(self) -> bool:
+    async def can_accept_new_requests(self) -> bool:
         """Check if overlord can accept new requests."""
-        return not self.overlord_shutting_down
+        async with self._lock:
+            return not self.overlord_shutting_down
 
-    def get_available_agents(self, all_agent_ids: List[str]) -> List[str]:
+    async def get_available_agents(self, all_agent_ids: List[str]) -> List[str]:
         """Get agents that can handle new requests (not marked for deletion)."""
-        return [aid for aid in all_agent_ids if aid not in self.pending_deletions]
+        async with self._lock:
+            return [aid for aid in all_agent_ids if aid not in self.pending_deletions]
 
-    def get_busy_agents_count(self) -> int:
+    async def get_busy_agents_count(self) -> int:
         """Get count of currently busy agents."""
-        return len(self.busy_agents)
+        async with self._lock:
+            return len(self.busy_agents)
 
-    def get_pending_deletions_count(self) -> int:
+    async def get_pending_deletions_count(self) -> int:
         """Get count of agents pending deletion."""
-        return len(self.pending_deletions)
+        async with self._lock:
+            return len(self.pending_deletions)
 
-    def is_idle(self) -> bool:
+    async def get_pending_deletions(self) -> List[str]:
+        """Get list of agents pending deletion."""
+        async with self._lock:
+            return list(self.pending_deletions)
+
+    async def is_idle(self) -> bool:
         """Check if all agents are idle (no busy agents)."""
-        return len(self.busy_agents) == 0
+        async with self._lock:
+            return len(self.busy_agents) == 0
 
     async def _process_pending_deletions(self):
         """Process any agents/overlord ready for deletion."""
         # Check agents ready for deletion (not busy)
+        # Note: We're already within the lock context when this is called,
+        # so we access busy_agents directly to avoid deadlock
         agents_to_delete = []
         for agent_id in self.pending_deletions:
-            if not self.is_agent_busy(agent_id):
+            if agent_id not in self.busy_agents:  # Direct access to avoid deadlock
                 agents_to_delete.append(agent_id)
 
         # Remove agents that are no longer busy
@@ -98,13 +111,14 @@ class ActiveAgentsTracker:
         if self._shutdown_overlord:
             await self._shutdown_overlord()
 
-    def get_status_summary(self) -> dict:
+    async def get_status_summary(self) -> dict:
         """Get summary of tracker status for debugging/monitoring."""
-        return {
-            'busy_agents_count': len(self.busy_agents),
-            'busy_agents': list(self.busy_agents),
-            'pending_deletions_count': len(self.pending_deletions),
-            'pending_deletions': list(self.pending_deletions),
-            'overlord_shutting_down': self.overlord_shutting_down,
-            'is_idle': self.is_idle()
-        }
+        async with self._lock:
+            return {
+                'busy_agents_count': len(self.busy_agents),
+                'busy_agents': list(self.busy_agents),
+                'pending_deletions_count': len(self.pending_deletions),
+                'pending_deletions': list(self.pending_deletions),
+                'overlord_shutting_down': self.overlord_shutting_down,
+                'is_idle': len(self.busy_agents) == 0  # Use direct check to avoid calling is_idle() within lock
+            }

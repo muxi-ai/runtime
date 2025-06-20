@@ -44,11 +44,10 @@ class ConfigurationValidationError(FormationConfigurationError):
 class ConfigurationLoadError(FormationConfigurationError):
     """Raised when formation configuration cannot be loaded."""
 
-    def __init__(self, path: str, reason: str, details: Optional[Dict[str, Any]] = None):
-        message = f"Failed to load configuration from {path}: {reason}"
+    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message, details)
-        self.path = path
-        self.reason = reason
+        # Extract path from details if available for backward compatibility
+        self.path = details.get('config_path') if details else None
 
 
 # Service Errors

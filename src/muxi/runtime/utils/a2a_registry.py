@@ -22,7 +22,6 @@ This is a development-only tool and does not interfere with production runtime.
 import json
 
 import time
-import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional

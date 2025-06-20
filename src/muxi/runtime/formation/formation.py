@@ -1173,7 +1173,7 @@ class Formation:
 
             async def wait_for_shutdown():
                 tracker = self._overlord.active_agent_tracker
-                while not tracker.overlord_shutting_down or not tracker.is_idle():
+                while not tracker.overlord_shutting_down or not await tracker.is_idle():
                     await asyncio.sleep(0.1)
                     if asyncio.get_event_loop().time() - start_time > timeout_seconds:
                         raise TimeoutError(f"Graceful shutdown timed out after {timeout_seconds} seconds")
@@ -1355,6 +1355,8 @@ class Formation:
         The agent will be marked for deletion and actually removed when it finishes
         any current work. This ensures no active requests are interrupted.
 
+        Note: This is the synchronous version. Use remove_agent_async() for async contexts.
+
         Args:
             agent_id: The ID of the agent to remove
 
@@ -1372,9 +1374,70 @@ class Formation:
                 {"operation": "remove_agent", "agent_id": agent_id},
             )
 
-        return asyncio.run(self._overlord.remove_agent(agent_id))
+        # Handle event loop properly - check if we're already in an event loop
+        try:
+            # Try to get the current event loop
+            asyncio.get_running_loop()
+            # If we're in an event loop, we need to handle this differently
+            # Create a future and run it in the loop
+            import threading
 
-    def list_agents(self) -> Dict[str, Dict[str, Any]]:
+            result = None
+            exception = None
+
+            def run_in_thread():
+                nonlocal result, exception
+                try:
+                    # Create a new event loop in the thread
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result = new_loop.run_until_complete(self._overlord.remove_agent(agent_id))
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    exception = e
+
+            # Run in a separate thread to avoid event loop conflicts
+            thread = threading.Thread(target=run_in_thread)
+            thread.start()
+            thread.join()
+
+            if exception:
+                raise exception
+            return result
+
+        except RuntimeError:
+            # No event loop running, safe to use asyncio.run()
+            return asyncio.run(self._overlord.remove_agent(agent_id))
+
+    async def remove_agent_async(self, agent_id: str) -> bool:
+        """
+        Remove an agent from the running overlord using the "delete when done" pattern (async version).
+
+        The agent will be marked for deletion and actually removed when it finishes
+        any current work. This ensures no active requests are interrupted.
+
+        Args:
+            agent_id: The ID of the agent to remove
+
+        Returns:
+            True if the agent was successfully marked for removal
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            AgentNotFoundError: If no agent with the given ID exists
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "remove_agent", "agent_id": agent_id},
+            )
+
+        return await self._overlord.remove_agent(agent_id)
+
+    async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
         List all agents in the running overlord with their status.
 
@@ -1392,9 +1455,9 @@ class Formation:
                 {"operation": "list_agents"},
             )
 
-        return self._overlord.list_agents()
+        return await self._overlord.list_agents()
 
-    def get_agent_status(self, agent_id: str) -> Dict[str, Any]:
+    async def get_agent_status(self, agent_id: str) -> Dict[str, Any]:
         """
         Get detailed status information for a specific agent.
 
@@ -1415,7 +1478,7 @@ class Formation:
                 {"operation": "get_agent_status", "agent_id": agent_id},
             )
 
-        agents = self._overlord.list_agents()
+        agents = await self._overlord.list_agents()
         if agent_id not in agents:
             from ..datatypes.exceptions import AgentNotFoundError
             raise AgentNotFoundError(agent_id)

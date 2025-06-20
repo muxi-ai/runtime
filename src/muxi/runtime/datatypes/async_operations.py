@@ -8,7 +8,7 @@ import asyncio
 from typing import Any, Dict, Optional, Callable, Set
 from dataclasses import dataclass, field
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class OperationStatus(Enum):
@@ -46,7 +46,7 @@ class OperationContext:
     operation_type: str
     description: str
     timeout: float
-    start_time: datetime = field(default_factory=datetime.now)
+    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     status: OperationStatus = OperationStatus.PENDING
     result: Optional[Any] = None
     error: Optional[Exception] = None
@@ -56,7 +56,7 @@ class OperationContext:
     @property
     def elapsed_time(self) -> float:
         """Get elapsed time since operation started."""
-        return (datetime.now() - self.start_time).total_seconds()
+        return (datetime.now(timezone.utc) - self.start_time).total_seconds()
 
     @property
     def is_expired(self) -> bool:
@@ -150,7 +150,7 @@ class CancellationError(Exception):
         self.operation_id = operation_id
 
 
-class TimeoutError(Exception):
+class OperationTimeoutError(Exception):
     """Exception raised when an operation times out."""
 
     def __init__(self, message: str, timeout: float, operation_id: Optional[str] = None):

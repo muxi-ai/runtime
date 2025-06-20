@@ -1103,7 +1103,7 @@ class Overlord:
         # Mark for deletion - actual removal happens when no longer active
         await self.active_agent_tracker.mark_agent_for_deletion(agent_id)
 
-        if self.active_agent_tracker.is_agent_busy(agent_id):
+        if await self.active_agent_tracker.is_agent_busy(agent_id):
             print(f"⏳ Agent '{agent_id}' marked for deletion - will be removed when current request completes")
         else:
             print(f"✅ Agent '{agent_id}' removed immediately (not busy)")
@@ -1229,7 +1229,7 @@ class Overlord:
             raise NoAvailableAgentsError("No agents available")
 
         # Get available agents (not marked for deletion)
-        available_agents = self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
+        available_agents = await self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
 
         if not available_agents:
             raise NoAvailableAgentsError("No agents available for new requests")
@@ -1279,7 +1279,7 @@ class Overlord:
                 #  Warning - TODO: add observability
                 # ConversationEvents.OVERLORD_ROUTING_FAILED
                 _ = e  # remove this after implementing observability
-                return self._select_best_available_agent(message)
+                return await self._select_best_available_agent(message)
 
         try:
             # Create a prompt for the routing model
@@ -1293,7 +1293,7 @@ class Overlord:
 
             # If parsing failed or the agent doesn't exist, use intelligent fallback
             if selected_agent_id is None or selected_agent_id not in self.agents:
-                selected_agent_id = self._select_best_available_agent(message)
+                selected_agent_id = await self._select_best_available_agent(message)
                 #  Warning - TODO: add observability
                 # ConversationEvents.OVERLORD_ROUTING_COMPLETED
                 # Routing model returned invalid agent. Selected best available agent
@@ -1316,7 +1316,7 @@ class Overlord:
             #  Warning - TODO: add observability
             # ConversationEvents.OVERLORD_ROUTING_FAILED
             _ = e  # remove this after implementing observability
-            return self._select_best_available_agent(message)
+            return await self._select_best_available_agent(message)
 
     def _create_routing_prompt(self, message: str) -> str:
         """
@@ -1381,7 +1381,7 @@ class Overlord:
 
         return prompt
 
-    def _select_best_available_agent(self, message: str) -> str:
+    async def _select_best_available_agent(self, message: str) -> str:
         """
         Intelligently select the best available agent based on message content.
 
@@ -1396,7 +1396,7 @@ class Overlord:
             The ID of the best matching agent
         """
         # Get available agents (not marked for deletion)
-        available_agents = self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
+        available_agents = await self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
 
         if not available_agents:
             raise NoAvailableAgentsError("No agents available for new requests")
@@ -1488,7 +1488,7 @@ class Overlord:
         # If no agent ID was found, return None
         return None
 
-    def list_agents(self) -> Dict[str, Dict[str, Any]]:
+    async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
         List all registered agents with their status information.
 
@@ -1502,7 +1502,7 @@ class Overlord:
                 'status' (idle/busy/pending_deletion), and 'is_busy' flag.
 
         Example:
-            >>> agents = overlord.list_agents()
+            >>> agents = await overlord.list_agents()
             >>> print(agents)
             {
                 'assistant': {
@@ -1521,8 +1521,9 @@ class Overlord:
         """
         agent_info = {}
         for agent_id in self.agents.keys():
-            is_busy = self.active_agent_tracker.is_agent_busy(agent_id)
-            is_pending_deletion = agent_id in self.active_agent_tracker.pending_deletions
+            is_busy = await self.active_agent_tracker.is_agent_busy(agent_id)
+            pending_deletions = await self.active_agent_tracker.get_pending_deletions()
+            is_pending_deletion = agent_id in pending_deletions
 
             status = "busy" if is_busy else "idle"
             if is_pending_deletion:
@@ -2649,7 +2650,7 @@ class Overlord:
             )
 
         # Check if overlord is accepting new requests
-        if not self.active_agent_tracker.can_accept_new_requests():
+        if not await self.active_agent_tracker.can_accept_new_requests():
             raise OverlordShuttingDownError("❌ Overlord is shutting down - not accepting new requests")
 
         # Get the selected agent and process the message
