@@ -20,7 +20,7 @@ Requires-Dist: websockets>=11.0.3
 Requires-Dist: httpx-sse>=0.4.0
 Requires-Dist: rich>=13.6.0
 Requires-Dist: colorama>=0.4.6
-Requires-Dist: mcp>=1.4.1
+Requires-Dist: mcp>=1.9.0
 Requires-Dist: aiofiles>=23.2.0
 Requires-Dist: python-magic>=0.4.27
 Requires-Dist: markitdown[all]>=0.1.0
@@ -31,7 +31,7 @@ Requires-Dist: nltk>=3.8.0
 Requires-Dist: spacy>=3.8.0
 Requires-Dist: sentence-transformers>=2.2.0
 Requires-Dist: onellm>=0.0.7
-Requires-Dist: a2a-sdk>=1.0.0
+Requires-Dist: a2a-sdk>=0.2.8
 Requires-Dist: pytest>=7.0.0
 Requires-Dist: fastapi>=0.108.0
 Requires-Dist: uvicorn>=0.24.0
@@ -55,7 +55,7 @@ Dynamic: license-file
 
 ## Overview
 
-MUXI Runtime is the foundational execution engine of the MUXI Framework, serving as the computational core that runs AI agent formations. It provides a comprehensive set of abstractions and utilities for building, deploying, and managing complex AI agent systems both within the MUXI Server and as a standalone embedded runtime.****
+MUXI Runtime is the foundational execution engine of the MUXI Framework, serving as the computational core that runs AI agent formations. It provides a comprehensive set of abstractions and utilities for building, deploying, and managing complex AI agent systems both within the MUXI Server and as a standalone embedded runtime.
 
 Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful engine that executes formation definitions (YAML configs) as live AI systems, while the MUXI Server acts as the "Docker daemon" handling HTTP, routing, authentication, and formation lifecycle management.
 
@@ -63,17 +63,58 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Server Integration**: Powers formation execution within the MUXI AI Server
 - **Embedded Systems**: Runs directly in applications for local AI agent capabilities
 
+## Recent Architecture Improvements
+
+### Formation-Overlord Separation ✅ **COMPLETED**
+- **Clean Separation**: Formation handles operational lifecycle, Overlord focuses on intelligent decision-making
+- **Hot Agent Management**: Add/remove agents during runtime without formation restart
+- **Service Handoff**: Formation creates and configures services, then hands them to Overlord
+- **Breaking Changes**: Legacy direct Overlord instantiation removed for cleaner architecture
+
+### Services Consolidation ✅ **COMPLETED**
+- **Multimodal Migration**: Moved multimodal capabilities to unified services architecture
+- **Datatype Consolidation**: Unified data structures across all services
+- **Service Directory**: All reusable components organized in `src/muxi/runtime/services/`
+- **Clean Dependencies**: Eliminated backward compatibility layers
+
+### Hot Agent Deployment ✅ **READY**
+- **Runtime Agent Management**: Add/remove agents without formation restart
+- **State Preservation**: Maintain all existing traces, sessions, and memory state
+- **Validation Pipeline**: Comprehensive agent validation before deployment
+- **Rollback Capability**: Safe removal and error recovery
+
+### Backward Compatibility Removal ✅ **COMPLETED**
+- **Legacy API Elimination**: Removed all deprecated patterns and APIs for cleaner codebase
+- **Architectural Simplification**: No more legacy support burden, pure modern architecture
+- **Breaking Changes**: Full commitment to new Formation-Services-Overlord paradigm
+- **Development Velocity**: Faster iteration without compatibility constraints
+
+### Architectural Transformation Summary ✅ **COMPLETED**
+The MUXI Runtime has undergone a complete architectural transformation:
+
+| **Legacy Architecture** | **New Architecture** |
+|------------------------|---------------------|
+| Direct Overlord instantiation | Formation-managed lifecycle |
+| Monolithic agent capabilities | Unified services architecture |
+| Scattered multimodal code | Consolidated multimodal services |
+| Fragmented data types | Unified datatypes package |
+| Backward compatibility burden | Clean, modern APIs only |
+| Static agent management | Hot agent deployment |
+
 ## Features
 
 - **Formation Execution**: Direct execution of formation YAML configurations as live AI systems
+- **Hot Agent Deployment**: Add/remove agents during runtime with zero downtime
+- **Formation-Overlord Architecture**: Clean separation between operations (Formation) and intelligence (Overlord)
 - **Overlord Orchestration**: Central orchestration system for managing multiple agents
 - **Agent Framework**: Flexible agent implementation with specialized capabilities
+- **Unified Services Architecture**: Consolidated multimodal, memory, MCP, A2A, and observability services
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
-- **Multi-Modal Support**: Handle text, image, audio, video, and document content
+- **Multi-Modal Support**: Handle text, image, audio, video, and document content through unified services
 - **OneLLM Integration**: Provider-agnostic LLM interface with multiple model support
 - **Async Orchestration**: Production-ready async request-response patterns for long-running agentic tasks with intelligent routing, webhook notifications, background processing, and session tracking
 - **Streaming Responses**: Real-time streaming chat responses with AsyncGenerator support for ChatGPT-like streaming behavior
@@ -95,51 +136,62 @@ pip install -e .
 
 ## Usage
 
+### New Formation-Based Architecture
+
 ```python
-from muxi.runtime import Overlord, Agent
+from muxi.runtime import Formation
 
-# Create an overlord to manage agents and shared memory
-overlord = Overlord(
-    id="my-overlord",
-    description="My orchestration system",
-    buffer_size=10,
-    buffer_multiplier=5
-)
+# Create a formation to manage the operational lifecycle
+formation = Formation()
 
-# Add agents to the overlord
-assistant = Agent(
-    id="assistant",
-    system_message="You are a helpful assistant.",
-    model="openai/gpt-4o"
-)
+# Load and validate formation configuration
+formation.load("my-formation.yaml")
 
-coder = Agent(
-    id="coder",
-    system_message="You are an expert programmer.",
-    model="anthropic/claude-3-opus"
-)
+# Start the overlord with pre-configured services
+overlord = formation.start_overlord()
 
-overlord.add_agent(assistant)
-overlord.add_agent(coder)
-
-# Run a conversation with session tracking
+# Interact with the intelligent system
 response = overlord.chat(
     message="Hello, can you help me with a coding problem?",
-    agent_name="assistant",
     user_id="user123",
     session_id="session_abc"
 )
 print(response)
 
-# Streaming conversation (ChatGPT-like streaming)
+# Hot agent deployment during runtime
+new_agent_id = await formation.add_agent({
+    "id": "specialist_coder",
+    "name": "Python Specialist",
+    "specialties": ["python", "debugging"],
+    "model": {"provider": "openai", "model": "gpt-4o"}
+})
+
+# Remove agents safely during runtime
+await formation.remove_agent("old_agent_id")
+
+# Graceful shutdown - finish conversations/tasks
+formation.stop_overlord()
+
+# Cleanup operational resources
+formation.stop()
+```
+
+### Streaming Conversation (ChatGPT-like streaming)
+```python
 async for chunk in overlord.chat(
     message="Explain how async generators work",
-    agent_name="coder",
     user_id="user123",
     session_id="session_abc",
     stream=True  # Enable streaming
 ):
     print(chunk, end="", flush=True)
+```
+
+### Legacy Pattern (Removed)
+```python
+# ❌ No longer supported - use Formation-based architecture above
+# from muxi.runtime.overlord import Overlord
+# overlord = Overlord(config_dict)  # Removed for cleaner architecture
 ```
 
 ## Secrets Management (Development)
@@ -210,38 +262,39 @@ mcp_servers:
 
 ## Architecture
 
-MUXI Runtime consists of several key components:
+MUXI Runtime consists of several key components organized around the Formation-Services-Overlord architecture:
 
 ```
 muxi/runtime/
-├── agent.py          # Agent implementation
-├── overlord.py       # Overlord orchestration
-├── config/           # Configuration components
-├── memory/           # Memory systems
-│   ├── buffer.py     # Buffer memory
-│   ├── long_term.py  # Long-term memory
-│   └── extractor.py  # Information extraction
-├── mcp/              # Model Context Protocol
-│   ├── service.py    # Centralized MCP service
-│   └── transport/    # Transport implementations
-├── observability/    # Observability & monitoring
-│   ├── manager.py    # Central observability manager
-│   ├── transports/   # Event transport implementations
-│   ├── formatters/   # Event formatting (10 formats)
-│   └── health/       # Health monitoring system
-└── knowledge/        # Knowledge base integration
+├── formation/                  # Formation orchestration and lifecycle
+│   ├── formation.py           # Main formation orchestration
+│   ├── agents/                # Agent management
+│   ├── overlord/              # Intelligent decision-making
+│   └── config/                # Configuration management
+├── services/                  # Unified service architecture
+│   ├── memory/                # Memory systems
+│   ├── multimodal/            # Multi-modal processing (moved from agents)
+│   ├── mcp/                   # Model Context Protocol
+│   ├── a2a/                   # Agent-to-Agent communication
+│   ├── llm/                   # Language model services
+│   ├── observability/         # Monitoring and tracing
+│   └── secrets/               # Secrets management
+├── types/                     # Consolidated data types
+│   ├── errors.py              # Unified error types
+│   └── response.py            # Unified response format
+└── utils/                     # Runtime utilities
 ```
 
 ## Runtime in the MUXI Ecosystem
 
 MUXI Runtime is part of the broader MUXI Framework ecosystem, designed around formation-based AI system deployment:
 
-- **MUXI Runtime**: The computational engine executing formations (this repository) - **✅ 100% Complete + Async Orchestration**
-- **MUXI Server**: Formation execution server with REST/SSE/WebRTC/MCP/Webhook APIs - **⏳ Next Phase**
+- **MUXI Runtime**: The computational engine executing formations (this repository) - **✅ 100% Complete + Architectural Transformation**
+- **MUXI Server**: Formation execution server with REST/SSE/WebRTC/MCP/Webhook APIs - **⏳ Ready to Start Development**
 - **OneLLM**: Provider-agnostic LLM interface with multi-modal support - **✅ OpenAI Complete**
 - **FAISSx**: Distributed FAISS vector database for memory systems - **✅ Integration Complete**
-- **MUXI CLI**: Command-line interface for formation management (planned)
-- **MUXI Schemas**: Formation and agent configuration schemas
+- **MUXI CLI**: Command-line interface for formation management - **⏳ Next Priority**
+- **MUXI Schemas**: Formation and agent configuration schemas - **✅ Complete**
 
 ### Formation-First Architecture
 
@@ -253,7 +306,6 @@ The runtime executes **Formation configs** (YAML files defining complete AI syst
 | Docker Container | Running Formation |
 | Docker Runtime | MUXI Runtime |
 | Docker Daemon | MUXI Server |
-
 
 ## License
 
