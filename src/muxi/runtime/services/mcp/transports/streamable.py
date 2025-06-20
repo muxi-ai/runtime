@@ -139,7 +139,7 @@ class StreamableHTTPTransport(BaseTransport):
             "ping": "ping"
         }
 
-        return endpoint_map.get(method, method.replace("/", "/"))
+        return endpoint_map.get(method, method)
 
     async def _send_http_request(self, url: str, json_request: dict, timeout: int) -> dict:
         """Send HTTP POST request to MCP server."""

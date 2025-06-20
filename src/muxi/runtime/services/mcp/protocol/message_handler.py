@@ -6,7 +6,10 @@ from mcp.shared.message import SessionMessage
 from mcp.types import JSONRPCRequest, JSONRPCResponse, JSONRPCError
 import uuid
 import json
+import logging
 from typing import Dict, Any, Union
+
+logger = logging.getLogger(__name__)
 
 
 class MCPMessageHandler:
@@ -110,17 +113,79 @@ class MCPMessageHandler:
 
     def create_notification(self, method: str, params: dict) -> SessionMessage:
         """Create proper MCP notification message (no ID)."""
-        request = {
-            "jsonrpc": "2.0",
-            "method": method,
-            "params": params
-        }
-        return SessionMessage(message=request)
+        # Create JSONRPCRequest without ID (notifications don't have IDs per JSON-RPC spec)
+        notification = JSONRPCRequest(
+            jsonrpc="2.0",
+            method=method,
+            params=params,
+            id=None  # Notifications explicitly have no ID
+        )
+        return SessionMessage(message=notification)
 
     def validate_request(self, request: Dict[str, Any]) -> bool:
-        """Validate MCP request format."""
-        required_fields = ["jsonrpc", "method"]
-        return all(field in request for field in required_fields)
+        """Validate MCP request format according to JSON-RPC 2.0 specification.
+
+        Args:
+            request: Request dictionary to validate
+
+        Returns:
+            True if request is valid, False otherwise
+        """
+        try:
+            # Basic type check
+            if not isinstance(request, dict):
+                logger.debug(f"Request is not a dictionary: {type(request)}")
+                return False
+
+            # Validate required 'jsonrpc' field
+            if "jsonrpc" not in request:
+                logger.debug("Request missing required 'jsonrpc' field")
+                return False
+
+            jsonrpc_version = request["jsonrpc"]
+            if not isinstance(jsonrpc_version, str):
+                logger.debug(f"jsonrpc field is not a string: {type(jsonrpc_version)}")
+                return False
+
+            if jsonrpc_version != "2.0":
+                logger.debug(f"Invalid jsonrpc version: {jsonrpc_version}, expected '2.0'")
+                return False
+
+            # Validate required 'method' field
+            if "method" not in request:
+                logger.debug("Request missing required 'method' field")
+                return False
+
+            method = request["method"]
+            if not isinstance(method, str):
+                logger.debug(f"method field is not a string: {type(method)}")
+                return False
+
+            if not method.strip():
+                logger.debug("method field is empty or whitespace only")
+                return False
+
+            # Validate optional 'params' field
+            if "params" in request:
+                params = request["params"]
+                # JSON-RPC allows params to be Object (dict) or Array (list)
+                if not isinstance(params, (dict, list)):
+                    logger.debug(f"params field must be dict or list: {type(params)}")
+                    return False
+
+            # Validate optional 'id' field
+            if "id" in request:
+                request_id = request["id"]
+                # JSON-RPC allows id to be String, Number, or null
+                if not isinstance(request_id, (str, int, float, type(None))):
+                    logger.debug(f"id field must be string, number, or null: {type(request_id)}")
+                    return False
+
+            return True
+
+        except Exception as e:
+            logger.debug(f"Error validating request: {e}")
+            return False
 
     def validate_response(self, response: Dict[str, Any]) -> bool:
         """Validate MCP response format."""

@@ -58,6 +58,10 @@ class MCPSamplingClient:
 
             # Extract result
             result = response.get("result", {})
+
+            # Validate result structure
+            self._validate_message_result(result)
+
             return result
 
         except Exception as e:

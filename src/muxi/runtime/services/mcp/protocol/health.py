@@ -2,9 +2,12 @@
 
 import time
 import asyncio
+import logging
 from typing import Dict, Any, List
 from ..transports.base import BaseTransport
 from .message_handler import MCPMessageHandler
+
+logger = logging.getLogger(__name__)
 
 
 class MCPHealthMonitor:
@@ -161,7 +164,8 @@ class MCPHealthMonitor:
             tools_request = self.message_handler.create_request("tools/list", {})
             await asyncio.wait_for(transport.send_message(tools_request), timeout=5.0)
             capabilities.append("tools")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Tools capability check failed: {type(e).__name__}: {e}")
             pass
 
         # Test resources capability
@@ -169,7 +173,8 @@ class MCPHealthMonitor:
             resources_request = self.message_handler.create_request("resources/list", {})
             await asyncio.wait_for(transport.send_message(resources_request), timeout=5.0)
             capabilities.append("resources")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Resources capability check failed: {type(e).__name__}: {e}")
             pass
 
         # Test prompts capability
@@ -177,7 +182,8 @@ class MCPHealthMonitor:
             prompts_request = self.message_handler.create_request("prompts/list", {})
             await asyncio.wait_for(transport.send_message(prompts_request), timeout=5.0)
             capabilities.append("prompts")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Prompts capability check failed: {type(e).__name__}: {e}")
             pass
 
         # Test sampling capability
@@ -190,7 +196,8 @@ class MCPHealthMonitor:
             await asyncio.wait_for(transport.send_message(sampling_request), timeout=5.0)
             # If we get a response (even an error), the capability exists
             capabilities.append("sampling")
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Sampling capability check failed: {type(e).__name__}: {e}")
             pass
 
         health_status["capabilities"] = capabilities

@@ -153,8 +153,15 @@ class MCPTestServerManager:
                 # Verify the server is responding
                 if not await self._wait_for_http_server(config.url, timeout):
                     process.terminate()
-                    stderr = process.stderr.read().decode() if process.stderr else ""
-                    raise RuntimeError(f"Server {server_type} failed to respond: {stderr}")
+                    try:
+                        # Wait for process to terminate and capture output safely
+                        stdout, stderr = process.communicate(timeout=5)
+                        stderr_text = stderr.decode() if stderr else ""
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        stdout, stderr = process.communicate()
+                        stderr_text = stderr.decode() if stderr else ""
+                    raise RuntimeError(f"Server {server_type} failed to respond: {stderr_text}")
 
             # Check if process is still running
             if process.poll() is None:
@@ -162,8 +169,10 @@ class MCPTestServerManager:
                 print(f"✅ Started {config.name}")
                 return True
             else:
-                stderr = process.stderr.read().decode() if process.stderr else ""
-                raise RuntimeError(f"Server {server_type} failed to start: {stderr}")
+                # Process has terminated - capture output safely
+                stdout, stderr = process.communicate()
+                stderr_text = stderr.decode() if stderr else ""
+                raise RuntimeError(f"Server {server_type} failed to start: {stderr_text}")
 
         except Exception as e:
             print(f"❌ Failed to start {server_type} server: {e}")

@@ -1,6 +1,7 @@
 """MCP Health monitoring and capabilities negotiation implementation."""
 
 import asyncio
+import datetime
 from typing import Dict, Any, Optional, Callable
 from ..transports.base import BaseTransport
 from ..protocol.message_handler import MCPMessageHandler
@@ -130,9 +131,27 @@ class MCPHealthMonitor:
                 if not self.is_monitoring:
                     break
 
-                # Send ping
-                await self.ping(transport)
-                consecutive_failures = 0
+                # Send ping and check result
+                ping_result = await self.ping(transport)
+
+                # Check if ping was actually successful
+                if ping_result.get("success", False):
+                    consecutive_failures = 0
+                else:
+                    # Ping failed without raising exception (e.g., timeout)
+                    consecutive_failures += 1
+                    error_msg = ping_result.get("error", "Unknown ping failure")
+                    print(f"Health check failed ({consecutive_failures}/{max_failures}): {error_msg}")
+
+                    # Check if we've failed too many times
+                    if consecutive_failures >= max_failures:
+                        self.is_monitoring = False
+                        if self.on_connection_lost:
+                            try:
+                                await self.on_connection_lost()
+                            except Exception as callback_error:
+                                print(f"Error in connection lost callback: {callback_error}")
+                        break
 
             except (MCPRequestError, MCPTimeoutError) as e:
                 consecutive_failures += 1
@@ -202,7 +221,6 @@ class MCPHealthMonitor:
             summary_lines.append(f"⏱️  Last RTT: {stats['last_rtt_ms']:.1f}ms")
 
         if stats["last_ping_time"]:
-            import datetime
             last_ping = datetime.datetime.fromtimestamp(stats["last_ping_time"])
             summary_lines.append(f"🕐 Last ping: {last_ping.strftime('%H:%M:%S')}")
 
@@ -220,10 +238,12 @@ class MCPHealthMonitor:
             success: Whether the ping was successful
             response_time_ms: Response time of the ping in milliseconds
         """
+        # Always increment total ping count on every attempt
+        self.ping_count += 1
+
         if success:
             self.last_ping_time = asyncio.get_event_loop().time()
             self.last_pong_time = self.last_ping_time + (response_time_ms / 1000) if response_time_ms else None
-            self.ping_count += 1
         else:
             self.failed_pings += 1
 

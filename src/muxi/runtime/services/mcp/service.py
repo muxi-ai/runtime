@@ -636,6 +636,31 @@ class MCPService:
     # MCP Specification Features
     # =============================
 
+    def _get_transport_for_server(self, server_id: str):
+        """Get transport object for a server with validation.
+
+        Args:
+            server_id: The ID of the server
+
+        Returns:
+            Transport object for the server
+
+        Raises:
+            ValueError: If server_id is invalid or not connected
+        """
+        if server_id not in self.handlers:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        handler = self.handlers[server_id]
+        server_name = self.connections[server_id]["server_name"]
+
+        # Get transport from the handler
+        if server_name not in handler.active_connections:
+            raise ValueError(f"Server {server_id} is not connected")
+
+        client = handler.active_connections[server_name]
+        return client.transport
+
     async def list_resources(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
         """List available resources from an MCP server.
 
@@ -649,19 +674,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.resource_discovery.list_resources(transport, cursor)
 
     async def read_resource(self, server_id: str, uri: str) -> Dict[str, Any]:
@@ -677,19 +690,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.resource_discovery.read_resource(transport, uri)
 
     async def list_prompts(self, server_id: str) -> list[Dict[str, Any]]:
@@ -704,19 +705,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.prompt_discovery.list_prompts(transport)
 
     async def get_prompt(self, server_id: str, name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -733,19 +722,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.prompt_discovery.get_prompt(transport, name, arguments)
 
     async def create_message(
@@ -773,19 +750,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.sampling_creator.create_message(
             transport=transport,
             messages=messages,
@@ -808,19 +773,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.template_discovery.list_templates(transport, cursor)
 
     async def get_template(self, server_id: str, name: str) -> Dict[str, Any]:
@@ -836,19 +789,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.template_discovery.get_template(transport, name)
 
     async def ping_server(self, server_id: str, data: Optional[str] = None) -> Dict[str, Any]:
@@ -864,19 +805,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
-
+        transport = self._get_transport_for_server(server_id)
         return await self.health_monitor.ping(transport, data)
 
     async def start_health_monitoring(self, server_id: str, ping_interval: float = 30.0) -> None:
@@ -889,18 +818,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
+        transport = self._get_transport_for_server(server_id)
 
         # Update health monitor settings
         self.health_monitor.ping_interval = ping_interval
@@ -945,18 +863,7 @@ class MCPService:
         Raises:
             ValueError: If the server ID is not valid
         """
-        if server_id not in self.handlers:
-            raise ValueError(f"Unknown MCP server: {server_id}")
-
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Get transport from the handler
-        if server_name not in handler.active_connections:
-            raise ValueError(f"Server {server_id} is not connected")
-
-        client = handler.active_connections[server_name]
-        transport = client.transport
+        transport = self._get_transport_for_server(server_id)
 
         # Default client info if not provided
         if client_info is None:

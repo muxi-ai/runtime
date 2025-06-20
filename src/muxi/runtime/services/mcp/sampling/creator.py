@@ -49,8 +49,10 @@ class MCPSamplingCreator:
             if model_preferences:
                 params["modelPreferences"] = model_preferences
             if max_tokens is not None:
+                self._validate_max_tokens(max_tokens)
                 params["maxTokens"] = max_tokens
             if temperature is not None:
+                self._validate_temperature(temperature)
                 params["temperature"] = temperature
             if stop_sequences:
                 params["stopSequences"] = stop_sequences

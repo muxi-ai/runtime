@@ -13,6 +13,38 @@ class MCPPromptDiscovery:
         """Initialize prompt discovery."""
         self.message_handler = MCPMessageHandler()
 
+    def _extract_result_from_response(self, response: Any, method_name: str) -> Dict[str, Any]:
+        """Extract result from MCP response with validation.
+
+        Args:
+            response: Raw response from MCP server
+            method_name: Name of the MCP method for error context
+
+        Returns:
+            Extracted result dictionary
+
+        Raises:
+            MCPRequestError: If response is invalid or malformed
+        """
+        # Validate response type
+        if isinstance(response, dict):
+            result = response.get("result", response)
+
+            # Validate result is also a dictionary
+            if not isinstance(result, dict):
+                raise MCPRequestError(
+                    f"Invalid {method_name} response: result must be a dictionary, "
+                    f"got {type(result).__name__}"
+                )
+
+            return result
+        else:
+            # Handle non-dict response
+            raise MCPRequestError(
+                f"Invalid {method_name} response: expected dictionary, "
+                f"got {type(response).__name__}"
+            )
+
     async def list_prompts(self, transport: BaseTransport) -> List[Dict[str, Any]]:
         """List available prompts using prompts/list method.
 
@@ -32,13 +64,8 @@ class MCPPromptDiscovery:
                 "params": {}
             })
 
-            # Extract prompts from result - handle both dict and direct response
-            if hasattr(response, 'get'):
-                result = response.get("result", {})
-            else:
-                # Handle case where response might be the result directly
-                result = response if isinstance(response, dict) else {}
-
+            # Extract result using helper method
+            result = self._extract_result_from_response(response, "prompts/list")
             prompts = result.get("prompts", [])
 
             # Validate and process prompts
@@ -78,12 +105,8 @@ class MCPPromptDiscovery:
                 "params": params
             })
 
-            # Extract result - handle both dict and direct response
-            if hasattr(response, 'get'):
-                result = response.get("result", {})
-            else:
-                result = response if isinstance(response, dict) else {}
-
+            # Extract result using helper method
+            result = self._extract_result_from_response(response, "prompts/get")
             return self._process_prompt_result(result)
 
         except Exception as e:

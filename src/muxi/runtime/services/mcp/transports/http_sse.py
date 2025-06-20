@@ -176,7 +176,7 @@ class HTTPSSETransport(BaseTransport):
                 post_url = f"{base_url}/mcp/ping"
             else:
                 # Fallback for unknown methods
-                post_url = f"{base_url}/mcp/{method.replace('/', '/')}"
+                post_url = f"{base_url}/mcp/{method}"
 
             async with self.session.post(
                 post_url,
