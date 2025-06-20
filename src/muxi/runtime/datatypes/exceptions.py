@@ -310,6 +310,59 @@ class DependencyValidationError(DependencyError):
         self.validation_errors = validation_errors
 
 
+# MCP Errors
+class MCPError(FormationError):
+    """Base class for MCP-related errors."""
+    pass
+
+
+class MCPRequestError(MCPError):
+    """Raised when MCP request fails."""
+
+    def __init__(
+        self, message: str, method: str = None, server_id: str = None, details: Optional[Dict[str, Any]] = None
+    ):
+        super().__init__(message, details)
+        self.method = method
+        self.server_id = server_id
+
+
+class MCPConnectionError(MCPError):
+    """Raised when MCP connection fails."""
+
+    def __init__(self, server_id: str, reason: str, details: Optional[Dict[str, Any]] = None):
+        message = f"Failed to connect to MCP server '{server_id}': {reason}"
+        super().__init__(message, details)
+        self.server_id = server_id
+        self.reason = reason
+
+
+class MCPToolError(MCPError):
+    """Raised when MCP tool execution fails."""
+
+    def __init__(self, tool_name: str, reason: str, server_id: str = None, details: Optional[Dict[str, Any]] = None):
+        message = f"MCP tool '{tool_name}' failed: {reason}"
+        if server_id:
+            message = f"MCP tool '{tool_name}' on server '{server_id}' failed: {reason}"
+        super().__init__(message, details)
+        self.tool_name = tool_name
+        self.server_id = server_id
+        self.reason = reason
+
+
+class MCPTimeoutError(MCPError):
+    """Raised when MCP operation times out."""
+
+    def __init__(self, operation: str, timeout: float, server_id: str = None, details: Optional[Dict[str, Any]] = None):
+        message = f"MCP {operation} timed out after {timeout}s"
+        if server_id:
+            message = f"MCP {operation} on server '{server_id}' timed out after {timeout}s"
+        super().__init__(message, details)
+        self.operation = operation
+        self.timeout = timeout
+        self.server_id = server_id
+
+
 # Utility function for error context
 def add_error_context(exception: Exception, context: Dict[str, Any]) -> FormationError:
     """

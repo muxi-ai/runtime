@@ -44,8 +44,53 @@ class SystemEvents(Enum):
     MCP_SERVER_REGISTRATION_FAILED = "mcp.server.registration.failed"
     # When MCP server registration fails
 
+    MCP_SERVER_REGISTRATION_STARTED = "mcp.server.registration.started"
+    # When MCP server registration begins
+
+    MCP_SERVER_REGISTRATION_COMPLETED = "mcp.server.registration.completed"
+    # When MCP server registration completes successfully
+
     MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery.completed"
     # When MCP server tool discovery finishes
+
+    # Connection lifecycle events
+    MCP_SERVER_CONNECTING = "mcp.server.connecting"
+    # When starting connection to MCP server
+
+    MCP_SERVER_CONNECTED = "mcp.server.connected"
+    # When MCP server connection is established
+
+    MCP_SERVER_CONNECTION_FAILED = "mcp.server.connection_failed"
+    # When MCP server connection fails
+
+    MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
+    # When MCP server disconnects
+
+    MCP_SERVER_DISCONNECTION_FAILED = "mcp.server.disconnection_failed"
+    # When MCP server disconnection fails
+
+    MCP_SERVER_RECONNECTING = "mcp.server.reconnecting"
+    # When attempting to reconnect to MCP server
+
+    MCP_SERVER_CONNECTION_LOST = "mcp.server.connection_lost"
+    # When connection to MCP server is lost
+
+    # Deregistration events
+    MCP_SERVER_UNREGISTERED = "mcp.server.unregistered"
+    # When MCP server is successfully unregistered
+
+    MCP_SERVER_UNREGISTRATION_FAILED = "mcp.server.unregistration_failed"
+    # When MCP server unregistration fails
+
+    # Message handling events
+    MCP_MESSAGE_SENT = "mcp.message.sent"
+    # When MCP message is sent to server
+
+    MCP_MESSAGE_RECEIVED = "mcp.message.received"
+    # When MCP message is received from server
+
+    MCP_MESSAGE_FAILED = "mcp.message.failed"
+    # When MCP message handling fails
 
     # ===================================================================
     # MCP TRANSPORT EVENTS (Added for Streamable HTTP implementation)
@@ -498,23 +543,8 @@ class ConversationEvents(Enum):
     # ===================================================================
     # TOOL & MCP OPERATIONS
     # ===================================================================
-    MCP_SERVER_CONNECTING = "mcp.server.connecting"
-    # When connecting to MCP server for request
-
-    MCP_SERVER_CONNECTED = "mcp.server.connected"
-    # When MCP server connection established for request
-
-    MCP_SERVER_DISCONNECTED = "mcp.server.disconnected"
-    # When MCP server disconnects during request
-
-    MCP_SERVER_CONNECTION_FAILED = "mcp.server.connection_failed"
-    # When MCP server connection fails during request
-
     MCP_TOOL_DISCOVERY_STARTED = "mcp.tool.discovery_started"
     # When starting tool discovery for request
-
-    MCP_TOOL_DISCOVERY_COMPLETED = "mcp.tool.discovery_completed"
-    # When tool discovery completes for request
 
     MCP_TOOL_DISCOVERY_FAILED = "mcp.tool.discovery_failed"
     # When tool discovery fails for request
