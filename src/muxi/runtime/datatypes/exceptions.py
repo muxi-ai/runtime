@@ -363,6 +363,15 @@ class MCPTimeoutError(MCPError):
         self.server_id = server_id
 
 
+class MCPServerNotFoundError(MCPError):
+    """Raised when attempting to operate on a non-existent MCP server."""
+
+    def __init__(self, server_id: str, details: Optional[Dict[str, Any]] = None):
+        message = f"MCP server '{server_id}' not found"
+        super().__init__(message, details)
+        self.server_id = server_id
+
+
 # Utility function for error context
 def add_error_context(exception: Exception, context: Dict[str, Any]) -> FormationError:
     """

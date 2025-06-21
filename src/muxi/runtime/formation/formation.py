@@ -31,7 +31,7 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 # Configuration imports
 from .config.validation import validate_formation
@@ -1321,32 +1321,214 @@ class Formation:
         self._retry_config = config
 
     # =============================================================================
-    # PHASE 5: DYNAMIC AGENT MANAGEMENT
+    # DYNAMIC COMPONENT MANAGEMENT HELPERS
     # =============================================================================
 
-    def add_agent(self, agent, agent_id: Optional[str] = None, description: Optional[str] = None) -> str:
+    async def _resolve_schema(self, schema: Union[Dict[str, Any], str], schema_type: str) -> Dict[str, Any]:
         """
-        Add an agent to the running overlord.
+        Resolve a schema from either inline dict or file path using FormationLoader.
 
         Args:
-            agent: The agent instance to add
-            agent_id: Optional custom agent ID (auto-generated if not provided)
-            description: Optional description for the agent
+            schema: Either a dict containing the schema, or a path to YAML/JSON file
+            schema_type: Type of schema for error messages ("agent" or "mcp")
 
         Returns:
-            The agent ID of the added agent
+            Dict[str, Any]: Resolved schema dictionary
+
+        Raises:
+            TypeError: If schema is not dict or str
+            ValueError: If schema is invalid or file cannot be loaded
+        """
+        if isinstance(schema, dict):
+            # Inline schema - validate it has required fields and interpolate secrets
+            if "id" not in schema:
+                raise ValueError(f"Inline {schema_type} schema missing required 'id' field")
+
+            # Apply secrets interpolation to inline schema
+            return await self.secrets_manager.interpolate_secrets(schema)
+
+        elif isinstance(schema, str):
+            # File path - use FormationLoader to load and process
+            try:
+                formation_loader = FormationLoader()
+                loaded_config = await formation_loader.load(schema, self.secrets_manager)
+
+                # For individual components, extract the relevant section
+                if schema_type == "agent":
+                    # If it's a standalone agent file, return as-is
+                    if "id" in loaded_config and "name" in loaded_config:
+                        return loaded_config
+                    # If it's a formation file, extract first agent
+                    elif "agents" in loaded_config and loaded_config["agents"]:
+                        return loaded_config["agents"][0]
+                    else:
+                        raise ValueError(f"No valid agent configuration found in {schema}")
+
+                elif schema_type == "mcp":
+                    # If it's a standalone MCP file, return as-is
+                    if "id" in loaded_config and "type" in loaded_config:
+                        return loaded_config
+                    # If it's a formation file, extract first MCP server
+                    elif ("mcp" in loaded_config and "servers" in loaded_config["mcp"]
+                          and loaded_config["mcp"]["servers"]):
+                        return loaded_config["mcp"]["servers"][0]
+                    else:
+                        raise ValueError(f"No valid MCP server configuration found in {schema}")
+
+            except Exception as e:
+                raise ValueError(f"Failed to load {schema_type} schema from {schema}: {e}") from e
+
+        else:
+            raise TypeError(f"Schema must be dict or str, got {type(schema).__name__}")
+
+    async def _check_agent_conflict(self, agent_schema: Dict[str, Any]) -> None:
+        """
+        Check if agent ID conflicts with existing agents.
+
+        Args:
+            agent_schema: Resolved agent schema
+
+        Raises:
+            ValueError: If agent ID already exists
+        """
+        agent_id = agent_schema["id"]
+
+        # Check running agents
+        if self._overlord:
+            existing_agents = await self._overlord.list_agents()
+            if agent_id in existing_agents:
+                raise ValueError(f"Agent ID '{agent_id}' already exists in running formation")
+
+        # Check for duplicates in existing agents
+        existing_agent_ids = [agent["id"] for agent in self._loaded_config.get("agents", [])]
+        if agent_id in existing_agent_ids:
+            raise ValueError(f"Agent ID '{agent_id}' already exists in formation configuration")
+
+    async def _check_mcp_conflict(self, mcp_schema: Dict[str, Any]) -> None:
+        """
+        Check if an MCP server schema conflicts with existing configuration.
+
+        Args:
+            mcp_schema: The MCP server schema to validate
+
+        Raises:
+            ValueError: If MCP server ID conflicts with existing configuration
+        """
+        server_id = mcp_schema.get("id")
+        if not server_id:
+            raise ValueError("MCP schema must include 'id' field")
+
+        # Check for duplicates in running overlord
+        if self._overlord:
+            servers = await self._overlord.list_mcp_servers()
+            if server_id in servers:
+                raise ValueError(f"MCP server ID '{server_id}' already exists in running overlord")
+
+        # Check for duplicates in existing MCP configuration
+        existing_server_ids = []
+        mcp_config = self._loaded_config.get("mcp", {})
+        if "servers" in mcp_config:
+            existing_server_ids.extend([server["id"] for server in mcp_config["servers"]])
+
+        if server_id in existing_server_ids:
+            raise ValueError(f"MCP server ID '{server_id}' already exists in formation configuration")
+
+    def _validate_agent_schema(self, agent_schema: Dict[str, Any]) -> None:
+        """
+        Validate agent schema structure and required fields.
+
+        Args:
+            agent_schema: The agent schema to validate
+
+        Raises:
+            ValueError: If schema is invalid or missing required fields
+        """
+        required_fields = ["schema", "id", "name", "description"]
+
+        for field in required_fields:
+            if field not in agent_schema:
+                raise ValueError(f"Agent schema missing required field: '{field}'")
+
+        # Validate schema version
+        schema_version = agent_schema.get("schema")
+        if schema_version != "1.0.0":
+            raise ValueError(f"Unsupported schema version: {schema_version}. Expected: 1.0.0")
+
+    def _validate_mcp_schema(self, mcp_schema: Dict[str, Any]) -> None:
+        """
+        Validate MCP server schema structure and required fields.
+
+        Args:
+            mcp_schema: The MCP server schema to validate
+
+        Raises:
+            ValueError: If schema is invalid or missing required fields
+        """
+        required_fields = ["schema", "id", "description", "type"]
+
+        for field in required_fields:
+            if field not in mcp_schema:
+                raise ValueError(f"MCP schema missing required field: '{field}'")
+
+        # Validate schema version
+        schema_version = mcp_schema.get("schema")
+        if schema_version != "1.0.0":
+            raise ValueError(f"Unsupported schema version: {schema_version}. Expected: 1.0.0")
+
+        # Validate server type and required fields
+        server_type = mcp_schema.get("type")
+        if server_type not in ["command", "http"]:
+            raise ValueError(f"Invalid MCP server type: {server_type}. Must be 'command' or 'http'")
+
+        if server_type == "command" and "command" not in mcp_schema:
+            raise ValueError("Command-type MCP server missing 'command' field")
+
+        if server_type == "http":
+            if "endpoint" not in mcp_schema:
+                raise ValueError("HTTP-type MCP server missing 'endpoint' field")
+
+            # Validate endpoint URL format
+            endpoint = mcp_schema.get("endpoint", "")
+            if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
+                raise ValueError(f"Invalid endpoint URL: {endpoint}. Must start with http:// or https://")
+
+    # =============================================================================
+    # DYNAMIC AGENT MANAGEMENT
+    # =============================================================================
+
+    async def add_agent(self, schema: Union[Dict[str, Any], str]) -> str:
+        """
+        Add an agent to the running overlord from a schema definition.
+
+        Args:
+            schema: Either a dict containing the agent schema,
+                   or a path to YAML/JSON file
+
+        Returns:
+            The agent_id that was added
 
         Raises:
             OverlordStateError: If overlord is not running
+            ValueError: If agent ID already exists or schema is invalid
         """
         if not self._is_running or not self._overlord:
             raise OverlordStateError(
                 "stopped",
                 "running",
-                {"operation": "add_agent", "agent_id": agent_id},
+                {"operation": "add_agent", "schema_type": type(schema).__name__},
             )
 
-        return self._overlord.add_agent(agent, agent_id=agent_id, description=description)
+        # Resolve schema from dict or file path
+        agent_schema = await self._resolve_schema(schema, "agent")
+
+        # Validate schema structure
+        self._validate_agent_schema(agent_schema)
+
+        # Check for conflicts
+        await self._check_agent_conflict(agent_schema)
+
+        # Delegate to overlord (overlord will need to handle schema-based agent creation)
+        return await self._overlord.create_agent_from_schema(agent_schema)
 
     def remove_agent(self, agent_id: str) -> bool:
         """
@@ -1484,3 +1666,178 @@ class Formation:
             raise AgentNotFoundError(agent_id)
 
         return agents[agent_id]
+
+    # =============================================================================
+    # DYNAMIC MCP SERVER MANAGEMENT
+    # =============================================================================
+
+    async def add_mcp(self, schema: Union[Dict[str, Any], str]) -> str:
+        """
+        Add an MCP server to the running overlord from a schema definition.
+
+        Args:
+            schema: Either a dict containing the MCP schema,
+                   or a path to YAML/JSON file
+
+        Returns:
+            The server_id that was added
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            ValueError: If MCP server ID already exists or schema is invalid
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "add_mcp", "schema_type": type(schema).__name__},
+            )
+
+        # Resolve schema from dict or file path
+        mcp_schema = await self._resolve_schema(schema, "mcp")
+
+        # Validate schema structure
+        self._validate_mcp_schema(mcp_schema)
+
+        # Check for conflicts
+        await self._check_mcp_conflict(mcp_schema)
+
+        # Delegate to overlord (overlord will need to handle schema-based MCP creation)
+        return await self._overlord.create_mcp_server_from_schema(mcp_schema)
+
+    def remove_mcp(self, server_id: str) -> bool:
+        """
+        Remove an MCP server from the running overlord using the "delete when done" pattern.
+
+        The server will be marked for deletion and actually removed when it finishes
+        any current operations. This ensures no active requests are interrupted.
+
+        Note: This is the synchronous version. Use remove_mcp_async() for async contexts.
+
+        Args:
+            server_id: The ID of the MCP server to remove
+
+        Returns:
+            True if the server was successfully marked for removal
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            MCPServerNotFoundError: If no server with the given ID exists
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "remove_mcp", "server_id": server_id},
+            )
+
+        # Handle event loop properly - check if we're already in an event loop
+        try:
+            # Try to get the current event loop
+            asyncio.get_running_loop()
+            # If we're in an event loop, we need to handle this differently
+            # Create a future and run it in the loop
+            import threading
+
+            result = None
+            exception = None
+
+            def run_in_thread():
+                nonlocal result, exception
+                try:
+                    # Create a new event loop in the thread
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        result = new_loop.run_until_complete(self._overlord.remove_mcp_server(server_id))
+                    finally:
+                        new_loop.close()
+                except Exception as e:
+                    exception = e
+
+            # Run in a separate thread to avoid event loop conflicts
+            thread = threading.Thread(target=run_in_thread)
+            thread.start()
+            thread.join()
+
+            if exception:
+                raise exception
+            return result
+
+        except RuntimeError:
+            # No event loop running, safe to use asyncio.run()
+            return asyncio.run(self._overlord.remove_mcp_server(server_id))
+
+    async def remove_mcp_async(self, server_id: str) -> bool:
+        """
+        Remove an MCP server from the running overlord using the "delete when done" pattern (async version).
+
+        The server will be marked for deletion and actually removed when it finishes
+        any current operations. This ensures no active requests are interrupted.
+
+        Args:
+            server_id: The ID of the MCP server to remove
+
+        Returns:
+            True if the server was successfully marked for removal
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            MCPServerNotFoundError: If no server with the given ID exists
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "remove_mcp", "server_id": server_id},
+            )
+
+        return await self._overlord.remove_mcp_server(server_id)
+
+    async def list_mcp_servers(self) -> Dict[str, Dict[str, Any]]:
+        """
+        List all MCP servers in the running overlord with their status.
+
+        Returns:
+            Dictionary mapping server IDs to their information including status
+            (connected/disconnected/pending_deletion)
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "list_mcp_servers"},
+            )
+
+        return await self._overlord.list_mcp_servers()
+
+    async def get_mcp_status(self, server_id: str) -> Dict[str, Any]:
+        """
+        Get detailed status information for a specific MCP server.
+
+        Args:
+            server_id: The ID of the MCP server to get status for
+
+        Returns:
+            Dictionary containing MCP server status information
+
+        Raises:
+            OverlordStateError: If overlord is not running
+            MCPServerNotFoundError: If no server with the given ID exists
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_mcp_status", "server_id": server_id},
+            )
+
+        servers = await self._overlord.list_mcp_servers()
+        if server_id not in servers:
+            from ..datatypes.exceptions import MCPServerNotFoundError
+            raise MCPServerNotFoundError(server_id)
+
+        return servers[server_id]
