@@ -209,17 +209,20 @@ class MCPService:
         # Handle command-line transport directly
         if command or transport_type == "command":
             return await self._connect_single_transport(
-                server_id, url, command, "command", credentials, model, request_timeout
+                server_id, url, command, "command", credentials, model,
+                request_timeout
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
         if url and transport_type == "auto":
             try:
                 # Use enhanced transport detector with caching
-                detected_transport, detection_metadata = await TransportDetector.detect_with_fallback(
-                    url=url,
-                    timeout=min(request_timeout // 2, 30),  # Use reasonable timeout for detection
-                    use_cache=True
+                detected_transport, detection_metadata = (
+                    await TransportDetector.detect_with_fallback(
+                        url=url,
+                        timeout=min(request_timeout // 2, 30),
+                        use_cache=True
+                    )
                 )
 
                 observability.observe(
@@ -230,16 +233,22 @@ class MCPService:
                         "detected_transport": detected_transport,
                         "url": url,
                         "cache_used": detection_metadata.get("cache_used", False),
-                        "detection_method": detection_metadata.get("metadata", {}).get("detection_method", "unknown")
+                        "detection_method": (
+                            detection_metadata.get("metadata", {})
+                            .get("detection_method", "unknown")
+                        )
                     },
                     description=f"MCP transport detected: {detected_transport} for {server_id}",
                 )
 
                 # Get recommended URL for the detected transport
-                recommended_url = TransportDetector.get_recommended_url(url, detected_transport)
+                recommended_url = TransportDetector.get_recommended_url(
+                    url, detected_transport
+                )
 
                 return await self._connect_single_transport(
-                    server_id, recommended_url, command, detected_transport, credentials, model, request_timeout
+                    server_id, recommended_url, command, detected_transport,
+                    credentials, model, request_timeout
                 )
 
             except MCPConnectionError as e:
@@ -265,13 +274,16 @@ class MCPService:
                             "Try specifying transport_type explicitly "
                             "('streamable_http', 'http_sse', or 'command')"
                         ),
-                        "available_transports": ["streamable_http", "http_sse", "command"]
+                        "available_transports": [
+                            "streamable_http", "http_sse", "command"
+                        ]
                     }
                 )
 
         # Proceed with explicitly specified transport type
         return await self._connect_single_transport(
-            server_id, url, command, transport_type, credentials, model, request_timeout
+            server_id, url, command, transport_type, credentials, model,
+            request_timeout
         )
 
     async def invoke_tool(
@@ -367,7 +379,10 @@ class MCPService:
                         "success": not processed_result["isError"],
                         "protocol_version": "2025-06-18"
                     },
-                    description=f"MCP tool invocation completed with modern protocol: {tool_name} on {server_id}",
+                    description=(
+                        f"MCP tool invocation completed with modern protocol: "
+                        f"{tool_name} on {server_id}"
+                    ),
                 )
 
                 return {
@@ -386,7 +401,9 @@ class MCPService:
                         "error": str(e),
                         "error_type": type(e).__name__,
                     },
-                    description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
+                    description=(
+                        f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"
+                    ),
                 )
 
                 # Error event already emitted above
@@ -394,7 +411,8 @@ class MCPService:
             finally:
                 # Restore the original timeout if we changed it
                 if restore_timeout and server_name in handler.active_connections:
-                    handler.active_connections[server_name].request_timeout = original_timeout
+                    client = handler.active_connections[server_name]
+                    client.request_timeout = original_timeout
 
     async def _connect_with_fallback(
         self,
@@ -423,7 +441,8 @@ class MCPService:
                 )
 
                 return await self._connect_single_transport(
-                    server_id, url, None, transport_type, credentials, model, request_timeout
+                    server_id, url, None, transport_type, credentials, model,
+                    request_timeout
                 )
 
             except Exception as e:
@@ -506,9 +525,11 @@ class MCPService:
                         # Use modern protocol features for better UX
                         self.tool_registry[server_id][tool_name] = {
                             **tool,
-                            "display_name": ModernProtocolFeatures.extract_display_name(tool),
-                            "supports_structured_output": True,  # Assume modern servers support this
-                            "supports_elicitation": True,        # New 2025-06-18 feature
+                            "display_name": (
+                                ModernProtocolFeatures.extract_display_name(tool)
+                            ),
+                            "supports_structured_output": True,
+                            "supports_elicitation": True,
                             "_meta": tool.get("_meta", {}),
                             "protocol_version": "2025-06-18"
                         }
@@ -530,12 +551,18 @@ class MCPService:
                             "tools": [
                                 {
                                     "name": tool.get("name", f"unknown_{i}"),
-                                    "display_name": ModernProtocolFeatures.extract_display_name(tool)
+                                    "display_name": (
+                                        ModernProtocolFeatures
+                                        .extract_display_name(tool)
+                                    )
                                 }
                                 for i, tool in enumerate(tools)
                             ]
                         },
-                        description=(f"Discovered {len(tools)} tools with modern protocol features from {server_id}"),
+                        description=(
+                            f"Discovered {len(tools)} tools with modern protocol "
+                            f"features from {server_id}"
+                        ),
                     )
                 except Exception as e:
                     # Emit tool discovery failed event
@@ -543,7 +570,10 @@ class MCPService:
                         event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
                         level=observability.EventLevel.WARNING,
                         data={"server_id": server_id, "error": str(e), "tools_count": 0},
-                        description=f"Unable to discover tools from MCP server {server_id}: {str(e)}",
+                        description=(
+                            f"Unable to discover tools from MCP server "
+                            f"{server_id}: {str(e)}"
+                        ),
                     )
                     self.tool_registry[server_id] = {}
 
@@ -628,7 +658,9 @@ class MCPService:
                     event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
                     level=observability.EventLevel.ERROR,
                     data={"server_id": server_id, "error": str(e)},
-                    description=f"Error disconnecting from MCP server {server_id}: {str(e)}",
+                    description=(
+                        f"Error disconnecting from MCP server {server_id}: {str(e)}"
+                    ),
                 )
                 return False
 
