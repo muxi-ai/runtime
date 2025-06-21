@@ -239,22 +239,73 @@ class HealthMonitor:
     async def _check_kafka_health_async(
         self, destination: str, config: Dict[str, Any]
     ) -> Tuple[str, bool, Optional[str]]:
-        """Async Kafka health check."""
+        """Async Kafka health check with simple connectivity test."""
         try:
-            # For now, return healthy (Kafka health checks require kafka-python in async context)
-            # TODO: Implement proper Kafka health check
-            return destination, True, None
+            # Parse Kafka brokers from destination
+            if destination.startswith("kafka://"):
+                brokers = destination[8:].split(",")
+            else:
+                brokers = [destination]
+
+            # Test basic TCP connectivity to first broker
+            broker = brokers[0]
+            if ":" in broker:
+                host, port = broker.rsplit(":", 1)
+                port = int(port)
+            else:
+                host = broker
+                port = 9092  # Default Kafka port
+
+            # Simple TCP connection test
+            try:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port), timeout=10
+                )
+                writer.close()
+                await writer.wait_closed()
+                return destination, True, None
+            except Exception as e:
+                return destination, False, f"Connection failed: {str(e)}"
+
         except Exception as e:
             return destination, False, str(e)
 
     async def _check_zmq_health_async(
         self, destination: str, config: Dict[str, Any]
     ) -> Tuple[str, bool, Optional[str]]:
-        """Async ZMQ health check."""
+        """Async ZMQ health check with simple connectivity test."""
         try:
-            # For now, return healthy (ZMQ health checks require zmq.asyncio)
-            # TODO: Implement proper ZMQ health check
-            return destination, True, None
+            # Parse ZMQ destination
+            if destination.startswith(("tcp://", "tcps://")):
+                # Extract host and port from tcp://host:port
+                from urllib.parse import urlparse
+                parsed = urlparse(destination)
+                host = parsed.hostname
+                port = parsed.port or 5555  # Default ZMQ port
+
+                # Simple TCP connection test
+                try:
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection(host, port), timeout=10
+                    )
+                    writer.close()
+                    await writer.wait_closed()
+                    return destination, True, None
+                except Exception as e:
+                    return destination, False, f"Connection failed: {str(e)}"
+
+            elif destination.startswith(("ipc://", "ipcs://")):
+                # For IPC, check if socket file exists and is accessible
+                import os
+                socket_path = destination[6:]  # Remove ipc:// prefix
+                if os.path.exists(socket_path):
+                    return destination, True, None
+                else:
+                    return destination, False, "IPC socket file does not exist"
+
+            else:
+                return destination, False, f"Unsupported ZMQ protocol: {destination}"
+
         except Exception as e:
             return destination, False, str(e)
 
