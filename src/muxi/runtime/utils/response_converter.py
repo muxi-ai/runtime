@@ -10,18 +10,14 @@ import traceback
 from typing import List, Optional, Dict, Any, Union
 
 from onellm.types.common import ContentItem as OneLLMContentItem
-from ..datatypes.response import (
-    MuxiContentItem,
-    MuxiUnifiedResponse,
-    MuxiErrorDetails
-)
+from ..datatypes.response import MuxiContentItem, MuxiUnifiedResponse, MuxiErrorDetails
 from ..datatypes.errors import get_error_info
 from ..utils.error_classifier import classify_error_code
 from ..services import observability
 
 
 def convert_onellm_to_muxi_content(
-    onellm_content: List[OneLLMContentItem]
+    onellm_content: List[OneLLMContentItem],
 ) -> List[MuxiContentItem]:
     """
     Convert OneLLM ContentItem list to MUXI MuxiContentItem list.
@@ -38,10 +34,7 @@ def convert_onellm_to_muxi_content(
             observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
             observability.EventLevel.DEBUG,
             "Starting OneLLM to MUXI content conversion",
-            data={
-                "input_items_count": len(onellm_content),
-                "conversion_type": "onellm_to_muxi"
-            }
+            data={"input_items_count": len(onellm_content), "conversion_type": "onellm_to_muxi"},
         )
     except Exception:
         pass  # Don't let observability failures break core functionality
@@ -51,51 +44,46 @@ def convert_onellm_to_muxi_content(
     try:
         for item in onellm_content:
             if item["type"] == "text":
-                muxi_content.append({
-                    "type": "text",
-                    "text": item["text"],
-                    "file": None
-                })
+                muxi_content.append({"type": "text", "text": item["text"], "file": None})
             elif item["type"] == "image_url":
                 # Convert image_url to file format
-                muxi_content.append({
-                    "type": "file",
-                    "text": None,
-                    "file": {
-                        "type": "image",
-                        "url": item["image_url"]["url"]
+                muxi_content.append(
+                    {
+                        "type": "file",
+                        "text": None,
+                        "file": {"type": "image", "url": item["image_url"]["url"]},
                     }
-                })
+                )
 
         observability.observe(
-                observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-                observability.EventLevel.DEBUG,
-                "OneLLM to MUXI content conversion completed",
-                data={
-                    "input_items_count": len(onellm_content),
-                    "output_items_count": len(muxi_content),
-                    "conversion_type": "onellm_to_muxi"
-                }
-            )
+            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            observability.EventLevel.DEBUG,
+            "OneLLM to MUXI content conversion completed",
+            data={
+                "input_items_count": len(onellm_content),
+                "output_items_count": len(muxi_content),
+                "conversion_type": "onellm_to_muxi",
+            },
+        )
 
         return muxi_content
 
     except Exception as e:
         observability.observe(
-                observability.ErrorEvents.RETRY_ATTEMPTED,
-                observability.EventLevel.ERROR,
-                f"OneLLM to MUXI content conversion failed: {str(e)}",
-                data={
-                    "error_type": type(e).__name__,
-                    "conversion_type": "onellm_to_muxi",
-                    "input_items_count": len(onellm_content)
-                }
-            )
+            observability.ErrorEvents.RETRY_ATTEMPTED,
+            observability.EventLevel.ERROR,
+            f"OneLLM to MUXI content conversion failed: {str(e)}",
+            data={
+                "error_type": type(e).__name__,
+                "conversion_type": "onellm_to_muxi",
+                "input_items_count": len(onellm_content),
+            },
+        )
         raise
 
 
 def extract_user_content(
-    mcp_message_content: Union[str, List[Dict[str, Any]]]
+    mcp_message_content: Union[str, List[Dict[str, Any]]],
 ) -> List[MuxiContentItem]:
     """
     Extract user-facing content from MCP message content, filtering out tool calls.
@@ -110,9 +98,7 @@ def extract_user_content(
 
         content_type = "string" if isinstance(mcp_message_content, str) else "list"
         content_length = (
-            len(mcp_message_content)
-            if isinstance(mcp_message_content, (str, list))
-            else 0
+            len(mcp_message_content) if isinstance(mcp_message_content, (str, list)) else 0
         )
 
         observability.observe(
@@ -122,8 +108,8 @@ def extract_user_content(
             data={
                 "content_type": content_type,
                 "content_length": content_length,
-                "conversion_type": "mcp_to_user_content"
-            }
+                "conversion_type": "mcp_to_user_content",
+            },
         )
     except Exception:
         pass
@@ -133,22 +119,18 @@ def extract_user_content(
     try:
         # Handle string content
         if isinstance(mcp_message_content, str):
-            user_content.append({
-                "type": "text",
-                "text": mcp_message_content,
-                "file": None
-            })
+            user_content.append({"type": "text", "text": mcp_message_content, "file": None})
 
             observability.observe(
-                    observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-                    observability.EventLevel.DEBUG,
-                    "MCP string content extraction completed",
-                    data={
-                        "content_type": "string",
-                        "output_items_count": 1,
-                        "conversion_type": "mcp_to_user_content"
-                    }
-                )
+                observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+                observability.EventLevel.DEBUG,
+                "MCP string content extraction completed",
+                data={
+                    "content_type": "string",
+                    "output_items_count": 1,
+                    "conversion_type": "mcp_to_user_content",
+                },
+            )
 
             return user_content
 
@@ -165,49 +147,47 @@ def extract_user_content(
             if item_type == "text":
                 text_content = item.get("text", "")
                 if text_content:  # Only add non-empty text
-                    user_content.append({
-                        "type": "text",
-                        "text": text_content,
-                        "file": None
-                    })
+                    user_content.append({"type": "text", "text": text_content, "file": None})
             elif item_type == "file":
                 # Handle file content (future extension)
                 file_info = item.get("file", {})
-                user_content.append({
-                    "type": "file",
-                    "text": None,
-                    "file": {
-                        "type": file_info.get("type", "document"),
-                        "url": file_info.get("url", "")
+                user_content.append(
+                    {
+                        "type": "file",
+                        "text": None,
+                        "file": {
+                            "type": file_info.get("type", "document"),
+                            "url": file_info.get("url", ""),
+                        },
                     }
-                })
+                )
 
         observability.observe(
-                observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-                observability.EventLevel.DEBUG,
-                "MCP list content extraction completed",
-                data={
-                    "content_type": "list",
-                    "input_items_count": len(mcp_message_content),
-                    "output_items_count": len(user_content),
-                    "tool_calls_filtered": tool_calls_filtered,
-                    "conversion_type": "mcp_to_user_content"
-                }
-            )
+            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            observability.EventLevel.DEBUG,
+            "MCP list content extraction completed",
+            data={
+                "content_type": "list",
+                "input_items_count": len(mcp_message_content),
+                "output_items_count": len(user_content),
+                "tool_calls_filtered": tool_calls_filtered,
+                "conversion_type": "mcp_to_user_content",
+            },
+        )
 
         return user_content
 
     except Exception as e:
         observability.observe(
-                observability.ErrorEvents.RETRY_ATTEMPTED,
-                observability.EventLevel.ERROR,
-                f"MCP content extraction failed: {str(e)}",
-                data={
-                    "error_type": type(e).__name__,
-                    "conversion_type": "mcp_to_user_content",
-                    "content_type": "string" if isinstance(mcp_message_content, str) else "list"
-                }
-            )
+            observability.ErrorEvents.RETRY_ATTEMPTED,
+            observability.EventLevel.ERROR,
+            f"MCP content extraction failed: {str(e)}",
+            data={
+                "error_type": type(e).__name__,
+                "conversion_type": "mcp_to_user_content",
+                "content_type": "string" if isinstance(mcp_message_content, str) else "list",
+            },
+        )
         raise
 
 
@@ -220,7 +200,7 @@ def create_unified_response(
     processing_time: Optional[float] = None,
     webhook_url: Optional[str] = None,
     error: Optional[MuxiErrorDetails] = None,
-    user_id: Optional[str] = None
+    user_id: Optional[str] = None,
 ) -> MuxiUnifiedResponse:
     """
     Create a unified response object.
@@ -252,8 +232,8 @@ def create_unified_response(
                 "processing_mode": processing_mode,
                 "content_items_count": len(content),
                 "has_error": error is not None,
-                "conversion_type": "unified_response_creation"
-            }
+                "conversion_type": "unified_response_creation",
+            },
         )
     except Exception:
         pass
@@ -270,45 +250,42 @@ def create_unified_response(
             "processing_mode": processing_mode,
             "webhook_url": webhook_url,
             "error": error,
-            "response": content
+            "response": content,
         }
 
         observability.observe(
-                observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-                observability.EventLevel.DEBUG,
-                "Unified response object created successfully",
-                data={
-                    "request_id": request_id,
-                    "status": status,
-                    "formation_id": formation_id,
-                    "processing_mode": processing_mode,
-                    "content_items_count": len(content),
-                    "has_error": error is not None,
-                    "conversion_type": "unified_response_creation"
-                }
-            )
+            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            observability.EventLevel.DEBUG,
+            "Unified response object created successfully",
+            data={
+                "request_id": request_id,
+                "status": status,
+                "formation_id": formation_id,
+                "processing_mode": processing_mode,
+                "content_items_count": len(content),
+                "has_error": error is not None,
+                "conversion_type": "unified_response_creation",
+            },
+        )
 
         return response
 
     except Exception as e:
         observability.observe(
-                observability.ErrorEvents.RETRY_ATTEMPTED,
-                observability.EventLevel.ERROR,
-                f"Unified response creation failed: {str(e)}",
-                data={
-                    "error_type": type(e).__name__,
-                    "request_id": request_id,
-                    "status": status,
-                    "conversion_type": "unified_response_creation"
-                }
-            )
+            observability.ErrorEvents.RETRY_ATTEMPTED,
+            observability.EventLevel.ERROR,
+            f"Unified response creation failed: {str(e)}",
+            data={
+                "error_type": type(e).__name__,
+                "request_id": request_id,
+                "status": status,
+                "conversion_type": "unified_response_creation",
+            },
+        )
         raise
 
 
-def create_error_response(
-    exception: Exception,
-    include_trace: bool = False
-) -> MuxiErrorDetails:
+def create_error_response(exception: Exception, include_trace: bool = False) -> MuxiErrorDetails:
     """
     Create standardized error details from an exception.
 
@@ -328,8 +305,8 @@ def create_error_response(
             data={
                 "exception_type": type(exception).__name__,
                 "include_trace": include_trace,
-                "conversion_type": "error_response_creation"
-            }
+                "conversion_type": "error_response_creation",
+            },
         )
     except Exception:
         pass
@@ -341,33 +318,33 @@ def create_error_response(
         error_details = {
             "code": error_code,
             "message": error_info.message if error_info else str(exception),
-            "trace": traceback.format_exc() if include_trace else None
+            "trace": traceback.format_exc() if include_trace else None,
         }
 
         observability.observe(
-                observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-                observability.EventLevel.DEBUG,
-                "Error response details created successfully",
-                data={
-                    "exception_type": type(exception).__name__,
-                    "error_code": error_code,
-                    "include_trace": include_trace,
-                    "has_trace": error_details["trace"] is not None,
-                    "conversion_type": "error_response_creation"
-                }
-            )
+            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            observability.EventLevel.DEBUG,
+            "Error response details created successfully",
+            data={
+                "exception_type": type(exception).__name__,
+                "error_code": error_code,
+                "include_trace": include_trace,
+                "has_trace": error_details["trace"] is not None,
+                "conversion_type": "error_response_creation",
+            },
+        )
 
         return error_details
 
     except Exception as e:
         observability.observe(
-                observability.ErrorEvents.RETRY_ATTEMPTED,
-                observability.EventLevel.ERROR,
-                f"Error response creation failed: {str(e)}",
-                data={
-                    "error_type": type(e).__name__,
-                    "original_exception_type": type(exception).__name__,
-                    "conversion_type": "error_response_creation"
-                }
-            )
+            observability.ErrorEvents.RETRY_ATTEMPTED,
+            observability.EventLevel.ERROR,
+            f"Error response creation failed: {str(e)}",
+            data={
+                "error_type": type(e).__name__,
+                "original_exception_type": type(exception).__name__,
+                "conversion_type": "error_response_creation",
+            },
+        )
         raise
