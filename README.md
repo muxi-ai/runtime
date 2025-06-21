@@ -26,6 +26,13 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Service Directory**: All reusable components organized in `src/muxi/runtime/services/`
 - **Clean Dependencies**: Eliminated backward compatibility layers
 
+### ZeroMQ Token + Encryption ✅ **COMPLETED**
+- **Format-Agnostic Encryption**: Works before message serialization with any format (msgpack/jsonl/protobuf)
+- **Auto-Detection**: Automatic encryption for `token + tcp://` configurations
+- **Production-Ready**: 45/45 tests passing with comprehensive error handling
+- **Architecture**: `Raw Event → TokenEncryption → Format → ZMQ Send`
+- **Backward Compatibility**: Zero breaking changes to existing functionality
+
 ### Hot Agent Deployment ✅ **READY**
 - **Runtime Agent Management**: Add/remove agents without formation restart
 - **State Preservation**: Maintain all existing traces, sessions, and memory state
