@@ -4,8 +4,6 @@
 from typing import Any, Dict, List, Tuple
 
 
-
-
 class DocumentProcessingConfig:
     """Document processing configuration manager for unified LLM model schema."""
 

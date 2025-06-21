@@ -82,10 +82,10 @@ class StreamTransport(BaseTransport):
     def _needs_encryption(self) -> bool:
         """Check if this transport should use encryption."""
         return (
-            self.destination is not None and
-            self.auth_config.get("type") == "token" and
-            self.protocol == "zmq" and
-            self.destination.startswith(("tcp://", "tcps://"))
+            self.destination is not None
+            and self.auth_config.get("type") == "token"
+            and self.protocol == "zmq"
+            and self.destination.startswith(("tcp://", "tcps://"))
         )
 
     def _validate_configuration(self) -> None:
@@ -110,9 +110,11 @@ class StreamTransport(BaseTransport):
                 f"Must start with tcp://, tcps://, ipc://, or ipcs://"
             )
 
-                # Warn about security implications
-        if (self.destination.startswith(("tcp://", "tcps://")) and
-                not self.auth_config.get("type") == "token"):
+            # Warn about security implications
+        if (
+            self.destination.startswith(("tcp://", "tcps://"))
+            and not self.auth_config.get("type") == "token"
+        ):
             # This is a warning, not an error - allow unencrypted for testing
             pass
 
@@ -143,9 +145,7 @@ class StreamTransport(BaseTransport):
 
         elif auth_type == "sasl":
             if not all(k in self.auth_config for k in ["username", "password"]):
-                raise ValueError(
-                    "SASL authentication requires 'username' and 'password' fields"
-                )
+                raise ValueError("SASL authentication requires 'username' and 'password' fields")
         elif auth_type is not None:
             raise ValueError(
                 f"Unsupported authentication type '{auth_type}'. "

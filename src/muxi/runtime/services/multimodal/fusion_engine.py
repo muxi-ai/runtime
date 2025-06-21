@@ -248,7 +248,7 @@ Analyze and provide as JSON:
 
         # Normalize text
         text_lower = text.lower()
-        words = re.findall(r'\b\w+\b', text_lower)
+        words = re.findall(r"\b\w+\b", text_lower)
 
         # Initialize embedding vector (512 dimensions)
         embedding = [0.0] * 512
@@ -257,15 +257,17 @@ Analyze and provide as JSON:
         embedding[0] = min(len(words) / 100.0, 1.0)  # Word count (normalized)
         embedding[1] = min(len(text) / 1000.0, 1.0)  # Character count
         embedding[2] = len(set(words)) / max(len(words), 1)  # Vocabulary diversity
-        embedding[3] = sum(len(word) for word in words) / max(len(words), 1) / 10.0  # Avg word length
+        embedding[3] = (
+            sum(len(word) for word in words) / max(len(words), 1) / 10.0
+        )  # Avg word length
 
         # Count sentence markers
-        sentence_count = len(re.findall(r'[.!?]+', text))
+        sentence_count = len(re.findall(r"[.!?]+", text))
         embedding[4] = min(sentence_count / 20.0, 1.0)
 
         # Question/exclamation indicators
-        embedding[5] = 1.0 if '?' in text else 0.0
-        embedding[6] = 1.0 if '!' in text else 0.0
+        embedding[5] = 1.0 if "?" in text else 0.0
+        embedding[6] = 1.0 if "!" in text else 0.0
 
         # 2. Character frequency features (dimensions 64-127)
         char_freq = {}
@@ -276,23 +278,77 @@ Analyze and provide as JSON:
         total_chars = sum(char_freq.values())
         if total_chars > 0:
             # Map character frequencies to embedding dimensions
-            for i, char in enumerate('abcdefghijklmnopqrstuvwxyz'):
+            for i, char in enumerate("abcdefghijklmnopqrstuvwxyz"):
                 if i < 26:  # Ensure we don't exceed bounds
                     freq = char_freq.get(char, 0) / total_chars
                     embedding[64 + i] = freq
 
         # 3. Common word pattern features (dimensions 128-255)
         common_words = {
-            'the': 0, 'and': 1, 'is': 2, 'in': 3, 'to': 4, 'of': 5, 'a': 6, 'that': 7,
-            'it': 8, 'with': 9, 'for': 10, 'as': 11, 'was': 12, 'on': 13, 'are': 14,
-            'you': 15, 'this': 16, 'be': 17, 'at': 18, 'have': 19, 'or': 20, 'not': 21,
-            'from': 22, 'they': 23, 'we': 24, 'can': 25, 'will': 26, 'would': 27,
-            'there': 28, 'what': 29, 'about': 30, 'which': 31, 'when': 32, 'where': 33,
-            'how': 34, 'why': 35, 'who': 36, 'if': 37, 'then': 38, 'now': 39,
-            'get': 40, 'make': 41, 'go': 42, 'see': 43, 'know': 44, 'take': 45,
-            'think': 46, 'come': 47, 'give': 48, 'work': 49, 'time': 50, 'way': 51,
-            'good': 52, 'new': 53, 'first': 54, 'last': 55, 'long': 56, 'great': 57,
-            'little': 58, 'own': 59, 'other': 60, 'old': 61, 'right': 62, 'big': 63
+            "the": 0,
+            "and": 1,
+            "is": 2,
+            "in": 3,
+            "to": 4,
+            "of": 5,
+            "a": 6,
+            "that": 7,
+            "it": 8,
+            "with": 9,
+            "for": 10,
+            "as": 11,
+            "was": 12,
+            "on": 13,
+            "are": 14,
+            "you": 15,
+            "this": 16,
+            "be": 17,
+            "at": 18,
+            "have": 19,
+            "or": 20,
+            "not": 21,
+            "from": 22,
+            "they": 23,
+            "we": 24,
+            "can": 25,
+            "will": 26,
+            "would": 27,
+            "there": 28,
+            "what": 29,
+            "about": 30,
+            "which": 31,
+            "when": 32,
+            "where": 33,
+            "how": 34,
+            "why": 35,
+            "who": 36,
+            "if": 37,
+            "then": 38,
+            "now": 39,
+            "get": 40,
+            "make": 41,
+            "go": 42,
+            "see": 43,
+            "know": 44,
+            "take": 45,
+            "think": 46,
+            "come": 47,
+            "give": 48,
+            "work": 49,
+            "time": 50,
+            "way": 51,
+            "good": 52,
+            "new": 53,
+            "first": 54,
+            "last": 55,
+            "long": 56,
+            "great": 57,
+            "little": 58,
+            "own": 59,
+            "other": 60,
+            "old": 61,
+            "right": 62,
+            "big": 63,
         }
 
         word_total = len(words)
@@ -304,14 +360,14 @@ Analyze and provide as JSON:
 
         # 4. Semantic category indicators (dimensions 256-383)
         semantic_patterns = {
-            'technical': r'\b(?:system|process|data|algorithm|function|method|code|software|technology)\b',
-            'emotional': r'\b(?:feel|emotion|happy|sad|angry|love|hate|excited|worried|calm)\b',
-            'temporal': r'\b(?:yesterday|today|tomorrow|now|then|before|after|during|while)\b',
-            'spatial': r'\b(?:here|there|above|below|left|right|near|far|inside|outside)\b',
-            'quantitative': r'\b(?:many|few|more|less|all|some|most|several|number|amount)\b',
-            'modal': r'\b(?:must|should|could|would|might|may|can|will|shall)\b',
-            'negative': r'\b(?:not|no|never|nothing|nobody|nowhere|neither|nor)\b',
-            'positive': r'\b(?:yes|good|great|excellent|wonderful|amazing|perfect|best)\b'
+            "technical": r"\b(?:system|process|data|algorithm|function|method|code|software|technology)\b",
+            "emotional": r"\b(?:feel|emotion|happy|sad|angry|love|hate|excited|worried|calm)\b",
+            "temporal": r"\b(?:yesterday|today|tomorrow|now|then|before|after|during|while)\b",
+            "spatial": r"\b(?:here|there|above|below|left|right|near|far|inside|outside)\b",
+            "quantitative": r"\b(?:many|few|more|less|all|some|most|several|number|amount)\b",
+            "modal": r"\b(?:must|should|could|would|might|may|can|will|shall)\b",
+            "negative": r"\b(?:not|no|never|nothing|nobody|nowhere|neither|nor)\b",
+            "positive": r"\b(?:yes|good|great|excellent|wonderful|amazing|perfect|best)\b",
         }
 
         for i, (category, pattern) in enumerate(semantic_patterns.items()):
@@ -322,7 +378,7 @@ Analyze and provide as JSON:
         # 5. N-gram features (dimensions 384-511)
         # Simple bigram frequency for common patterns
         if len(words) > 1:
-            bigrams = [f"{words[i]}_{words[i+1]}" for i in range(len(words)-1)]
+            bigrams = [f"{words[i]}_{words[i+1]}" for i in range(len(words) - 1)]
             bigram_counts = {}
             for bigram in bigrams:
                 bigram_counts[bigram] = bigram_counts.get(bigram, 0) + 1

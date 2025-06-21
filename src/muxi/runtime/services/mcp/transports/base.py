@@ -42,6 +42,7 @@ class MCPConnectionError(MCPError):
     to an MCP server, such as network failures, authentication problems,
     or server unavailability.
     """
+
     pass
 
 
@@ -53,6 +54,7 @@ class MCPRequestError(MCPError):
     invalid parameters, missing permissions, or server-side errors
     during tool execution.
     """
+
     pass
 
 
@@ -64,6 +66,7 @@ class MCPTimeoutError(MCPError):
     longer than the specified timeout period, which could be due to
     network issues, server overload, or long-running operations.
     """
+
     pass
 
 
@@ -75,6 +78,7 @@ class MCPCancelledError(MCPError):
     cancelled, typically by user action or as part of cleanup during
     error handling or shutdown.
     """
+
     pass
 
 
@@ -155,7 +159,7 @@ class BaseTransport:
             request_timeout: Default timeout for requests in seconds
             auth: Optional authentication configuration
         """
-        self.url = url.rstrip('/')
+        self.url = url.rstrip("/")
         self.request_timeout = request_timeout
         self.auth = auth
         self.connected = False
@@ -164,11 +168,11 @@ class BaseTransport:
 
         # Connection statistics
         self.connection_stats = {
-            'requests_sent': 0,
-            'responses_received': 0,
-            'errors_encountered': 0,
-            'bytes_sent': 0,
-            'bytes_received': 0
+            "requests_sent": 0,
+            "responses_received": 0,
+            "errors_encountered": 0,
+            "bytes_sent": 0,
+            "bytes_received": 0,
         }
 
     async def connect(self) -> bool:
@@ -223,5 +227,5 @@ class BaseTransport:
             "connected": self.connected,
             "connect_time": self.connect_time.isoformat() if self.connect_time else None,
             "last_activity": self.last_activity.isoformat() if self.last_activity else None,
-            **self.connection_stats
+            **self.connection_stats,
         }

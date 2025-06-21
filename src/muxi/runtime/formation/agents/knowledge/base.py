@@ -328,9 +328,7 @@ class FileKnowledge(KnowledgeSource):
         )
 
     async def process_with_chunk_manager(
-        self,
-        chunk_manager: DocumentChunkManager,
-        file_limit: Optional[int] = None
+        self, chunk_manager: DocumentChunkManager, file_limit: Optional[int] = None
     ) -> List[DocumentChunk]:
         """
         Process files using DocumentChunkManager for hybrid architecture integration.
@@ -375,20 +373,22 @@ class FileKnowledge(KnowledgeSource):
                     content=content,
                     filename=os.path.basename(file_path),
                     strategy="adaptive",  # Use adaptive strategy for optimal chunking
-                    document_id=file_path
+                    document_id=file_path,
                 )
 
                 # Add FileKnowledge-specific metadata to chunks
                 for chunk in document_chunks:
-                    chunk.metadata.update({
-                        "knowledge_source": self.name,
-                        "knowledge_description": self.description,
-                        "file_path": file_path,
-                        "processing_method": self._get_processing_method(file_path),
-                        "markitdown_supported": self._is_markitdown_supported(file_path),
-                        "file_extension": os.path.splitext(file_path)[1],
-                        "file_size": file_size,
-                    })
+                    chunk.metadata.update(
+                        {
+                            "knowledge_source": self.name,
+                            "knowledge_description": self.description,
+                            "file_path": file_path,
+                            "processing_method": self._get_processing_method(file_path),
+                            "markitdown_supported": self._is_markitdown_supported(file_path),
+                            "file_extension": os.path.splitext(file_path)[1],
+                            "file_size": file_size,
+                        }
+                    )
 
                 all_chunks.extend(document_chunks)
                 print(f"✓ Processed {file_path} -> {len(document_chunks)} chunks")

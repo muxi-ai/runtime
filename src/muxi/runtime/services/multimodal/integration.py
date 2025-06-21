@@ -478,9 +478,7 @@ class TaskInputProcessor:
             if parsed.hostname:
                 # Block IP addresses in private ranges
                 hostname_lower = parsed.hostname.lower()
-                private_ranges = [
-                    "192.168.", "10.", "172.16.", "172.31.", "localhost"
-                ]
+                private_ranges = ["192.168.", "10.", "172.16.", "172.31.", "localhost"]
                 if any(hostname_lower.startswith(prefix) for prefix in private_ranges):
                     return False
 

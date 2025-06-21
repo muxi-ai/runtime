@@ -20,7 +20,7 @@ from ...datatypes.resilience import (
     ErrorSeverity,
 )
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class CircuitBreaker(Generic[T]):
@@ -50,11 +50,7 @@ class CircuitBreaker(Generic[T]):
         #  Circuit breaker debug - TODO: add observability
 
     async def execute(
-        self,
-        func: Callable[..., T],
-        *args,
-        fallback: Optional[Callable[..., T]] = None,
-        **kwargs
+        self, func: Callable[..., T], *args, fallback: Optional[Callable[..., T]] = None, **kwargs
     ) -> T:
         """
         Execute a function with circuit breaker protection.
@@ -81,7 +77,7 @@ class CircuitBreaker(Generic[T]):
                     estimated_recovery = self._get_estimated_recovery_time()
                     raise CircuitBreakerException(
                         f"Circuit breaker '{self.name}' is open",
-                        estimated_recovery_time=estimated_recovery
+                        estimated_recovery_time=estimated_recovery,
                     )
 
         # Execute the function
@@ -110,8 +106,7 @@ class CircuitBreaker(Generic[T]):
 
         elif self.state.state == CircuitState.OPEN:
             # Check if we should transition to half-open
-            if (self.state.next_attempt_time and
-                    current_time >= self.state.next_attempt_time):
+            if self.state.next_attempt_time and current_time >= self.state.next_attempt_time:
                 await self._transition_to_half_open()
                 return True
             return False
@@ -126,22 +121,19 @@ class CircuitBreaker(Generic[T]):
         """Execute the function with timeout protection."""
         try:
             if asyncio.iscoroutinefunction(func):
-                return await asyncio.wait_for(
-                    func(*args, **kwargs),
-                    timeout=self.config.timeout
-                )
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=self.config.timeout)
             else:
                 # Run sync function in executor with timeout
                 loop = asyncio.get_event_loop()
                 return await asyncio.wait_for(
                     loop.run_in_executor(None, lambda: func(*args, **kwargs)),
-                    timeout=self.config.timeout
+                    timeout=self.config.timeout,
                 )
         except asyncio.TimeoutError:
             raise WorkflowException(
                 f"Function execution timed out after {self.config.timeout}s",
                 ErrorType.AGENT_TIMEOUT,
-                ErrorSeverity.MEDIUM
+                ErrorSeverity.MEDIUM,
             )
 
     async def _execute_fallback(self, fallback: Callable[..., T], *args, **kwargs) -> T:
@@ -158,7 +150,7 @@ class CircuitBreaker(Generic[T]):
             raise WorkflowException(
                 f"Both primary function and fallback failed for circuit breaker '{self.name}'",
                 ErrorType.SYSTEM_OVERLOAD,
-                ErrorSeverity.CRITICAL
+                ErrorSeverity.CRITICAL,
             )
 
     async def _record_success(self, execution_time: float) -> None:
@@ -248,12 +240,10 @@ class CircuitBreaker(Generic[T]):
         """Get circuit breaker statistics."""
         total_requests = self.state.total_requests
         success_rate = (
-            (self.state.total_successes / total_requests * 100)
-            if total_requests > 0 else 0
+            (self.state.total_successes / total_requests * 100) if total_requests > 0 else 0
         )
         failure_rate = (
-            (self.state.total_failures / total_requests * 100)
-            if total_requests > 0 else 0
+            (self.state.total_failures / total_requests * 100) if total_requests > 0 else 0
         )
 
         return {
@@ -302,9 +292,7 @@ class CircuitBreakerRegistry:
         self._default_config = CircuitBreakerConfig()
 
     def get_circuit_breaker(
-        self,
-        name: str,
-        config: Optional[CircuitBreakerConfig] = None
+        self, name: str, config: Optional[CircuitBreakerConfig] = None
     ) -> CircuitBreaker:
         """
         Get or create a circuit breaker by name.
@@ -341,10 +329,7 @@ class CircuitBreakerRegistry:
 
     def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
         """Get statistics for all circuit breakers."""
-        return {
-            name: cb.get_stats()
-            for name, cb in self._circuit_breakers.items()
-        }
+        return {name: cb.get_stats() for name, cb in self._circuit_breakers.items()}
 
     async def reset_all(self) -> None:
         """Reset all circuit breakers."""

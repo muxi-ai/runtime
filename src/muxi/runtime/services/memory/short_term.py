@@ -353,7 +353,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size:]
+            recent_items = list(self.buffer)[-self.max_size :]
 
         # Apply filtering if specified
         if filter_metadata or namespace:
@@ -689,9 +689,7 @@ class ShortTermMemory:
                 continue
 
             # Check metadata filter
-            if all(
-                item["metadata"].get(k) == v for k, v in metadata_filter.items()
-            ):
+            if all(item["metadata"].get(k) == v for k, v in metadata_filter.items()):
                 results.append(item.copy())
 
         return results
@@ -726,7 +724,7 @@ class ShortTermMemory:
             "metadata": metadata,
             "timestamp": time.time(),
             "namespace": namespace,
-            "embedding": embedding  # Store pre-computed embedding
+            "embedding": embedding,  # Store pre-computed embedding
         }
 
         # Add to buffer

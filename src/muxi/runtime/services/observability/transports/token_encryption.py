@@ -52,15 +52,12 @@ class TokenEncryption:
         authenticated_data = {
             "auth_token": self.token,
             "timestamp": time.time(),
-            "event": event_data
+            "event": event_data,
         }
 
         # Encrypt as JSON (format-neutral)
-        json_str = json.dumps(authenticated_data, separators=(',', ':'))
+        json_str = json.dumps(authenticated_data, separators=(",", ":"))
         encrypted_bytes = self.cipher.encrypt(json_str.encode())
         encrypted_payload = base64.b64encode(encrypted_bytes).decode()
 
-        return {
-            "encrypted": True,
-            "payload": encrypted_payload
-        }
+        return {"encrypted": True, "payload": encrypted_payload}

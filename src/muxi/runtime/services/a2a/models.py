@@ -13,11 +13,13 @@ import json
 
 class A2AVersion(str, Enum):
     """Supported A2A protocol versions"""
+
     V1_0 = "1.0"
 
 
 class AuthType(str, Enum):
     """Authentication types supported by A2A"""
+
     NONE = "none"
     BEARER = "bearer"
     API_KEY = "apiKey"
@@ -26,6 +28,7 @@ class AuthType(str, Enum):
 
 class CapabilityType(str, Enum):
     """Types of capabilities an agent can advertise"""
+
     STREAMING = "streaming"
     PUSH_NOTIFICATIONS = "pushNotifications"
     MULTIMODAL = "multimodal"
@@ -37,6 +40,7 @@ class CapabilityType(str, Enum):
 @dataclass
 class A2AAuthentication:
     """Authentication configuration for A2A agent"""
+
     type: AuthType = AuthType.NONE
     description: Optional[str] = None
     required: bool = False
@@ -54,6 +58,7 @@ class A2AAuthentication:
 @dataclass
 class A2ACapability:
     """Represents a capability that an agent can advertise"""
+
     name: str
     description: Optional[str] = None
     enabled: bool = True
@@ -61,10 +66,7 @@ class A2ACapability:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
-        result = {
-            "name": self.name,
-            "enabled": self.enabled
-        }
+        result = {"name": self.name, "enabled": self.enabled}
         if self.description:
             result["description"] = self.description
         if self.metadata:
@@ -75,16 +77,14 @@ class A2ACapability:
 @dataclass
 class A2AEndpoint:
     """A2A API endpoint configuration"""
+
     url: str
     methods: List[str] = field(default_factory=lambda: ["POST"])
     description: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
-        result = {
-            "url": self.url,
-            "methods": self.methods
-        }
+        result = {"url": self.url, "methods": self.methods}
         if self.description:
             result["description"] = self.description
         return result
@@ -98,6 +98,7 @@ class AgentCard:
     This follows Google's A2A Agent Card specification and is served at
     /.well-known/agent.json
     """
+
     # Required fields
     name: str
     description: str
@@ -196,7 +197,7 @@ class AgentCard:
                         name=cap_data.get("name", cap_name),  # fallback to cap_name
                         description=cap_data.get("description"),
                         enabled=cap_data.get("enabled", True),
-                        metadata=cap_data.get("metadata", {})
+                        metadata=cap_data.get("metadata", {}),
                     )
                 except Exception:
                     # Skip malformed capabilities
@@ -210,7 +211,7 @@ class AgentCard:
                 authentication = A2AAuthentication(
                     type=AuthType(auth_data["type"]),
                     description=auth_data.get("description"),
-                    required=auth_data.get("required", False)
+                    required=auth_data.get("required", False),
                 )
             except Exception:
                 # Skip malformed authentication
@@ -228,7 +229,7 @@ class AgentCard:
                     endpoints[ep_name] = A2AEndpoint(
                         url=ep_data["url"],
                         methods=ep_data.get("methods", ["POST"]),
-                        description=ep_data.get("description")
+                        description=ep_data.get("description"),
                     )
                 except Exception:
                     # Skip malformed endpoints
@@ -250,7 +251,7 @@ class AgentCard:
             muxi_agent_id=muxi_ext.get("agentId"),
             muxi_formation=muxi_ext.get("formation"),
             created_at=muxi_ext.get("createdAt"),
-            updated_at=muxi_ext.get("updatedAt")
+            updated_at=muxi_ext.get("updatedAt"),
         )
 
     @classmethod

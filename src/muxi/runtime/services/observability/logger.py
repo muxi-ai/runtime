@@ -156,7 +156,7 @@ class EventLogger:
 
     async def _emit_to_file(self, event_line: str) -> None:
         """Emit event to file output."""
-        file_path = self.output_config.get("path",  f"{get_observability_dir()}/muxi.jsonl")
+        file_path = self.output_config.get("path", f"{get_observability_dir()}/muxi.jsonl")
         async with aiofiles.open(file_path, "a") as f:
             await f.write(event_line + "\n")
 

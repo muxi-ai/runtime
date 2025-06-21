@@ -4,6 +4,7 @@ from .base import BaseFormatter
 
 try:
     from google.protobuf.struct_pb2 import Struct
+
     PROTOBUF_AVAILABLE = True
 except ImportError:
     PROTOBUF_AVAILABLE = False
@@ -22,7 +23,7 @@ class ProtobufFormatter(BaseFormatter):
 
         if not PROTOBUF_AVAILABLE:
             # Fallback to JSON if protobuf not available
-            return json.dumps(enriched).encode('utf-8')
+            return json.dumps(enriched).encode("utf-8")
 
         # Use protobuf Struct for arbitrary dict serialization (like msgpack)
         struct = Struct()
@@ -34,7 +35,7 @@ class ProtobufFormatter(BaseFormatter):
         enriched_events = [self._add_metadata(event) for event in events]
 
         if not PROTOBUF_AVAILABLE:
-            return json.dumps(enriched_events).encode('utf-8')
+            return json.dumps(enriched_events).encode("utf-8")
 
         # Serialize list of events as protobuf
         struct = Struct()

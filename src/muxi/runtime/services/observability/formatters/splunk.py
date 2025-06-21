@@ -24,8 +24,8 @@ class SplunkFormatter(BaseFormatter):
                 "event_type": event.get("event"),
                 "formation_id": self.formation_id,
                 "service": self.service_name,
-                **event.get("data", {})
-            }
+                **event.get("data", {}),
+            },
         }
         return json.dumps(hec_event)
 
@@ -33,13 +33,13 @@ class SplunkFormatter(BaseFormatter):
         lines = []
         for event in events:
             lines.append(self.format_event(event))
-        return '\n'.join(lines)
+        return "\n".join(lines)
 
     def _convert_timestamp(self, timestamp_str: str) -> float:
         """Convert ISO timestamp to Unix epoch."""
         if timestamp_str:
             try:
-                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 return dt.timestamp()
             except Exception:
                 pass

@@ -45,8 +45,6 @@ import time
 from datetime import datetime
 from typing import Any, Callable, Dict, TypeVar, Union
 
-from .. import observability
-
 # Type variables
 T = TypeVar("T")  # Return type for retried functions
 ExceptionType = TypeVar("ExceptionType", bound=Exception)  # Type of exception to retry on

@@ -22,8 +22,6 @@
 # =============================================================================
 
 from typing import Any, Dict, List, Optional
-
-# Import observability components
 from ...services import observability
 
 

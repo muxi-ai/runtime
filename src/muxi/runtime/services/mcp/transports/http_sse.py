@@ -25,12 +25,7 @@ from ..protocol.message_handler import MCPMessageHandler
 class HTTPSSETransport(BaseTransport):
     """Real MCP HTTP+SSE transport with working SSE client."""
 
-    def __init__(
-        self,
-        url: str,
-        request_timeout: int = 30,
-        auth: Optional[Any] = None
-    ):
+    def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
         """Initialize real MCP HTTP+SSE transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
@@ -52,10 +47,10 @@ class HTTPSSETransport(BaseTransport):
             self.response = await self.session.get(
                 self.url,
                 headers={
-                    'Accept': 'text/event-stream',
-                    'Cache-Control': 'no-cache',
-                    'Connection': 'keep-alive'
-                }
+                    "Accept": "text/event-stream",
+                    "Cache-Control": "no-cache",
+                    "Connection": "keep-alive",
+                },
             )
 
             if self.response.status != 200:
@@ -73,7 +68,7 @@ class HTTPSSETransport(BaseTransport):
             error_details = {
                 "url": self.url,
                 "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
             raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
 
@@ -82,12 +77,12 @@ class HTTPSSETransport(BaseTransport):
         try:
             buffer = ""
             async for data in self.response.content:
-                chunk = data.decode('utf-8')
+                chunk = data.decode("utf-8")
                 buffer += chunk
 
                 # Process complete SSE events
-                while '\r\n\r\n' in buffer:
-                    event_data, buffer = buffer.split('\r\n\r\n', 1)
+                while "\r\n\r\n" in buffer:
+                    event_data, buffer = buffer.split("\r\n\r\n", 1)
                     await self._process_sse_event(event_data)
 
         except Exception as e:
@@ -96,11 +91,11 @@ class HTTPSSETransport(BaseTransport):
     async def _process_sse_event(self, event_data: str):
         """Process a single SSE event."""
         try:
-            lines = event_data.strip().split('\r\n')
+            lines = event_data.strip().split("\r\n")
             data_content = None
 
             for line in lines:
-                if line.startswith('data: '):
+                if line.startswith("data: "):
                     data_content = line[6:]  # Remove 'data: ' prefix
                     break
 
@@ -112,32 +107,32 @@ class HTTPSSETransport(BaseTransport):
                 from mcp.shared.message import SessionMessage
                 from mcp.types import JSONRPCResponse, JSONRPCRequest, JSONRPCNotification
 
-                if 'result' in message_data:
+                if "result" in message_data:
                     # Response message
                     response = JSONRPCResponse(
-                        jsonrpc=message_data.get('jsonrpc', '2.0'),
-                        id=message_data.get('id'),
-                        result=message_data.get('result')
+                        jsonrpc=message_data.get("jsonrpc", "2.0"),
+                        id=message_data.get("id"),
+                        result=message_data.get("result"),
                     )
                     session_msg = SessionMessage(message=response)
-                elif 'method' in message_data:
+                elif "method" in message_data:
                     # Check if it's a notification (no id) or request (has id)
-                    message_id = message_data.get('id')
+                    message_id = message_data.get("id")
                     if message_id is None:
                         # Notification message
                         notification = JSONRPCNotification(
-                            jsonrpc=message_data.get('jsonrpc', '2.0'),
-                            method=message_data.get('method'),
-                            params=message_data.get('params', {})
+                            jsonrpc=message_data.get("jsonrpc", "2.0"),
+                            method=message_data.get("method"),
+                            params=message_data.get("params", {}),
                         )
                         session_msg = SessionMessage(message=notification)
                     else:
                         # Request message
                         request = JSONRPCRequest(
-                            jsonrpc=message_data.get('jsonrpc', '2.0'),
+                            jsonrpc=message_data.get("jsonrpc", "2.0"),
                             id=message_id,
-                            method=message_data.get('method'),
-                            params=message_data.get('params', {})
+                            method=message_data.get("method"),
+                            params=message_data.get("params", {}),
                         )
                         session_msg = SessionMessage(message=request)
                 else:
@@ -154,34 +149,32 @@ class HTTPSSETransport(BaseTransport):
         """Send HTTP POST request for MCP messages."""
         try:
             # Determine correct POST URL based on MCP method
-            method = message_data.get('method', '')
+            method = message_data.get("method", "")
 
-            if self.url.endswith('/sse'):
+            if self.url.endswith("/sse"):
                 base_url = self.url[:-4]  # Remove '/sse' suffix
             else:
                 base_url = self.url
 
             # Map MCP methods to specific endpoints
-            if method == 'tools/list':
+            if method == "tools/list":
                 post_url = f"{base_url}/mcp/tools/list"
-            elif method == 'tools/call':
+            elif method == "tools/call":
                 post_url = f"{base_url}/mcp/tools/call"
-            elif method == 'resources/list':
+            elif method == "resources/list":
                 post_url = f"{base_url}/mcp/resources/list"
-            elif method == 'prompts/list':
+            elif method == "prompts/list":
                 post_url = f"{base_url}/mcp/prompts/list"
-            elif method == 'initialize':
+            elif method == "initialize":
                 post_url = f"{base_url}/mcp/initialize"
-            elif method == 'ping':
+            elif method == "ping":
                 post_url = f"{base_url}/mcp/ping"
             else:
                 # Fallback for unknown methods
                 post_url = f"{base_url}/mcp/{method}"
 
             async with self.session.post(
-                post_url,
-                json=message_data,
-                headers={'Content-Type': 'application/json'}
+                post_url, json=message_data, headers={"Content-Type": "application/json"}
             ) as response:
                 if response.status == 200:
                     return await response.json()
@@ -210,14 +203,14 @@ class HTTPSSETransport(BaseTransport):
 
         # Extract raw message data for HTTP POST
         raw_message = request_message.message
-        if hasattr(raw_message, 'model_dump'):
+        if hasattr(raw_message, "model_dump"):
             message_data = raw_message.model_dump()
         else:
             message_data = {
-                'jsonrpc': '2.0',
-                'id': getattr(raw_message, 'id', None),
-                'method': method,
-                'params': params
+                "jsonrpc": "2.0",
+                "id": getattr(raw_message, "id", None),
+                "method": method,
+                "params": params,
             }
 
         # Send HTTP POST request
@@ -228,14 +221,13 @@ class HTTPSSETransport(BaseTransport):
                 "status": "success",
                 "result": response_data.get("result", response_data),
                 "id": response_data.get("id"),
-                "jsonrpc": response_data.get("jsonrpc", "2.0")
+                "jsonrpc": response_data.get("jsonrpc", "2.0"),
             }
         except Exception as e:
             # If HTTP POST fails, try to get response from SSE stream
             try:
                 response_message = await asyncio.wait_for(
-                    self.message_queue.get(),
-                    timeout=actual_timeout
+                    self.message_queue.get(), timeout=actual_timeout
                 )
                 return self.message_handler.parse_response(response_message)
             except asyncio.TimeoutError:

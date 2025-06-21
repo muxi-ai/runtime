@@ -33,7 +33,6 @@
 import asyncio
 from typing import Any, Dict, List, Optional
 
-from .. import observability
 from .handler import MCPHandler, MCPConnectionError
 from .reconnection import RetryConfiguration, with_retries
 
@@ -96,11 +95,8 @@ class ReconnectingMCPHandler(MCPHandler):
         if not url and not command:
             raise ValueError("Either url or command must be provided")
 
-        server_url = url or command
-
-        log_msg = f"Connecting to MCP server {name} at {server_url} " f"with reconnection support"
         #  Info - TODO: add observability
-        #  MCP_SERVER_CONNECTING
+        #  MCP_SERVER_CONNECTING - Connecting to MCP server {name} at {url or command} with reconnection support
 
         # Use the retry mechanism for connection
         try:
@@ -117,9 +113,8 @@ class ReconnectingMCPHandler(MCPHandler):
             )
             return result
         except MCPConnectionError as e:
-            error_msg = f"Failed to connect to MCP server {name} after retries: {str(e)}"
             #  Error - TODO: add observability
-            #  MCP_SERVER_CONNECTING
+            #  MCP_SERVER_CONNECTING - Failed to connect to MCP server {name} after retries: {str(e)}
             raise
 
     async def _connect_server_impl(

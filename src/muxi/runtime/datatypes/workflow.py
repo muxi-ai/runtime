@@ -7,6 +7,7 @@ import uuid
 
 class TaskStatus(Enum):
     """Task execution status"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     DONE = "done"
@@ -18,6 +19,7 @@ class TaskStatus(Enum):
 
 class WorkflowStatus(Enum):
     """Overall workflow status"""
+
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -28,6 +30,7 @@ class WorkflowStatus(Enum):
 
 class ApprovalStatus(Enum):
     """Plan approval status"""
+
     PENDING = "pending"
     AWAITING_APPROVAL = "awaiting_approval"
     APPROVED = "approved"
@@ -38,6 +41,7 @@ class ApprovalStatus(Enum):
 @dataclass
 class TaskInput:
     """Input specification for a task"""
+
     name: str
     description: str
     type: str  # "text", "file", "data", etc.
@@ -48,6 +52,7 @@ class TaskInput:
 @dataclass
 class TaskOutput:
     """Output specification for a task"""
+
     name: str
     description: str
     type: str  # "text", "file", "data", etc.
@@ -57,6 +62,7 @@ class TaskOutput:
 @dataclass
 class SubTask:
     """Individual task within a workflow"""
+
     id: str
     description: str
     required_capabilities: List[str]
@@ -76,6 +82,7 @@ class SubTask:
 @dataclass
 class RequestAnalysis:
     """Analysis results for a user request"""
+
     complexity_score: float  # 1-10 scale
     requires_decomposition: bool
     requires_approval: bool  # Plan preview needed
@@ -88,6 +95,7 @@ class RequestAnalysis:
 @dataclass
 class TaskResult:
     """Result of task execution"""
+
     task_id: str
     status: TaskStatus
     outputs: Dict[str, Any] = field(default_factory=dict)
@@ -100,6 +108,7 @@ class TaskResult:
 @dataclass
 class Workflow:
     """Complete workflow definition"""
+
     id: str
     user_request: str
     tasks: Dict[str, SubTask]
@@ -118,6 +127,7 @@ class Workflow:
 
 
 # Utility Functions
+
 
 def generate_workflow_id() -> str:
     """Generate a unique workflow ID"""
@@ -198,7 +208,8 @@ def build_execution_phases(workflow: Workflow) -> List[List[str]]:
     while remaining_tasks:
         # Find tasks with no pending dependencies
         ready_tasks = [
-            task_id for task_id in remaining_tasks
+            task_id
+            for task_id in remaining_tasks
             if not graph[task_id].intersection(remaining_tasks)
         ]
 
@@ -228,10 +239,7 @@ def calculate_workflow_progress(workflow: Workflow) -> float:
         return 0.0
 
     total_tasks = len(workflow.tasks)
-    completed_tasks = sum(
-        1 for task in workflow.tasks.values()
-        if task.status == TaskStatus.DONE
-    )
+    completed_tasks = sum(1 for task in workflow.tasks.values() if task.status == TaskStatus.DONE)
 
     return completed_tasks / total_tasks
 

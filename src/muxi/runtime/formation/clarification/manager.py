@@ -5,7 +5,6 @@ This module manages active clarification requests and coordinates the
 clarification process across multiple conversation turns.
 """
 
-
 import time
 from typing import Dict, Optional, Any
 
@@ -15,7 +14,7 @@ from ...datatypes import (
     ClarificationResultStatus,
     ClarificationStatus,
     RequestType,
-    ClarificationError
+    ClarificationError,
 )
 
 
@@ -40,7 +39,7 @@ class ClarificationManager:
         request_type: RequestType,
         intent: str,
         tool_name: Optional[str] = None,
-        provided_info: Optional[Dict[str, Any]] = None
+        provided_info: Optional[Dict[str, Any]] = None,
     ) -> ClarificationRequest:
         """
         Start a new clarification process
@@ -71,7 +70,7 @@ class ClarificationManager:
                 tool_name=tool_name,
                 intent=intent,
                 provided_info=provided_info or {},
-                status=ClarificationStatus.CLARIFYING
+                status=ClarificationStatus.CLARIFYING,
             )
 
             # Store the request
@@ -86,9 +85,7 @@ class ClarificationManager:
             raise ClarificationError(f"Failed to start clarification: {e}")
 
     async def process_user_response(
-        self,
-        request_id: str,
-        user_response: str
+        self, request_id: str, user_response: str
     ) -> ClarificationResult:
         """
         Process user's response to clarification question
@@ -107,19 +104,17 @@ class ClarificationManager:
             if not request:
                 return ClarificationResult(
                     status=ClarificationResultStatus.ERROR,
-                    error_message="Clarification request not found"
+                    error_message="Clarification request not found",
                 )
 
             if request.status != ClarificationStatus.CLARIFYING:
                 return ClarificationResult(
                     status=ClarificationResultStatus.ERROR,
-                    error_message="Clarification request is not active"
+                    error_message="Clarification request is not active",
                 )
 
             # Extract information from user response
-            extracted_info = await self._extract_information_from_response(
-                user_response, request
-            )
+            extracted_info = await self._extract_information_from_response(user_response, request)
 
             # Update request with extracted information
             request.provided_info.update(extracted_info)
@@ -136,7 +131,7 @@ class ClarificationManager:
                     status=ClarificationResultStatus.COMPLETE,
                     complete_params=complete_params,
                     confidence=0.9,
-                    extracted_info=extracted_info
+                    extracted_info=extracted_info,
                 )
 
             # Need more information - generate next question
@@ -147,7 +142,7 @@ class ClarificationManager:
                     status=ClarificationResultStatus.CONTINUE,
                     next_question=next_question,
                     confidence=0.7,
-                    extracted_info=extracted_info
+                    extracted_info=extracted_info,
                 )
             else:
                 # No more questions but still missing info - fail gracefully
@@ -155,20 +150,17 @@ class ClarificationManager:
                 return ClarificationResult(
                     status=ClarificationResultStatus.ERROR,
                     error_message="Unable to collect all required information",
-                    extracted_info=extracted_info
+                    extracted_info=extracted_info,
                 )
 
         except Exception as e:
             #  Error - TODO: add observability
             return ClarificationResult(
                 status=ClarificationResultStatus.ERROR,
-                error_message=f"Failed to process response: {e}"
+                error_message=f"Failed to process response: {e}",
             )
 
-    async def complete_clarification(
-        self,
-        request_id: str
-    ) -> Dict[str, Any]:
+    async def complete_clarification(self, request_id: str) -> Dict[str, Any]:
         """
         Complete clarification and return full information set
 
@@ -256,9 +248,7 @@ class ClarificationManager:
             await self.cancel_clarification(existing_request.request_id)
 
     async def _extract_information_from_response(
-        self,
-        user_response: str,
-        request: ClarificationRequest
+        self, user_response: str, request: ClarificationRequest
     ) -> Dict[str, Any]:
         """Extract structured information from user's response"""
         extracted = {}
@@ -276,7 +266,8 @@ class ClarificationManager:
                 try:
                     # Extract numbers from response
                     import re
-                    numbers = re.findall(r'\d+', user_response)
+
+                    numbers = re.findall(r"\d+", user_response)
                     if numbers:
                         extracted[param_name] = int(numbers[0])
                 except ValueError:
@@ -359,12 +350,10 @@ class ClarificationManager:
         """Get tool schema - placeholder for MCP integration"""
         # Mock schemas for development
         schemas = {
-            "book_restaurant": {
-                "required": ["location", "date", "time", "party_size"]
-            },
+            "book_restaurant": {"required": ["location", "date", "time", "party_size"]},
             "book_flight": {
                 "required": ["departure", "destination", "departure_date", "passengers"]
-            }
+            },
         }
         return schemas.get(tool_name, {"required": []})
 

@@ -50,7 +50,12 @@ from ..datatypes.async_operations import TimeoutConfig, CancellationToken
 
 # Retry logic imports
 from ..utils.retry_manager import get_retry_manager
-from ..datatypes.retry import RetryConfig, RetryStrategy, NetworkTransientError, ServiceTransientError
+from ..datatypes.retry import (
+    RetryConfig,
+    RetryStrategy,
+    NetworkTransientError,
+    ServiceTransientError,
+)
 
 # Exception imports
 from ..datatypes.exceptions import (
@@ -84,7 +89,11 @@ class Formation:
     - Handles resource cleanup and shutdown
     """
 
-    def __init__(self, timeout_config: Optional[TimeoutConfig] = None, retry_config: Optional[RetryConfig] = None):
+    def __init__(
+        self,
+        timeout_config: Optional[TimeoutConfig] = None,
+        retry_config: Optional[RetryConfig] = None,
+    ):
         """
         Initialize Formation platform.
 
@@ -290,15 +299,18 @@ class Formation:
             if os.path.isfile(formation_file_yml):
                 return formation_file_yml
 
-            raise ConfigurationNotFoundError(config_path, {
-                "operation": "find_formation_config",
-                "directory_checked": config_path,
-                "suggestion": (
-                    f"Create a formation.yaml file in the directory '{config_path}' or "
-                    "provide the direct path to your formation configuration file"
-                ),
-                "example": f"Try: formation.load('{config_path}/formation.yaml') or create the missing file"
-            })
+            raise ConfigurationNotFoundError(
+                config_path,
+                {
+                    "operation": "find_formation_config",
+                    "directory_checked": config_path,
+                    "suggestion": (
+                        f"Create a formation.yaml file in the directory '{config_path}' or "
+                        "provide the direct path to your formation configuration file"
+                    ),
+                    "example": f"Try: formation.load('{config_path}/formation.yaml') or create the missing file",
+                },
+            )
 
         raise ConfigurationValidationError(
             [f"Config path must be a file or directory, got: {type(config_path).__name__}"],
@@ -308,9 +320,9 @@ class Formation:
                 "suggestion": "Provide either a path to a formation.yaml file or a directory containing formation.yaml",
                 "examples": [
                     "formation.load('path/to/formation.yaml')",
-                    "formation.load('path/to/formation/directory')"
-                ]
-            }
+                    "formation.load('path/to/formation/directory')",
+                ],
+            },
         )
 
     def _validate_config(self, config_path: str) -> Dict[str, Any]:
@@ -358,8 +370,10 @@ class Formation:
         Raises:
             ConfigurationLoadError: If configuration loading fails after retries
         """
+
         async def _load_operation():
             """Load configuration with timeout and error handling for retry logic."""
+
             async def _timeout_operation():
                 formation_loader = FormationLoader()
                 return await formation_loader.load(config_path, self.secrets_manager)
@@ -369,7 +383,7 @@ class Formation:
                 operation_type="config_load",
                 description=f"Loading formation configuration from {config_path}",
                 timeout=self._timeout_config.config_load_timeout,
-                cancellation_token=self._formation_cancellation_token
+                cancellation_token=self._formation_cancellation_token,
             )
 
             if not result.is_success:
@@ -380,27 +394,30 @@ class Formation:
                         details={
                             "config_path": config_path,
                             "timeout": self._timeout_config.config_load_timeout,
-                            "suggestion": "Try increasing config_load_timeout or check file system performance"
-                        }
+                            "suggestion": "Try increasing config_load_timeout or check file system performance",
+                        },
                     )
                 elif result.was_cancelled:
                     raise ConfigurationLoadError(
                         "❌ Configuration loading was cancelled",
                         {
                             "config_path": config_path,
-                            "suggestion": "Operation was cancelled - check if Formation is being shut down"
-                        }
+                            "suggestion": "Operation was cancelled - check if Formation is being shut down",
+                        },
                     )
                 else:
                     # Check if the error is retryable (e.g., network issues, file system issues)
                     error_str = str(result.error).lower()
-                    if any(pattern in error_str for pattern in ['network', 'connection', 'timeout', 'temporary']):
+                    if any(
+                        pattern in error_str
+                        for pattern in ["network", "connection", "timeout", "temporary"]
+                    ):
                         raise NetworkTransientError(
                             f"Configuration loading failed: {result.error}",
                             details={
                                 "config_path": config_path,
-                                "original_error": str(result.error)
-                            }
+                                "original_error": str(result.error),
+                            },
                         )
                     else:
                         # Non-retryable error - re-raise as is
@@ -410,14 +427,14 @@ class Formation:
 
         # Use retry logic for configuration loading
         retry_result = await self._retry_manager.execute_with_retry(
-            _load_operation,
-            config=self._retry_config,
-            operation_name="configuration_loading"
+            _load_operation, config=self._retry_config, operation_name="configuration_loading"
         )
 
         if retry_result.success:
             if retry_result.was_retried:
-                print(f"✅ Configuration loaded successfully after {retry_result.total_attempts} attempts")
+                print(
+                    f"✅ Configuration loaded successfully after {retry_result.total_attempts} attempts"
+                )
             return retry_result.result
         else:
             error = retry_result.error
@@ -439,9 +456,9 @@ class Formation:
                             "Check if the configuration file is accessible",
                             "Verify network connectivity if loading from remote location",
                             f"Increase retry attempts: Formation(retry_config=RetryConfig("
-                            f"max_attempts={self._retry_config.max_attempts * 2}))"
-                        ]
-                    }
+                            f"max_attempts={self._retry_config.max_attempts * 2}))",
+                        ],
+                    },
                 )
             else:
                 # Re-raise the original error if it's already a ConfigurationLoadError
@@ -453,8 +470,8 @@ class Formation:
                         {
                             "config_path": config_path,
                             "attempts": retry_result.total_attempts,
-                            "suggestion": "Check configuration file format and accessibility"
-                        }
+                            "suggestion": "Check configuration file format and accessibility",
+                        },
                     ) from error
 
     def _prepare_services(self) -> None:
@@ -523,16 +540,18 @@ class Formation:
                     "example": {
                         "llm": {
                             "api_keys": {"openai": "your-api-key"},
-                            "models": [{"name": "gpt-4"}]
+                            "models": [{"name": "gpt-4"}],
                         }
-                    }
-                }
+                    },
+                },
             )
 
         # Validate required LLM fields
         if not self._llm_config:
             raise ConfigurationValidationError(
-                ["LLM configuration cannot be empty - at least one LLM provider must be configured"],
+                [
+                    "LLM configuration cannot be empty - at least one LLM provider must be configured"
+                ],
                 {
                     "suggestion": "Add LLM configuration to your formation.yaml",
                     "required_sections": ["api_keys", "models"],
@@ -540,15 +559,15 @@ class Formation:
                         "llm": {
                             "api_keys": {
                                 "openai": "sk-your-openai-key",
-                                "anthropic": "sk-ant-your-anthropic-key"
+                                "anthropic": "sk-ant-your-anthropic-key",
                             },
                             "models": [
                                 {"name": "gpt-4", "provider": "openai"},
-                                {"name": "claude-3-sonnet", "provider": "anthropic"}
-                            ]
+                                {"name": "claude-3-sonnet", "provider": "anthropic"},
+                            ],
                         }
-                    }
-                }
+                    },
+                },
             )
 
         # Validate LLM structure (api_keys, models, settings)
@@ -563,29 +582,27 @@ class Formation:
                         "example": {
                             "api_keys": {
                                 "openai": "sk-your-openai-key",
-                                "anthropic": "sk-ant-your-anthropic-key"
+                                "anthropic": "sk-ant-your-anthropic-key",
                             }
-                        }
-                    }
+                        },
+                    },
                 )
 
             # Validate that at least one API key is provided
             if not api_keys:
                 raise ConfigurationValidationError(
-                    ["LLM 'api_keys' section cannot be empty - at least one provider API key required"],
+                    [
+                        "LLM 'api_keys' section cannot be empty - at least one provider API key required"
+                    ],
                     {
                         "suggestion": "Add at least one API key for an LLM provider",
                         "supported_providers": ["openai", "anthropic", "azure", "cohere"],
-                        "example": {
-                            "api_keys": {
-                                "openai": "sk-your-openai-key"
-                            }
-                        },
+                        "example": {"api_keys": {"openai": "sk-your-openai-key"}},
                         "how_to_get_keys": {
                             "openai": "Get your API key from https://platform.openai.com/api-keys",
-                            "anthropic": "Get your API key from https://console.anthropic.com/"
-                        }
-                    }
+                            "anthropic": "Get your API key from https://console.anthropic.com/",
+                        },
+                    },
                 )
 
         if "models" in self._llm_config:
@@ -614,13 +631,8 @@ class Formation:
                 {
                     "current_type": type(self._memory_config).__name__,
                     "suggestion": "Update your formation.yaml to have 'memory:' as a dictionary section",
-                    "example": {
-                        "memory": {
-                            "type": "local",
-                            "path": "./memory"
-                        }
-                    }
-                }
+                    "example": {"memory": {"type": "local", "path": "./memory"}},
+                },
             )
 
         # Validate memory type and required fields
@@ -628,7 +640,9 @@ class Formation:
             memory_type = self._memory_config.get("type")
             if memory_type and memory_type not in ["local", "memobase", "sqlite"]:
                 raise ConfigurationValidationError(
-                    [f"Unsupported memory type '{memory_type}'. Supported types: local, memobase, sqlite"],
+                    [
+                        f"Unsupported memory type '{memory_type}'. Supported types: local, memobase, sqlite"
+                    ],
                     {
                         "current_type": memory_type,
                         "supported_types": ["local", "memobase", "sqlite"],
@@ -636,16 +650,21 @@ class Formation:
                         "examples": {
                             "local": {"type": "local", "path": "./memory"},
                             "sqlite": {"type": "sqlite", "database": "memory.db"},
-                            "memobase": {"type": "memobase", "connection_string": "postgresql://..."}
-                        }
-                    }
+                            "memobase": {
+                                "type": "memobase",
+                                "connection_string": "postgresql://...",
+                            },
+                        },
+                    },
                 )
 
             # Validate memobase-specific configuration
             if memory_type == "memobase":
                 if "connection_string" not in self._memory_config:
                     raise ConfigurationValidationError(
-                        ["Memobase memory configuration missing required 'connection_string' field"],
+                        [
+                            "Memobase memory configuration missing required 'connection_string' field"
+                        ],
                         {
                             "memory_type": "memobase",
                             "missing_field": "connection_string",
@@ -653,11 +672,11 @@ class Formation:
                             "example": {
                                 "memory": {
                                     "type": "memobase",
-                                    "connection_string": "postgresql://user:password@localhost:5432/memobase"
+                                    "connection_string": "postgresql://user:password@localhost:5432/memobase",
                                 }
                             },
-                            "setup_help": "Install PostgreSQL and create a database for Memobase storage"
-                        }
+                            "setup_help": "Install PostgreSQL and create a database for Memobase storage",
+                        },
                     )
 
     def _setup_mcp_config(self) -> None:
@@ -717,11 +736,11 @@ class Formation:
                                 "id": "assistant",
                                 "name": "AI Assistant",
                                 "type": "chat",
-                                "description": "General purpose assistant"
+                                "description": "General purpose assistant",
                             }
                         ]
-                    }
-                }
+                    },
+                },
             )
 
         # Validate individual agent configurations
@@ -739,9 +758,9 @@ class Formation:
                             "id": "my-agent",
                             "name": "My Agent",
                             "type": "chat",
-                            "description": "Agent description"
-                        }
-                    }
+                            "description": "Agent description",
+                        },
+                    },
                 )
 
             if not agent_config.get("id"):
@@ -751,8 +770,8 @@ class Formation:
                         "agent_position": i,
                         "missing_field": "id",
                         "suggestion": "Add a unique 'id' field to identify the agent",
-                        "example": {"id": "my-agent", "name": "My Agent"}
-                    }
+                        "example": {"id": "my-agent", "name": "My Agent"},
+                    },
                 )
 
             agent_id = agent_config["id"]
@@ -767,8 +786,8 @@ class Formation:
                             "Agent ID must be a non-empty string "
                             "(letters, numbers, hyphens, underscores)"
                         ),
-                        "examples": ["assistant", "code-reviewer", "data_analyst"]
-                    }
+                        "examples": ["assistant", "code-reviewer", "data_analyst"],
+                    },
                 )
 
             # Check for duplicate agent IDs
@@ -782,8 +801,8 @@ class Formation:
                         "fix": (
                             f"Change the ID of agent {i} to something unique like "
                             f"'{agent_id}_2' or '{agent_id}_v2'"
-                        )
-                    }
+                        ),
+                    },
                 )
             agent_ids.add(agent_id)
 
@@ -795,8 +814,8 @@ class Formation:
                         "agent_id": agent_id,
                         "missing_field": "name",
                         "suggestion": "Add a human-readable 'name' field for the agent",
-                        "example": {"id": agent_id, "name": "My Assistant Agent"}
-                    }
+                        "example": {"id": agent_id, "name": "My Assistant Agent"},
+                    },
                 )
 
             # Validate agent type if specified
@@ -815,9 +834,9 @@ class Formation:
                         "type_descriptions": {
                             "chat": "Interactive conversational agent",
                             "workflow": "Multi-step task automation agent",
-                            "specialist": "Domain-specific expert agent"
-                        }
-                    }
+                            "specialist": "Domain-specific expert agent",
+                        },
+                    },
                 )
 
     async def ensure_secrets_manager(self) -> bool:
@@ -832,6 +851,7 @@ class Formation:
 
         async def _initialize_operation():
             """Initialize secrets manager with timeout support."""
+
             async def _timeout_operation():
                 await self.secrets_manager.initialize_encryption()
                 return True
@@ -841,7 +861,7 @@ class Formation:
                 operation_type="secrets_operation",
                 description="Initializing secrets manager encryption",
                 timeout=self._timeout_config.secrets_operation_timeout,
-                cancellation_token=self._formation_cancellation_token
+                cancellation_token=self._formation_cancellation_token,
             )
 
             if result.is_success:
@@ -853,13 +873,15 @@ class Formation:
                         retry_after=2.0,
                         details={
                             "timeout": self._timeout_config.secrets_operation_timeout,
-                            "suggestion": "Increase secrets_operation_timeout or check system performance"
-                        }
+                            "suggestion": "Increase secrets_operation_timeout or check system performance",
+                        },
                     )
                 elif result.was_cancelled:
                     raise ServiceTransientError(
                         "Secrets manager initialization was cancelled",
-                        details={"suggestion": "Operation was cancelled - check if Formation is being shut down"}
+                        details={
+                            "suggestion": "Operation was cancelled - check if Formation is being shut down"
+                        },
                     )
                 else:
                     # Re-raise the original error for retry logic to handle
@@ -870,16 +892,20 @@ class Formation:
             retry_result = await self._retry_manager.execute_with_retry(
                 _initialize_operation,
                 config=self._retry_config,
-                operation_name="secrets_manager_initialization"
+                operation_name="secrets_manager_initialization",
             )
 
             if retry_result.success:
                 if retry_result.was_retried:
-                    print(f"✅ Secrets manager initialized successfully after {retry_result.total_attempts} attempts")
+                    print(
+                        f"✅ Secrets manager initialized successfully after {retry_result.total_attempts} attempts"
+                    )
                 return retry_result.result
             else:
                 error = retry_result.error
-                print(f"❌ Failed to initialize secrets manager after {retry_result.total_attempts} attempts: {error}")
+                print(
+                    f"❌ Failed to initialize secrets manager after {retry_result.total_attempts} attempts: {error}"
+                )
 
                 # Provide specific suggestions based on error type
                 if isinstance(error, ServiceTransientError):
@@ -1021,7 +1047,9 @@ class Formation:
             return await self.secrets_manager.interpolate_secrets(config)
         except Exception as e:
             print(f"❌ Failed to interpolate secrets: {e}")
-            print("💡 Suggestion: Check your secret references use format: ${{ secrets.SECRET_NAME }}")
+            print(
+                "💡 Suggestion: Check your secret references use format: ${{ secrets.SECRET_NAME }}"
+            )
             return config
 
     def start_overlord(self):
@@ -1099,9 +1127,9 @@ class Formation:
                     "troubleshooting": [
                         "Check if the overlord module exists in the formation directory",
                         "Verify Python path includes the formation package",
-                        "Try reinstalling the formation package"
-                    ]
-                }
+                        "Try reinstalling the formation package",
+                    ],
+                },
             ) from e
         except (ValueError, TypeError) as e:
             # Clean up on failure - configuration error
@@ -1118,8 +1146,8 @@ class Formation:
                         "Validate your formation.yaml syntax",
                         "Check required fields are present",
                         "Verify data types match expected values",
-                        f"Review configuration at: {self._formation_path}"
-                    ]
+                        f"Review configuration at: {self._formation_path}",
+                    ],
                 },
             ) from e
         except Exception as e:
@@ -1145,8 +1173,8 @@ class Formation:
                         "Try reloading the formation configuration",
                         "Check system resources (memory, disk space)",
                         "Review formation logs for additional details",
-                        "Consider restarting the formation process"
-                    ]
+                        "Consider restarting the formation process",
+                    ],
                 },
             ) from e
 
@@ -1176,13 +1204,17 @@ class Formation:
                 while not tracker.overlord_shutting_down or not await tracker.is_idle():
                     await asyncio.sleep(0.1)
                     if asyncio.get_event_loop().time() - start_time > timeout_seconds:
-                        raise TimeoutError(f"Graceful shutdown timed out after {timeout_seconds} seconds")
+                        raise TimeoutError(
+                            f"Graceful shutdown timed out after {timeout_seconds} seconds"
+                        )
 
             try:
                 asyncio.run(wait_for_shutdown())
                 print("✅ Overlord shutdown gracefully - all agents finished their work")
             except TimeoutError:
-                print(f"⚠️  Graceful shutdown timed out after {timeout_seconds}s - forcing termination")
+                print(
+                    f"⚠️  Graceful shutdown timed out after {timeout_seconds}s - forcing termination"
+                )
 
             # Clean up references
             self._overlord = None
@@ -1324,7 +1356,9 @@ class Formation:
     # DYNAMIC COMPONENT MANAGEMENT HELPERS
     # =============================================================================
 
-    async def _resolve_schema(self, schema: Union[Dict[str, Any], str], schema_type: str) -> Dict[str, Any]:
+    async def _resolve_schema(
+        self, schema: Union[Dict[str, Any], str], schema_type: str
+    ) -> Dict[str, Any]:
         """
         Resolve a schema from either inline dict or file path using FormationLoader.
 
@@ -1369,8 +1403,11 @@ class Formation:
                     if "id" in loaded_config and "type" in loaded_config:
                         return loaded_config
                     # If it's a formation file, extract first MCP server
-                    elif ("mcp" in loaded_config and "servers" in loaded_config["mcp"]
-                          and loaded_config["mcp"]["servers"]):
+                    elif (
+                        "mcp" in loaded_config
+                        and "servers" in loaded_config["mcp"]
+                        and loaded_config["mcp"]["servers"]
+                    ):
                         return loaded_config["mcp"]["servers"][0]
                     else:
                         raise ValueError(f"No valid MCP server configuration found in {schema}")
@@ -1431,7 +1468,9 @@ class Formation:
             existing_server_ids.extend([server["id"] for server in mcp_config["servers"]])
 
         if server_id in existing_server_ids:
-            raise ValueError(f"MCP server ID '{server_id}' already exists in formation configuration")
+            raise ValueError(
+                f"MCP server ID '{server_id}' already exists in formation configuration"
+            )
 
     def _validate_agent_schema(self, agent_schema: Dict[str, Any]) -> None:
         """
@@ -1490,7 +1529,9 @@ class Formation:
             # Validate endpoint URL format
             endpoint = mcp_schema.get("endpoint", "")
             if not (endpoint.startswith("http://") or endpoint.startswith("https://")):
-                raise ValueError(f"Invalid endpoint URL: {endpoint}. Must start with http:// or https://")
+                raise ValueError(
+                    f"Invalid endpoint URL: {endpoint}. Must start with http:// or https://"
+                )
 
     # =============================================================================
     # DYNAMIC AGENT MANAGEMENT
@@ -1663,6 +1704,7 @@ class Formation:
         agents = await self._overlord.list_agents()
         if agent_id not in agents:
             from ..datatypes.exceptions import AgentNotFoundError
+
             raise AgentNotFoundError(agent_id)
 
         return agents[agent_id]
@@ -1749,7 +1791,9 @@ class Formation:
                     new_loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(new_loop)
                     try:
-                        result = new_loop.run_until_complete(self._overlord.remove_mcp_server(server_id))
+                        result = new_loop.run_until_complete(
+                            self._overlord.remove_mcp_server(server_id)
+                        )
                     finally:
                         new_loop.close()
                 except Exception as e:
@@ -1838,6 +1882,7 @@ class Formation:
         servers = await self._overlord.list_mcp_servers()
         if server_id not in servers:
             from ..datatypes.exceptions import MCPServerNotFoundError
+
             raise MCPServerNotFoundError(server_id)
 
         return servers[server_id]

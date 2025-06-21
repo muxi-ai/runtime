@@ -18,7 +18,9 @@ class MCPToolDiscovery:
         self._cached_tools: List[Dict[str, Any]] = []
         self._cache_valid = False
 
-    async def discover_tools(self, transport: BaseTransport, use_cache: bool = True) -> List[Dict[str, Any]]:
+    async def discover_tools(
+        self, transport: BaseTransport, use_cache: bool = True
+    ) -> List[Dict[str, Any]]:
         """Discover tools using real MCP tools/list method.
 
         Args:
@@ -34,10 +36,7 @@ class MCPToolDiscovery:
 
         try:
             # Send real tools/list request
-            response = await transport.send_request({
-                "method": "tools/list",
-                "params": {}
-            })
+            response = await transport.send_request({"method": "tools/list", "params": {}})
 
             if "result" in response and "tools" in response["result"]:
                 tools = response["result"]["tools"]
@@ -63,13 +62,15 @@ class MCPToolDiscovery:
         processed_tools = []
         for tool in tools:
             if self._validate_tool_definition(tool):
-                processed_tools.append({
-                    "name": tool["name"],
-                    "description": tool.get("description", ""),
-                    "inputSchema": tool.get("inputSchema", {}),
-                    "displayName": tool.get("title", tool["name"]),
-                    "protocol_compliant": True
-                })
+                processed_tools.append(
+                    {
+                        "name": tool["name"],
+                        "description": tool.get("description", ""),
+                        "inputSchema": tool.get("inputSchema", {}),
+                        "displayName": tool.get("title", tool["name"]),
+                        "protocol_compliant": True,
+                    }
+                )
         return processed_tools
 
     def _validate_tool_definition(self, tool: Dict[str, Any]) -> bool:
@@ -102,7 +103,7 @@ class MCPToolDiscovery:
                 return False
 
             # Validate name format (should be valid identifier)
-            if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_-]*$', name):
+            if not re.match(r"^[a-zA-Z_][a-zA-Z0-9_-]*$", name):
                 logger.debug(f"Tool name '{name}' contains invalid characters")
                 return False
 
@@ -195,10 +196,7 @@ class MCPToolDiscovery:
             return False
 
     async def get_tool_schema(
-        self,
-        transport: BaseTransport,
-        tool_name: str,
-        tools: Optional[List[Dict[str, Any]]] = None
+        self, transport: BaseTransport, tool_name: str, tools: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """Get detailed schema for a specific tool.
 
@@ -250,7 +248,7 @@ class MCPToolDiscovery:
             "description": tool.get("description", "No description available"),
             "parameters": self._extract_parameters(tool.get("inputSchema", {})),
             "required": self._extract_required_parameters(tool.get("inputSchema", {})),
-            "mcp_compliant": tool.get("protocol_compliant", False)
+            "mcp_compliant": tool.get("protocol_compliant", False),
         }
 
     def _extract_parameters(self, schema: Dict[str, Any]) -> Dict[str, Any]:

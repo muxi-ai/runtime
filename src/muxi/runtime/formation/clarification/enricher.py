@@ -5,7 +5,6 @@ This module enriches parameters using user context memory to pre-fill
 information where possible, reducing the need for clarifying questions.
 """
 
-
 from typing import Dict, List, Optional, Any, Tuple
 
 from ...datatypes import (
@@ -32,7 +31,7 @@ class ContextualParameterEnricher:
         self,
         tool_schema: Dict[str, Any],
         provided_params: Dict[str, Any],
-        user_context: Dict[str, Any]
+        user_context: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], Dict[str, float]]:
         """
         Fill missing parameters from user context where possible
@@ -71,10 +70,7 @@ class ContextualParameterEnricher:
             raise ContextEnrichmentError(f"Failed to enrich parameters: {e}")
 
     async def enrich_reasoning_context(
-        self,
-        intent: str,
-        provided_context: Dict[str, Any],
-        user_context: Dict[str, Any]
+        self, intent: str, provided_context: Dict[str, Any], user_context: Dict[str, Any]
     ) -> Tuple[Dict[str, Any], Dict[str, float]]:
         """
         Enrich reasoning context with user background and preferences
@@ -98,9 +94,7 @@ class ContextualParameterEnricher:
 
             for context_key, mapping in relevant_mappings.items():
                 if context_key not in enriched_context:
-                    context_value, confidence = await self._find_mapped_value(
-                        mapping, user_context
-                    )
+                    context_value, confidence = await self._find_mapped_value(mapping, user_context)
 
                     if context_value is not None and confidence >= self.confidence_threshold:
                         enriched_context[context_key] = context_value
@@ -113,11 +107,7 @@ class ContextualParameterEnricher:
             raise ContextEnrichmentError(f"Failed to enrich reasoning context: {e}")
 
     async def learn_parameter_mapping(
-        self,
-        parameter_name: str,
-        user_response: str,
-        context_key: str,
-        confidence: float
+        self, parameter_name: str, user_response: str, context_key: str, confidence: float
     ) -> None:
         """
         Learn new parameter mapping from successful interactions
@@ -132,9 +122,7 @@ class ContextualParameterEnricher:
             # Update or create parameter mapping
             if parameter_name not in self.parameter_mappings:
                 self.parameter_mappings[parameter_name] = ParameterMapping(
-                    parameter_name=parameter_name,
-                    context_keys=[],
-                    confidence_threshold=0.6
+                    parameter_name=parameter_name, context_keys=[], confidence_threshold=0.6
                 )
 
             mapping = self.parameter_mappings[parameter_name]
@@ -151,10 +139,7 @@ class ContextualParameterEnricher:
     # Private helper methods
 
     async def _find_context_value(
-        self,
-        param_name: str,
-        param_info: Dict[str, Any],
-        user_context: Dict[str, Any]
+        self, param_name: str, param_info: Dict[str, Any], user_context: Dict[str, Any]
     ) -> Tuple[Optional[Any], float]:
         """Find parameter value in user context with confidence score"""
 
@@ -178,18 +163,14 @@ class ContextualParameterEnricher:
                 return value, similarity
 
         # Try semantic matching based on parameter description
-        semantic_value = await self._find_semantic_match(
-            param_name, param_info, user_context
-        )
+        semantic_value = await self._find_semantic_match(param_name, param_info, user_context)
         if semantic_value:
             return semantic_value, 0.7
 
         return None, 0.0
 
     async def _find_mapped_value(
-        self,
-        mapping: ParameterMapping,
-        user_context: Dict[str, Any]
+        self, mapping: ParameterMapping, user_context: Dict[str, Any]
     ) -> Tuple[Optional[Any], float]:
         """Find value using parameter mapping"""
 
@@ -214,9 +195,7 @@ class ContextualParameterEnricher:
         return context_item
 
     def _find_fuzzy_matches(
-        self,
-        param_name: str,
-        user_context: Dict[str, Any]
+        self, param_name: str, user_context: Dict[str, Any]
     ) -> List[Tuple[str, float]]:
         """Find fuzzy matches for parameter name in context keys"""
         matches = []
@@ -238,10 +217,7 @@ class ContextualParameterEnricher:
         return matches
 
     async def _find_semantic_match(
-        self,
-        param_name: str,
-        param_info: Dict[str, Any],
-        user_context: Dict[str, Any]
+        self, param_name: str, param_info: Dict[str, Any], user_context: Dict[str, Any]
     ) -> Optional[Any]:
         """Find semantic matches using parameter description"""
 
@@ -256,7 +232,7 @@ class ContextualParameterEnricher:
             "date": ["when", "day", "date", "schedule"],
             "preference": ["like", "prefer", "favorite", "choice"],
             "goal": ["want", "aim", "objective", "target"],
-            "background": ["experience", "history", "expertise", "knowledge"]
+            "background": ["experience", "history", "expertise", "knowledge"],
         }
 
         for semantic_type, keywords in semantic_keywords.items():
@@ -276,31 +252,31 @@ class ContextualParameterEnricher:
                 "risk_tolerance": ParameterMapping(
                     parameter_name="risk_tolerance",
                     context_keys=["risk_profile", "investment_risk", "risk_tolerance"],
-                    confidence_threshold=0.7
+                    confidence_threshold=0.7,
                 ),
                 "investment_timeline": ParameterMapping(
                     parameter_name="investment_timeline",
                     context_keys=["timeline", "investment_horizon", "time_frame"],
-                    confidence_threshold=0.7
+                    confidence_threshold=0.7,
                 ),
                 "financial_goals": ParameterMapping(
                     parameter_name="financial_goals",
                     context_keys=["goals", "financial_objectives", "investment_goals"],
-                    confidence_threshold=0.7
-                )
+                    confidence_threshold=0.7,
+                ),
             },
             "technical_explanation": {
                 "technical_background": ParameterMapping(
                     parameter_name="technical_background",
                     context_keys=["background", "expertise", "experience_level"],
-                    confidence_threshold=0.8
+                    confidence_threshold=0.8,
                 ),
                 "specific_interest": ParameterMapping(
                     parameter_name="specific_interest",
                     context_keys=["interests", "focus_area", "specialization"],
-                    confidence_threshold=0.6
-                )
-            }
+                    confidence_threshold=0.6,
+                ),
+            },
         }
 
         return intent_mappings.get(intent.lower(), {})
@@ -311,36 +287,36 @@ class ContextualParameterEnricher:
             "location": ParameterMapping(
                 parameter_name="location",
                 context_keys=["location", "city", "address", "current_location", "home_city"],
-                confidence_threshold=0.7
+                confidence_threshold=0.7,
             ),
             "date": ParameterMapping(
                 parameter_name="date",
                 context_keys=["preferred_date", "date", "when", "schedule"],
-                confidence_threshold=0.7
+                confidence_threshold=0.7,
             ),
             "time": ParameterMapping(
                 parameter_name="time",
                 context_keys=["preferred_time", "time", "schedule", "when"],
-                confidence_threshold=0.7
+                confidence_threshold=0.7,
             ),
             "party_size": ParameterMapping(
                 parameter_name="party_size",
                 context_keys=["group_size", "people", "party_size", "family_size"],
-                confidence_threshold=0.8
+                confidence_threshold=0.8,
             ),
             "cuisine": ParameterMapping(
                 parameter_name="cuisine",
                 context_keys=["favorite_cuisine", "cuisine_preference", "food_preference"],
-                confidence_threshold=0.7
+                confidence_threshold=0.7,
             ),
             "preferences": ParameterMapping(
                 parameter_name="preferences",
                 context_keys=["preferences", "likes", "dislikes", "style"],
-                confidence_threshold=0.6
+                confidence_threshold=0.6,
             ),
             "budget": ParameterMapping(
                 parameter_name="budget",
                 context_keys=["budget", "price_range", "spending_limit"],
-                confidence_threshold=0.8
-            )
+                confidence_threshold=0.8,
+            ),
         }

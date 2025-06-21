@@ -7,7 +7,12 @@ feasibility, identifying gaps, and generating clarification questions.
 
 from typing import List, Optional
 
-from .datatypes import MultiStepPlan, PlanAnalysis, PlanStepAnalysis, ClarificationError
+from ...datatypes.clarification import (
+    MultiStepPlan,
+    PlanAnalysis,
+    PlanStepAnalysis,
+    ClarificationError,
+)
 
 
 class PlanAnalyzer:

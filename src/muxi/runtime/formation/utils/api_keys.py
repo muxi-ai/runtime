@@ -1,6 +1,7 @@
 """
 API key generation utilities for the Overlord.
 """
+
 import secrets
 import string
 from typing import Literal

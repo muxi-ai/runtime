@@ -27,11 +27,7 @@ class FileTransport(BaseTransport):
             self.file_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Open file for writing
-            self.current_file = await aiofiles.open(
-                self.file_path,
-                mode='a',
-                encoding='utf-8'
-            )
+            self.current_file = await aiofiles.open(self.file_path, mode="a", encoding="utf-8")
 
             self.status = TransportStatus.HEALTHY
             return True
@@ -58,7 +54,7 @@ class FileTransport(BaseTransport):
 
                 # Write events
                 for event in events:
-                    line = json.dumps(event, separators=(",", ":")) + '\n'
+                    line = json.dumps(event, separators=(",", ":")) + "\n"
                     await self.current_file.write(line)
                     await self.current_file.flush()
 
@@ -94,8 +90,8 @@ class FileTransport(BaseTransport):
 
             # Rotate existing files
             for i in range(self.max_files - 1, 0, -1):
-                old_file = self.file_path.with_suffix(f'.{i}.jsonl')
-                new_file = self.file_path.with_suffix(f'.{i+1}.jsonl')
+                old_file = self.file_path.with_suffix(f".{i}.jsonl")
+                new_file = self.file_path.with_suffix(f".{i+1}.jsonl")
 
                 if old_file.exists():
                     if i == self.max_files - 1:
@@ -104,16 +100,12 @@ class FileTransport(BaseTransport):
                         old_file.rename(new_file)
 
             # Rename current file
-            rotated_file = self.file_path.with_suffix('.1.jsonl')
+            rotated_file = self.file_path.with_suffix(".1.jsonl")
             if self.file_path.exists():
                 self.file_path.rename(rotated_file)
 
             # Open new file
-            self.current_file = await aiofiles.open(
-                self.file_path,
-                mode='w',
-                encoding='utf-8'
-            )
+            self.current_file = await aiofiles.open(self.file_path, mode="w", encoding="utf-8")
 
         except Exception as e:
             self.last_error = f"Rotation failed: {e}"

@@ -84,4 +84,3 @@ class RoutingConfig(BaseModel):
         ),
         description="System message that guides the routing model's behavior",
     )
-

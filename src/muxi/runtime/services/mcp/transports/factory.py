@@ -35,7 +35,7 @@ class MCPTransportFactory:
         url: Optional[str] = None,
         command: Optional[str] = None,
         transport_type: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> BaseTransport:
         """Create a transport instance based on parameters.
 
@@ -72,7 +72,10 @@ class MCPTransportFactory:
 
         # Handle command-line transport
         if command is not None:
-            if transport_type is not None and transport_type != MCPTransportFactory.TRANSPORT_COMMAND:
+            if (
+                transport_type is not None
+                and transport_type != MCPTransportFactory.TRANSPORT_COMMAND
+            ):
                 raise ValueError(
                     f"Transport type '{transport_type}' is not compatible with command parameter. "
                     f"Use transport_type='{MCPTransportFactory.TRANSPORT_COMMAND}' or omit it."
@@ -102,9 +105,7 @@ class MCPTransportFactory:
 
     @staticmethod
     def create_transport_with_fallback(
-        url: Optional[str] = None,
-        command: Optional[str] = None,
-        **kwargs
+        url: Optional[str] = None, command: Optional[str] = None, **kwargs
     ) -> BaseTransport:
         """
         Create a transport instance with automatic fallback for HTTP URLs.
@@ -133,17 +134,13 @@ class MCPTransportFactory:
         if url is not None:
             try:
                 return MCPTransportFactory.create_transport(
-                    url=url,
-                    transport_type=MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP,
-                    **kwargs
+                    url=url, transport_type=MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP, **kwargs
                 )
             except Exception:
                 # TODO: Add observability logging for fallback
                 # Fall back to HTTP+SSE
                 return MCPTransportFactory.create_transport(
-                    url=url,
-                    transport_type=MCPTransportFactory.TRANSPORT_HTTP_SSE,
-                    **kwargs
+                    url=url, transport_type=MCPTransportFactory.TRANSPORT_HTTP_SSE, **kwargs
                 )
 
         raise ValueError("Must provide either url or command.")
@@ -152,7 +149,7 @@ class MCPTransportFactory:
     def supports_parameters(
         url: Optional[str] = None,
         command: Optional[str] = None,
-        transport_type: Optional[str] = None
+        transport_type: Optional[str] = None,
     ) -> bool:
         """Check if the provided parameters are supported.
 
@@ -175,7 +172,7 @@ class MCPTransportFactory:
             supported_types = [
                 MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP,
                 MCPTransportFactory.TRANSPORT_HTTP_SSE,
-                MCPTransportFactory.TRANSPORT_COMMAND
+                MCPTransportFactory.TRANSPORT_COMMAND,
             ]
 
             if transport_type not in supported_types:
@@ -199,7 +196,7 @@ class MCPTransportFactory:
         return [
             MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP,
             MCPTransportFactory.TRANSPORT_HTTP_SSE,
-            MCPTransportFactory.TRANSPORT_COMMAND
+            MCPTransportFactory.TRANSPORT_COMMAND,
         ]
 
     @staticmethod

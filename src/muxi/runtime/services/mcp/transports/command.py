@@ -20,7 +20,7 @@ from .base import (
     MCPConnectionError,
     MCPRequestError,
     MCPTimeoutError,
-    CancellationToken
+    CancellationToken,
 )
 from ..protocol.message_handler import MCPMessageHandler
 
@@ -34,7 +34,7 @@ class CommandLineTransport(BaseTransport):
         args: Optional[list] = None,
         env: Optional[dict] = None,
         request_timeout: int = 30,
-        auth: Optional[Any] = None
+        auth: Optional[Any] = None,
     ):
         """Initialize real MCP STDIO transport."""
         super().__init__(command, request_timeout, auth)
@@ -43,6 +43,7 @@ class CommandLineTransport(BaseTransport):
         if args is None and isinstance(command, str):
             # Split command string into command and args
             import shlex
+
             parsed_command = shlex.split(command)
             self.command = parsed_command[0]
             self.args = parsed_command[1:] if len(parsed_command) > 1 else []
@@ -58,9 +59,9 @@ class CommandLineTransport(BaseTransport):
 
         # Initialize connection stats
         self.connection_stats = {
-            'requests_sent': 0,
-            'responses_received': 0,
-            'errors_encountered': 0
+            "requests_sent": 0,
+            "responses_received": 0,
+            "errors_encountered": 0,
         }
 
     async def connect(self) -> bool:
@@ -71,9 +72,7 @@ class CommandLineTransport(BaseTransport):
         try:
             # Create server parameters object
             server_params = StdioServerParameters(
-                command=self.command,
-                args=self.args,
-                env=self.env
+                command=self.command, args=self.args, env=self.env
             )
 
             # Connect using real MCP SDK
@@ -90,7 +89,7 @@ class CommandLineTransport(BaseTransport):
                 "command": self.command,
                 "args": self.args,
                 "error": str(e),
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
             raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
 
@@ -98,7 +97,7 @@ class CommandLineTransport(BaseTransport):
         self,
         request_obj: Any,
         timeout: Optional[int] = None,
-        cancellation_token: Optional[CancellationToken] = None
+        cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """Send request using real MCP protocol."""
         if not self.connected:
@@ -124,32 +123,25 @@ class CommandLineTransport(BaseTransport):
             # Wait for response with timeout
             request_timeout = timeout or self.request_timeout
             response_message = await asyncio.wait_for(
-                self.read_stream.receive(),
-                timeout=request_timeout
+                self.read_stream.receive(), timeout=request_timeout
             )
 
             # Parse response using message handler
             parsed_response = self.message_handler.parse_response(response_message)
 
             self.last_activity = datetime.now()
-            self.connection_stats['requests_sent'] += 1
-            self.connection_stats['responses_received'] += 1
+            self.connection_stats["requests_sent"] += 1
+            self.connection_stats["responses_received"] += 1
 
             return parsed_response
 
         except asyncio.TimeoutError as e:
-            self.connection_stats['errors_encountered'] += 1
-            error_details = {
-                "timeout": request_timeout,
-                "timestamp": datetime.now().isoformat()
-            }
+            self.connection_stats["errors_encountered"] += 1
+            error_details = {"timeout": request_timeout, "timestamp": datetime.now().isoformat()}
             raise MCPTimeoutError("Request timed out", error_details) from e
         except Exception as e:
-            self.connection_stats['errors_encountered'] += 1
-            error_details = {
-                "error": str(e),
-                "timestamp": datetime.now().isoformat()
-            }
+            self.connection_stats["errors_encountered"] += 1
+            error_details = {"error": str(e), "timestamp": datetime.now().isoformat()}
             raise MCPRequestError("Request failed", error_details) from e
 
     async def disconnect(self) -> bool:
@@ -188,7 +180,7 @@ class CommandLineTransport(BaseTransport):
             "current_time": datetime.now().isoformat(),
         }
 
-        if self.session and hasattr(self.session, 'session_id'):
+        if self.session and hasattr(self.session, "session_id"):
             stats["session_id"] = self.session.session_id
         else:
             stats["session_id"] = None

@@ -20,6 +20,7 @@ class FormationError(Exception):
 # Configuration Errors
 class FormationConfigurationError(FormationError):
     """Base class for configuration-related errors."""
+
     pass
 
 
@@ -47,12 +48,13 @@ class ConfigurationLoadError(FormationConfigurationError):
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(message, details)
         # Extract path from details if available for backward compatibility
-        self.path = details.get('config_path') if details else None
+        self.path = details.get("config_path") if details else None
 
 
 # Service Errors
 class FormationServiceError(FormationError):
     """Base class for service-related errors."""
+
     pass
 
 
@@ -79,8 +81,13 @@ class ServiceStartupError(FormationServiceError):
 class ServiceDependencyError(FormationServiceError):
     """Raised when service dependencies are not met."""
 
-    def __init__(self, service_name: str, missing_dependencies: List[str], details: Optional[Dict[str, Any]] = None):
-        deps = ', '.join(missing_dependencies)
+    def __init__(
+        self,
+        service_name: str,
+        missing_dependencies: List[str],
+        details: Optional[Dict[str, Any]] = None,
+    ):
+        deps = ", ".join(missing_dependencies)
         message = f"Service {service_name} missing dependencies: {deps}"
         super().__init__(message, details)
         self.service_name = service_name
@@ -90,6 +97,7 @@ class ServiceDependencyError(FormationServiceError):
 # Overlord Errors
 class OverlordError(FormationError):
     """Base class for overlord-related errors."""
+
     pass
 
 
@@ -114,7 +122,9 @@ class OverlordStartupError(OverlordError):
 class OverlordStateError(OverlordError):
     """Raised when overlord is in an invalid state for the requested operation."""
 
-    def __init__(self, current_state: str, required_state: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, current_state: str, required_state: str, details: Optional[Dict[str, Any]] = None
+    ):
         message = f"Overlord in {current_state} state, but {required_state} required"
         super().__init__(message, details)
         self.current_state = current_state
@@ -124,6 +134,7 @@ class OverlordStateError(OverlordError):
 # Agent Errors
 class AgentError(FormationError):
     """Base class for agent-related errors."""
+
     pass
 
 
@@ -140,8 +151,10 @@ class AgentConfigurationError(AgentError):
 class DuplicateAgentError(AgentError):
     """Raised when duplicate agent IDs are found."""
 
-    def __init__(self, agent_id: str, positions: List[int], details: Optional[Dict[str, Any]] = None):
-        pos_str = ', '.join(map(str, positions))
+    def __init__(
+        self, agent_id: str, positions: List[int], details: Optional[Dict[str, Any]] = None
+    ):
+        pos_str = ", ".join(map(str, positions))
         message = f"Duplicate agent ID '{agent_id}' found at positions: {pos_str}"
         super().__init__(message, details)
         self.agent_id = agent_id
@@ -151,8 +164,10 @@ class DuplicateAgentError(AgentError):
 class AgentValidationError(AgentError):
     """Raised when agent validation fails."""
 
-    def __init__(self, agent_id: str, validation_errors: List[str], details: Optional[Dict[str, Any]] = None):
-        errors_str = '; '.join(validation_errors)
+    def __init__(
+        self, agent_id: str, validation_errors: List[str], details: Optional[Dict[str, Any]] = None
+    ):
+        errors_str = "; ".join(validation_errors)
         message = f"Agent '{agent_id}' validation failed: {errors_str}"
         super().__init__(message, details)
         self.agent_id = agent_id
@@ -172,8 +187,10 @@ class AgentNotFoundError(AgentError):
 class AgentHasDependentsError(AgentError):
     """Raised when attempting to remove an agent that has dependent agents."""
 
-    def __init__(self, agent_id: str, dependent_agents: List[str], details: Optional[Dict[str, Any]] = None):
-        deps_str = ', '.join(dependent_agents)
+    def __init__(
+        self, agent_id: str, dependent_agents: List[str], details: Optional[Dict[str, Any]] = None
+    ):
+        deps_str = ", ".join(dependent_agents)
         message = f"Cannot remove agent '{agent_id}' - other agents depend on it: {deps_str}"
         super().__init__(message, details)
         self.agent_id = agent_id
@@ -191,7 +208,9 @@ class OverlordShuttingDownError(OverlordError):
 class NoAvailableAgentsError(OverlordError):
     """Raised when no agents are available to handle requests."""
 
-    def __init__(self, reason: str = "No agents available", details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self, reason: str = "No agents available", details: Optional[Dict[str, Any]] = None
+    ):
         message = f"No available agents: {reason}"
         super().__init__(message, details)
         self.reason = reason
@@ -209,6 +228,7 @@ class FormationNotRunningError(OverlordError):
 # Secrets Management Errors
 class SecretsError(FormationError):
     """Base class for secrets management errors."""
+
     pass
 
 
@@ -252,6 +272,7 @@ class SecretsManagementError(SecretsError):
 # Resource Management Errors
 class ResourceError(FormationError):
     """Base class for resource management errors."""
+
     pass
 
 
@@ -277,6 +298,7 @@ class ResourceNotAvailableError(ResourceError):
 # Dependency Errors
 class DependencyError(FormationError):
     """Base class for dependency-related errors."""
+
     pass
 
 
@@ -284,7 +306,7 @@ class CircularDependencyError(DependencyError):
     """Raised when circular dependencies are detected."""
 
     def __init__(self, dependency_chain: List[str], details: Optional[Dict[str, Any]] = None):
-        chain_str = ' -> '.join(dependency_chain)
+        chain_str = " -> ".join(dependency_chain)
         message = f"Circular dependency detected: {chain_str}"
         super().__init__(message, details)
         self.dependency_chain = dependency_chain
@@ -293,8 +315,10 @@ class CircularDependencyError(DependencyError):
 class MissingDependencyError(DependencyError):
     """Raised when required dependencies are missing."""
 
-    def __init__(self, dependent: str, missing_deps: List[str], details: Optional[Dict[str, Any]] = None):
-        deps_str = ', '.join(missing_deps)
+    def __init__(
+        self, dependent: str, missing_deps: List[str], details: Optional[Dict[str, Any]] = None
+    ):
+        deps_str = ", ".join(missing_deps)
         message = f"'{dependent}' requires missing dependencies: {deps_str}"
         super().__init__(message, details)
         self.dependent = dependent
@@ -313,6 +337,7 @@ class DependencyValidationError(DependencyError):
 # MCP Errors
 class MCPError(FormationError):
     """Base class for MCP-related errors."""
+
     pass
 
 
@@ -320,7 +345,11 @@ class MCPRequestError(MCPError):
     """Raised when MCP request fails."""
 
     def __init__(
-        self, message: str, method: str = None, server_id: str = None, details: Optional[Dict[str, Any]] = None
+        self,
+        message: str,
+        method: str = None,
+        server_id: str = None,
+        details: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message, details)
         self.method = method
@@ -340,7 +369,13 @@ class MCPConnectionError(MCPError):
 class MCPToolError(MCPError):
     """Raised when MCP tool execution fails."""
 
-    def __init__(self, tool_name: str, reason: str, server_id: str = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        tool_name: str,
+        reason: str,
+        server_id: str = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         message = f"MCP tool '{tool_name}' failed: {reason}"
         if server_id:
             message = f"MCP tool '{tool_name}' on server '{server_id}' failed: {reason}"
@@ -353,7 +388,13 @@ class MCPToolError(MCPError):
 class MCPTimeoutError(MCPError):
     """Raised when MCP operation times out."""
 
-    def __init__(self, operation: str, timeout: float, server_id: str = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        operation: str,
+        timeout: float,
+        server_id: str = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         message = f"MCP {operation} timed out after {timeout}s"
         if server_id:
             message = f"MCP {operation} on server '{server_id}' timed out after {timeout}s"
@@ -395,6 +436,6 @@ def add_error_context(exception: Exception, context: Dict[str, Any]) -> Formatio
         details={
             "original_exception": type(exception).__name__,
             "original_message": str(exception),
-            **context
-        }
+            **context,
+        },
     )

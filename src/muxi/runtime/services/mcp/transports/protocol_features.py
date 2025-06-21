@@ -73,10 +73,10 @@ class ModernProtocolFeatures:
         Returns:
             Standardized structured output format
         """
-        if hasattr(result, 'content') and hasattr(result, 'isError'):
+        if hasattr(result, "content") and hasattr(result, "isError"):
             # Handle _meta attribute carefully to avoid mock objects
-            meta_attr = getattr(result, '_meta', None)
-            if meta_attr is None or (hasattr(meta_attr, '_mock_name')):
+            meta_attr = getattr(result, "_meta", None)
+            if meta_attr is None or (hasattr(meta_attr, "_mock_name")):
                 # Handle case where _meta doesn't exist or is a mock
                 meta_value = {}
             else:
@@ -85,19 +85,13 @@ class ModernProtocolFeatures:
             return {
                 "content": result.content,
                 "isError": result.isError,
-                "links": getattr(result, 'links', []),
+                "links": getattr(result, "links", []),
                 "_meta": meta_value,
-                "type": "structured"
+                "type": "structured",
             }
 
         # Legacy format
-        return {
-            "content": result,
-            "isError": False,
-            "links": [],
-            "_meta": {},
-            "type": "legacy"
-        }
+        return {"content": result, "isError": False, "links": [], "_meta": {}, "type": "legacy"}
 
     @staticmethod
     def handle_elicitation_request(elicitation_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -121,5 +115,5 @@ class ModernProtocolFeatures:
             "prompt": elicitation_data.get("prompt", "Additional information needed"),
             "fields": elicitation_data.get("fields", []),
             "required": elicitation_data.get("required", []),
-            "_meta": elicitation_data.get("_meta", {})
+            "_meta": elicitation_data.get("_meta", {}),
         }

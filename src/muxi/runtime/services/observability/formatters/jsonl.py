@@ -12,10 +12,10 @@ class JSONLFormatter(BaseFormatter):
 
     def format_event(self, event: Dict[str, Any]) -> str:
         enriched = self._add_metadata(event)
-        return json.dumps(enriched, separators=(',', ':'))
+        return json.dumps(enriched, separators=(",", ":"))
 
     def format_batch(self, events: List[Dict[str, Any]]) -> str:
         lines = []
         for event in events:
             lines.append(self.format_event(event))
-        return '\n'.join(lines)
+        return "\n".join(lines)

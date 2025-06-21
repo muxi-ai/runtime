@@ -216,9 +216,7 @@ class MemoryExtractor:
 
         # Clear these specific keys
         if to_delete:
-            return await self.overlord.clear_user_context(
-                user_id=user_id, keys=to_delete
-            )
+            return await self.overlord.clear_user_context(user_id=user_id, keys=to_delete)
 
         return True
 

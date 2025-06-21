@@ -5,7 +5,6 @@ This module generates natural language clarifying questions for missing informat
 across different contexts and interaction styles.
 """
 
-
 import uuid
 from typing import Dict, List, Any
 
@@ -13,7 +12,7 @@ from ...datatypes.clarification import (
     ClarificationQuestion,
     QuestionStyle,
     RequestType,
-    QuestionGenerationError
+    QuestionGenerationError,
 )
 
 
@@ -38,7 +37,7 @@ class ClarificationQuestionGenerator:
         user_context: Dict[str, Any],
         conversation_context: str,
         intent: str,
-        style: QuestionStyle = QuestionStyle.CONVERSATIONAL
+        style: QuestionStyle = QuestionStyle.CONVERSATIONAL,
     ) -> ClarificationQuestion:
         """
         Generate a natural clarifying question for missing information
@@ -61,8 +60,13 @@ class ClarificationQuestionGenerator:
             # Determine question approach based on context
             if self.model and await self._should_use_ai_generation(info_name, user_context):
                 question_text = await self._generate_ai_question(
-                    request_type, info_name, info_schema, user_context,
-                    conversation_context, intent, style
+                    request_type,
+                    info_name,
+                    info_schema,
+                    user_context,
+                    conversation_context,
+                    intent,
+                    style,
                 )
             else:
                 question_text = self._generate_template_question(
@@ -78,7 +82,7 @@ class ClarificationQuestionGenerator:
                 required=info_schema.get("required", True),
                 validation_rules=info_schema.get("validation"),
                 context_hints=self._generate_context_hints(info_name, user_context),
-                style=style
+                style=style,
             )
 
         except Exception as e:
@@ -92,7 +96,7 @@ class ClarificationQuestionGenerator:
         missing_info: List[str],
         info_requirements: Dict[str, Any],
         user_context: Dict[str, Any],
-        style: QuestionStyle = QuestionStyle.CONVERSATIONAL
+        style: QuestionStyle = QuestionStyle.CONVERSATIONAL,
     ) -> List[ClarificationQuestion]:
         """
         Generate a complete question sequence for all missing information
@@ -128,7 +132,7 @@ class ClarificationQuestionGenerator:
                     user_context=user_context,
                     conversation_context="",  # Will be filled later
                     intent=intent,
-                    style=style
+                    style=style,
                 )
 
                 questions.append(question)
@@ -144,7 +148,7 @@ class ClarificationQuestionGenerator:
         intent: str,
         missing_context: str,
         user_background: Dict[str, Any],
-        style: QuestionStyle = QuestionStyle.CONVERSATIONAL
+        style: QuestionStyle = QuestionStyle.CONVERSATIONAL,
     ) -> ClarificationQuestion:
         """
         Generate questions for reasoning/advice scenarios
@@ -177,7 +181,7 @@ class ClarificationQuestionGenerator:
                 parameter_type="context",
                 parameter_description=f"Context needed for {intent}",
                 required=True,
-                style=style
+                style=style,
             )
 
         except Exception as e:
@@ -200,7 +204,7 @@ class ClarificationQuestionGenerator:
         user_context: Dict[str, Any],
         conversation_context: str,
         intent: str,
-        style: QuestionStyle
+        style: QuestionStyle,
     ) -> str:
         """Generate question using AI model"""
         if not self.model:
@@ -208,15 +212,20 @@ class ClarificationQuestionGenerator:
 
         try:
             prompt = self._build_question_generation_prompt(
-                request_type, info_name, info_schema, user_context,
-                conversation_context, intent, style
+                request_type,
+                info_name,
+                info_schema,
+                user_context,
+                conversation_context,
+                intent,
+                style,
             )
 
             response = await self.model.generate(prompt, max_tokens=100, temperature=0.7)
 
             # Extract just the question from the response
             question = response.strip()
-            if question.endswith('?'):
+            if question.endswith("?"):
                 return question
             else:
                 return question + "?"
@@ -231,7 +240,7 @@ class ClarificationQuestionGenerator:
         request_type: RequestType,
         info_name: str,
         info_schema: Dict[str, Any],
-        style: QuestionStyle
+        style: QuestionStyle,
     ) -> str:
         """Generate question using templates"""
         templates = self._question_templates.get(request_type.value, {})
@@ -249,9 +258,7 @@ class ClarificationQuestionGenerator:
         # Fill in template variables
         description = info_schema.get("description", info_name.replace("_", " "))
         return template.format(
-            info_name=info_name,
-            description=description,
-            parameter=info_name.replace("_", " ")
+            info_name=info_name, description=description, parameter=info_name.replace("_", " ")
         )
 
     async def _generate_ai_reasoning_question(
@@ -259,7 +266,7 @@ class ClarificationQuestionGenerator:
         intent: str,
         missing_context: str,
         user_background: Dict[str, Any],
-        style: QuestionStyle
+        style: QuestionStyle,
     ) -> str:
         """Generate reasoning question using AI"""
         if not self.model:
@@ -280,7 +287,7 @@ class ClarificationQuestionGenerator:
             response = await self.model.generate(prompt, max_tokens=100, temperature=0.7)
             question = response.strip()
 
-            return question if question.endswith('?') else question + "?"
+            return question if question.endswith("?") else question + "?"
 
         except Exception as e:
             #  Warning - TODO: add observability
@@ -288,40 +295,46 @@ class ClarificationQuestionGenerator:
             return self._generate_template_reasoning_question(intent, missing_context, style)
 
     def _generate_template_reasoning_question(
-        self,
-        intent: str,
-        missing_context: str,
-        style: QuestionStyle
+        self, intent: str, missing_context: str, style: QuestionStyle
     ) -> str:
         """Generate reasoning question using templates"""
         templates = {
             QuestionStyle.CONVERSATIONAL: "I'd be happy to help with {intent}. "
-                                          "Could you tell me more about {context}?",
+            "Could you tell me more about {context}?",
             QuestionStyle.FORMAL: "To provide appropriate {intent} guidance, "
-                                  "please provide information about {context}.",
-            QuestionStyle.BRIEF: "What's your {context} for {intent}?"
+            "please provide information about {context}.",
+            QuestionStyle.BRIEF: "What's your {context} for {intent}?",
         }
 
         template = templates.get(style, templates[QuestionStyle.CONVERSATIONAL])
         return template.format(intent=intent, context=missing_context.replace("_", " "))
 
     def _prioritize_missing_info(
-        self,
-        missing_info: List[str],
-        info_requirements: Dict[str, Any],
-        request_type: RequestType
+        self, missing_info: List[str], info_requirements: Dict[str, Any], request_type: RequestType
     ) -> List[str]:
         """Prioritize missing information by importance and dependencies"""
         # Define priority order for common parameters
         priority_order = {
             RequestType.TOOL_CALL: [
-                "location", "date", "time", "departure", "destination",
-                "party_size", "passengers", "cuisine", "preferences"
+                "location",
+                "date",
+                "time",
+                "departure",
+                "destination",
+                "party_size",
+                "passengers",
+                "cuisine",
+                "preferences",
             ],
             RequestType.REASONING: [
-                "goals", "background", "constraints", "preferences",
-                "timeline", "budget", "requirements"
-            ]
+                "goals",
+                "background",
+                "constraints",
+                "preferences",
+                "timeline",
+                "budget",
+                "requirements",
+            ],
         }
 
         order = priority_order.get(request_type, [])
@@ -349,7 +362,7 @@ class ClarificationQuestionGenerator:
             "date": ["format: YYYY-MM-DD", "today, tomorrow, or specific date"],
             "time": ["format: HH:MM", "morning, afternoon, evening, or specific time"],
             "party_size": ["number of people", "just yourself or group size"],
-            "cuisine": ["type of food", "Italian, Chinese, Mexican, etc."]
+            "cuisine": ["type of food", "Italian, Chinese, Mexican, etc."],
         }
 
         if info_name in hint_map:
@@ -365,7 +378,7 @@ class ClarificationQuestionGenerator:
         user_context: Dict[str, Any],
         conversation_context: str,
         intent: str,
-        style: QuestionStyle
+        style: QuestionStyle,
     ) -> str:
         """Build prompt for AI question generation"""
         return f"""
@@ -393,7 +406,7 @@ class ClarificationQuestionGenerator:
         templates = {
             QuestionStyle.CONVERSATIONAL: "Could you please provide your {parameter}?",
             QuestionStyle.FORMAL: "Please specify the {parameter}.",
-            QuestionStyle.BRIEF: "{parameter}?"
+            QuestionStyle.BRIEF: "{parameter}?",
         }
         return templates.get(style, templates[QuestionStyle.CONVERSATIONAL])
 
@@ -404,44 +417,44 @@ class ClarificationQuestionGenerator:
                 "location": {
                     "conversational": "What city or area would you like me to search in?",
                     "formal": "Please specify the location for your request.",
-                    "brief": "Which location?"
+                    "brief": "Which location?",
                 },
                 "date": {
                     "conversational": "What date were you thinking?",
                     "formal": "Please provide the desired date.",
-                    "brief": "Which date?"
+                    "brief": "Which date?",
                 },
                 "time": {
                     "conversational": "What time would work best for you?",
                     "formal": "Please specify the preferred time.",
-                    "brief": "What time?"
+                    "brief": "What time?",
                 },
                 "party_size": {
                     "conversational": "How many people will be joining you?",
                     "formal": "Please indicate the number of people.",
-                    "brief": "How many people?"
+                    "brief": "How many people?",
                 },
                 "cuisine": {
                     "conversational": "What type of cuisine are you in the mood for?",
                     "formal": "Please specify your cuisine preference.",
-                    "brief": "Which cuisine?"
-                }
+                    "brief": "Which cuisine?",
+                },
             },
             "reasoning": {
                 "background": {
                     "conversational": "Could you tell me a bit about your background with this topic?",
                     "formal": "Please provide your relevant background information.",
-                    "brief": "Your background?"
+                    "brief": "Your background?",
                 },
                 "goals": {
                     "conversational": "What are you hoping to achieve?",
                     "formal": "Please describe your objectives.",
-                    "brief": "Your goals?"
+                    "brief": "Your goals?",
                 },
                 "constraints": {
                     "conversational": "Are there any constraints or limitations I should know about?",
                     "formal": "Please specify any relevant constraints.",
-                    "brief": "Any constraints?"
-                }
-            }
+                    "brief": "Any constraints?",
+                },
+            },
         }

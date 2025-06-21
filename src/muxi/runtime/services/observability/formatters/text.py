@@ -30,4 +30,4 @@ class TextFormatter(BaseFormatter):
         lines = []
         for event in events:
             lines.append(self.format_event(event))
-        return '\n'.join(lines)
+        return "\n".join(lines)

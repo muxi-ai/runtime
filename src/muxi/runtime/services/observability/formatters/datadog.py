@@ -23,8 +23,8 @@ class DatadogFormatter(BaseFormatter):
                 "event_type": event.get("event"),
                 "request_id": event.get("request", {}).get("id"),
                 "agent_id": event.get("data", {}).get("agent_id"),
-                **event.get("data", {})
-            }
+                **event.get("data", {}),
+            },
         }
         return json.dumps(datadog_event)
 

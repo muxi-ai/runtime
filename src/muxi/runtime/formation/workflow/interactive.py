@@ -641,7 +641,7 @@ class MediaIntegrator:
             elif media_type == "video":
                 return (
                     f'<video controls><source src="{url}" type="video/mp4"></video>'
-                    f'<p><strong>{title}</strong><br><em>{description}</em></p>'
+                    f"<p><strong>{title}</strong><br><em>{description}</em></p>"
                 )
 
         return f"📎 **{title}**: {url}"

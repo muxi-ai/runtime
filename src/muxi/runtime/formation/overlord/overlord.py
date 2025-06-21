@@ -1104,7 +1104,9 @@ class Overlord:
         await self.active_agent_tracker.mark_agent_for_deletion(agent_id)
 
         if await self.active_agent_tracker.is_agent_busy(agent_id):
-            print(f"⏳ Agent '{agent_id}' marked for deletion - will be removed when current request completes")
+            print(
+                f"⏳ Agent '{agent_id}' marked for deletion - will be removed when current request completes"
+            )
         else:
             print(f"✅ Agent '{agent_id}' removed immediately (not busy)")
 
@@ -1114,7 +1116,7 @@ class Overlord:
         """Actually delete the agent (called by active_agent_tracker)."""
         if agent_id in self.agents:
             # Deregister from external registries if configured
-            if hasattr(self, 'external_registry_client') and self.external_registry_client:
+            if hasattr(self, "external_registry_client") and self.external_registry_client:
                 try:
                     # Run deregistration in background - don't block removal
                     asyncio.create_task(self.deregister_agent_from_external_registry(agent_id))
@@ -1144,14 +1146,14 @@ class Overlord:
 
             # Cleanup agent if it has cleanup logic
             agent = self.agents[agent_id]
-            if hasattr(agent, 'cleanup'):
+            if hasattr(agent, "cleanup"):
                 await agent.cleanup()
 
             # Remove the agent
             del self.agents[agent_id]
 
             # Update default agent if necessary
-            if hasattr(self, 'default_agent_id') and self.default_agent_id == agent_id:
+            if hasattr(self, "default_agent_id") and self.default_agent_id == agent_id:
                 # Set the first available agent as default, or None if no agents remain
                 self.default_agent_id = next(iter(self.agents)) if self.agents else None
 
@@ -1173,8 +1175,8 @@ class Overlord:
         for other_agent_id, other_agent in self.agents.items():
             if other_agent_id != agent_id:
                 # Check if other agent has dependencies configuration
-                if hasattr(other_agent, 'config') and isinstance(other_agent.config, dict):
-                    dependencies = other_agent.config.get('dependencies', [])
+                if hasattr(other_agent, "config") and isinstance(other_agent.config, dict):
+                    dependencies = other_agent.config.get("dependencies", [])
                     if agent_id in dependencies:
                         dependents.append(other_agent_id)
         return dependents
@@ -1252,7 +1254,9 @@ class Overlord:
             raise NoAvailableAgentsError("No agents available")
 
         # Get available agents (not marked for deletion)
-        available_agents = await self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
+        available_agents = await self.active_agent_tracker.get_available_agents(
+            list(self.agents.keys())
+        )
 
         if not available_agents:
             raise NoAvailableAgentsError("No agents available for new requests")
@@ -1419,7 +1423,9 @@ class Overlord:
             The ID of the best matching agent
         """
         # Get available agents (not marked for deletion)
-        available_agents = await self.active_agent_tracker.get_available_agents(list(self.agents.keys()))
+        available_agents = await self.active_agent_tracker.get_available_agents(
+            list(self.agents.keys())
+        )
 
         if not available_agents:
             raise NoAvailableAgentsError("No agents available for new requests")
@@ -1554,7 +1560,7 @@ class Overlord:
 
             agent_info[agent_id] = {
                 "description": self.agent_descriptions.get(agent_id, ""),
-                "default": agent_id == getattr(self, 'default_agent_id', None),
+                "default": agent_id == getattr(self, "default_agent_id", None),
                 "status": status,
                 "is_busy": is_busy,
             }
@@ -2674,7 +2680,9 @@ class Overlord:
 
         # Check if overlord is accepting new requests
         if not await self.active_agent_tracker.can_accept_new_requests():
-            raise OverlordShuttingDownError("❌ Overlord is shutting down - not accepting new requests")
+            raise OverlordShuttingDownError(
+                "❌ Overlord is shutting down - not accepting new requests"
+            )
 
         # Get the selected agent and process the message
         agent = self.get_agent(agent_name)

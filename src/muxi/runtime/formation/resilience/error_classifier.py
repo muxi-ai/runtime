@@ -36,112 +36,106 @@ class ErrorClassifier:
         self.error_patterns: Dict[ErrorType, List[Pattern]] = {
             # Network-related patterns
             ErrorType.NETWORK_TIMEOUT: [
-                re.compile(r'timeout|timed out', re.IGNORECASE),
-                re.compile(r'connection.*timeout', re.IGNORECASE),
-                re.compile(r'read.*timeout', re.IGNORECASE),
+                re.compile(r"timeout|timed out", re.IGNORECASE),
+                re.compile(r"connection.*timeout", re.IGNORECASE),
+                re.compile(r"read.*timeout", re.IGNORECASE),
             ],
             ErrorType.CONNECTION_FAILED: [
-                re.compile(r'connection.*refused|refused.*connection', re.IGNORECASE),
-                re.compile(r'connection.*failed|failed.*connection', re.IGNORECASE),
-                re.compile(r'no route to host', re.IGNORECASE),
-                re.compile(r'network.*unreachable', re.IGNORECASE),
+                re.compile(r"connection.*refused|refused.*connection", re.IGNORECASE),
+                re.compile(r"connection.*failed|failed.*connection", re.IGNORECASE),
+                re.compile(r"no route to host", re.IGNORECASE),
+                re.compile(r"network.*unreachable", re.IGNORECASE),
             ],
             ErrorType.DNS_RESOLUTION: [
-                re.compile(r'name.*resolution.*failed', re.IGNORECASE),
-                re.compile(r'could not resolve', re.IGNORECASE),
-                re.compile(r'dns.*error', re.IGNORECASE),
+                re.compile(r"name.*resolution.*failed", re.IGNORECASE),
+                re.compile(r"could not resolve", re.IGNORECASE),
+                re.compile(r"dns.*error", re.IGNORECASE),
             ],
             ErrorType.SSL_ERROR: [
-                re.compile(r'ssl.*error|certificate.*error', re.IGNORECASE),
-                re.compile(r'handshake.*failed', re.IGNORECASE),
-                re.compile(r'certificate.*verify.*failed', re.IGNORECASE),
+                re.compile(r"ssl.*error|certificate.*error", re.IGNORECASE),
+                re.compile(r"handshake.*failed", re.IGNORECASE),
+                re.compile(r"certificate.*verify.*failed", re.IGNORECASE),
             ],
-
             # Agent-related patterns
             ErrorType.AGENT_UNAVAILABLE: [
-                re.compile(r'agent.*unavailable|unavailable.*agent', re.IGNORECASE),
-                re.compile(r'agent.*not.*found', re.IGNORECASE),
-                re.compile(r'no.*agent.*available', re.IGNORECASE),
+                re.compile(r"agent.*unavailable|unavailable.*agent", re.IGNORECASE),
+                re.compile(r"agent.*not.*found", re.IGNORECASE),
+                re.compile(r"no.*agent.*available", re.IGNORECASE),
             ],
             ErrorType.AGENT_OVERLOADED: [
-                re.compile(r'agent.*overloaded|overloaded.*agent', re.IGNORECASE),
-                re.compile(r'agent.*busy|busy.*agent', re.IGNORECASE),
-                re.compile(r'too many.*requests', re.IGNORECASE),
+                re.compile(r"agent.*overloaded|overloaded.*agent", re.IGNORECASE),
+                re.compile(r"agent.*busy|busy.*agent", re.IGNORECASE),
+                re.compile(r"too many.*requests", re.IGNORECASE),
             ],
             ErrorType.AGENT_TIMEOUT: [
-                re.compile(r'agent.*timeout|timeout.*agent', re.IGNORECASE),
-                re.compile(r'agent.*response.*timeout', re.IGNORECASE),
+                re.compile(r"agent.*timeout|timeout.*agent", re.IGNORECASE),
+                re.compile(r"agent.*response.*timeout", re.IGNORECASE),
             ],
-
             # LLM-related patterns
             ErrorType.LLM_RATE_LIMITED: [
-                re.compile(r'rate.*limit.*exceeded', re.IGNORECASE),
-                re.compile(r'too many.*requests', re.IGNORECASE),
-                re.compile(r'quota.*exceeded', re.IGNORECASE),
-                re.compile(r'429|rate.limit', re.IGNORECASE),
+                re.compile(r"rate.*limit.*exceeded", re.IGNORECASE),
+                re.compile(r"too many.*requests", re.IGNORECASE),
+                re.compile(r"quota.*exceeded", re.IGNORECASE),
+                re.compile(r"429|rate.limit", re.IGNORECASE),
             ],
             ErrorType.LLM_CONTEXT_OVERFLOW: [
-                re.compile(r'context.*length.*exceeded', re.IGNORECASE),
-                re.compile(r'maximum.*context.*length', re.IGNORECASE),
-                re.compile(r'input.*too.*long', re.IGNORECASE),
+                re.compile(r"context.*length.*exceeded", re.IGNORECASE),
+                re.compile(r"maximum.*context.*length", re.IGNORECASE),
+                re.compile(r"input.*too.*long", re.IGNORECASE),
             ],
             ErrorType.LLM_API_ERROR: [
-                re.compile(r'api.*error|openai.*error', re.IGNORECASE),
-                re.compile(r'invalid.*api.*key', re.IGNORECASE),
-                re.compile(r'unauthorized.*api', re.IGNORECASE),
+                re.compile(r"api.*error|openai.*error", re.IGNORECASE),
+                re.compile(r"invalid.*api.*key", re.IGNORECASE),
+                re.compile(r"unauthorized.*api", re.IGNORECASE),
             ],
-
             # Memory-related patterns
             ErrorType.MEMORY_FULL: [
-                re.compile(r'out of memory|memory.*full', re.IGNORECASE),
-                re.compile(r'insufficient.*memory', re.IGNORECASE),
-                re.compile(r'memory.*allocation.*failed', re.IGNORECASE),
+                re.compile(r"out of memory|memory.*full", re.IGNORECASE),
+                re.compile(r"insufficient.*memory", re.IGNORECASE),
+                re.compile(r"memory.*allocation.*failed", re.IGNORECASE),
             ],
             ErrorType.MEMORY_ACCESS_DENIED: [
-                re.compile(r'memory.*access.*denied', re.IGNORECASE),
-                re.compile(r'permission.*denied.*memory', re.IGNORECASE),
+                re.compile(r"memory.*access.*denied", re.IGNORECASE),
+                re.compile(r"permission.*denied.*memory", re.IGNORECASE),
             ],
-
             # Auth-related patterns
             ErrorType.AUTH_FAILED: [
-                re.compile(r'authentication.*failed|auth.*failed', re.IGNORECASE),
-                re.compile(r'invalid.*credentials', re.IGNORECASE),
-                re.compile(r'unauthorized', re.IGNORECASE),
+                re.compile(r"authentication.*failed|auth.*failed", re.IGNORECASE),
+                re.compile(r"invalid.*credentials", re.IGNORECASE),
+                re.compile(r"unauthorized", re.IGNORECASE),
             ],
             ErrorType.TOKEN_EXPIRED: [
-                re.compile(r'token.*expired|expired.*token', re.IGNORECASE),
-                re.compile(r'session.*expired', re.IGNORECASE),
+                re.compile(r"token.*expired|expired.*token", re.IGNORECASE),
+                re.compile(r"session.*expired", re.IGNORECASE),
             ],
             ErrorType.PERMISSION_DENIED: [
-                re.compile(r'permission.*denied|access.*denied', re.IGNORECASE),
-                re.compile(r'forbidden|403', re.IGNORECASE),
+                re.compile(r"permission.*denied|access.*denied", re.IGNORECASE),
+                re.compile(r"forbidden|403", re.IGNORECASE),
             ],
-
             # Data-related patterns
             ErrorType.DATA_VALIDATION: [
-                re.compile(r'validation.*error|invalid.*data', re.IGNORECASE),
-                re.compile(r'schema.*validation.*failed', re.IGNORECASE),
-                re.compile(r'malformed.*data', re.IGNORECASE),
+                re.compile(r"validation.*error|invalid.*data", re.IGNORECASE),
+                re.compile(r"schema.*validation.*failed", re.IGNORECASE),
+                re.compile(r"malformed.*data", re.IGNORECASE),
             ],
             ErrorType.SERIALIZATION_ERROR: [
-                re.compile(r'serialization.*error|json.*error', re.IGNORECASE),
-                re.compile(r'pickle.*error|encoding.*error', re.IGNORECASE),
+                re.compile(r"serialization.*error|json.*error", re.IGNORECASE),
+                re.compile(r"pickle.*error|encoding.*error", re.IGNORECASE),
             ],
-
             # System-related patterns
             ErrorType.SYSTEM_OVERLOAD: [
-                re.compile(r'system.*overload|server.*overload', re.IGNORECASE),
-                re.compile(r'service.*unavailable|503', re.IGNORECASE),
-                re.compile(r'internal.*server.*error|500', re.IGNORECASE),
+                re.compile(r"system.*overload|server.*overload", re.IGNORECASE),
+                re.compile(r"service.*unavailable|503", re.IGNORECASE),
+                re.compile(r"internal.*server.*error|500", re.IGNORECASE),
             ],
             ErrorType.DISK_FULL: [
-                re.compile(r'no.*space.*left|disk.*full', re.IGNORECASE),
-                re.compile(r'storage.*full', re.IGNORECASE),
+                re.compile(r"no.*space.*left|disk.*full", re.IGNORECASE),
+                re.compile(r"storage.*full", re.IGNORECASE),
             ],
             ErrorType.CONFIGURATION_ERROR: [
-                re.compile(r'configuration.*error|config.*error', re.IGNORECASE),
-                re.compile(r'missing.*configuration', re.IGNORECASE),
-                re.compile(r'invalid.*configuration', re.IGNORECASE),
+                re.compile(r"configuration.*error|config.*error", re.IGNORECASE),
+                re.compile(r"missing.*configuration", re.IGNORECASE),
+                re.compile(r"invalid.*configuration", re.IGNORECASE),
             ],
         }
 
@@ -154,7 +148,6 @@ class ErrorClassifier:
             ErrorType.MEMORY_FULL: ErrorSeverity.CRITICAL,
             ErrorType.DISK_FULL: ErrorSeverity.CRITICAL,
             ErrorType.AGENT_CRASHED: ErrorSeverity.CRITICAL,
-
             # High severity errors
             ErrorType.AGENT_UNAVAILABLE: ErrorSeverity.HIGH,
             ErrorType.AUTH_FAILED: ErrorSeverity.HIGH,
@@ -162,7 +155,6 @@ class ErrorClassifier:
             ErrorType.DATA_CORRUPTION: ErrorSeverity.HIGH,
             ErrorType.MEMORY_CORRUPTION: ErrorSeverity.HIGH,
             ErrorType.CONFIGURATION_ERROR: ErrorSeverity.HIGH,
-
             # Medium severity errors
             ErrorType.NETWORK_TIMEOUT: ErrorSeverity.MEDIUM,
             ErrorType.CONNECTION_FAILED: ErrorSeverity.MEDIUM,
@@ -173,7 +165,6 @@ class ErrorClassifier:
             ErrorType.TOKEN_EXPIRED: ErrorSeverity.MEDIUM,
             ErrorType.WORKFLOW_VALIDATION: ErrorSeverity.MEDIUM,
             ErrorType.DEPENDENCY_FAILED: ErrorSeverity.MEDIUM,
-
             # Low severity errors
             ErrorType.DNS_RESOLUTION: ErrorSeverity.LOW,
             ErrorType.DATA_VALIDATION: ErrorSeverity.LOW,
@@ -218,18 +209,15 @@ class ErrorClassifier:
 
             # Create error context
             error_context = ErrorContext(
-                error=error,
-                error_type=error_type,
-                severity=severity,
-                context_data=context or {}
+                error=error, error_type=error_type, severity=severity, context_data=context or {}
             )
 
             # Add additional context from exception
-            if hasattr(error, 'error_type'):
+            if hasattr(error, "error_type"):
                 error_context.error_type = error.error_type
-            if hasattr(error, 'severity'):
+            if hasattr(error, "severity"):
                 error_context.severity = error.severity
-            if hasattr(error, 'context'):
+            if hasattr(error, "context"):
                 error_context.context_data.update(error.context)
 
             #  Debug - TODO: add observability
@@ -247,14 +235,14 @@ class ErrorClassifier:
                 error=error,
                 error_type=ErrorType.UNKNOWN,
                 severity=ErrorSeverity.MEDIUM,
-                context_data=context or {}
+                context_data=context or {},
             )
 
     async def _determine_error_type(self, error: Exception) -> ErrorType:
         """Determine the error type based on exception and message analysis."""
 
         # Check if it's a WorkflowException with explicit type
-        if isinstance(error, WorkflowException) and hasattr(error, 'error_type'):
+        if isinstance(error, WorkflowException) and hasattr(error, "error_type"):
             return error.error_type
 
         # Check exception type mappings
@@ -276,7 +264,7 @@ class ErrorClassifier:
                     return error_type
 
         # Check for specific HTTP status codes
-        if hasattr(error, 'status_code'):
+        if hasattr(error, "status_code"):
             status_code = error.status_code
             if status_code == 429:
                 return ErrorType.LLM_RATE_LIMITED
@@ -291,15 +279,12 @@ class ErrorClassifier:
         return ErrorType.UNKNOWN
 
     async def _determine_severity(
-        self,
-        error: Exception,
-        error_type: ErrorType,
-        context: Optional[Dict] = None
+        self, error: Exception, error_type: ErrorType, context: Optional[Dict] = None
     ) -> ErrorSeverity:
         """Determine error severity based on type and context."""
 
         # Check if it's a WorkflowException with explicit severity
-        if isinstance(error, WorkflowException) and hasattr(error, 'severity'):
+        if isinstance(error, WorkflowException) and hasattr(error, "severity"):
             return error.severity
 
         # Get base severity from rules
@@ -308,19 +293,19 @@ class ErrorClassifier:
         # Adjust severity based on context
         if context:
             # Critical context indicators
-            if context.get('user_facing', False) and base_severity == ErrorSeverity.HIGH:
+            if context.get("user_facing", False) and base_severity == ErrorSeverity.HIGH:
                 return ErrorSeverity.CRITICAL
 
             # Check for repeated failures
-            attempt_count = context.get('attempt_count', 1)
+            attempt_count = context.get("attempt_count", 1)
             if attempt_count > 3 and base_severity == ErrorSeverity.MEDIUM:
                 return ErrorSeverity.HIGH
             elif attempt_count > 5:
                 return ErrorSeverity.CRITICAL
 
             # Check for workflow importance
-            workflow_priority = context.get('workflow_priority', 'normal')
-            if workflow_priority == 'critical' and base_severity == ErrorSeverity.MEDIUM:
+            workflow_priority = context.get("workflow_priority", "normal")
+            if workflow_priority == "critical" and base_severity == ErrorSeverity.MEDIUM:
                 return ErrorSeverity.HIGH
 
         return base_severity

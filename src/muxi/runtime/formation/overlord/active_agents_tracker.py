@@ -13,9 +13,9 @@ class ActiveAgentsTracker:
     """Ultra-simple: just track which agents are currently busy"""
 
     def __init__(self):
-        self.busy_agents: Set[str] = set()               # agent_ids currently handling requests
-        self.pending_deletions: Set[str] = set()         # agent_ids marked for deletion
-        self.overlord_shutting_down: bool = False        # overlord marked for shutdown
+        self.busy_agents: Set[str] = set()  # agent_ids currently handling requests
+        self.pending_deletions: Set[str] = set()  # agent_ids marked for deletion
+        self.overlord_shutting_down: bool = False  # overlord marked for shutdown
         self._lock = asyncio.Lock()
 
         # Callbacks for actual deletion (set by overlord)
@@ -115,10 +115,11 @@ class ActiveAgentsTracker:
         """Get summary of tracker status for debugging/monitoring."""
         async with self._lock:
             return {
-                'busy_agents_count': len(self.busy_agents),
-                'busy_agents': list(self.busy_agents),
-                'pending_deletions_count': len(self.pending_deletions),
-                'pending_deletions': list(self.pending_deletions),
-                'overlord_shutting_down': self.overlord_shutting_down,
-                'is_idle': len(self.busy_agents) == 0  # Use direct check to avoid calling is_idle() within lock
+                "busy_agents_count": len(self.busy_agents),
+                "busy_agents": list(self.busy_agents),
+                "pending_deletions_count": len(self.pending_deletions),
+                "pending_deletions": list(self.pending_deletions),
+                "overlord_shutting_down": self.overlord_shutting_down,
+                "is_idle": len(self.busy_agents)
+                == 0,  # Use direct check to avoid calling is_idle() within lock
             }

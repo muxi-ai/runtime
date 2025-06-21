@@ -30,7 +30,7 @@ class ObservabilityManager:
         self.health_manager = HealthManager()
         self.health_monitor = HealthMonitor(
             health_manager=self.health_manager,
-            check_interval=self.config.get("health_check_interval", 30)
+            check_interval=self.config.get("health_check_interval", 30),
         )
         self.health_api = HealthStatusAPI(self.health_manager)
         self._streams_initialized = False
@@ -50,7 +50,9 @@ class ObservabilityManager:
         output_config = {}
 
         if output == "file":
-            output_config["path"] = logging_config.get("path",  f"{get_observability_dir()}/muxi.jsonl")
+            output_config["path"] = logging_config.get(
+                "path", f"{get_observability_dir()}/muxi.jsonl"
+            )
         elif output == "stream":
             output_config["url"] = logging_config.get("stream_url", "")
         elif output == "trail":
@@ -201,9 +203,7 @@ class ObservabilityManager:
 
         # Also emit via stream processor if initialized
         if self._streams_initialized:
-            await self._emit_to_streams(
-                event_type, level, data, None, None, description, event_id
-            )
+            await self._emit_to_streams(event_type, level, data, None, None, description, event_id)
 
         return event_id
 
@@ -226,7 +226,7 @@ class ObservabilityManager:
                 "level": level.value,
                 "muxi_version": self.config.get("muxi_version", "1.0.0"),
                 "server": self._get_server_id(),
-                "event": event_type.value if hasattr(event_type, 'value') else str(event_type),
+                "event": event_type.value if hasattr(event_type, "value") else str(event_type),
             }
 
             # Add parent event relationship

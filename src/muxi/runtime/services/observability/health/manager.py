@@ -40,29 +40,26 @@ class HealthManager:
                     # Create default status file
                     default_status = {
                         "last_checked": datetime.now().isoformat(),
-                        "destinations": {}
+                        "destinations": {},
                     }
                     await self._write_health_file(default_status)
                     return default_status
 
-                async with aiofiles.open(self.health_file, 'r') as f:
+                async with aiofiles.open(self.health_file, "r") as f:
                     content = await f.read()
                     return json.loads(content)
 
             except Exception as e:
                 print(f"Error loading health status: {e}")
                 # Return default on error
-                return {
-                    "last_checked": datetime.now().isoformat(),
-                    "destinations": {}
-                }
+                return {"last_checked": datetime.now().isoformat(), "destinations": {}}
 
     async def update_destination_health(
         self,
         destination: str,
         healthy: bool,
         last_error: Optional[str] = None,
-        preserve_since: bool = False
+        preserve_since: bool = False,
     ) -> None:
         """
         Update health status for a specific destination.
@@ -80,10 +77,7 @@ class HealthManager:
             was_healthy = current_dest.get("healthy", True)
 
             # Prepare new status
-            new_status = {
-                "healthy": healthy,
-                "last_error": last_error
-            }
+            new_status = {"healthy": healthy, "last_error": last_error}
 
             # Handle "since" timestamp logic
             if not healthy and was_healthy and not preserve_since:
@@ -151,10 +145,7 @@ class HealthManager:
             Dictionary with health status details
         """
         health_status = await self.load_health_status()
-        return health_status["destinations"].get(destination, {
-            "healthy": True,
-            "last_error": None
-        })
+        return health_status["destinations"].get(destination, {"healthy": True, "last_error": None})
 
     async def get_all_destinations_status(self) -> Dict[str, Any]:
         """
@@ -172,10 +163,10 @@ class HealthManager:
         Uses temporary file + rename for atomic operation to prevent corruption.
         """
         # Write to temporary file first, then rename (atomic operation)
-        temp_file = self.health_file.with_suffix('.tmp')
+        temp_file = self.health_file.with_suffix(".tmp")
 
         try:
-            async with aiofiles.open(temp_file, 'w') as f:
+            async with aiofiles.open(temp_file, "w") as f:
                 await f.write(json.dumps(health_status, indent=2))
 
             # Atomic rename

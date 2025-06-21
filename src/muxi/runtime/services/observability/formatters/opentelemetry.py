@@ -18,28 +18,32 @@ class OpenTelemetryFormatter(BaseFormatter):
             "timeUnixNano": str(self._to_nanoseconds(event.get("timestamp"))),
             "severityNumber": self._severity_to_number(event.get("level")),
             "severityText": event.get("level", "INFO").upper(),
-            "body": {
-                "stringValue": self._extract_message(event)
-            },
+            "body": {"stringValue": self._extract_message(event)},
             "attributes": self._convert_attributes(event),
             "resource": {
                 "attributes": [
                     {"key": "service.name", "value": {"stringValue": self.service_name}},
                     {"key": "service.version", "value": {"stringValue": self.version}},
-                    {"key": "formation.id", "value": {"stringValue": self.formation_id}}
+                    {"key": "formation.id", "value": {"stringValue": self.formation_id}},
                 ]
-            }
+            },
         }
 
-        return json.dumps({
-            "resourceLogs": [{
-                "resource": log_record["resource"],
-                "scopeLogs": [{
-                    "scope": {"name": "muxi.runtime.observability"},
-                    "logRecords": [log_record]
-                }]
-            }]
-        })
+        return json.dumps(
+            {
+                "resourceLogs": [
+                    {
+                        "resource": log_record["resource"],
+                        "scopeLogs": [
+                            {
+                                "scope": {"name": "muxi.runtime.observability"},
+                                "logRecords": [log_record],
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
 
     def format_batch(self, events: List[Dict[str, Any]]) -> str:
         log_records = []
@@ -49,42 +53,49 @@ class OpenTelemetryFormatter(BaseFormatter):
                 "timeUnixNano": str(self._to_nanoseconds(event.get("timestamp"))),
                 "severityNumber": self._severity_to_number(event.get("level")),
                 "severityText": event.get("level", "INFO").upper(),
-                "body": {
-                    "stringValue": self._extract_message(event)
-                },
-                "attributes": self._convert_attributes(event)
+                "body": {"stringValue": self._extract_message(event)},
+                "attributes": self._convert_attributes(event),
             }
             log_records.append(log_record)
 
-        return json.dumps({
-            "resourceLogs": [{
-                "resource": {
-                    "attributes": [
-                        {"key": "service.name", "value": {"stringValue": self.service_name}},
-                        {"key": "service.version", "value": {"stringValue": self.version}},
-                        {"key": "formation.id", "value": {"stringValue": self.formation_id}}
-                    ]
-                },
-                "scopeLogs": [{
-                    "scope": {"name": "muxi.runtime.observability"},
-                    "logRecords": log_records
-                }]
-            }]
-        })
+        return json.dumps(
+            {
+                "resourceLogs": [
+                    {
+                        "resource": {
+                            "attributes": [
+                                {
+                                    "key": "service.name",
+                                    "value": {"stringValue": self.service_name},
+                                },
+                                {"key": "service.version", "value": {"stringValue": self.version}},
+                                {
+                                    "key": "formation.id",
+                                    "value": {"stringValue": self.formation_id},
+                                },
+                            ]
+                        },
+                        "scopeLogs": [
+                            {
+                                "scope": {"name": "muxi.runtime.observability"},
+                                "logRecords": log_records,
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
 
     def _severity_to_number(self, level: str) -> int:
         """Convert log level to OpenTelemetry severity number."""
-        mapping = {
-            "TRACE": 1, "DEBUG": 5, "INFO": 9,
-            "WARN": 13, "ERROR": 17, "FATAL": 21
-        }
+        mapping = {"TRACE": 1, "DEBUG": 5, "INFO": 9, "WARN": 13, "ERROR": 17, "FATAL": 21}
         return mapping.get(level.upper() if level else "INFO", 9)
 
     def _to_nanoseconds(self, timestamp_str: str) -> int:
         """Convert ISO timestamp to nanoseconds."""
         if timestamp_str:
             try:
-                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 return int(dt.timestamp() * 1_000_000_000)
             except Exception:
                 pass
@@ -96,36 +107,21 @@ class OpenTelemetryFormatter(BaseFormatter):
 
         # Add event type
         if event.get("event"):
-            attributes.append({
-                "key": "event.type",
-                "value": {"stringValue": event["event"]}
-            })
+            attributes.append({"key": "event.type", "value": {"stringValue": event["event"]}})
 
         # Add request ID
         request_id = event.get("request", {}).get("id")
         if request_id:
-            attributes.append({
-                "key": "request.id",
-                "value": {"stringValue": request_id}
-            })
+            attributes.append({"key": "request.id", "value": {"stringValue": request_id}})
 
         # Add custom data attributes
         data = event.get("data", {})
         for key, value in data.items():
             if isinstance(value, str):
-                attributes.append({
-                    "key": f"custom.{key}",
-                    "value": {"stringValue": value}
-                })
+                attributes.append({"key": f"custom.{key}", "value": {"stringValue": value}})
             elif isinstance(value, (int, float)):
-                attributes.append({
-                    "key": f"custom.{key}",
-                    "value": {"doubleValue": float(value)}
-                })
+                attributes.append({"key": f"custom.{key}", "value": {"doubleValue": float(value)}})
             elif isinstance(value, bool):
-                attributes.append({
-                    "key": f"custom.{key}",
-                    "value": {"boolValue": value}
-                })
+                attributes.append({"key": f"custom.{key}", "value": {"boolValue": value}})
 
         return attributes

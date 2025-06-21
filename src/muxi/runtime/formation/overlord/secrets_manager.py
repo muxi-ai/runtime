@@ -3,6 +3,7 @@ Secrets management utilities for the Overlord.
 
 This module handles secrets interpolation and management for formation configurations.
 """
+
 from typing import Any, Dict, Optional
 
 

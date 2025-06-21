@@ -4,6 +4,7 @@ User information extraction coordination for the Overlord.
 This module handles the coordination of automatic user information extraction
 from conversations, including triggering extraction and managing the process.
 """
+
 from typing import Any
 
 from ...services.memory.extractor import MemoryExtractor
@@ -56,7 +57,7 @@ class ExtractionCoordinator:
             return
 
         # Skip if no extractor is available
-        if not hasattr(self.overlord, 'extractor') or not self.overlord.extractor:
+        if not hasattr(self.overlord, "extractor") or not self.overlord.extractor:
             return
 
         # Run extraction asynchronously to avoid blocking
@@ -94,7 +95,7 @@ class ExtractionCoordinator:
             model_to_use = extraction_model or self.overlord.extraction_model
 
             # Create a temporary extractor if needed or use the existing one
-            if hasattr(self.overlord, 'extractor') and self.overlord.extractor:
+            if hasattr(self.overlord, "extractor") and self.overlord.extractor:
                 extractor = self.overlord.extractor
             else:
                 # Create a temporary extractor for this extraction

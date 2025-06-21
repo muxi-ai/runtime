@@ -53,7 +53,7 @@ class ResourceManager:
         # f"{list(agent_capability.capabilities)}")
 
     async def update_agent_load(self, agent_id: str, current_load: int) -> None:
-        """ Update an agent's current task load."""
+        """Update an agent's current task load."""
         if agent_id in self.agent_capabilities:
             self.agent_capabilities[agent_id].current_load = current_load
 

@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 
 from ...services.observability.utils import detect_stream_protocol
 from ...services.memory.short_term import ShortTermMemory
-from ...datatypes import ClarificationConfig, QuestionStyle
+from ...datatypes.clarification import ClarificationConfig, QuestionStyle
 
 
 async def initialize_llm_config(overlord) -> None:

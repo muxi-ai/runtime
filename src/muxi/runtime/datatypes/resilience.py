@@ -130,11 +130,11 @@ class RecoveryResult:
 class CircuitBreakerConfig:
     """Configuration for circuit breaker behavior."""
 
-    failure_threshold: int = 5          # Number of failures before opening
-    recovery_timeout: float = 60.0     # Seconds before trying half-open
-    success_threshold: int = 3          # Successes needed to close from half-open
-    timeout: float = 30.0              # Request timeout in seconds
-    monitor_window: float = 300.0      # Time window for failure tracking (seconds)
+    failure_threshold: int = 5  # Number of failures before opening
+    recovery_timeout: float = 60.0  # Seconds before trying half-open
+    success_threshold: int = 3  # Successes needed to close from half-open
+    timeout: float = 30.0  # Request timeout in seconds
+    monitor_window: float = 300.0  # Time window for failure tracking (seconds)
 
 
 @dataclass
@@ -234,6 +234,7 @@ class CircuitBreakerState:
 
 # Custom Exceptions
 
+
 class WorkflowException(Exception):
     """Base exception for workflow-related errors."""
 
@@ -242,7 +243,7 @@ class WorkflowException(Exception):
         message: str,
         error_type: ErrorType = ErrorType.UNKNOWN,
         severity: ErrorSeverity = ErrorSeverity.MEDIUM,
-        context: Optional[Dict[str, Any]] = None
+        context: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message)
         self.error_type = error_type
@@ -259,7 +260,7 @@ class RecoveryException(WorkflowException):
         message: str,
         original_error: Optional[Exception] = None,
         recovery_strategy: Optional[RecoveryStrategy] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(message, **kwargs)
         self.original_error = original_error
@@ -273,7 +274,7 @@ class CircuitBreakerException(WorkflowException):
         self,
         message: str = "Circuit breaker is open",
         estimated_recovery_time: Optional[float] = None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(message, ErrorType.SYSTEM_OVERLOAD, ErrorSeverity.HIGH, **kwargs)
         self.estimated_recovery_time = estimated_recovery_time
@@ -282,12 +283,7 @@ class CircuitBreakerException(WorkflowException):
 class TimeoutException(WorkflowException):
     """Exception raised when operations timeout."""
 
-    def __init__(
-        self,
-        message: str,
-        timeout_duration: float,
-        **kwargs
-    ):
+    def __init__(self, message: str, timeout_duration: float, **kwargs):
         super().__init__(message, ErrorType.AGENT_TIMEOUT, ErrorSeverity.MEDIUM, **kwargs)
         self.timeout_duration = timeout_duration
 
@@ -295,12 +291,7 @@ class TimeoutException(WorkflowException):
 class AgentUnavailableException(WorkflowException):
     """Exception raised when agent is unavailable."""
 
-    def __init__(
-        self,
-        message: str,
-        agent_id: Optional[str] = None,
-        **kwargs
-    ):
+    def __init__(self, message: str, agent_id: Optional[str] = None, **kwargs):
         super().__init__(message, ErrorType.AGENT_UNAVAILABLE, ErrorSeverity.HIGH, **kwargs)
         self.agent_id = agent_id
 

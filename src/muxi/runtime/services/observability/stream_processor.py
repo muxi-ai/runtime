@@ -31,16 +31,20 @@ class StreamProcessor:
         try:
             if transport_type == "stdout":
                 from .transports.stdout import StdoutTransport
+
                 transport = StdoutTransport(config)
             elif transport_type == "file":
                 from .transports.file import FileTransport
+
                 transport = FileTransport(config)
             elif transport_type == "stream":
                 from .transports.stream import StreamTransport
+
                 transport = StreamTransport(config)
             elif transport_type == "trail":
                 # Trail is a preset that configures stream transport
                 from .transports.stream import StreamTransport
+
                 transport = StreamTransport(config)
             else:
                 print(f"Unknown transport type: {transport_type}")
@@ -99,9 +103,7 @@ class StreamProcessor:
 
                 # Send event to healthy transports only
                 for transport_id, transport in self.transports.items():
-                    destination = transport.config.get(
-                        "destination", f"transport_{transport_id}"
-                    )
+                    destination = transport.config.get("destination", f"transport_{transport_id}")
 
                     # Circuit breaker: skip unhealthy destinations
                     if destination not in healthy_destinations:
@@ -158,7 +160,7 @@ class StreamProcessor:
                 "enabled": transport.enabled,
                 "status": transport.status.value,
                 "error_count": transport.error_count,
-                "last_error": transport.last_error
+                "last_error": transport.last_error,
             }
         return status
 
@@ -190,9 +192,7 @@ class StreamProcessor:
         for stream_config in streams_config:
             try:
                 transport_type = stream_config.get("type", "stdout")
-                transport_id = stream_config.get(
-                    "id", f"{transport_type}_{len(self.transports)}"
-                )
+                transport_id = stream_config.get("id", f"{transport_type}_{len(self.transports)}")
 
                 # Create transport based on type
                 if transport_type == "stdout":

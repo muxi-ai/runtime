@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 # NETWORK UTILITIES
 # ===================================================================
 
+
 def detect_stream_protocol(destination: str) -> str:
     """
     Detect the protocol type from a destination URL.
@@ -31,25 +32,25 @@ def detect_stream_protocol(destination: str) -> str:
     destination = destination.lower().strip()
 
     # HTTP/HTTPS detection
-    if destination.startswith(('http://', 'https://')):
+    if destination.startswith(("http://", "https://")):
         return "http"
 
     # Kafka detection
-    if destination.startswith('kafka://') or ':9092' in destination:
+    if destination.startswith("kafka://") or ":9092" in destination:
         return "kafka"
 
     # ZeroMQ detection
-    if destination.startswith(('tcp://', 'tcps://', 'ipc://', 'inproc://')):
+    if destination.startswith(("tcp://", "tcps://", "ipc://", "inproc://")):
         return "zmq"
 
     # Try to parse as URL
     try:
         parsed = urlparse(destination)
-        if parsed.scheme in ['http', 'https']:
+        if parsed.scheme in ["http", "https"]:
             return "http"
-        elif parsed.scheme in ['tcp', 'tcps', 'ipc', 'inproc']:
+        elif parsed.scheme in ["tcp", "tcps", "ipc", "inproc"]:
             return "zmq"
-        elif parsed.scheme == 'kafka':
+        elif parsed.scheme == "kafka":
             return "kafka"
     except Exception:
         pass
@@ -78,6 +79,7 @@ def is_valid_url(url: str) -> bool:
 # STRING UTILITIES
 # ===================================================================
 
+
 def normalize_external_id(external_id: Any) -> str:
     """
     Normalize an external ID to a consistent string format.
@@ -99,8 +101,8 @@ def normalize_external_id(external_id: Any) -> str:
         return "anonymous"
 
     # Normalize whitespace and special characters
-    normalized = re.sub(r'\s+', '_', id_str)
-    normalized = re.sub(r'[^\w\-_.]', '', normalized)
+    normalized = re.sub(r"\s+", "_", id_str)
+    normalized = re.sub(r"[^\w\-_.]", "", normalized)
 
     # Ensure it's not too long
     if len(normalized) > 100:
@@ -126,18 +128,18 @@ def sanitize_destination_name(destination: str) -> str:
 
     # Remove protocol prefixes
     sanitized = destination
-    for prefix in ['http://', 'https://', 'kafka://', 'tcp://', 'tcps://', 'ipc://', 'inproc://']:
+    for prefix in ["http://", "https://", "kafka://", "tcp://", "tcps://", "ipc://", "inproc://"]:
         if sanitized.startswith(prefix):
-            sanitized = sanitized[len(prefix):]
+            sanitized = sanitized[len(prefix) :]
             break
 
     # Replace special characters with underscores
-    sanitized = re.sub(r'[^\w\-_.]', '_', sanitized)
+    sanitized = re.sub(r"[^\w\-_.]", "_", sanitized)
 
     # Remove multiple consecutive underscores
-    sanitized = re.sub(r'_+', '_', sanitized)
+    sanitized = re.sub(r"_+", "_", sanitized)
 
     # Remove leading/trailing underscores
-    sanitized = sanitized.strip('_')
+    sanitized = sanitized.strip("_")
 
     return sanitized or "unknown"

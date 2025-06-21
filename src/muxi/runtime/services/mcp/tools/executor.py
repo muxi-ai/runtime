@@ -15,18 +15,15 @@ class MCPToolExecutor:
         transport: BaseTransport,
         tool_name: str,
         arguments: Dict[str, Any],
-        timeout: int = None
+        timeout: int = None,
     ) -> Dict[str, Any]:
         """Execute tool using real MCP tools/call method."""
         try:
             # Send real tools/call request
-            response = await transport.send_request({
-                "method": "tools/call",
-                "params": {
-                    "name": tool_name,
-                    "arguments": arguments
-                }
-            }, timeout=timeout)
+            response = await transport.send_request(
+                {"method": "tools/call", "params": {"name": tool_name, "arguments": arguments}},
+                timeout=timeout,
+            )
 
             return self._process_tool_result(response, tool_name)
 
@@ -46,7 +43,7 @@ class MCPToolExecutor:
                 "isError": result.get("isError", False),
                 "metadata": result.get("_meta", {}),
                 "tool_name": tool_name,
-                "execution_time": datetime.now().isoformat()
+                "execution_time": datetime.now().isoformat(),
             }
         elif "error" in response:
             # MCP error response
@@ -56,10 +53,10 @@ class MCPToolExecutor:
                 "error": {
                     "code": error.get("code", -1),
                     "message": error.get("message", "Unknown error"),
-                    "data": error.get("data", {})
+                    "data": error.get("data", {}),
                 },
                 "tool_name": tool_name,
-                "execution_time": datetime.now().isoformat()
+                "execution_time": datetime.now().isoformat(),
             }
         else:
             # Direct result format (legacy compatibility)
@@ -69,14 +66,11 @@ class MCPToolExecutor:
                 "isError": False,
                 "metadata": {},
                 "tool_name": tool_name,
-                "execution_time": datetime.now().isoformat()
+                "execution_time": datetime.now().isoformat(),
             }
 
     def _process_tool_timeout(
-        self,
-        tool_name: str,
-        timeout: int,
-        error: MCPTimeoutError
+        self, tool_name: str, timeout: int, error: MCPTimeoutError
     ) -> Dict[str, Any]:
         """Process tool execution timeout."""
         return {
@@ -85,14 +79,11 @@ class MCPToolExecutor:
             "tool_name": tool_name,
             "timeout_seconds": timeout,
             "execution_time": datetime.now().isoformat(),
-            "details": str(error)
+            "details": str(error),
         }
 
     def _process_tool_error(
-        self,
-        tool_name: str,
-        arguments: Dict[str, Any],
-        error: Exception
+        self, tool_name: str, arguments: Dict[str, Any], error: Exception
     ) -> Dict[str, Any]:
         """Process tool execution error."""
         return {
@@ -101,20 +92,14 @@ class MCPToolExecutor:
             "tool_name": tool_name,
             "arguments": arguments,
             "execution_time": datetime.now().isoformat(),
-            "error_type": type(error).__name__
+            "error_type": type(error).__name__,
         }
 
     def validate_arguments(
-        self,
-        arguments: Dict[str, Any],
-        schema: Dict[str, Any]
+        self, arguments: Dict[str, Any], schema: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Validate tool arguments against schema."""
-        validation_result = {
-            "valid": True,
-            "errors": [],
-            "warnings": []
-        }
+        validation_result = {"valid": True, "errors": [], "warnings": []}
 
         # Check required parameters
         required = schema.get("required", [])
@@ -151,7 +136,7 @@ class MCPToolExecutor:
             "integer": int,
             "boolean": bool,
             "object": dict,
-            "array": list
+            "array": list,
         }
 
         if expected_type in type_mapping:

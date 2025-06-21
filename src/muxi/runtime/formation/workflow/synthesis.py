@@ -17,6 +17,7 @@ from ...datatypes.workflow import Workflow, TaskStatus
 
 class ResponseQuality(Enum):
     """Response quality levels"""
+
     EXCELLENT = "excellent"
     GOOD = "good"
     ACCEPTABLE = "acceptable"
@@ -26,6 +27,7 @@ class ResponseQuality(Enum):
 
 class SynthesisMode(Enum):
     """Response synthesis modes"""
+
     COMPREHENSIVE = "comprehensive"  # Full synthesis with all enhancements
     BALANCED = "balanced"  # Balanced approach
     EFFICIENT = "efficient"  # Fast synthesis with core enhancements
@@ -35,6 +37,7 @@ class SynthesisMode(Enum):
 @dataclass
 class QualityAssessment:
     """Comprehensive quality assessment results"""
+
     overall_quality: ResponseQuality
     confidence_score: float  # 0-1
 
@@ -59,6 +62,7 @@ class QualityAssessment:
 @dataclass
 class SynthesisResult:
     """Result of response synthesis process"""
+
     synthesized_content: str
     quality_assessment: QualityAssessment
     synthesis_metadata: Dict[str, Any] = field(default_factory=dict)
@@ -86,7 +90,7 @@ class ResponseQualityAssessor:
         content: str,
         context: Dict[str, Any],
         user_request: str,
-        expected_persona: Optional[str] = None
+        expected_persona: Optional[str] = None,
     ) -> QualityAssessment:
         """
         Comprehensive quality assessment of response content.
@@ -108,9 +112,7 @@ class ResponseQualityAssessor:
 
             # Get LLM assessment
             assessment_response = await self.llm.generate(
-                assessment_prompt,
-                max_tokens=1000,
-                temperature=0.3
+                assessment_prompt, max_tokens=1000, temperature=0.3
             )
 
             # Parse assessment
@@ -132,7 +134,7 @@ class ResponseQualityAssessor:
         content: str,
         context: Dict[str, Any],
         user_request: str,
-        expected_persona: Optional[str] = None
+        expected_persona: Optional[str] = None,
     ) -> str:
         """Create comprehensive assessment prompt"""
 
@@ -198,10 +200,11 @@ Format your response as JSON:
         try:
             # Extract JSON from response
             json_match = response.strip()
-            if not json_match.startswith('{'):
+            if not json_match.startswith("{"):
                 # Try to find JSON block
                 import re
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+
+                json_match = re.search(r"\{.*\}", response, re.DOTALL)
                 if json_match:
                     json_match = json_match.group(0)
                 else:
@@ -211,16 +214,16 @@ Format your response as JSON:
 
             return QualityAssessment(
                 overall_quality=ResponseQuality.GOOD,  # Will be calculated
-                confidence_score=data.get('confidence_score', 0.7),
-                coherence_score=data.get('coherence_score', 0.7),
-                relevance_score=data.get('relevance_score', 0.7),
-                completeness_score=data.get('completeness_score', 0.7),
-                clarity_score=data.get('clarity_score', 0.7),
-                persona_consistency_score=data.get('persona_consistency_score', 0.7),
-                user_satisfaction_score=data.get('user_satisfaction_score', 0.7),
-                strengths=data.get('strengths', []),
-                weaknesses=data.get('weaknesses', []),
-                improvement_suggestions=data.get('improvement_suggestions', [])
+                confidence_score=data.get("confidence_score", 0.7),
+                coherence_score=data.get("coherence_score", 0.7),
+                relevance_score=data.get("relevance_score", 0.7),
+                completeness_score=data.get("completeness_score", 0.7),
+                clarity_score=data.get("clarity_score", 0.7),
+                persona_consistency_score=data.get("persona_consistency_score", 0.7),
+                user_satisfaction_score=data.get("user_satisfaction_score", 0.7),
+                strengths=data.get("strengths", []),
+                weaknesses=data.get("weaknesses", []),
+                improvement_suggestions=data.get("improvement_suggestions", []),
             )
 
         except Exception as e:
@@ -233,21 +236,21 @@ Format your response as JSON:
 
         # Weighted average of quality dimensions
         weights = {
-            'relevance': 0.25,
-            'completeness': 0.20,
-            'clarity': 0.20,
-            'coherence': 0.15,
-            'persona_consistency': 0.10,
-            'user_satisfaction': 0.10
+            "relevance": 0.25,
+            "completeness": 0.20,
+            "clarity": 0.20,
+            "coherence": 0.15,
+            "persona_consistency": 0.10,
+            "user_satisfaction": 0.10,
         }
 
         weighted_score = (
-            assessment.relevance_score * weights['relevance'] +
-            assessment.completeness_score * weights['completeness'] +
-            assessment.clarity_score * weights['clarity'] +
-            assessment.coherence_score * weights['coherence'] +
-            assessment.persona_consistency_score * weights['persona_consistency'] +
-            assessment.user_satisfaction_score * weights['user_satisfaction']
+            assessment.relevance_score * weights["relevance"]
+            + assessment.completeness_score * weights["completeness"]
+            + assessment.clarity_score * weights["clarity"]
+            + assessment.coherence_score * weights["coherence"]
+            + assessment.persona_consistency_score * weights["persona_consistency"]
+            + assessment.user_satisfaction_score * weights["user_satisfaction"]
         )
 
         # Map to quality levels
@@ -275,7 +278,7 @@ Format your response as JSON:
             user_satisfaction_score=0.7,
             strengths=["Response provided"],
             weaknesses=["Quality assessment unavailable"],
-            improvement_suggestions=["Manual review recommended"]
+            improvement_suggestions=["Manual review recommended"],
         )
 
 
@@ -297,7 +300,7 @@ class PersonaConsistencyAnalyzer:
         content: str,
         expected_persona: str,
         context: Dict[str, Any],
-        conversation_history: Optional[List[str]] = None
+        conversation_history: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Analyze persona consistency of content.
@@ -316,20 +319,14 @@ class PersonaConsistencyAnalyzer:
                 content, expected_persona, context, conversation_history
             )
 
-            response = await self.llm.generate(
-                analysis_prompt,
-                max_tokens=800,
-                temperature=0.2
-            )
+            response = await self.llm.generate(analysis_prompt, max_tokens=800, temperature=0.2)
 
             analysis = self._parse_persona_analysis(response)
 
             # Store in history
-            self.consistency_history.append({
-                'timestamp': time.time(),
-                'analysis': analysis,
-                'context': context
-            })
+            self.consistency_history.append(
+                {"timestamp": time.time(), "analysis": analysis, "context": context}
+            )
 
             return analysis
 
@@ -337,10 +334,10 @@ class PersonaConsistencyAnalyzer:
             #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return {
-                'consistency_score': 0.7,
-                'persona_match': True,
-                'issues_found': [],
-                'recommendations': ['Manual review recommended']
+                "consistency_score": 0.7,
+                "persona_match": True,
+                "issues_found": [],
+                "recommendations": ["Manual review recommended"],
             }
 
     def _create_persona_analysis_prompt(
@@ -348,7 +345,7 @@ class PersonaConsistencyAnalyzer:
         content: str,
         expected_persona: str,
         context: Dict[str, Any],
-        conversation_history: Optional[List[str]] = None
+        conversation_history: Optional[List[str]] = None,
     ) -> str:
         """Create persona analysis prompt"""
 
@@ -397,7 +394,8 @@ Provide analysis as JSON:
         try:
             # Extract and parse JSON
             import re
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+
+            json_match = re.search(r"\{.*\}", response, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group(0))
             else:
@@ -406,10 +404,10 @@ Provide analysis as JSON:
             #  Error - TODO: add observability
             _ = e  # remove this after implementing observability
             return {
-                'consistency_score': 0.7,
-                'persona_match': True,
-                'issues_found': [],
-                'recommendations': ['Manual review recommended']
+                "consistency_score": 0.7,
+                "persona_match": True,
+                "issues_found": [],
+                "recommendations": ["Manual review recommended"],
             }
 
 
@@ -435,7 +433,7 @@ class AdvancedResponseSynthesizer:
         self,
         workflow: Workflow,
         user_context: Dict[str, Any],
-        synthesis_options: Dict[str, Any] = None
+        synthesis_options: Dict[str, Any] = None,
     ) -> SynthesisResult:
         """
         Synthesize polished response from workflow outputs.
@@ -453,9 +451,9 @@ class AdvancedResponseSynthesizer:
         try:
             # Extract synthesis configuration
             options = synthesis_options or {}
-            mode = SynthesisMode(options.get('mode', 'balanced'))
-            target_quality = options.get('target_quality', self.quality_threshold)
-            max_iterations = options.get('max_iterations', self.max_iterations)
+            mode = SynthesisMode(options.get("mode", "balanced"))
+            target_quality = options.get("target_quality", self.quality_threshold)
+            max_iterations = options.get("max_iterations", self.max_iterations)
 
             # Collect workflow outputs
             task_outputs = self._collect_workflow_outputs(workflow)
@@ -471,7 +469,7 @@ class AdvancedResponseSynthesizer:
                 workflow.user_request,
                 user_context,
                 target_quality,
-                max_iterations
+                max_iterations,
             )
 
             # Create synthesis result
@@ -479,15 +477,15 @@ class AdvancedResponseSynthesizer:
                 synthesized_content=final_content,
                 quality_assessment=quality_assessment,
                 synthesis_metadata={
-                    'workflow_id': workflow.id,
-                    'synthesis_mode': mode.value,
-                    'task_count': len(workflow.tasks),
-                    'original_length': len(synthesized_content),
-                    'final_length': len(final_content)
+                    "workflow_id": workflow.id,
+                    "synthesis_mode": mode.value,
+                    "task_count": len(workflow.tasks),
+                    "original_length": len(synthesized_content),
+                    "final_length": len(final_content),
                 },
                 synthesis_time_ms=(time.time() - start_time) * 1000,
                 iterations_performed=iterations,
-                enhancement_applied=self._get_applied_enhancements(mode)
+                enhancement_applied=self._get_applied_enhancements(mode),
             )
 
             #  Info - TODO: add observability
@@ -509,11 +507,11 @@ class AdvancedResponseSynthesizer:
         for task in workflow.tasks.values():
             if task.status == TaskStatus.COMPLETED and task.outputs:
                 output_data = {
-                    'task_id': task.id,
-                    'description': task.description,
-                    'content': task.outputs.get('content', ''),
-                    'capabilities': task.required_capabilities,
-                    'metadata': task.outputs
+                    "task_id": task.id,
+                    "description": task.description,
+                    "content": task.outputs.get("content", ""),
+                    "capabilities": task.required_capabilities,
+                    "metadata": task.outputs,
                 }
                 outputs.append(output_data)
 
@@ -524,7 +522,7 @@ class AdvancedResponseSynthesizer:
         task_outputs: List[Dict[str, Any]],
         user_request: str,
         user_context: Dict[str, Any],
-        mode: SynthesisMode
+        mode: SynthesisMode,
     ) -> str:
         """Perform initial synthesis of task outputs"""
 
@@ -532,11 +530,7 @@ class AdvancedResponseSynthesizer:
             task_outputs, user_request, user_context, mode
         )
 
-        response = await self.llm.generate(
-            synthesis_prompt,
-            max_tokens=2000,
-            temperature=0.7
-        )
+        response = await self.llm.generate(synthesis_prompt, max_tokens=2000, temperature=0.7)
 
         return response.strip()
 
@@ -545,7 +539,7 @@ class AdvancedResponseSynthesizer:
         task_outputs: List[Dict[str, Any]],
         user_request: str,
         user_context: Dict[str, Any],
-        mode: SynthesisMode
+        mode: SynthesisMode,
     ) -> str:
         """Create synthesis prompt based on mode and inputs"""
 
@@ -559,7 +553,7 @@ Output: {output['content']}
 ---
 """
 
-        persona_info = user_context.get('persona', 'professional and helpful')
+        persona_info = user_context.get("persona", "professional and helpful")
 
         mode_instructions = {
             SynthesisMode.COMPREHENSIVE: """
@@ -589,7 +583,7 @@ Create a concise response that:
 - Summarizes task outputs briefly
 - Uses simple, direct language
 - Focuses on core message
-"""
+""",
         }
 
         return f"""
@@ -624,7 +618,7 @@ Provide the synthesized response:
         user_request: str,
         user_context: Dict[str, Any],
         target_quality: float,
-        max_iterations: int
+        max_iterations: int,
     ) -> Tuple[str, QualityAssessment, int]:
         """Iteratively improve response quality"""
 
@@ -636,20 +630,17 @@ Provide the synthesized response:
 
             # Assess current quality
             quality_assessment = await self.quality_assessor.assess_quality(
-                current_content,
-                user_context,
-                user_request,
-                user_context.get('persona')
+                current_content, user_context, user_request, user_context.get("persona")
             )
 
             # Check if quality threshold met
             average_score = (
-                quality_assessment.coherence_score +
-                quality_assessment.relevance_score +
-                quality_assessment.completeness_score +
-                quality_assessment.clarity_score +
-                quality_assessment.persona_consistency_score +
-                quality_assessment.user_satisfaction_score
+                quality_assessment.coherence_score
+                + quality_assessment.relevance_score
+                + quality_assessment.completeness_score
+                + quality_assessment.clarity_score
+                + quality_assessment.persona_consistency_score
+                + quality_assessment.user_satisfaction_score
             ) / 6
 
             if average_score >= target_quality:
@@ -665,10 +656,7 @@ Provide the synthesized response:
 
         # Final assessment
         final_quality = await self.quality_assessor.assess_quality(
-            current_content,
-            user_context,
-            user_request,
-            user_context.get('persona')
+            current_content, user_context, user_request, user_context.get("persona")
         )
 
         return current_content, final_quality, iterations
@@ -678,7 +666,7 @@ Provide the synthesized response:
         content: str,
         quality_assessment: QualityAssessment,
         user_request: str,
-        user_context: Dict[str, Any]
+        user_context: Dict[str, Any],
     ) -> str:
         """Improve content based on quality assessment"""
 
@@ -712,9 +700,7 @@ Improved Response:
 
         try:
             improved_response = await self.llm.generate(
-                improvement_prompt,
-                max_tokens=2000,
-                temperature=0.6
+                improvement_prompt, max_tokens=2000, temperature=0.6
             )
             return improved_response.strip()
         except Exception as e:
@@ -724,38 +710,32 @@ Improved Response:
 
     def _get_applied_enhancements(self, mode: SynthesisMode) -> List[str]:
         """Get list of enhancements applied based on synthesis mode"""
-        base_enhancements = ['output_integration', 'quality_assessment']
+        base_enhancements = ["output_integration", "quality_assessment"]
 
         if mode in [SynthesisMode.COMPREHENSIVE, SynthesisMode.BALANCED]:
-            base_enhancements.extend([
-                'persona_consistency_analysis',
-                'iterative_improvement',
-                'flow_optimization'
-            ])
+            base_enhancements.extend(
+                ["persona_consistency_analysis", "iterative_improvement", "flow_optimization"]
+            )
 
         if mode == SynthesisMode.COMPREHENSIVE:
-            base_enhancements.extend([
-                'advanced_structuring',
-                'engagement_optimization',
-                'context_enrichment'
-            ])
+            base_enhancements.extend(
+                ["advanced_structuring", "engagement_optimization", "context_enrichment"]
+            )
 
         return base_enhancements
 
     def _create_fallback_synthesis_result(
-        self,
-        workflow: Workflow,
-        user_context: Dict[str, Any]
+        self, workflow: Workflow, user_context: Dict[str, Any]
     ) -> SynthesisResult:
         """Create fallback synthesis result when synthesis fails"""
 
         # Simple concatenation of outputs
         outputs = []
         for task in workflow.tasks.values():
-            if task.outputs and task.outputs.get('content'):
-                outputs.append(task.outputs['content'])
+            if task.outputs and task.outputs.get("content"):
+                outputs.append(task.outputs["content"])
 
-        fallback_content = '\n\n'.join(outputs) if outputs else "I've completed your request."
+        fallback_content = "\n\n".join(outputs) if outputs else "I've completed your request."
 
         fallback_assessment = QualityAssessment(
             overall_quality=ResponseQuality.ACCEPTABLE,
@@ -768,17 +748,14 @@ Improved Response:
             user_satisfaction_score=0.6,
             strengths=["Request completed"],
             weaknesses=["Synthesis unavailable"],
-            improvement_suggestions=["Manual review recommended"]
+            improvement_suggestions=["Manual review recommended"],
         )
 
         return SynthesisResult(
             synthesized_content=fallback_content,
             quality_assessment=fallback_assessment,
-            synthesis_metadata={
-                'workflow_id': workflow.id,
-                'fallback_used': True
-            },
+            synthesis_metadata={"workflow_id": workflow.id, "fallback_used": True},
             synthesis_time_ms=0.0,
             iterations_performed=0,
-            enhancement_applied=['basic_output_concatenation']
+            enhancement_applied=["basic_output_concatenation"],
         )

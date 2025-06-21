@@ -178,14 +178,14 @@ class Agent:
 
             # Get embedding function from model for semantic search
             embedding_fn = None
-            if hasattr(self.model, 'get_embedding'):
+            if hasattr(self.model, "get_embedding"):
                 embedding_fn = self.model.get_embedding
-            elif hasattr(self.model, 'embed'):
+            elif hasattr(self.model, "embed"):
                 embedding_fn = self.model.embed
 
             # Get formation config from overlord if available
             formation_config = None
-            if hasattr(self.overlord, 'formation_config') and self.overlord.formation_config:
+            if hasattr(self.overlord, "formation_config") and self.overlord.formation_config:
                 formation_config = self.overlord.formation_config
 
             # Create knowledge handler using the factory method with formation config
@@ -194,8 +194,7 @@ class Agent:
                 knowledge_config=knowledge_config,
                 generate_embeddings_fn=embedding_fn,
                 formation_config=formation_config,
-
-                short_term_memory=getattr(self.overlord, 'buffer_memory', None),
+                short_term_memory=getattr(self.overlord, "buffer_memory", None),
                 auto_inject_knowledge=True,
             )
 
@@ -338,39 +337,95 @@ class Agent:
         # Factual/domain knowledge indicators
         knowledge_indicators = [
             # Question words that typically need factual answers
-            "what is", "what are", "how does", "how do", "how to", "explain",
-            "define", "definition", "describe", "documentation", "specification",
-
+            "what is",
+            "what are",
+            "how does",
+            "how do",
+            "how to",
+            "explain",
+            "define",
+            "definition",
+            "describe",
+            "documentation",
+            "specification",
             # Technical/domain-specific terms
-            "api", "function", "method", "class", "algorithm", "process",
-            "procedure", "protocol", "standard", "requirement", "feature",
-
+            "api",
+            "function",
+            "method",
+            "class",
+            "algorithm",
+            "process",
+            "procedure",
+            "protocol",
+            "standard",
+            "requirement",
+            "feature",
             # Instructional queries
-            "tutorial", "guide", "example", "sample", "instruction", "step",
-            "configure", "setup", "install", "implement", "deploy",
-
+            "tutorial",
+            "guide",
+            "example",
+            "sample",
+            "instruction",
+            "step",
+            "configure",
+            "setup",
+            "install",
+            "implement",
+            "deploy",
             # Reference queries
-            "reference", "manual", "documentation", "spec", "format",
-            "syntax", "parameter", "option", "setting", "configuration"
+            "reference",
+            "manual",
+            "documentation",
+            "spec",
+            "format",
+            "syntax",
+            "parameter",
+            "option",
+            "setting",
+            "configuration",
         ]
 
         # Conversational/personal context indicators
         memory_indicators = [
             # Personal references
-            "we discussed", "you mentioned", "i told you", "earlier", "before",
-            "previously", "last time", "remember when", "as we talked",
-
+            "we discussed",
+            "you mentioned",
+            "i told you",
+            "earlier",
+            "before",
+            "previously",
+            "last time",
+            "remember when",
+            "as we talked",
             # Conversational continuity
-            "continue", "follow up", "regarding our", "about our conversation",
-            "back to", "returning to", "as i was saying", "to clarify",
-
+            "continue",
+            "follow up",
+            "regarding our",
+            "about our conversation",
+            "back to",
+            "returning to",
+            "as i was saying",
+            "to clarify",
             # Personal preferences/history
-            "my preference", "i prefer", "i like", "i want", "my project",
-            "our project", "my situation", "my case", "for me", "in my context",
-
+            "my preference",
+            "i prefer",
+            "i like",
+            "i want",
+            "my project",
+            "our project",
+            "my situation",
+            "my case",
+            "for me",
+            "in my context",
             # Recent context references
-            "just now", "recently", "today", "this session", "current",
-            "ongoing", "in progress", "working on"
+            "just now",
+            "recently",
+            "today",
+            "this session",
+            "current",
+            "ongoing",
+            "in progress",
+            "working on",
         ]
 
         # Count indicators
@@ -394,8 +449,10 @@ class Agent:
             memory_score += 1
 
         # Technical terms lean toward knowledge
-        if any(char in query for char in ["()", "{}", "[]", ".", "/"]) or \
-           len([word for word in query.split() if word.isupper()]) > 0:
+        if (
+            any(char in query for char in ["()", "{}", "[]", ".", "/"])
+            or len([word for word in query.split() if word.isupper()]) > 0
+        ):
             knowledge_score += 1
 
         # Determine strategy based on scores
@@ -508,10 +565,7 @@ class Agent:
             if not is_duplicate:
                 deduplicated_memory.append(m_result)
 
-        return {
-            "knowledge": knowledge_results,
-            "memory": deduplicated_memory
-        }
+        return {"knowledge": knowledge_results, "memory": deduplicated_memory}
 
     def _calculate_text_overlap(self, text1: str, text2: str) -> float:
         """
@@ -648,8 +702,9 @@ class Agent:
             if isinstance(timestamp, str):
                 # Try to parse ISO format or other common formats
                 import datetime
+
                 try:
-                    dt = datetime.datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                    dt = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
                     timestamp = dt.timestamp()
                 except (ValueError, TypeError):
                     return 0.0
@@ -736,10 +791,7 @@ class Agent:
             try:
                 # Use unified search to get both knowledge and memory context
                 search_results = await self.search_knowledge(
-                    query=content,
-                    limit=5,
-                    include_memory=True,
-                    unified=True
+                    query=content, limit=5, include_memory=True, unified=True
                 )
 
                 # Build enhanced context from unified results
@@ -923,16 +975,13 @@ class Agent:
                 r"(?:is|are|do|does|did|will|would|should|could|can)\s+(?:you|your)",
                 r"(?i)(?:i need|i require|could you (?:please )?(?:provide|tell|specify|clarify))",
                 r"(?i)(?:what(?:'s| is) your|could you specify|please (?:provide|clarify|specify))",
-
                 # Questions about preferences or requirements
                 r"(?i)(?:do you (?:prefer|want|need)|would you like|are you looking for)",
                 r"(?i)(?:what (?:type|kind|sort) of|which (?:option|approach|method))",
-
                 # Uncertainty indicators
                 r"(?i)(?:i(?:'m| am) not sure|unclear|ambiguous|could mean)",
                 r"(?i)(?:depends on|varies based on|need(?:s)? more "
                 r"(?:information|details|context))",
-
                 # Multiple options requiring choice
                 r"(?i)(?:several (?:options|ways|approaches)|multiple (?:possibilities|choices))",
                 r"(?i)(?:option [abc12]|approach [abc12]|method [abc12])",
@@ -960,7 +1009,7 @@ class Agent:
                 "clarification_type": "information_request",
                 "required_info": required_info,
                 "agent_reasoning": reasoning,
-                "original_response": agent_response
+                "original_response": agent_response,
             }
 
         except Exception as e:
@@ -994,28 +1043,28 @@ class Agent:
         info_categories = {
             "budget": [
                 r"(?i)(?:budget|cost|price|money|funding|spend)",
-                r"(?i)(?:how much|what(?:'s| is) (?:the )?(?:cost|price))"
+                r"(?i)(?:how much|what(?:'s| is) (?:the )?(?:cost|price))",
             ],
             "timeline": [
                 r"(?i)(?:when|timeline|deadline|schedule|time)",
-                r"(?i)(?:how (?:long|soon)|by when)"
+                r"(?i)(?:how (?:long|soon)|by when)",
             ],
             "preferences": [
                 r"(?i)(?:prefer|preference|like|want|style|approach)",
-                r"(?i)(?:which (?:type|kind|option)|what (?:type|kind))"
+                r"(?i)(?:which (?:type|kind|option)|what (?:type|kind))",
             ],
             "requirements": [
                 r"(?i)(?:require|requirement|need|must|should|specification)",
-                r"(?i)(?:what (?:features|capabilities|functionality))"
+                r"(?i)(?:what (?:features|capabilities|functionality))",
             ],
             "scope": [
                 r"(?i)(?:scope|scale|size|extent|coverage)",
-                r"(?i)(?:how (?:big|large|extensive|comprehensive))"
+                r"(?i)(?:how (?:big|large|extensive|comprehensive))",
             ],
             "location": [
                 r"(?i)(?:where|location|place|region|area)",
-                r"(?i)(?:which (?:location|place|area))"
-            ]
+                r"(?i)(?:which (?:location|place|area))",
+            ],
         }
 
         required_info = {}
@@ -1044,7 +1093,7 @@ class Agent:
             The extracted question or a generated question for the category
         """
         # Split response into sentences
-        sentences = re.split(r'[.!?]+', response)
+        sentences = re.split(r"[.!?]+", response)
 
         # Category-specific keywords to look for
         category_keywords = {
@@ -1053,7 +1102,7 @@ class Agent:
             "preferences": ["prefer", "preference", "like", "want", "style"],
             "requirements": ["require", "requirement", "need", "must", "specification"],
             "scope": ["scope", "scale", "size", "extent", "coverage"],
-            "location": ["where", "location", "place", "region", "area"]
+            "location": ["where", "location", "place", "region", "area"],
         }
 
         keywords = category_keywords.get(category, [])
@@ -1081,7 +1130,7 @@ class Agent:
             "preferences": "What are your preferences for this request?",
             "requirements": "What are your specific requirements?",
             "scope": "What's the scope of work you're looking for?",
-            "location": "Where should this be implemented or focused?"
+            "location": "Where should this be implemented or focused?",
         }
 
         return generic_questions.get(category)

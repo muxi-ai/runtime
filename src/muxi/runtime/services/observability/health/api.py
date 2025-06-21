@@ -44,10 +44,11 @@ class HealthStatusAPI:
                 "unhealthy": unhealthy_count,
                 "health_percentage": (
                     round((healthy_count / total_destinations * 100), 2)
-                    if total_destinations > 0 else 100
-                )
+                    if total_destinations > 0
+                    else 100
+                ),
             },
-            "destinations": destinations
+            "destinations": destinations,
         }
 
     async def get_destination_health(self, destination: str) -> Dict[str, Any]:
@@ -70,7 +71,7 @@ class HealthStatusAPI:
                 downtime_duration = datetime.now() - since_time
                 uptime_info = {
                     "downtime_seconds": int(downtime_duration.total_seconds()),
-                    "downtime_human": self._format_duration(downtime_duration.total_seconds())
+                    "downtime_human": self._format_duration(downtime_duration.total_seconds()),
                 }
             except (ValueError, TypeError):
                 pass
@@ -80,7 +81,7 @@ class HealthStatusAPI:
             "healthy": dest_status.get("healthy", True),
             "last_error": dest_status.get("last_error"),
             "since": dest_status.get("since"),
-            **uptime_info
+            **uptime_info,
         }
 
     async def get_unhealthy_destinations(self) -> Dict[str, Any]:
@@ -99,13 +100,13 @@ class HealthStatusAPI:
                 unhealthy[dest] = {
                     "last_error": status.get("last_error"),
                     "since": status.get("since"),
-                    "downtime_seconds": self._calculate_downtime_seconds(status.get("since"))
+                    "downtime_seconds": self._calculate_downtime_seconds(status.get("since")),
                 }
 
         return {
             "count": len(unhealthy),
             "destinations": unhealthy,
-            "last_checked": health_status.get("last_checked")
+            "last_checked": health_status.get("last_checked"),
         }
 
     async def force_health_check(self, destination: Optional[str] = None) -> Dict[str, Any]:
@@ -128,14 +129,14 @@ class HealthStatusAPI:
                 "action": "force_check",
                 "destination": destination,
                 "result": result,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
         else:
             summary = await self.get_health_summary()
             return {
                 "action": "force_check_all",
                 "result": summary,
-                "timestamp": datetime.now().isoformat()
+                "timestamp": datetime.now().isoformat(),
             }
 
     async def reset_destination_health(self, destination: str) -> Dict[str, Any]:
@@ -156,7 +157,7 @@ class HealthStatusAPI:
             "action": "reset_health",
             "destination": destination,
             "status": "healthy",
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
     async def get_health_metrics(self) -> Dict[str, Any]:
@@ -179,25 +180,22 @@ class HealthStatusAPI:
             ),
             "muxi_observability_last_check_timestamp": self._iso_to_timestamp(
                 health_status.get("last_checked")
-            )
+            ),
         }
 
         # Per-destination metrics
         for dest, status in destinations.items():
-            metrics[f"muxi_observability_destination_healthy{{destination=\"{dest}\"}}"] = (
+            metrics[f'muxi_observability_destination_healthy{{destination="{dest}"}}'] = (
                 1 if status.get("healthy", True) else 0
             )
 
             if not status.get("healthy", True) and status.get("since"):
                 downtime_seconds = self._calculate_downtime_seconds(status.get("since"))
                 metrics[
-                    f"muxi_observability_destination_downtime_seconds{{destination=\"{dest}\"}}"
+                    f'muxi_observability_destination_downtime_seconds{{destination="{dest}"}}'
                 ] = downtime_seconds
 
-        return {
-            "metrics": metrics,
-            "timestamp": datetime.now().isoformat()
-        }
+        return {"metrics": metrics, "timestamp": datetime.now().isoformat()}
 
     def _format_duration(self, seconds: float) -> str:
         """Format duration in human-readable format."""

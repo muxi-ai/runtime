@@ -25,12 +25,7 @@ from ..protocol.message_handler import MCPMessageHandler
 class StreamableHTTPTransport(BaseTransport):
     """Fixed MCP Streamable HTTP transport using direct HTTP communication."""
 
-    def __init__(
-        self,
-        url: str,
-        request_timeout: int = 30,
-        auth: Optional[Any] = None
-    ):
+    def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
         """Initialize fixed streamable HTTP transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
@@ -38,25 +33,17 @@ class StreamableHTTPTransport(BaseTransport):
 
     async def connect(self) -> bool:
         """Connect to the MCP server with health check."""
-        error_details = {
-            "url": self.url,
-            "timestamp": datetime.utcnow().isoformat()
-        }
+        error_details = {"url": self.url, "timestamp": datetime.utcnow().isoformat()}
 
         try:
             self.session = aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=30),
-                headers={"Content-Type": "application/json"}
+                headers={"Content-Type": "application/json"},
             )
 
             # Test connection with minimal POST request instead of GET
             # Send a simple JSON-RPC request to test connectivity
-            test_request = {
-                "jsonrpc": "2.0",
-                "id": "test",
-                "method": "tools/list",
-                "params": {}
-            }
+            test_request = {"jsonrpc": "2.0", "id": "test", "method": "tools/list", "params": {}}
 
             async with self.session.post(self.url, json=test_request) as response:
                 if response.status == 400:
@@ -80,7 +67,9 @@ class StreamableHTTPTransport(BaseTransport):
             error_details["error"] = str(e)
             raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
 
-    async def send_request(self, request: Dict[str, Any], timeout: Optional[int] = None) -> Dict[str, Any]:
+    async def send_request(
+        self, request: Dict[str, Any], timeout: Optional[int] = None
+    ) -> Dict[str, Any]:
         """Send request via HTTP POST."""
         if not self.session or not self.connection_stats.get("connected", False):
             raise MCPConnectionError("Not connected to MCP server")
@@ -97,7 +86,7 @@ class StreamableHTTPTransport(BaseTransport):
             session_message = self.message_handler.create_request(method, params)
 
             # Extract the raw JSON-RPC data
-            if hasattr(session_message.message, 'model_dump'):
+            if hasattr(session_message.message, "model_dump"):
                 json_request = session_message.message.model_dump()
             else:
                 # Fallback for compatibility
@@ -105,7 +94,7 @@ class StreamableHTTPTransport(BaseTransport):
                     "jsonrpc": "2.0",
                     "id": str(uuid.uuid4()),
                     "method": method,
-                    "params": params
+                    "params": params,
                 }
 
             # Send HTTP request to base URL (streamable servers handle routing via JSON-RPC method)
@@ -115,7 +104,9 @@ class StreamableHTTPTransport(BaseTransport):
             parsed_response = self.message_handler.parse_response(raw_response)
 
             # Update stats
-            self.connection_stats["requests_sent"] = self.connection_stats.get("requests_sent", 0) + 1
+            self.connection_stats["requests_sent"] = (
+                self.connection_stats.get("requests_sent", 0) + 1
+            )
             self.connection_stats["last_activity"] = datetime.utcnow().isoformat()
 
             return parsed_response
@@ -136,7 +127,7 @@ class StreamableHTTPTransport(BaseTransport):
             "prompts/get": "prompts/get",
             "sampling/createMessage": "sampling/createMessage",
             "initialize": "initialize",
-            "ping": "ping"
+            "ping": "ping",
         }
 
         return endpoint_map.get(method, method)
@@ -147,9 +138,7 @@ class StreamableHTTPTransport(BaseTransport):
             # Send HTTP POST request using asyncio.wait_for for Python 3.10 compatibility
             async def make_request():
                 async with self.session.post(
-                    url,
-                    json=json_request,
-                    headers={'Content-Type': 'application/json'}
+                    url, json=json_request, headers={"Content-Type": "application/json"}
                 ) as response:
                     if response.status == 200:
                         return await response.json()
@@ -160,10 +149,10 @@ class StreamableHTTPTransport(BaseTransport):
             return await asyncio.wait_for(make_request(), timeout=timeout)
 
         except asyncio.TimeoutError:
-            self.connection_stats['errors_encountered'] += 1
+            self.connection_stats["errors_encountered"] += 1
             raise MCPRequestError(f"Request timeout after {timeout}s")
         except Exception as e:
-            self.connection_stats['errors_encountered'] += 1
+            self.connection_stats["errors_encountered"] += 1
             raise MCPRequestError(f"Request failed: {e}")
 
     async def disconnect(self) -> None:
@@ -190,12 +179,14 @@ class StreamableHTTPTransport(BaseTransport):
         base_stats = super().get_connection_stats()
 
         # Add streamable-specific stats
-        base_stats.update({
-            "transport_type": "streamable_http",
-            "protocol_version": "2025-03-26",
-            "supports_streaming": True,
-            "supports_cancellation": True,
-        })
+        base_stats.update(
+            {
+                "transport_type": "streamable_http",
+                "protocol_version": "2025-03-26",
+                "supports_streaming": True,
+                "supports_cancellation": True,
+            }
+        )
 
         # Add session duration if connected
         if self.connected and self.connect_time:
@@ -207,17 +198,18 @@ class StreamableHTTPTransport(BaseTransport):
             base_stats["has_active_session"] = True
 
         # Calculate efficiency metrics
-        if self.connection_stats['requests_sent'] > 0:
-            base_stats['success_rate'] = 1.0 - (
-                self.connection_stats['errors_encountered'] / self.connection_stats['requests_sent']
+        if self.connection_stats["requests_sent"] > 0:
+            base_stats["success_rate"] = 1.0 - (
+                self.connection_stats["errors_encountered"] / self.connection_stats["requests_sent"]
             )
-            base_stats['avg_bytes_per_request'] = (
-                self.connection_stats['bytes_sent'] / self.connection_stats['requests_sent']
+            base_stats["avg_bytes_per_request"] = (
+                self.connection_stats["bytes_sent"] / self.connection_stats["requests_sent"]
             )
 
-        if self.connection_stats['responses_received'] > 0:
-            base_stats['avg_bytes_per_response'] = (
-                self.connection_stats['bytes_received'] / self.connection_stats['responses_received']
+        if self.connection_stats["responses_received"] > 0:
+            base_stats["avg_bytes_per_response"] = (
+                self.connection_stats["bytes_received"]
+                / self.connection_stats["responses_received"]
             )
 
         return base_stats
@@ -238,5 +230,5 @@ class StreamableHTTPTransport(BaseTransport):
             "max_concurrent_requests": 10,  # HTTP allows multiple concurrent requests
             "url": self.url,
             "connected": self.connected,
-            "has_active_session": self.session is not None
+            "has_active_session": self.session is not None,
         }

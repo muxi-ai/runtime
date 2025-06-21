@@ -209,8 +209,7 @@ class MCPService:
         # Handle command-line transport directly
         if command or transport_type == "command":
             return await self._connect_single_transport(
-                server_id, url, command, "command", credentials, model,
-                request_timeout
+                server_id, url, command, "command", credentials, model, request_timeout
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
@@ -219,9 +218,7 @@ class MCPService:
                 # Use enhanced transport detector with caching
                 detected_transport, detection_metadata = (
                     await TransportDetector.detect_with_fallback(
-                        url=url,
-                        timeout=min(request_timeout // 2, 30),
-                        use_cache=True
+                        url=url, timeout=min(request_timeout // 2, 30), use_cache=True
                     )
                 )
 
@@ -234,21 +231,25 @@ class MCPService:
                         "url": url,
                         "cache_used": detection_metadata.get("cache_used", False),
                         "detection_method": (
-                            detection_metadata.get("metadata", {})
-                            .get("detection_method", "unknown")
-                        )
+                            detection_metadata.get("metadata", {}).get(
+                                "detection_method", "unknown"
+                            )
+                        ),
                     },
                     description=f"MCP transport detected: {detected_transport} for {server_id}",
                 )
 
                 # Get recommended URL for the detected transport
-                recommended_url = TransportDetector.get_recommended_url(
-                    url, detected_transport
-                )
+                recommended_url = TransportDetector.get_recommended_url(url, detected_transport)
 
                 return await self._connect_single_transport(
-                    server_id, recommended_url, command, detected_transport,
-                    credentials, model, request_timeout
+                    server_id,
+                    recommended_url,
+                    command,
+                    detected_transport,
+                    credentials,
+                    model,
+                    request_timeout,
                 )
 
             except MCPConnectionError as e:
@@ -260,7 +261,7 @@ class MCPService:
                         "server_id": server_id,
                         "error": str(e),
                         "url": url,
-                        "suggestion": "Try specifying transport_type explicitly"
+                        "suggestion": "Try specifying transport_type explicitly",
                     },
                     description=f"Transport detection failed for {server_id}: {e}",
                 )
@@ -274,16 +275,13 @@ class MCPService:
                             "Try specifying transport_type explicitly "
                             "('streamable_http', 'http_sse', or 'command')"
                         ),
-                        "available_transports": [
-                            "streamable_http", "http_sse", "command"
-                        ]
-                    }
+                        "available_transports": ["streamable_http", "http_sse", "command"],
+                    },
                 )
 
         # Proceed with explicitly specified transport type
         return await self._connect_single_transport(
-            server_id, url, command, transport_type, credentials, model,
-            request_timeout
+            server_id, url, command, transport_type, credentials, model, request_timeout
         )
 
     async def invoke_tool(
@@ -377,7 +375,7 @@ class MCPService:
                         "has_links": len(processed_result["links"]) > 0,
                         "is_error": processed_result["isError"],
                         "success": not processed_result["isError"],
-                        "protocol_version": "2025-06-18"
+                        "protocol_version": "2025-06-18",
                     },
                     description=(
                         f"MCP tool invocation completed with modern protocol: "
@@ -387,7 +385,7 @@ class MCPService:
 
                 return {
                     "result": processed_result,
-                    "status": "success" if not processed_result["isError"] else "error"
+                    "status": "success" if not processed_result["isError"] else "error",
                 }
 
             except Exception as e:
@@ -401,9 +399,7 @@ class MCPService:
                         "error": str(e),
                         "error_type": type(e).__name__,
                     },
-                    description=(
-                        f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"
-                    ),
+                    description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
                 )
 
                 # Error event already emitted above
@@ -435,14 +431,13 @@ class MCPService:
                     data={
                         "server_id": server_id,
                         "transport_type": transport_type,
-                        "attempt_number": transports_to_try.index(transport_type) + 1
+                        "attempt_number": transports_to_try.index(transport_type) + 1,
                     },
                     description=f"Attempting {transport_type} transport for {server_id}",
                 )
 
                 return await self._connect_single_transport(
-                    server_id, url, None, transport_type, credentials, model,
-                    request_timeout
+                    server_id, url, None, transport_type, credentials, model, request_timeout
                 )
 
             except Exception as e:
@@ -453,7 +448,7 @@ class MCPService:
                         "server_id": server_id,
                         "transport_type": transport_type,
                         "error": str(e),
-                        "will_retry": transport_type != transports_to_try[-1]
+                        "will_retry": transport_type != transports_to_try[-1],
                     },
                     description=f"Transport {transport_type} failed for {server_id}",
                 )
@@ -462,10 +457,7 @@ class MCPService:
                     # Last transport failed
                     raise MCPConnectionError(
                         f"Unable to connect to {server_id} with any transport",
-                        {
-                            "tried_transports": transports_to_try,
-                            "last_error": str(e)
-                        }
+                        {"tried_transports": transports_to_try, "last_error": str(e)},
                     )
 
                 continue  # Try next transport
@@ -526,13 +518,11 @@ class MCPService:
                         # Use modern protocol features for better UX
                         self.tool_registry[server_id][tool_name] = {
                             **tool,
-                            "display_name": (
-                                ModernProtocolFeatures.extract_display_name(tool)
-                            ),
+                            "display_name": (ModernProtocolFeatures.extract_display_name(tool)),
                             "supports_structured_output": True,
                             "supports_elicitation": True,
                             "_meta": tool.get("_meta", {}),
-                            "protocol_version": "2025-06-18"
+                            "protocol_version": "2025-06-18",
                         }
 
                     # Enhanced observability with modern features
@@ -547,18 +537,17 @@ class MCPService:
                                 "structured_output": True,
                                 "elicitation": True,
                                 "resource_links": True,
-                                "title_fields": True
+                                "title_fields": True,
                             },
                             "tools": [
                                 {
                                     "name": tool.get("name", f"unknown_{i}"),
                                     "display_name": (
-                                        ModernProtocolFeatures
-                                        .extract_display_name(tool)
-                                    )
+                                        ModernProtocolFeatures.extract_display_name(tool)
+                                    ),
                                 }
                                 for i, tool in enumerate(tools)
-                            ]
+                            ],
                         },
                         description=(
                             f"Discovered {len(tools)} tools with modern protocol "
@@ -572,8 +561,7 @@ class MCPService:
                         level=observability.EventLevel.WARNING,
                         data={"server_id": server_id, "error": str(e), "tools_count": 0},
                         description=(
-                            f"Unable to discover tools from MCP server "
-                            f"{server_id}: {str(e)}"
+                            f"Unable to discover tools from MCP server " f"{server_id}: {str(e)}"
                         ),
                     )
                     self.tool_registry[server_id] = {}
@@ -659,9 +647,7 @@ class MCPService:
                     event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
                     level=observability.EventLevel.ERROR,
                     data={"server_id": server_id, "error": str(e)},
-                    description=(
-                        f"Error disconnecting from MCP server {server_id}: {str(e)}"
-                    ),
+                    description=(f"Error disconnecting from MCP server {server_id}: {str(e)}"),
                 )
                 return False
 
@@ -741,7 +727,9 @@ class MCPService:
         transport = self._get_transport_for_server(server_id)
         return await self.prompt_discovery.list_prompts(transport)
 
-    async def get_prompt(self, server_id: str, name: str, arguments: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def get_prompt(
+        self, server_id: str, name: str, arguments: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
         """Get a specific prompt from an MCP server.
 
         Args:
@@ -765,7 +753,7 @@ class MCPService:
         model_preferences: Optional[Dict[str, Any]] = None,
         system_prompt: Optional[str] = None,
         temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None
+        max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Create a message using MCP sampling/createMessage.
 
@@ -790,7 +778,7 @@ class MCPService:
             model_preferences=model_preferences,
             system_prompt=system_prompt,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
         )
 
     async def list_templates(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
@@ -880,9 +868,7 @@ class MCPService:
         return self.health_monitor.get_health_stats()
 
     async def initialize_server_capabilities(
-        self,
-        server_id: str,
-        client_info: Optional[Dict[str, Any]] = None
+        self, server_id: str, client_info: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Initialize MCP connection with capabilities negotiation.
 
@@ -904,7 +890,7 @@ class MCPService:
                 "name": "MUXI MCP Client",
                 "version": "1.0.0",
                 "protocolVersion": "2024-11-05",
-                "capabilities": self.capabilities_negotiator.get_supported_capabilities()
+                "capabilities": self.capabilities_negotiator.get_supported_capabilities(),
             }
 
         return await self.capabilities_negotiator.initialize_connection(transport, client_info)
@@ -923,13 +909,13 @@ class MCPService:
             "performance_impact": {
                 "cache_hit_benefit": "Skips transport detection (~2-10 seconds)",
                 "cache_miss_cost": "Performs transport detection tests",
-                "cache_ttl_minutes": cache_stats.get("cache_ttl_minutes", 60)
+                "cache_ttl_minutes": cache_stats.get("cache_ttl_minutes", 60),
             },
             "recommendations": {
                 "clear_cache_if": "Transport detection seems incorrect",
                 "disable_cache_if": "Debugging transport issues",
-                "cache_is_helpful_when": "Connecting to same servers repeatedly"
-            }
+                "cache_is_helpful_when": "Connecting to same servers repeatedly",
+            },
         }
 
     def clear_transport_cache(self) -> Dict[str, Any]:
@@ -950,7 +936,7 @@ class MCPService:
                 level=observability.EventLevel.INFO,
                 data={
                     "cleared_entries": old_stats.get("total_entries", 0),
-                    "reason": "manual_clear_requested"
+                    "reason": "manual_clear_requested",
                 },
                 description="MCP transport cache cleared manually",
             )
@@ -958,21 +944,18 @@ class MCPService:
             return {
                 "status": "success",
                 "cleared_entries": old_stats.get("total_entries", 0),
-                "message": "Transport cache cleared successfully"
+                "message": "Transport cache cleared successfully",
             }
 
         except Exception as e:
             return {
                 "status": "error",
                 "error": str(e),
-                "message": "Failed to clear transport cache"
+                "message": "Failed to clear transport cache",
             }
 
     async def test_transport_connectivity(
-        self,
-        url: str,
-        transport_type: Optional[str] = None,
-        timeout: int = 10
+        self, url: str, transport_type: Optional[str] = None, timeout: int = 10
     ) -> Dict[str, Any]:
         """
         Test connectivity to an MCP server with specific or auto-detected transport.
@@ -992,7 +975,7 @@ class MCPService:
             "timestamp": datetime.utcnow().isoformat(),
             "timeout": timeout,
             "tests_performed": [],
-            "recommended_action": None
+            "recommended_action": None,
         }
 
         try:
@@ -1000,11 +983,13 @@ class MCPService:
                 # Test specific transport
                 test_passed = await TransportDetector._test_transport(url, transport_type, timeout)
 
-                test_results["tests_performed"].append({
-                    "transport_type": transport_type,
-                    "passed": test_passed,
-                    "method": "specific_transport_test"
-                })
+                test_results["tests_performed"].append(
+                    {
+                        "transport_type": transport_type,
+                        "passed": test_passed,
+                        "method": "specific_transport_test",
+                    }
+                )
 
                 if test_passed:
                     recommended_url = TransportDetector.get_recommended_url(url, transport_type)
@@ -1018,15 +1003,21 @@ class MCPService:
 
             else:
                 # Auto-detect best transport
-                detected_transport, detection_metadata = await TransportDetector.detect_with_fallback(
-                    url, timeout, use_cache=False  # Don't use cache for testing
+                detected_transport, detection_metadata = (
+                    await TransportDetector.detect_with_fallback(
+                        url, timeout, use_cache=False  # Don't use cache for testing
+                    )
                 )
 
                 test_results["status"] = "success"
                 test_results["recommended_transport"] = detected_transport
-                test_results["recommended_url"] = TransportDetector.get_recommended_url(url, detected_transport)
+                test_results["recommended_url"] = TransportDetector.get_recommended_url(
+                    url, detected_transport
+                )
                 test_results["detection_metadata"] = detection_metadata
-                test_results["recommended_action"] = f"Use transport_type='{detected_transport}' or 'auto'"
+                test_results["recommended_action"] = (
+                    f"Use transport_type='{detected_transport}' or 'auto'"
+                )
 
         except Exception as e:
             test_results["status"] = "error"

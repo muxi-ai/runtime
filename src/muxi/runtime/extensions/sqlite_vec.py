@@ -58,8 +58,6 @@ import os
 import platform
 import sqlite3
 
-# Loguru import removed - add observability import
-
 from .base import Extension
 
 

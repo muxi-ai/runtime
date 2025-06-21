@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 class OperationStatus(Enum):
     """Status of an async operation."""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -50,7 +51,7 @@ class OperationContext:
     status: OperationStatus = OperationStatus.PENDING
     result: Optional[Any] = None
     error: Optional[Exception] = None
-    cancellation_token: Optional['CancellationToken'] = None
+    cancellation_token: Optional["CancellationToken"] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
     @property
@@ -145,7 +146,9 @@ class CancellationToken:
 class CancellationError(Exception):
     """Exception raised when an operation is cancelled."""
 
-    def __init__(self, message: str = "Operation was cancelled", operation_id: Optional[str] = None):
+    def __init__(
+        self, message: str = "Operation was cancelled", operation_id: Optional[str] = None
+    ):
         super().__init__(message)
         self.operation_id = operation_id
 
@@ -180,4 +183,8 @@ class AsyncOperationResult:
     @property
     def is_failure(self) -> bool:
         """Check if operation failed."""
-        return self.status in [OperationStatus.FAILED, OperationStatus.TIMEOUT, OperationStatus.CANCELLED]
+        return self.status in [
+            OperationStatus.FAILED,
+            OperationStatus.TIMEOUT,
+            OperationStatus.CANCELLED,
+        ]

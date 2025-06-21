@@ -86,7 +86,9 @@ class TransportCache:
 
         return None
 
-    def cache_transport(self, url: str, transport_type: str, metadata: Optional[Dict] = None) -> None:
+    def cache_transport(
+        self, url: str, transport_type: str, metadata: Optional[Dict] = None
+    ) -> None:
         """
         Cache successful transport connection.
 
@@ -101,7 +103,7 @@ class TransportCache:
             "url": url,
             "transport_type": transport_type,
             "timestamp": datetime.now().isoformat(),
-            "metadata": metadata or {}
+            "metadata": metadata or {},
         }
 
     def clear_cache(self) -> None:
@@ -124,7 +126,7 @@ class TransportCache:
             "total_entries": len(self._cache),
             "valid_entries": valid_entries,
             "expired_entries": expired_entries,
-            "cache_ttl_minutes": self._cache_ttl.total_seconds() / 60
+            "cache_ttl_minutes": self._cache_ttl.total_seconds() / 60,
         }
 
 
@@ -199,8 +201,8 @@ class TransportDetector:
                 "tested_transports": transports_to_try,
                 "url": url,
                 "timestamp": datetime.now().isoformat(),
-                "suggestion": "Verify server is running and supports MCP protocol"
-            }
+                "suggestion": "Verify server is running and supports MCP protocol",
+            },
         )
 
     @staticmethod
@@ -260,9 +262,9 @@ class TransportDetector:
         """
         try:
             # Ensure URL has /mcp endpoint for streamable servers
-            test_url = url.rstrip('/')
-            if not test_url.endswith('/mcp'):
-                test_url += '/mcp'
+            test_url = url.rstrip("/")
+            if not test_url.endswith("/mcp"):
+                test_url += "/mcp"
 
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=timeout)
@@ -272,13 +274,11 @@ class TransportDetector:
                     "jsonrpc": "2.0",
                     "id": "transport_test",
                     "method": "ping",
-                    "params": {}
+                    "params": {},
                 }
 
                 async with session.post(
-                    test_url,
-                    json=test_request,
-                    headers={'Content-Type': 'application/json'}
+                    test_url, json=test_request, headers={"Content-Type": "application/json"}
                 ) as response:
                     # Accept any response that's not a hard connection error
                     # Streamable servers should respond to POST requests
@@ -301,17 +301,16 @@ class TransportDetector:
         """
         try:
             # Ensure URL has /sse endpoint for SSE servers
-            test_url = url.rstrip('/')
-            if not test_url.endswith('/sse'):
-                test_url += '/sse'
+            test_url = url.rstrip("/")
+            if not test_url.endswith("/sse"):
+                test_url += "/sse"
 
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=timeout)
             ) as session:
                 # Test SSE endpoint with proper headers
                 async with session.get(
-                    test_url,
-                    headers={'Accept': 'text/event-stream'}
+                    test_url, headers={"Accept": "text/event-stream"}
                 ) as response:
                     # SSE servers should respond favorably to event-stream requests
                     return response.status in [200, 404]  # Not hard errors
@@ -321,9 +320,7 @@ class TransportDetector:
 
     @staticmethod
     async def detect_with_fallback(
-        url: str,
-        timeout: int = 10,
-        use_cache: bool = True
+        url: str, timeout: int = 10, use_cache: bool = True
     ) -> Tuple[str, Dict]:
         """
         Detect transport with detailed fallback information.
@@ -341,7 +338,7 @@ class TransportDetector:
             "timestamp": datetime.now().isoformat(),
             "cache_used": False,
             "tests_performed": [],
-            "fallback_applied": False
+            "fallback_applied": False,
         }
 
         try:
@@ -388,11 +385,11 @@ class TransportDetector:
         Returns:
             Recommended URL with correct endpoint
         """
-        base = base_url.rstrip('/')
+        base = base_url.rstrip("/")
 
         if transport_type == "streamable_http":
-            return f"{base}/mcp" if not base.endswith('/mcp') else base
+            return f"{base}/mcp" if not base.endswith("/mcp") else base
         elif transport_type == "http_sse":
-            return f"{base}/sse" if not base.endswith('/sse') else base
+            return f"{base}/sse" if not base.endswith("/sse") else base
         else:
             return base

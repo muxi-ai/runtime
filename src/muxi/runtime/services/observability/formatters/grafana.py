@@ -22,9 +22,9 @@ class GrafanaLokiFormatter(BaseFormatter):
                 "formation_id": self.formation_id,
                 "service": self.service_name,
                 "level": event.get("level", "info"),
-                "event_type": event.get("event", "unknown")
+                "event_type": event.get("event", "unknown"),
             },
-            "values": [[str(timestamp_ns), line]]
+            "values": [[str(timestamp_ns), line]],
         }
 
         return json.dumps({"streams": [loki_stream]})
@@ -38,7 +38,7 @@ class GrafanaLokiFormatter(BaseFormatter):
                 self.formation_id,
                 self.service_name,
                 event.get("level", "info"),
-                event.get("event", "unknown")
+                event.get("event", "unknown"),
             )
 
             if labels not in streams:
@@ -47,9 +47,9 @@ class GrafanaLokiFormatter(BaseFormatter):
                         "formation_id": labels[0],
                         "service": labels[1],
                         "level": labels[2],
-                        "event_type": labels[3]
+                        "event_type": labels[3],
                     },
-                    "values": []
+                    "values": [],
                 }
 
             timestamp_ns = self._to_nanoseconds(event.get("timestamp"))
@@ -62,7 +62,7 @@ class GrafanaLokiFormatter(BaseFormatter):
         """Convert ISO timestamp to nanoseconds."""
         if timestamp_str:
             try:
-                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 return int(dt.timestamp() * 1_000_000_000)
             except Exception:
                 pass

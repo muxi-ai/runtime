@@ -17,8 +17,7 @@ from ...datatypes.observability import RequestContext
 
 # Global context variable to track current request context
 _current_request_context: ContextVar[Optional[RequestContext]] = ContextVar(
-    'request_context',
-    default=None
+    "request_context", default=None
 )
 
 

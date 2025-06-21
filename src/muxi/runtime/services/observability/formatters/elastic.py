@@ -16,12 +16,7 @@ class ElasticFormatter(BaseFormatter):
 
     def format_event(self, event: Dict[str, Any]) -> str:
         # Elasticsearch bulk format requires action line + document line
-        action_line = json.dumps({
-            "index": {
-                "_index": self.index_name,
-                "_type": "_doc"
-            }
-        })
+        action_line = json.dumps({"index": {"_index": self.index_name, "_type": "_doc"}})
 
         document = self._add_metadata(event)
         document_line = json.dumps(document)
@@ -32,4 +27,4 @@ class ElasticFormatter(BaseFormatter):
         lines = []
         for event in events:
             lines.append(self.format_event(event))
-        return '\n'.join(lines) + '\n'  # Bulk API requires trailing newline
+        return "\n".join(lines) + "\n"  # Bulk API requires trailing newline

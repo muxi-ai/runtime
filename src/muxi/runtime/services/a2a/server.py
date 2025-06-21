@@ -256,7 +256,6 @@ class A2AServer:
                 """
                 return await self._handle_a2a_message(agent_id, request, http_request)
 
-
             # Emit app creation event
             observability.observe(
                 event_type=observability.SystemEvents.A2A_SERVER_STARTED,

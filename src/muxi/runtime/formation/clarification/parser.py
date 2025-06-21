@@ -10,7 +10,7 @@ import re
 from typing import Dict, Any, Optional, List, Tuple
 from datetime import datetime, timedelta
 
-from ...datatypes import ClarificationQuestion, ParameterExtractionError
+from ...datatypes.clarification import ClarificationQuestion, ParameterExtractionError
 
 
 class ClarificationResponseParser:
@@ -275,7 +275,7 @@ class ClarificationResponseParser:
         prefixes = ["in ", "at ", "near ", "around ", "close to "]
         for prefix in prefixes:
             if response.lower().startswith(prefix):
-                response = response[len(prefix):].strip()
+                response = response[len(prefix) :].strip()
                 break
 
         # Basic validation - location should be reasonable length

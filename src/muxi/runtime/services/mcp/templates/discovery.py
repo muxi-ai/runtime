@@ -27,10 +27,9 @@ class MCPTemplateDiscovery:
         """
         try:
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "resources/templates/list",
-                "params": {}
-            })
+            response = await transport.send_request(
+                {"method": "resources/templates/list", "params": {}}
+            )
 
             # Extract templates from result
             result = response.get("result", {})
@@ -50,10 +49,7 @@ class MCPTemplateDiscovery:
             raise MCPRequestError(f"Failed to list templates: {e}")
 
     async def get_template(
-        self,
-        transport: BaseTransport,
-        name: str,
-        arguments: Optional[Dict[str, Any]] = None
+        self, transport: BaseTransport, name: str, arguments: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Get a specific template using resources/templates/get method.
 
@@ -75,10 +71,9 @@ class MCPTemplateDiscovery:
                 params["arguments"] = arguments
 
             # Send request to MCP server
-            response = await transport.send_request({
-                "method": "resources/templates/get",
-                "params": params
-            })
+            response = await transport.send_request(
+                {"method": "resources/templates/get", "params": params}
+            )
 
             # Extract template content from result
             result = response.get("result", {})
@@ -246,14 +241,14 @@ class MCPTemplateDiscovery:
         import re
 
         # Find all {variable} patterns
-        pattern = r'\{([^}]+)\}'
+        pattern = r"\{([^}]+)\}"
         matches = re.findall(pattern, uri_template)
 
         # Remove any URI template operators (RFC 6570)
         variables = []
         for match in matches:
             # Remove operators like +, #, ., /, ;, ?, &
-            cleaned = re.sub(r'^[+#./;?&]', '', match)
+            cleaned = re.sub(r"^[+#./;?&]", "", match)
             variables.append(cleaned)
 
         return variables

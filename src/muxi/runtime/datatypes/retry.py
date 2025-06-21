@@ -12,6 +12,7 @@ from enum import Enum
 
 class RetryStrategy(Enum):
     """Retry strategy types."""
+
     FIXED_DELAY = "fixed_delay"
     LINEAR_BACKOFF = "linear_backoff"
     EXPONENTIAL_BACKOFF = "exponential_backoff"
@@ -20,6 +21,7 @@ class RetryStrategy(Enum):
 
 class TransientErrorType(Enum):
     """Types of transient errors that can be retried."""
+
     NETWORK_TIMEOUT = "network_timeout"
     CONNECTION_REFUSED = "connection_refused"
     SERVICE_UNAVAILABLE = "service_unavailable"
@@ -47,21 +49,25 @@ class RetryConfig:
     jitter_range: float = 0.1  # 10% jitter
 
     # Error type specific settings
-    retryable_errors: List[Type[Exception]] = field(default_factory=lambda: [
-        ConnectionError,
-        TimeoutError,
-        OSError,  # Network-related OS errors
-    ])
+    retryable_errors: List[Type[Exception]] = field(
+        default_factory=lambda: [
+            ConnectionError,
+            TimeoutError,
+            OSError,  # Network-related OS errors
+        ]
+    )
 
     # Retry conditions
-    retry_on_status_codes: List[int] = field(default_factory=lambda: [
-        408,  # Request Timeout
-        429,  # Too Many Requests
-        500,  # Internal Server Error
-        502,  # Bad Gateway
-        503,  # Service Unavailable
-        504,  # Gateway Timeout
-    ])
+    retry_on_status_codes: List[int] = field(
+        default_factory=lambda: [
+            408,  # Request Timeout
+            429,  # Too Many Requests
+            500,  # Internal Server Error
+            502,  # Bad Gateway
+            503,  # Service Unavailable
+            504,  # Gateway Timeout
+        ]
+    )
 
     # Callbacks
     on_retry_callback: Optional[Callable[[int, Exception, float], None]] = None
@@ -104,8 +110,13 @@ class RetryResult:
 class TransientError(Exception):
     """Base exception for transient errors that can be retried."""
 
-    def __init__(self, message: str, error_type: TransientErrorType,
-                 retry_after: Optional[float] = None, details: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        error_type: TransientErrorType,
+        retry_after: Optional[float] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ):
         super().__init__(message)
         self.error_type = error_type
         self.retry_after = retry_after  # Suggested retry delay
@@ -115,16 +126,24 @@ class TransientError(Exception):
 class NetworkTransientError(TransientError):
     """Network-related transient error."""
 
-    def __init__(self, message: str, error_type: TransientErrorType = TransientErrorType.NETWORK_TIMEOUT,
-                 **kwargs):
+    def __init__(
+        self,
+        message: str,
+        error_type: TransientErrorType = TransientErrorType.NETWORK_TIMEOUT,
+        **kwargs,
+    ):
         super().__init__(message, error_type, **kwargs)
 
 
 class ServiceTransientError(TransientError):
     """Service-related transient error."""
 
-    def __init__(self, message: str, error_type: TransientErrorType = TransientErrorType.SERVICE_UNAVAILABLE,
-                 **kwargs):
+    def __init__(
+        self,
+        message: str,
+        error_type: TransientErrorType = TransientErrorType.SERVICE_UNAVAILABLE,
+        **kwargs,
+    ):
         super().__init__(message, error_type, **kwargs)
 
 
@@ -132,7 +151,9 @@ class RateLimitTransientError(TransientError):
     """Rate limiting transient error."""
 
     def __init__(self, message: str, retry_after: Optional[float] = None, **kwargs):
-        super().__init__(message, TransientErrorType.RATE_LIMITED, retry_after=retry_after, **kwargs)
+        super().__init__(
+            message, TransientErrorType.RATE_LIMITED, retry_after=retry_after, **kwargs
+        )
 
 
 def calculate_delay(attempt: int, config: RetryConfig) -> float:
@@ -184,8 +205,8 @@ def is_retryable_error(error: Exception, config: RetryConfig) -> bool:
             return True
 
     # Check for HTTP status codes if error has status attribute
-    if hasattr(error, 'status') or hasattr(error, 'status_code'):
-        status = getattr(error, 'status', getattr(error, 'status_code', None))
+    if hasattr(error, "status") or hasattr(error, "status_code"):
+        status = getattr(error, "status", getattr(error, "status_code", None))
         if status and status in config.retry_on_status_codes:
             return True
 
@@ -196,9 +217,16 @@ def is_retryable_error(error: Exception, config: RetryConfig) -> bool:
     # Check error message for common transient patterns
     error_str = str(error).lower()
     transient_patterns = [
-        'timeout', 'timed out', 'connection refused', 'connection reset',
-        'service unavailable', 'temporarily unavailable', 'rate limit',
-        'too many requests', 'network unreachable', 'dns resolution failed'
+        "timeout",
+        "timed out",
+        "connection refused",
+        "connection reset",
+        "service unavailable",
+        "temporarily unavailable",
+        "rate limit",
+        "too many requests",
+        "network unreachable",
+        "dns resolution failed",
     ]
 
     for pattern in transient_patterns:

@@ -4,6 +4,7 @@ User context management for the Overlord.
 This module handles user context memory operations including getting, adding,
 and clearing user-specific context information.
 """
+
 from typing import Any, Dict, List, Optional
 
 from ...services.memory.memobase import Memobase
@@ -52,23 +53,20 @@ class UserContextManager:
             Returns an empty dictionary if no context exists or if multi-user
             support is not enabled.
         """
-        if (not self.overlord.is_multi_user
-                or not isinstance(self.overlord.long_term_memory, Memobase)):
+        if not self.overlord.is_multi_user or not isinstance(
+            self.overlord.long_term_memory, Memobase
+        ):
             return {}
 
         try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(
-                user_id
-            )
+            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
             #  Error - TODO: add observability
             # ErrorEvents.INTERNAL_ERROR
             _ = e  # remove this after implementing observability
             return {}
 
-        context = await self.overlord.long_term_memory.get_user_context(
-            user_id=internal_user_id
-        )
+        context = await self.overlord.long_term_memory.get_user_context(user_id=internal_user_id)
 
         #  Info - TODO: add observability
         # ConversationEvents.MEMORY_LONG_TERM_RETRIEVED
@@ -108,14 +106,13 @@ class UserContextManager:
             reference the specific memory items later.
             Returns an empty list if multi-user support is not enabled.
         """
-        if (not self.overlord.is_multi_user
-                or not isinstance(self.overlord.long_term_memory, Memobase)):
+        if not self.overlord.is_multi_user or not isinstance(
+            self.overlord.long_term_memory, Memobase
+        ):
             return []
 
         try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(
-                user_id
-            )
+            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
             #  Error - TODO: add observability
             # ErrorEvents.INTERNAL_ERROR
@@ -123,10 +120,7 @@ class UserContextManager:
             return []
 
         context = await self.overlord.long_term_memory.add_user_context(
-            user_id=internal_user_id,
-            knowledge=knowledge,
-            source=source,
-            importance=importance
+            user_id=internal_user_id, knowledge=knowledge, source=source, importance=importance
         )
 
         #  Info - TODO: add observability
@@ -156,15 +150,14 @@ class UserContextManager:
             True if successful, False otherwise (including if multi-user
             support is not enabled).
         """
-        if (not self.overlord.is_multi_user
-                or not isinstance(self.overlord.long_term_memory, Memobase)):
+        if not self.overlord.is_multi_user or not isinstance(
+            self.overlord.long_term_memory, Memobase
+        ):
             return False
 
         # ENHANCE: Use flexible user ID conversion
         try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(
-                user_id
-            )
+            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
         except Exception as e:
             #  Error - TODO: add observability
             # ErrorEvents.INTERNAL_ERROR

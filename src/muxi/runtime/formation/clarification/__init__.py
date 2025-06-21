@@ -63,20 +63,17 @@ from ...datatypes.clarification import (
     ClarificationConfig,
     ToolCall,
     ToolCallResult,
-
     # Analysis types
     InformationAnalysis,
     ToolInformationAnalysis,
     ReasoningInformationAnalysis,
     ContextAnalysis,
-
     # Enums
     ClarificationStatus,
     RequestType,
     QuestionStyle,
     ClarificationMode,
     ProactiveRequestType,
-
     # Proactive clarification types
     ProactiveRequest,
     MultiStepPlan,
@@ -84,7 +81,6 @@ from ...datatypes.clarification import (
     PlanAnalysis,
     GoalContext,
     ClarificationSession,
-
     # Planning workflow types
     PlanningWorkflowType,
     WorkflowState,
@@ -93,10 +89,8 @@ from ...datatypes.clarification import (
     WorkflowSynthesis,
     PlanningWorkflowSession,
     PlanningOption,
-
     # Utility types
     ParameterMapping,
-
     # Exceptions
     ClarificationError,
     InformationAnalysisError,
@@ -134,17 +128,14 @@ __all__ = [
     "ClarificationResponseParser",
     "InformationRequirements",
     "EnhancedToolProcessor",
-
     # Proactive Clarification
     "ProactiveClarificationIntentDetector",
     "ClarificationModeManager",
     "PlanAnalyzer",
-
     # Planning Workflow
     "PlanningWorkflowDetector",
     "WorkflowSynthesizer",
     "PlanningContinuationManager",
-
     # Data types
     "ClarificationRequest",
     "ClarificationResult",
@@ -153,20 +144,17 @@ __all__ = [
     "ClarificationConfig",
     "ToolCall",
     "ToolCallResult",
-
     # Analysis types
     "InformationAnalysis",
     "ToolInformationAnalysis",
     "ReasoningInformationAnalysis",
     "ContextAnalysis",
-
     # Enums
     "ClarificationStatus",
     "RequestType",
     "QuestionStyle",
     "ClarificationMode",
     "ProactiveRequestType",
-
     # Proactive clarification types
     "ProactiveRequest",
     "MultiStepPlan",
@@ -174,7 +162,6 @@ __all__ = [
     "PlanAnalysis",
     "GoalContext",
     "ClarificationSession",
-
     # Planning workflow types
     "PlanningWorkflowType",
     "WorkflowState",
@@ -183,10 +170,8 @@ __all__ = [
     "WorkflowSynthesis",
     "PlanningWorkflowSession",
     "PlanningOption",
-
     # Utility types
     "ParameterMapping",
-
     # Exceptions
     "ClarificationError",
     "InformationAnalysisError",
@@ -208,21 +193,21 @@ def create_clarification_system(overlord, model=None):
         Dictionary containing all clarification components
     """
     return {
-        'analyzer': InformationAnalyzer(model=model),
-        'manager': ClarificationManager(overlord=overlord),
-        'generator': ClarificationQuestionGenerator(model=model),
-        'enricher': ContextualParameterEnricher(overlord=overlord),
-        'parser': ClarificationResponseParser(model=model),
-        'requirements': InformationRequirements(),
-        'tool_processor': EnhancedToolProcessor(
+        "analyzer": InformationAnalyzer(model=model),
+        "manager": ClarificationManager(overlord=overlord),
+        "generator": ClarificationQuestionGenerator(model=model),
+        "enricher": ContextualParameterEnricher(overlord=overlord),
+        "parser": ClarificationResponseParser(model=model),
+        "requirements": InformationRequirements(),
+        "tool_processor": EnhancedToolProcessor(
             agent=overlord.agents[0] if overlord.agents else None,
             clarification_analyzer=InformationAnalyzer(model=model),
-            clarification_enricher=ContextualParameterEnricher(overlord=overlord)
+            clarification_enricher=ContextualParameterEnricher(overlord=overlord),
         ),
-        'proactive_detector': ProactiveClarificationIntentDetector(model=model),
-        'mode_manager': ClarificationModeManager(overlord=overlord),
-        'plan_analyzer': PlanAnalyzer(model=model),
-        'planning_detector': PlanningWorkflowDetector(model=model),
-        'workflow_synthesizer': WorkflowSynthesizer(model=model),
-        'planning_manager': PlanningContinuationManager()
+        "proactive_detector": ProactiveClarificationIntentDetector(model=model),
+        "mode_manager": ClarificationModeManager(overlord=overlord),
+        "plan_analyzer": PlanAnalyzer(model=model),
+        "planning_detector": PlanningWorkflowDetector(model=model),
+        "workflow_synthesizer": WorkflowSynthesizer(model=model),
+        "planning_manager": PlanningContinuationManager(),
     }

@@ -31,12 +31,14 @@ class BaseFormatter(ABC):
     def _add_metadata(self, event: Dict[str, Any]) -> Dict[str, Any]:
         """Add common metadata to events."""
         enriched = event.copy()
-        enriched.update({
-            "formation_id": self.formation_id,
-            "service": self.service_name,
-            "version": self.version,
-            "_timestamp": datetime.utcnow().isoformat() + "Z"
-        })
+        enriched.update(
+            {
+                "formation_id": self.formation_id,
+                "service": self.service_name,
+                "version": self.version,
+                "_timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+        )
         return enriched
 
     def _extract_message(self, event: Dict[str, Any]) -> str:

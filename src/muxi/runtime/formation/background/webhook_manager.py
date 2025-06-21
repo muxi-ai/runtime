@@ -127,9 +127,7 @@ class WebhookManager:
                 else:
                     content_str = str(result)
 
-                response_content: List[MuxiContentItem] = [
-                    {"type": "text", "text": content_str}
-                ]
+                response_content: List[MuxiContentItem] = [{"type": "text", "text": content_str}]
 
             unified_response = create_unified_response(
                 request_id=request_id,

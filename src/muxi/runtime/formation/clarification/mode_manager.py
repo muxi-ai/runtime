@@ -8,7 +8,7 @@ switching between reactive and proactive questioning based on user needs.
 import time
 from typing import Dict, Optional, List
 
-from .datatypes import (
+from ...datatypes.clarification import (
     ClarificationMode,
     ClarificationSession,
     ProactiveRequest,

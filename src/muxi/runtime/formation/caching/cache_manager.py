@@ -323,7 +323,7 @@ class IntelligentCacheManager:
         # Agent-based invalidation
         if agent_id:
             for cache in self.cache_layers.values():
-                if hasattr(cache, 'iterate_keys'):  # or whatever method exists
+                if hasattr(cache, "iterate_keys"):  # or whatever method exists
                     for key in cache.iterate_keys():
                         if key.agent_id == agent_id:
                             await cache.remove(key)

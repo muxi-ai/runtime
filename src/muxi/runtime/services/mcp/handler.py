@@ -60,11 +60,7 @@ from .. import observability
 import asyncio
 
 # Import all transport classes from the new modular structure
-from .transports import (
-    MCPTransportFactory,
-    MCPConnectionError,
-    CancellationToken
-)
+from .transports import MCPTransportFactory, MCPConnectionError, CancellationToken
 
 
 class MCPServerClient:
@@ -372,7 +368,7 @@ class MCPServerClient:
             "tools/call",
             {"name": tool_name, "arguments": params},
             request_id=request_id,
-            cancellation_token=cancellation_token
+            cancellation_token=cancellation_token,
         )
 
     def get_connection_stats(self) -> Dict[str, Any]:
@@ -409,7 +405,9 @@ class MCPServerClient:
             return 0
 
         cancelled_count = 0
-        requests_to_cancel = list(self.active_requests.keys())  # Copy to avoid modification during iteration
+        requests_to_cancel = list(
+            self.active_requests.keys()
+        )  # Copy to avoid modification during iteration
 
         for tracking_id in requests_to_cancel:
             if self.cancel_request(tracking_id):
@@ -422,7 +420,7 @@ class MCPServerClient:
             data={
                 "server_name": self.name,
                 "cancelled_count": cancelled_count,
-                "total_requests": len(requests_to_cancel)
+                "total_requests": len(requests_to_cancel),
             },
         )
 
@@ -562,7 +560,12 @@ class MCPHandler:
     for tool discovery and execution across all connected servers.
     """
 
-    def __init__(self, model, tool_registry: Optional[Dict[str, Dict[str, Any]]] = None, allow_fallback: bool = False):
+    def __init__(
+        self,
+        model,
+        tool_registry: Optional[Dict[str, Dict[str, Any]]] = None,
+        allow_fallback: bool = False,
+    ):
         """
         Initialize the MCP handler with a model for LLM integration.
 
@@ -648,7 +651,7 @@ class MCPHandler:
                     data={
                         "server_name": name,
                         "server_id": server_id,
-                        "total_servers": len(self.servers)
+                        "total_servers": len(self.servers),
                     },
                 )
             return success
@@ -698,7 +701,7 @@ class MCPHandler:
                 data={
                     "server_name": name,
                     "server_id": server_id,
-                    "remaining_servers": len(self.servers)
+                    "remaining_servers": len(self.servers),
                 },
             )
 
@@ -790,12 +793,7 @@ class MCPHandler:
             raise ValueError(f"Server '{server_name}' not found")
 
         server = self.servers[server_name]
-        return await server.execute_tool(
-            tool_name,
-            params,
-            request_id,
-            cancellation_token
-        )
+        return await server.execute_tool(tool_name, params, request_id, cancellation_token)
 
     async def list_tools(self, server_name: str) -> List[Dict[str, Any]]:
         """
@@ -1000,8 +998,8 @@ class MCPHandler:
                     data={
                         "server_name": server_name,
                         "cancelled_count": cancelled,
-                        "request_id": request_id
-                    }
+                        "request_id": request_id,
+                    },
                 )
 
         return total_cancelled

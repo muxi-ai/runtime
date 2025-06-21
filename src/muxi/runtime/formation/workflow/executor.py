@@ -4,7 +4,12 @@ from datetime import datetime
 import json
 
 from ...datatypes.workflow import (
-    Workflow, SubTask, TaskStatus, WorkflowStatus, TaskResult, build_execution_phases
+    Workflow,
+    SubTask,
+    TaskStatus,
+    WorkflowStatus,
+    TaskResult,
+    build_execution_phases,
 )
 from ..agents.agent import Agent
 

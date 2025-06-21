@@ -22,7 +22,7 @@ class NewRelicFormatter(BaseFormatter):
             "service.version": self.version,
             "formation.id": self.formation_id,
             "event.type": event.get("event"),
-            "log.source": "muxi-runtime"
+            "log.source": "muxi-runtime",
         }
 
         # Add custom attributes
@@ -41,7 +41,7 @@ class NewRelicFormatter(BaseFormatter):
         """Convert ISO timestamp to milliseconds."""
         if timestamp_str:
             try:
-                dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
                 return int(dt.timestamp() * 1000)
             except Exception:
                 pass

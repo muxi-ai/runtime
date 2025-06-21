@@ -10,7 +10,7 @@ from .fusion_engine import (
     MultiModalContent,
     ModalityType,
     ProcessingMode,
-    MultiModalProcessingResult
+    MultiModalProcessingResult,
 )
 
 from .integration import (
@@ -18,7 +18,7 @@ from .integration import (
     MultiModalTaskOutput,
     WorkflowMultiModalProcessor,
     TaskInputProcessor,
-    TaskOutputProcessor
+    TaskOutputProcessor,
 )
 
 __all__ = [
@@ -31,5 +31,5 @@ __all__ = [
     "MultiModalTaskOutput",
     "WorkflowMultiModalProcessor",
     "TaskInputProcessor",
-    "TaskOutputProcessor"
+    "TaskOutputProcessor",
 ]

@@ -4,6 +4,7 @@ Persistent memory management for the Overlord.
 This module handles all long-term memory operations including adding content,
 searching, and clearing persistent memory.
 """
+
 from typing import Any, Dict, List, Optional
 
 from ...services import observability
@@ -202,10 +203,7 @@ class PersistentMemoryManager:
                     "memory_type": "long_term",
                     "results_count": len(lt_results),
                 },
-                description=(
-                    f"Long-term memory search completed: "
-                    f"{len(lt_results)} results"
-                ),
+                description=(f"Long-term memory search completed: " f"{len(lt_results)} results"),
             )
 
             # Convert to standard format

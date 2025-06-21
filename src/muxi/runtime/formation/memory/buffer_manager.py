@@ -4,6 +4,7 @@ Buffer memory management for the Overlord.
 This module handles all buffer memory operations including adding messages,
 searching, and clearing buffer memory.
 """
+
 from typing import Any, Dict, List, Optional
 
 from ...services import observability

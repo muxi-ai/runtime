@@ -33,6 +33,7 @@ class A2ACacheManager:
         """
         if cache_dir is None:
             from ...utils.user_dirs import get_a2a_cards_dir
+
             cache_dir = get_a2a_cards_dir()
 
         self.cache_dir = Path(get_a2a_cache_dir())

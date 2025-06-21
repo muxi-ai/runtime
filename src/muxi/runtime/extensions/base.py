@@ -55,11 +55,7 @@
 # =============================================================================
 
 # Graceful import for observability
-try:
-    from .. import observability
-except ImportError:
-    # Fallback for when observability is not available during init
-    observability = None
+from ..services import observability
 
 
 class Extension:
@@ -280,9 +276,7 @@ class Extension:
                 observability.observe(
                     event_type=observability.SystemEvents.EXTENSION_LOADED,
                     level=observability.EventLevel.ERROR,
-                    description=(
-                        f"Extension initialization failed for {cls.__name__}: {str(e)}"
-                    ),
+                    description=(f"Extension initialization failed for {cls.__name__}: {str(e)}"),
                     data={
                         "extension_class": cls.__name__,
                         "extension_name": getattr(cls, "name", None),

@@ -279,6 +279,7 @@ class HealthMonitor:
             if destination.startswith(("tcp://", "tcps://")):
                 # Extract host and port from tcp://host:port
                 from urllib.parse import urlparse
+
                 parsed = urlparse(destination)
                 host = parsed.hostname
                 port = parsed.port or 5555  # Default ZMQ port
@@ -297,6 +298,7 @@ class HealthMonitor:
             elif destination.startswith(("ipc://", "ipcs://")):
                 # For IPC, check if socket file exists and is accessible
                 import os
+
                 socket_path = destination[6:]  # Remove ipc:// prefix
                 if os.path.exists(socket_path):
                     return destination, True, None

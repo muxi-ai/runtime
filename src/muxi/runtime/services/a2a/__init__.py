@@ -12,7 +12,7 @@ from .discovery import (
     LocalDiscoveryService,
     DiscoveryServiceManager,
     DiscoveryConfig,
-    AgentRegistration
+    AgentRegistration,
 )
 from .registry_client import A2ARegistryClient
 from .server import A2AServer
@@ -24,22 +24,17 @@ __all__ = [
     "A2AEndpoint",
     "A2AAuthentication",
     "AuthType",
-
     # Cache Management
     "A2ACacheManager",
-
     # Card Generation
     "AgentCardGenerator",
-
     # Discovery Services
     "LocalDiscoveryService",
     "DiscoveryServiceManager",
     "DiscoveryConfig",
     "AgentRegistration",
-
     # Registry Client
     "A2ARegistryClient",
-
     # Formation Server
     "A2AServer",
 ]

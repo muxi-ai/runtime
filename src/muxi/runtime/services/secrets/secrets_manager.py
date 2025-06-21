@@ -11,8 +11,6 @@ import asyncio
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 from cryptography.fernet import Fernet
-
-# Import observability components with graceful fallback
 from .. import observability
 
 
