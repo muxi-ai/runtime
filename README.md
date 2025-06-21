@@ -133,6 +133,113 @@ formation.stop_overlord()
 formation.stop()
 ```
 
+### Runtime Formation Management ✅ **NEW**
+
+MUXI Runtime now supports dynamic addition and removal of agents and MCP servers at runtime, providing flexible component management for live formations:
+
+```python
+# Add agents dynamically using inline schema
+await formation.add_agent({
+    "schema": "1.0.0",
+    "id": "code_reviewer",
+    "name": "Code Review Assistant",
+    "description": "Specialized in code review and best practices",
+    "llm_models": [
+        {
+            "text": "anthropic/claude-3-opus",
+            "api_key": "${{ secrets.ANTHROPIC_API_KEY }}",
+            "settings": {"temperature": 0.1}
+        }
+    ],
+    "role": "specialist",
+    "specialties": ["code_review", "best_practices"]
+})
+
+# Add agents from YAML/JSON files
+await formation.add_agent("path/to/new_agent.yaml")
+
+# Add MCP servers dynamically
+await formation.add_mcp({
+    "schema": "1.0.0",
+    "id": "weather-tools",
+    "description": "Weather information tools",
+    "type": "http",
+    "endpoint": "https://api.weather.com/mcp",
+    "auth": {
+        "type": "api_key",
+        "key": "${{ secrets.WEATHER_API_KEY }}"
+    }
+})
+
+# Add MCP servers from configuration files
+await formation.add_mcp("configs/mcp/database-tools.yaml")
+
+# List available components
+agents = formation.list_agents()
+mcp_servers = formation.list_mcp_servers()
+
+# Check MCP server status
+status = formation.get_mcp_status("weather-tools")
+print(f"Weather Tools Status: {status}")
+
+# Remove components when no longer needed
+await formation.remove_agent("code_reviewer")
+await formation.remove_mcp("weather-tools")
+
+# Remove MCP servers with immediate disconnection
+formation.remove_mcp_async("database-tools")  # Non-blocking removal
+```
+
+#### Schema-Based Configuration
+
+The dynamic component system accepts both inline schemas and file paths:
+
+```python
+# Inline schema (Python dict)
+agent_schema = {
+    "schema": "1.0.0",
+    "id": "sales_assistant",
+    "name": "Sales Support Agent",
+    "description": "Helps with sales inquiries and product information",
+    "system_message": "You are a helpful sales assistant...",
+    "llm_models": [{"text": "openai/gpt-4o"}],
+    "knowledge": {
+        "enabled": True,
+        "sources": [
+            {"path": "knowledge/products/", "description": "Product catalog"}
+        ]
+    }
+}
+await formation.add_agent(agent_schema)
+
+# File path (YAML/JSON)
+await formation.add_agent("agents/support_agent.yaml")
+```
+
+#### Component Validation
+
+The system provides comprehensive validation:
+
+- **Schema compliance** checking (version, required fields)
+- **Conflict detection** (duplicate IDs, overlapping configurations)
+- **Resource validation** (model availability, MCP endpoint connectivity)
+- **Integration testing** (agent-to-overlord communication verification)
+
+```python
+# Validation errors provide helpful feedback
+try:
+    await formation.add_agent({"id": "existing_agent"})
+except ComponentConflictError as e:
+    print(f"Conflict detected: {e}")
+    # Output: "Agent with ID 'existing_agent' already exists"
+
+try:
+    await formation.add_mcp({"invalid": "schema"})
+except SchemaValidationError as e:
+    print(f"Schema error: {e}")
+    # Output: "Missing required field: 'id'"
+```
+
 ### Streaming Conversation (ChatGPT-like streaming)
 ```python
 async for chunk in overlord.chat(
