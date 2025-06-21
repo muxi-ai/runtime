@@ -291,12 +291,7 @@ async def retry_async(
             # If this was the last attempt, don't retry
             if attempt > config.max_retries:
                 # Construct a detailed error message
-                part1 = f"Operation failed after {config.max_retries + 1} attempts: "
-                part2 = str(e)
-                msg = part1 + part2
-
-                # Log the final failure
-                #  Warning - TODO: add observability
+                #  Warning - TODO: add observability -Operation failed after {config.max_retries + 1} attempts: {str(e)}
 
                 # Re-raise the last exception to signal failure to caller
                 raise
@@ -372,18 +367,8 @@ async def with_retries(
             exception: The exception that triggered the retry
             delay: The delay before the next retry attempt
         """
-        # Extract exception details for logging
-        exc_name = type(exception).__name__
-        exc_str = str(exception)
-        retry_msg = f"Retrying in {delay:.2f} seconds..."
-
-        # Format a comprehensive warning message
-        warning_msg = (
-            f"{operation_name}: Attempt {attempt} failed with "
-            f"{exc_name}: {exc_str}. {retry_msg}"
-        )
         # Log at warning level to highlight the retry event
-        #  Warning - TODO: add observability
+        #  Warning - TODO: add observability - Retry attempt with details
 
     # Log the start of the operation
     #  Info - TODO: add observability
@@ -403,20 +388,16 @@ async def with_retries(
         )
 
         # Calculate and log the total elapsed time on success
-        elapsed = time.time() - start_time
         #  Info - TODO: add observability
+        _ = time.time() - start_time  # use this in observability
         # Return the successful result to the caller
         return result
 
     except Exception as e:
         # If all retries failed, we'll end up here
         # Calculate and log the total elapsed time on failure
-        elapsed = time.time() - start_time
-        # Create a detailed error message with exception information
-        error_msg = (
-            f"{operation_name} failed after {elapsed:.2f} seconds with "
-            f"{type(e).__name__}: {str(e)}"
-        )
         # Log at error level since this is a complete failure after all retries
-        #  Error - TODO: add observability
+        _ = time.time() - start_time  # use this in observability
+        _ = e  # use this in observability
+        #  Error - TODO: add observability - Operation failed after retries
         raise  # Re-raise the exception to the caller

@@ -112,9 +112,9 @@ class ReconnectingMCPHandler(MCPHandler):
                 request_timeout=request_timeout,
             )
             return result
-        except MCPConnectionError as e:
+        except MCPConnectionError:
             #  Error - TODO: add observability
-            #  MCP_SERVER_CONNECTING - Failed to connect to MCP server {name} after retries: {str(e)}
+            #  MCP_SERVER_CONNECTING - Failed to connect to MCP server {name} after retries
             raise
 
     async def _connect_server_impl(
@@ -201,10 +201,9 @@ class ReconnectingMCPHandler(MCPHandler):
                 cancellation_token=cancellation_token,
             )
             return result
-        except MCPConnectionError as e:
-            error_msg = f"Failed to execute tool {tool_name} after retries: {str(e)}"
+        except MCPConnectionError:
             #  Error - TODO: add observability
-            #  MCP_SERVER_CONNECTING
+            #  MCP_SERVER_CONNECTING - Failed to execute tool {tool_name} after retries
             raise
 
     async def _execute_tool_impl(
@@ -315,9 +314,8 @@ class ReconnectingMCPHandler(MCPHandler):
                 refresh=refresh,
             )
             return result
-        except MCPConnectionError as e:
+        except MCPConnectionError:
             #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
             # Return empty list instead of raising to avoid breaking clients
             return []
 

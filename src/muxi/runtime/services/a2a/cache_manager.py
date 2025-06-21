@@ -214,21 +214,19 @@ class A2ACacheManager:
         """Remove cache entry and file"""
 
         cache_path = self._get_cache_path(agent_id)
-        file_removed = False
-        metadata_removed = False
 
         # Remove cache file
         if cache_path.exists():
             try:
                 cache_path.unlink()
-                file_removed = True
+                _ = True  # file removed successfully
             except OSError:
                 pass
 
         # Remove from metadata
         if agent_id in self.metadata:
             del self.metadata[agent_id]
-            metadata_removed = True
+            _ = True  # metadata removed successfully
             self._save_metadata()
 
     def invalidate_cache(self, agent_id: str) -> None:
