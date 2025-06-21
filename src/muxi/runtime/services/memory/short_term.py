@@ -353,7 +353,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size :]
+            recent_items = list(self.buffer)[-self.max_size:]
 
         # Apply filtering if specified
         if filter_metadata or namespace:

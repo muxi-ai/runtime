@@ -393,7 +393,7 @@ class ToolParser:
 
         result = text
         for call in sorted_calls:
-            result = result[: call.start_pos] + result[call.end_pos :]
+            result = result[: call.start_pos] + result[call.end_pos:]
 
         return result.strip()
 
@@ -421,6 +421,6 @@ class ToolParser:
             if call.result:
                 result_text = f"**Result from {call.tool_name}:** "
                 result_text += f"{json.dumps(call.result, indent=2)}"
-                result = result[: call.start_pos] + result_text + result[call.end_pos :]
+                result = result[: call.start_pos] + result_text + result[call.end_pos:]
 
         return result

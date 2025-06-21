@@ -275,7 +275,7 @@ class ClarificationResponseParser:
         prefixes = ["in ", "at ", "near ", "around ", "close to "]
         for prefix in prefixes:
             if response.lower().startswith(prefix):
-                response = response[len(prefix) :].strip()
+                response = response[len(prefix):].strip()
                 break
 
         # Basic validation - location should be reasonable length

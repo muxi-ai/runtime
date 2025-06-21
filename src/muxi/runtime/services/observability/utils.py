@@ -130,7 +130,7 @@ def sanitize_destination_name(destination: str) -> str:
     sanitized = destination
     for prefix in ["http://", "https://", "kafka://", "tcp://", "tcps://", "ipc://", "inproc://"]:
         if sanitized.startswith(prefix):
-            sanitized = sanitized[len(prefix) :]
+            sanitized = sanitized[len(prefix):]
             break
 
     # Replace special characters with underscores
