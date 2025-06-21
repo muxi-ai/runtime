@@ -4,6 +4,7 @@ Implements conversion between JSON observability events and protobuf messages.
 """
 
 from typing import Any, Dict, TYPE_CHECKING
+from ...datatypes.observability import SystemEvents, ConversationEvents, ErrorEvents, EventLevel
 
 if TYPE_CHECKING:
     from .proto import observability_pb2
@@ -48,56 +49,64 @@ class ObservabilityEventConverter:
         }
 
     def _build_event_type_mapping(self) -> Dict[str, int]:
-        """Build mapping from string event types to protobuf enum values"""
+        """Build mapping from string event types to protobuf enum values - SINGLE SOURCE OF TRUTH"""
         if not observability_pb2:
             return {}
 
-        return {
-            # System Events
-            'SYSTEM_STARTUP': observability_pb2.SYSTEM_STARTUP,
-            'SYSTEM_SHUTDOWN': observability_pb2.SYSTEM_SHUTDOWN,
-            'SYSTEM_ERROR': observability_pb2.SYSTEM_ERROR,
-            'SYSTEM_HEALTH_CHECK': observability_pb2.SYSTEM_HEALTH_CHECK,
+        mapping = {}
 
-            # Conversation Events
-            'CONVERSATION_STARTED': observability_pb2.CONVERSATION_STARTED,
-            'CONVERSATION_MESSAGE': observability_pb2.CONVERSATION_MESSAGE,
-            'CONVERSATION_COMPLETED': observability_pb2.CONVERSATION_COMPLETED,
-            'CONVERSATION_ERROR': observability_pb2.CONVERSATION_ERROR,
-
-            # MCP Events
-            'MCP_TOOL_CALL': observability_pb2.MCP_TOOL_CALL,
-            'MCP_TOOL_RESULT': observability_pb2.MCP_TOOL_RESULT,
-            'MCP_CONNECTION_ERROR': observability_pb2.MCP_CONNECTION_ERROR,
-            'MCP_TIMEOUT': observability_pb2.MCP_TIMEOUT,
-
-            # Memory Events
-            'MEMORY_STORE': observability_pb2.MEMORY_STORE,
-            'MEMORY_RETRIEVE': observability_pb2.MEMORY_RETRIEVE,
-            'MEMORY_CLEANUP': observability_pb2.MEMORY_CLEANUP,
-            'MEMORY_ERROR': observability_pb2.MEMORY_ERROR,
-
-            # A2A Events
-            'A2A_REQUEST': observability_pb2.A2A_REQUEST,
-            'A2A_RESPONSE': observability_pb2.A2A_RESPONSE,
-            'A2A_DISCOVERY': observability_pb2.A2A_DISCOVERY,
-            'A2A_ERROR': observability_pb2.A2A_ERROR,
-
-            # Performance Events
-            'PERFORMANCE_METRIC': observability_pb2.PERFORMANCE_METRIC,
-            'PERFORMANCE_ALERT': observability_pb2.PERFORMANCE_ALERT,
+        # Map SystemEvents to protobuf enums dynamically
+        system_event_mapping = {
+            "INITIALIZING": observability_pb2.EventType.SYSTEM_STARTUP,
+            "SERVICE_STARTED": observability_pb2.EventType.SYSTEM_STARTUP,
+            "SYSTEM_ERROR": observability_pb2.EventType.SYSTEM_ERROR,
+            "SYSTEM_HEALTH_CHECK": observability_pb2.EventType.SYSTEM_HEALTH_CHECK,
         }
 
+        for event in SystemEvents:
+            event_name = event.name
+            if event_name in system_event_mapping:
+                mapping[event_name] = system_event_mapping[event_name]
+            else:
+                # Default to SYSTEM_STARTUP for unmapped system events
+                mapping[event_name] = observability_pb2.EventType.SYSTEM_STARTUP
+
+        # Map ConversationEvents to protobuf enums
+        conversation_event_mapping = {
+            "SESSION_CREATED": observability_pb2.EventType.CONVERSATION_STARTED,
+            "REQUEST_RECEIVED": observability_pb2.EventType.CONVERSATION_MESSAGE,
+            "REQUEST_COMPLETED": observability_pb2.EventType.CONVERSATION_COMPLETED,
+            "REQUEST_FAILED": observability_pb2.EventType.CONVERSATION_ERROR,
+            "MCP_TOOL_CALLED": observability_pb2.EventType.MCP_TOOL_CALL,
+            "MCP_TOOL_CALL_COMPLETED": observability_pb2.EventType.MCP_TOOL_RESULT,
+            "MCP_TOOL_CALL_FAILED": observability_pb2.EventType.MCP_CONNECTION_ERROR,
+        }
+
+        for event in ConversationEvents:
+            event_name = event.name
+            if event_name in conversation_event_mapping:
+                mapping[event_name] = conversation_event_mapping[event_name]
+            else:
+                # Default to CONVERSATION_MESSAGE for unmapped conversation events
+                mapping[event_name] = observability_pb2.EventType.CONVERSATION_MESSAGE
+
+        # Map ErrorEvents to protobuf enums
+        for event in ErrorEvents:
+            mapping[event.name] = observability_pb2.EventType.SYSTEM_ERROR
+
+        return mapping
+
     def _build_level_mapping(self) -> Dict[str, int]:
-        """Build mapping from string levels to protobuf enum values"""
+        """Build mapping from string levels to protobuf enum values - SINGLE SOURCE OF TRUTH"""
         if not observability_pb2:
             return {}
 
+        # Build level mapping dynamically from Python enums
         return {
-            'DEBUG': observability_pb2.DEBUG,
-            'INFO': observability_pb2.INFO,
-            'WARNING': observability_pb2.WARNING,
-            'ERROR': observability_pb2.ERROR,
+            EventLevel.DEBUG.value.upper(): observability_pb2.EventLevel.DEBUG,
+            EventLevel.INFO.value.upper(): observability_pb2.EventLevel.INFO,
+            EventLevel.WARNING.value.upper(): observability_pb2.EventLevel.WARNING,
+            EventLevel.ERROR.value.upper(): observability_pb2.EventLevel.ERROR,
         }
 
     def json_to_protobuf(
