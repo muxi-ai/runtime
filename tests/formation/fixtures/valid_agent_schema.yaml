@@ -1,0 +1,22 @@
+# Valid agent schema for testing
+schema: "1.0.0"
+id: "fixture-test-agent"
+name: "Fixture Test Agent"
+description: "A test agent loaded from a YAML fixture file"
+system_message: |
+  You are a helpful test agent loaded from a fixture file.
+  You should respond helpfully to test queries.
+
+# Optional fields for testing
+role: "specialist"
+specialties:
+  - "testing"
+  - "validation"
+  - "fixtures"
+
+# LLM model configuration
+llm_models:
+  - text: "openai/gpt-4o"
+    settings:
+      temperature: 0.2
+      max_tokens: 1000
