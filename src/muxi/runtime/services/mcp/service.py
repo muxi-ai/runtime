@@ -487,7 +487,7 @@ class MCPService:
         async with self.locks[server_id]:
             try:
                 # Create and initialize the MCP handler
-                handler = MCPHandler(model=model)
+                handler = MCPHandler(model=model, tool_registry=self.tool_registry)
 
                 # Set up connection with the transport factory
                 server_name = server_id.replace("-", "_").lower()

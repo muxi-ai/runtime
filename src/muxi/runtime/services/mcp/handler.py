@@ -57,6 +57,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from .. import observability
+import asyncio
 
 # Import all transport classes from the new modular structure
 from .transports import (
@@ -100,6 +101,11 @@ class MCPServerClient:
         self.transport = None
         self.connected = False
         self.last_activity = None
+
+        # Request tracking using overlord request_id as primary key
+        # Maps request_id -> {json_rpc_id, task, start_time, cancellation_token}
+        self.active_requests: Dict[str, Dict[str, Any]] = {}
+        self.request_tasks: Dict[str, asyncio.Task] = {}
 
     async def connect(self) -> bool:
         """
@@ -216,6 +222,7 @@ class MCPServerClient:
         self,
         method: str,
         params: Dict[str, Any],
+        request_id: Optional[str] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
@@ -224,6 +231,7 @@ class MCPServerClient:
         Args:
             method: The method name to call
             params: Parameters for the method
+            request_id: Request ID from overlord for lifecycle tracking
             cancellation_token: Optional token to cancel the operation
 
         Returns:
@@ -239,13 +247,29 @@ class MCPServerClient:
                 {"server_name": self.name, "url": self.url, "command": self.command},
             )
 
-        # Create JSON-RPC request
+        # Create JSON-RPC request (internal protocol ID)
+        json_rpc_id = str(uuid.uuid4())
         request_data = {
             "jsonrpc": "2.0",
-            "id": str(uuid.uuid4()),
+            "id": json_rpc_id,
             "method": method,
             "params": params,
         }
+
+        # Use overlord request_id as primary tracking key (fallback to json_rpc_id)
+        tracking_id = request_id or json_rpc_id
+        start_time = datetime.now()
+
+        # Track this request using overlord's request lifecycle
+        request_info = {
+            "json_rpc_id": json_rpc_id,
+            "method": method,
+            "start_time": start_time,
+            "cancellation_token": cancellation_token,
+            "request_id": request_id,
+        }
+
+        self.active_requests[tracking_id] = request_info
 
         observability.observe(
             event_type=observability.SystemEvents.MCP_MESSAGE_SENT,
@@ -254,13 +278,25 @@ class MCPServerClient:
             data={
                 "server_name": self.name,
                 "method": method,
-                "request_id": request_data["id"],
+                "json_rpc_id": json_rpc_id,
+                "request_id": request_id,
+                "tracking_id": tracking_id,
                 "params": params,
             },
         )
 
         try:
-            response = await self.transport.send_request(request_data, cancellation_token)
+            # Create task for the actual request
+            task = asyncio.create_task(
+                self.transport.send_request(request_data, cancellation_token)
+            )
+
+            # Store task for cancellation purposes
+            self.request_tasks[tracking_id] = task
+            request_info["task"] = task
+
+            # Wait for completion
+            response = await task
             self.last_activity = datetime.now()
 
             observability.observe(
@@ -270,13 +306,29 @@ class MCPServerClient:
                 data={
                     "server_name": self.name,
                     "method": method,
-                    "request_id": request_data["id"],
+                    "json_rpc_id": json_rpc_id,
+                    "request_id": request_id,
+                    "tracking_id": tracking_id,
                     "response": response,
                 },
             )
 
             return response
 
+        except asyncio.CancelledError:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_MESSAGE_CANCELLED,
+                level=observability.EventLevel.INFO,
+                description=f"MCP request '{method}' was cancelled for server '{self.name}'",
+                data={
+                    "server_name": self.name,
+                    "method": method,
+                    "json_rpc_id": json_rpc_id,
+                    "request_id": request_id,
+                    "tracking_id": tracking_id,
+                },
+            )
+            raise
         except Exception as e:
             observability.observe(
                 event_type=observability.SystemEvents.MCP_MESSAGE_FAILED,
@@ -285,16 +337,23 @@ class MCPServerClient:
                 data={
                     "server_name": self.name,
                     "method": method,
-                    "request_id": request_data["id"],
+                    "json_rpc_id": json_rpc_id,
+                    "request_id": request_id,
+                    "tracking_id": tracking_id,
                     "error": str(e),
                 },
             )
             raise
+        finally:
+            # Clean up tracking
+            self.active_requests.pop(tracking_id, None)
+            self.request_tasks.pop(tracking_id, None)
 
     async def execute_tool(
         self,
         tool_name: str,
         params: Dict[str, Any],
+        request_id: Optional[str] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
@@ -303,12 +362,18 @@ class MCPServerClient:
         Args:
             tool_name: Name of the tool to execute
             params: Parameters for the tool
+            request_id: Request ID from overlord for lifecycle tracking
             cancellation_token: Optional token to cancel the operation
 
         Returns:
             Dict containing the tool execution result
         """
-        return await self.send_message("tools/call", {"name": tool_name, "arguments": params}, cancellation_token)
+        return await self.send_message(
+            "tools/call",
+            {"name": tool_name, "arguments": params},
+            request_id=request_id,
+            cancellation_token=cancellation_token
+        )
 
     def get_connection_stats(self) -> Dict[str, Any]:
         """
@@ -334,11 +399,159 @@ class MCPServerClient:
         """
         Cancel all outstanding requests to this server.
 
+        Uses the overlord request_id tracking system for graceful cancellation.
+        Cancels both by overlord request_id (preferred) and individual requests.
+
         Returns:
             int: Number of requests cancelled
         """
-        # TODO: Implement request tracking and cancellation
-        return 0
+        if not self.active_requests:
+            return 0
+
+        cancelled_count = 0
+        requests_to_cancel = list(self.active_requests.keys())  # Copy to avoid modification during iteration
+
+        for tracking_id in requests_to_cancel:
+            if self.cancel_request(tracking_id):
+                cancelled_count += 1
+
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_ALL_REQUESTS_CANCELLED,
+            level=observability.EventLevel.INFO,
+            description=f"Cancelled {cancelled_count} pending requests for server '{self.name}'",
+            data={
+                "server_name": self.name,
+                "cancelled_count": cancelled_count,
+                "total_requests": len(requests_to_cancel)
+            },
+        )
+
+        return cancelled_count
+
+    def cancel_request(self, tracking_id: str) -> bool:
+        """
+        Cancel a specific request by tracking ID (overlord request_id or json_rpc_id).
+
+        Args:
+            tracking_id: The tracking ID of the request to cancel
+
+        Returns:
+            bool: True if request was cancelled, False if not found or already completed
+        """
+        if tracking_id not in self.active_requests:
+            return False
+
+        request_info = self.active_requests[tracking_id]
+        task = self.request_tasks.get(tracking_id)
+
+        if not task or task.done():
+            # Request already completed, clean up tracking
+            self._cleanup_request(tracking_id)
+            return False
+
+        # Cancel the task
+        task.cancel()
+
+        # Use cancellation token if available
+        cancellation_token = request_info.get("cancellation_token")
+        if cancellation_token:
+            cancellation_token.cancel()
+
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_REQUEST_CANCELLED,
+            level=observability.EventLevel.INFO,
+            description=f"Cancelled request {tracking_id} on server '{self.name}'",
+            data={
+                "server_name": self.name,
+                "tracking_id": tracking_id,
+                "request_id": request_info.get("request_id"),
+                "json_rpc_id": request_info.get("json_rpc_id"),
+                "method": request_info.get("method"),
+            },
+        )
+
+        return True
+
+    def cancel_requests_by_overlord_id(self, request_id: str) -> int:
+        """
+        Cancel all requests associated with a specific overlord request_id.
+
+        This enables cancelling all MCP operations for a specific user request,
+        supporting the overlord's graceful shutdown and request lifecycle management.
+
+        Args:
+            request_id: The overlord request ID to cancel
+
+        Returns:
+            int: Number of requests cancelled
+        """
+        if not request_id:
+            return 0
+
+        cancelled_count = 0
+        requests_to_cancel = []
+
+        # Find all requests for this overlord request_id
+        for tracking_id, request_info in self.active_requests.items():
+            if request_info.get("request_id") == request_id:
+                requests_to_cancel.append(tracking_id)
+
+        # Cancel each matching request
+        for tracking_id in requests_to_cancel:
+            if self.cancel_request(tracking_id):
+                cancelled_count += 1
+
+        if cancelled_count > 0:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_OVERLORD_REQUEST_CANCELLED,
+                level=observability.EventLevel.INFO,
+                description=(
+                    f"Cancelled {cancelled_count} MCP requests for overlord "
+                    f"request {request_id} on server '{self.name}'"
+                ),
+                data={
+                    "server_name": self.name,
+                    "request_id": request_id,
+                    "cancelled_count": cancelled_count,
+                },
+            )
+
+        return cancelled_count
+
+    def _cleanup_request(self, tracking_id: str) -> None:
+        """Clean up tracking for a completed/cancelled request."""
+        self.active_requests.pop(tracking_id, None)
+        self.request_tasks.pop(tracking_id, None)
+
+    def get_pending_requests(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get information about all pending requests.
+
+        Returns:
+            Dict mapping tracking IDs to request information including overlord request_id
+        """
+        result = {}
+
+        for tracking_id, request_info in self.active_requests.items():
+            task = self.request_tasks.get(tracking_id)
+            start_time = request_info.get("start_time")
+            duration = None
+
+            if start_time:
+                duration = (datetime.now() - start_time).total_seconds()
+
+            result[tracking_id] = {
+                "request_id": request_info.get("request_id"),
+                "json_rpc_id": request_info.get("json_rpc_id"),
+                "method": request_info.get("method"),
+                "status": "running" if task and not task.done() else "completed",
+                "cancelled": task.cancelled() if task and task.done() else False,
+                "start_time": start_time.isoformat() if start_time else None,
+                "duration_seconds": duration,
+                "has_cancellation_token": bool(request_info.get("cancellation_token")),
+            }
+
+        return result
 
 
 class MCPHandler:
@@ -349,16 +562,18 @@ class MCPHandler:
     for tool discovery and execution across all connected servers.
     """
 
-    def __init__(self, model):
+    def __init__(self, model, tool_registry: Optional[Dict[str, Dict[str, Any]]] = None):
         """
         Initialize the MCP handler with a model for LLM integration.
 
         Args:
             model: The language model to use for extracting tool calls
+            tool_registry: Reference to the shared tool registry from MCPService
         """
         self.model = model
         self.servers: Dict[str, MCPServerClient] = {}
         self.active_connections: Dict[str, MCPServerClient] = {}
+        self.tool_registry = tool_registry or {}
 
     async def connect_server(
         self,
@@ -525,6 +740,7 @@ class MCPHandler:
         server_name: str,
         tool_name: str,
         params: Dict[str, Any],
+        request_id: Optional[str] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
         """
@@ -534,6 +750,7 @@ class MCPHandler:
             server_name: Name of the server to execute the tool on
             tool_name: Name of the tool to execute
             params: Parameters for the tool
+            request_id: Request ID from overlord for lifecycle tracking
             cancellation_token: Optional token to cancel the operation
 
         Returns:
@@ -547,7 +764,12 @@ class MCPHandler:
             raise ValueError(f"Server '{server_name}' not found")
 
         server = self.servers[server_name]
-        return await server.execute_tool(tool_name, params, cancellation_token)
+        return await server.execute_tool(
+            tool_name,
+            params,
+            request_id,
+            cancellation_token
+        )
 
     async def list_tools(self, server_name: str) -> List[Dict[str, Any]]:
         """
@@ -614,11 +836,21 @@ class MCPHandler:
         Returns:
             Server name that provides the tool, or None if not found
         """
-        # TODO: Implement tool discovery and caching
-        # For now, return the first connected server
+        # Search through the tool registry for the tool
+        for server_id, tools in self.tool_registry.items():
+            if tool_name in tools:
+                # Convert server_id back to server_name format used by MCPHandler
+                server_name = server_id.replace("-", "_").lower()
+                # Verify the server is still connected
+                if server_name in self.servers and self.servers[server_name].connected:
+                    return server_name
+
+        # Fallback: if tool not found in registry, return first connected server
+        # This maintains backward compatibility for edge cases
         for server_name, server in self.servers.items():
             if server.connected:
                 return server_name
+
         return None
 
     def get_connection_stats(self) -> Dict[str, Any]:
@@ -650,3 +882,51 @@ class MCPHandler:
         for server in self.servers.values():
             total_cancelled += server.cancel_all_requests()
         return total_cancelled
+
+    def cancel_operations_by_overlord_id(self, request_id: str) -> int:
+        """
+        Cancel all operations associated with a specific overlord request_id.
+
+        This enables the overlord to cancel all MCP operations for a specific
+        user request during graceful shutdown or request lifecycle management.
+
+        Args:
+            request_id: The overlord request ID to cancel
+
+        Returns:
+            int: Total number of operations cancelled across all servers
+        """
+        if not request_id:
+            return 0
+
+        total_cancelled = 0
+        for server_name, server in self.servers.items():
+            cancelled = server.cancel_requests_by_overlord_id(request_id)
+            if cancelled > 0:
+                total_cancelled += cancelled
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_OPERATIONS_CANCELLED,
+                    level=observability.EventLevel.INFO,
+                    description=(
+                        f"Cancelled {cancelled} operations on server '{server_name}' "
+                        f"for overlord request {request_id}"
+                    ),
+                    data={
+                        "server_name": server_name,
+                        "cancelled_count": cancelled,
+                        "request_id": request_id
+                    }
+                )
+
+        return total_cancelled
+
+    def get_all_pending_requests(self) -> Dict[str, Dict[str, Any]]:
+        """Get pending requests from all servers with overlord request_id tracking."""
+        result = {}
+
+        for server_name, server in self.servers.items():
+            pending = server.get_pending_requests()
+            if pending:
+                result[server_name] = pending
+
+        return result
