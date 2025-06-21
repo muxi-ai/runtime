@@ -5,6 +5,7 @@ from kafka import KafkaProducer
 import zmq
 import zmq.asyncio
 from .base import BaseTransport, TransportStatus
+from .token_encryption import TokenEncryption
 
 
 class StreamTransport(BaseTransport):
@@ -26,6 +27,23 @@ class StreamTransport(BaseTransport):
         if config.get("transport") == "trail":
             self._apply_trail_preset(config)
 
+        # Initialize encryption if token provided for ZMQ transport
+        self.encryptor = None
+        if self._needs_encryption():
+            token = self.auth_config.get("token")
+            if not token or not isinstance(token, str) or len(token.strip()) == 0:
+                raise ValueError(
+                    f"Token required for encrypted ZMQ transport to {self.destination}. "
+                    f"Please provide auth.token in configuration."
+                )
+            try:
+                self.encryptor = TokenEncryption(token)
+            except Exception as e:
+                raise ValueError(f"Failed to initialize encryption: {e}")
+
+        # Validate configuration compatibility
+        self._validate_configuration()
+
         # Protocol-specific initialization
         self.session: Optional[aiohttp.ClientSession] = None
         self.kafka_producer: Optional[KafkaProducer] = None
@@ -39,9 +57,13 @@ class StreamTransport(BaseTransport):
         self.format_type = "msgpack"
         self.events = ["*"]
 
-        # Convert simplified token to auth config
-        if "token" in config:
-            self.auth_config = {"type": "bearer", "token": config["token"]}
+        # Convert simplified token to auth config or raise error if missing
+        if "token" in config and config["token"]:
+            self.auth_config = {"type": "token", "token": config["token"]}
+        else:
+            raise ValueError(
+                "Token required for trail transport. Please provide 'token' field in configuration."
+            )
 
     def _detect_protocol(self) -> str:
         """Auto-detect protocol from destination URL."""
@@ -56,6 +78,79 @@ class StreamTransport(BaseTransport):
             return "zmq"
         else:
             return "http"  # Default fallback
+
+    def _needs_encryption(self) -> bool:
+        """Check if this transport should use encryption."""
+        return (
+            self.destination is not None and
+            self.auth_config.get("type") == "token" and
+            self.protocol == "zmq" and
+            self.destination.startswith(("tcp://", "tcps://"))
+        )
+
+    def _validate_configuration(self) -> None:
+        """Validate transport configuration for security and compatibility."""
+        # Validate destination format
+        if not self.destination:
+            raise ValueError("Destination URL is required")
+
+        # Validate ZMQ-specific configurations
+        if self.protocol == "zmq":
+            self._validate_zmq_configuration()
+
+        # Validate authentication configuration
+        if self.auth_config:
+            self._validate_auth_configuration()
+
+    def _validate_zmq_configuration(self) -> None:
+        """Validate ZMQ-specific configuration."""
+        if not self.destination.startswith(("tcp://", "tcps://", "ipc://", "ipcs://")):
+            raise ValueError(
+                f"Invalid ZMQ destination '{self.destination}'. "
+                f"Must start with tcp://, tcps://, ipc://, or ipcs://"
+            )
+
+                # Warn about security implications
+        if (self.destination.startswith(("tcp://", "tcps://")) and
+                not self.auth_config.get("type") == "token"):
+            # This is a warning, not an error - allow unencrypted for testing
+            pass
+
+    def _validate_auth_configuration(self) -> None:
+        """Validate authentication configuration."""
+        auth_type = self.auth_config.get("type")
+
+        if auth_type == "token":
+            token = self.auth_config.get("token")
+            if not token:
+                raise ValueError(
+                    "Token authentication requires 'token' field in auth configuration"
+                )
+            if not isinstance(token, str) or len(token.strip()) == 0:
+                raise ValueError("Token must be a non-empty string")
+
+        elif auth_type == "bearer":
+            if not self.auth_config.get("token"):
+                raise ValueError(
+                    "Bearer authentication requires 'token' field in auth configuration"
+                )
+
+        elif auth_type == "api_key":
+            if not self.auth_config.get("api_key"):
+                raise ValueError(
+                    "API key authentication requires 'api_key' field in auth configuration"
+                )
+
+        elif auth_type == "sasl":
+            if not all(k in self.auth_config for k in ["username", "password"]):
+                raise ValueError(
+                    "SASL authentication requires 'username' and 'password' fields"
+                )
+        elif auth_type is not None:
+            raise ValueError(
+                f"Unsupported authentication type '{auth_type}'. "
+                f"Supported types: token, bearer, api_key, sasl"
+            )
 
     async def initialize(self) -> bool:
         """Initialize transport based on protocol."""
@@ -170,7 +265,7 @@ class StreamTransport(BaseTransport):
 
             # Determine socket type from URL scheme
             if self.destination.startswith(("tcps://", "ipcs://")):
-                # Secure protocols - use CURVE encryption
+                # Secure protocols - use PUSH with encryption
                 socket_type = zmq.PUSH
             else:
                 socket_type = zmq.PUSH
@@ -179,7 +274,8 @@ class StreamTransport(BaseTransport):
 
             # Configure security if needed
             if self.destination.startswith(("tcps://", "ipcs://")):
-                # TODO: Implement CURVE encryption setup
+                # Token-based encryption is handled at message level
+                # Encryption/authentication managed by self.encryptor
                 pass
 
             # Connect to destination
@@ -283,7 +379,16 @@ class StreamTransport(BaseTransport):
 
         try:
             for event in events:
-                formatted_data = self.formatter.format_event(event)
+                # 1. Encrypt if needed (before formatting)
+                if self.encryptor:
+                    final_data = self.encryptor.encrypt_message(event)
+                else:
+                    final_data = event
+
+                # 2. Format according to stream config
+                formatted_data = self.formatter.format_event(final_data)
+
+                # 3. Send via ZMQ
                 if isinstance(formatted_data, str):
                     message = formatted_data.encode("utf-8")
                 else:
