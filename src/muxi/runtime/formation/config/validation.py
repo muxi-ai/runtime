@@ -1295,7 +1295,6 @@ class FormationValidator:
             else:
                 self._validate_persistent_memory_config(persistent_config)
 
-
     def _get_default_working_memory_config(self) -> Dict[str, Any]:
         """Get default working memory configuration."""
         return {

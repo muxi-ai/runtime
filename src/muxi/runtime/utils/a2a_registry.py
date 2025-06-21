@@ -604,6 +604,7 @@ async def deregister_agent(request: dict):
             raise HTTPException(status_code=500, detail="Failed to deregister agent")
         raise
 
+
 @app.get("/discover", response_model=DiscoveryResponse)
 async def discover_agents(
     capabilities: Optional[str] = Query(None, description="Comma-separated capabilities filter"),

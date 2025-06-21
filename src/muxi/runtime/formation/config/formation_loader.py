@@ -230,7 +230,6 @@ class FormationLoader:
                     agent_config["id"] = agent_file.stem
 
                 # Check if agent is active (default to True)
-                agent_id = agent_config.get('id', agent_file.stem)
                 is_active = agent_config.get('active', True)
 
                 if is_active:
@@ -270,7 +269,6 @@ class FormationLoader:
             if not isinstance(agent_config, dict):
                 continue
 
-            agent_id = agent_config.get('id', 'unknown')
             is_active = agent_config.get('active', True)
 
             if is_active:
