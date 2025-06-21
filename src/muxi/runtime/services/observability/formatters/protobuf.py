@@ -40,5 +40,3 @@ class ProtobufFormatter(BaseFormatter):
         struct = Struct()
         struct.update({"events": enriched_events})
         return struct.SerializeToString()
-
-
