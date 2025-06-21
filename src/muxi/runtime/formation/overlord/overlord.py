@@ -1124,6 +1124,24 @@ class Overlord:
                     # ErrorEvents.INTERNAL_ERROR
                     _ = e  # remove this after implementing observability
 
+            # Invalidate all cached responses for this agent
+            try:
+                invalidated_count = await self.cache_manager.invalidate_cache(agent_id=agent_id)
+                observability.observe(
+                    event_type=observability.SystemEvents.MEMORY_DELETION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={"agent_id": agent_id, "invalidated_count": invalidated_count},
+                    description=f"Successfully invalidated {invalidated_count} cached responses for agent '{agent_id}'",
+                )
+            except Exception as e:
+                # Don't fail agent deletion if cache invalidation fails
+                observability.observe(
+                    event_type=observability.SystemEvents.MEMORY_DELETION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"agent_id": agent_id, "error": str(e)},
+                    description=f"Failed to invalidate cache for agent '{agent_id}': {str(e)}",
+                )
+
             # Cleanup agent if it has cleanup logic
             agent = self.agents[agent_id]
             if hasattr(agent, 'cleanup'):
@@ -1137,7 +1155,12 @@ class Overlord:
                 # Set the first available agent as default, or None if no agents remain
                 self.default_agent_id = next(iter(self.agents)) if self.agents else None
 
-            print(f"✅ Agent '{agent_id}' deleted")
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,  # Using closest available event
+                level=observability.EventLevel.INFO,
+                data={"agent_id": agent_id, "action": "deleted"},
+                description=f"Agent '{agent_id}' successfully deleted",
+            )
 
     async def _actually_shutdown_overlord(self):
         """Actually shutdown overlord (called by active_agent_tracker)."""

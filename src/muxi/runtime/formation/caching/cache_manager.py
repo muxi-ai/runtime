@@ -320,8 +320,14 @@ class IntelligentCacheManager:
                 if await cache.remove(cache_key_str):
                     invalidated_count += 1
 
-        # TODO: Implement pattern-based and user/agent-based invalidation
-        # This would require iterating through cache entries and matching criteria
+        # Agent-based invalidation
+        if agent_id:
+            for cache in self.cache_layers.values():
+                if hasattr(cache, 'iterate_keys'):  # or whatever method exists
+                    for key in cache.iterate_keys():
+                        if key.agent_id == agent_id:
+                            await cache.remove(key)
+                            invalidated_count += 1
 
         #  Cache manager info - TODO: add observability
         return invalidated_count
