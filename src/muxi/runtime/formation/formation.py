@@ -1400,7 +1400,7 @@ class Formation:
                 raise ValueError(f"Agent ID '{agent_id}' already exists in running formation")
 
         # Check for duplicates in existing agents
-        existing_agent_ids = [agent["id"] for agent in self._loaded_config.get("agents", [])]
+        existing_agent_ids = [agent["id"] for agent in self.config.get("agents", [])]
         if agent_id in existing_agent_ids:
             raise ValueError(f"Agent ID '{agent_id}' already exists in formation configuration")
 
@@ -1426,7 +1426,7 @@ class Formation:
 
         # Check for duplicates in existing MCP configuration
         existing_server_ids = []
-        mcp_config = self._loaded_config.get("mcp", {})
+        mcp_config = self.config.get("mcp", {})
         if "servers" in mcp_config:
             existing_server_ids.extend([server["id"] for server in mcp_config["servers"]])
 

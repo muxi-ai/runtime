@@ -499,6 +499,7 @@ class MCPService:
                     command=command,
                     credentials=credentials,
                     request_timeout=request_timeout,
+                    server_id=server_id,
                 )
 
                 # Store the handler

@@ -229,13 +229,13 @@ The system provides comprehensive validation:
 # Validation errors provide helpful feedback
 try:
     await formation.add_agent({"id": "existing_agent"})
-except ComponentConflictError as e:
+except ValueError as e:
     print(f"Conflict detected: {e}")
     # Output: "Agent with ID 'existing_agent' already exists"
 
 try:
     await formation.add_mcp({"invalid": "schema"})
-except SchemaValidationError as e:
+except ValueError as e:
     print(f"Schema error: {e}")
     # Output: "Missing required field: 'id'"
 ```

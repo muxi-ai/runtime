@@ -562,18 +562,24 @@ class MCPHandler:
     for tool discovery and execution across all connected servers.
     """
 
-    def __init__(self, model, tool_registry: Optional[Dict[str, Dict[str, Any]]] = None):
+    def __init__(self, model, tool_registry: Optional[Dict[str, Dict[str, Any]]] = None, allow_fallback: bool = False):
         """
         Initialize the MCP handler with a model for LLM integration.
 
         Args:
             model: The language model to use for extracting tool calls
             tool_registry: Reference to the shared tool registry from MCPService
+            allow_fallback: Whether to allow fallback to any connected server if tool not found in registry
         """
         self.model = model
         self.servers: Dict[str, MCPServerClient] = {}
         self.active_connections: Dict[str, MCPServerClient] = {}
         self.tool_registry = tool_registry or {}
+        self.allow_fallback = allow_fallback
+
+        # Explicit mapping between server IDs and server names
+        self.server_id_to_name: Dict[str, str] = {}
+        self.server_name_to_id: Dict[str, str] = {}
 
     async def connect_server(
         self,
@@ -582,6 +588,7 @@ class MCPHandler:
         command: Optional[str] = None,
         credentials: Optional[Dict[str, Any]] = None,
         request_timeout: int = 60,
+        server_id: Optional[str] = None,
     ) -> bool:
         """
         Connect to an MCP server.
@@ -592,6 +599,7 @@ class MCPHandler:
             command: Command for command-line based servers (mutually exclusive with url)
             credentials: Optional authentication credentials
             request_timeout: Timeout for requests in seconds
+            server_id: Optional server ID for explicit mapping to tool registry
 
         Returns:
             bool: True if connection was successful
@@ -628,11 +636,20 @@ class MCPHandler:
                 self.servers[name] = server
                 self.active_connections[name] = server
 
+                # Maintain explicit server ID to name mapping
+                if server_id:
+                    self.server_id_to_name[server_id] = name
+                    self.server_name_to_id[name] = server_id
+
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
                     level=observability.EventLevel.INFO,
                     description=f"Successfully registered MCP server '{name}' (total: {len(self.servers)})",
-                    data={"server_name": name, "total_servers": len(self.servers)},
+                    data={
+                        "server_name": name,
+                        "server_id": server_id,
+                        "total_servers": len(self.servers)
+                    },
                 )
             return success
 
@@ -669,11 +686,20 @@ class MCPHandler:
             if name in self.active_connections:
                 del self.active_connections[name]
 
+            # Clean up server ID mappings
+            server_id = self.server_name_to_id.pop(name, None)
+            if server_id:
+                self.server_id_to_name.pop(server_id, None)
+
             observability.observe(
                 event_type=observability.SystemEvents.MCP_SERVER_UNREGISTERED,
                 level=observability.EventLevel.INFO,
                 description=f"Unregistered MCP server '{name}' (remaining: {len(self.servers)})",
-                data={"server_name": name, "remaining_servers": len(self.servers)},
+                data={
+                    "server_name": name,
+                    "server_id": server_id,
+                    "remaining_servers": len(self.servers)
+                },
             )
 
             return success
@@ -828,7 +854,7 @@ class MCPHandler:
 
     def _get_server_for_tool(self, tool_name: str) -> Optional[str]:
         """
-        Find which server provides a specific tool.
+        Find which server provides a specific tool using explicit server ID mapping.
 
         Args:
             tool_name: Name of the tool to find
@@ -839,19 +865,79 @@ class MCPHandler:
         # Search through the tool registry for the tool
         for server_id, tools in self.tool_registry.items():
             if tool_name in tools:
-                # Convert server_id back to server_name format used by MCPHandler
-                server_name = server_id.replace("-", "_").lower()
-                # Verify the server is still connected
-                if server_name in self.servers and self.servers[server_name].connected:
+                # Use explicit mapping to convert server_id to server_name
+                server_name = self.server_id_to_name.get(server_id)
+
+                # Validate the mapping and connection
+                if server_name and self._validate_server_connection(server_name, server_id):
                     return server_name
 
-        # Fallback: if tool not found in registry, return first connected server
-        # This maintains backward compatibility for edge cases
-        for server_name, server in self.servers.items():
-            if server.connected:
-                return server_name
+                # If explicit mapping failed, log warning and continue searching
+                if server_name:
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_SERVER_MAPPING_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        description=(
+                            f"Server '{server_name}' (ID: {server_id}) found in registry "
+                            f"but not connected for tool '{tool_name}'"
+                        ),
+                        data={
+                            "server_id": server_id,
+                            "server_name": server_name,
+                            "tool_name": tool_name,
+                        },
+                    )
+
+        # Configurable fallback behavior
+        if self.allow_fallback:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_TOOL_FALLBACK_USED,
+                level=observability.EventLevel.WARNING,
+                description=f"Tool '{tool_name}' not found in registry, using fallback to first connected server",
+                data={"tool_name": tool_name, "connected_servers": list(self.servers.keys())},
+            )
+
+            # Return first connected server as fallback
+            for server_name, server in self.servers.items():
+                if server.connected:
+                    return server_name
 
         return None
+
+    def _validate_server_connection(self, server_name: str, server_id: str) -> bool:
+        """
+        Validate that a server name is correctly mapped and connected.
+
+        Args:
+            server_name: The server name to validate
+            server_id: The server ID for additional validation
+
+        Returns:
+            bool: True if server is correctly mapped and connected
+        """
+        # Check if server exists and is connected
+        if server_name not in self.servers:
+            return False
+
+        server = self.servers[server_name]
+        if not server.connected:
+            return False
+
+        # Validate bidirectional mapping consistency
+        if self.server_name_to_id.get(server_name) != server_id:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_MAPPING_INCONSISTENT,
+                level=observability.EventLevel.ERROR,
+                description=f"Inconsistent server mapping: name '{server_name}' -> ID '{server_id}'",
+                data={
+                    "server_name": server_name,
+                    "expected_id": server_id,
+                    "actual_id": self.server_name_to_id.get(server_name),
+                },
+            )
+            return False
+
+        return True
 
     def get_connection_stats(self) -> Dict[str, Any]:
         """

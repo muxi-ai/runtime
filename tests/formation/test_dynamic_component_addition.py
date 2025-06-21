@@ -30,7 +30,7 @@ class TestSchemaLoading:
         # Mock the secrets manager
         formation.secrets_manager = Mock()
         formation.secrets_manager.interpolate_secrets = AsyncMock(side_effect=lambda x: x)
-        formation._loaded_config = {}
+        formation.config = {}
         return formation
 
     @pytest.fixture
@@ -107,7 +107,7 @@ class TestAgentManagement:
         """Create a formation with a mocked running overlord."""
         formation = Formation()
         formation._is_running = True
-        formation._loaded_config = {}
+        formation.config = {}
 
         # Mock overlord
         mock_overlord = Mock()
@@ -159,7 +159,7 @@ class TestAgentManagement:
     async def test_add_agent_duplicate_id(self, formation_with_overlord, valid_agent_schema):
         """Test that duplicate agent IDs are rejected."""
         # Add existing agent to loaded config
-        formation_with_overlord._loaded_config = {
+        formation_with_overlord.config = {
             "agents": [{"id": "test-agent", "name": "Existing Agent"}]
         }
 
@@ -186,7 +186,7 @@ class TestMCPManagement:
         """Create a formation with a mocked running overlord."""
         formation = Formation()
         formation._is_running = True
-        formation._loaded_config = {}
+        formation.config = {}
 
         # Mock overlord
         mock_overlord = Mock()
@@ -239,7 +239,7 @@ class TestMCPManagement:
 
     async def test_add_mcp_duplicate_id(self, formation_with_overlord, valid_mcp_schema):
         """Test that duplicate MCP server IDs are rejected."""
-        formation_with_overlord._loaded_config = {
+        formation_with_overlord.config = {
             "mcp": {"servers": [{"id": "test-mcp", "description": "Existing server"}]}
         }
 
@@ -330,7 +330,7 @@ class TestSchemaValidation:
     @pytest.fixture
     async def formation(self):
         formation = Formation()
-        formation._loaded_config = {}
+        formation.config = {}
         return formation
 
     async def test_validate_agent_schema_valid(self, formation):
