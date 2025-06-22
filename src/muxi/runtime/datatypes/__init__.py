@@ -84,8 +84,10 @@ from .validation import (
     ServiceDependency,
     ValidationResult,
 )
-from .workflow import (
+from .task_status import (
     TaskStatus,
+)
+from .workflow import (
     WorkflowStatus,
     ApprovalStatus,
     TaskInput,

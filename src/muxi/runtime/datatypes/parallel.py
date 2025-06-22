@@ -10,16 +10,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 from datetime import datetime
 
-
-class TaskStatus(Enum):
-    """Status of tasks in parallel execution."""
-
-    PENDING = "pending"
-    READY = "ready"  # Dependencies satisfied, ready to start
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
+from .task_status import TaskStatus
 
 
 class BottleneckType(Enum):

@@ -4,17 +4,7 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
 import uuid
 
-
-class TaskStatus(Enum):
-    """Task execution status"""
-
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    DONE = "done"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    DEFERRED = "deferred"
-    REVIEW = "review"
+from .task_status import TaskStatus
 
 
 class WorkflowStatus(Enum):
