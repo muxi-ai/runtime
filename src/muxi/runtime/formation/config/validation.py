@@ -340,6 +340,10 @@ class FormationValidator:
         if "document_processing" in config:
             self._validate_document_processing_config(config["document_processing"])
 
+        # Validate scheduler configuration
+        if "scheduler" in config:
+            self._validate_scheduler_config(config["scheduler"])
+
     def _validate_agents(self, agents_config: List[Dict[str, Any]]) -> None:
         """Validate agents configuration."""
         if not isinstance(agents_config, list):
@@ -2125,6 +2129,42 @@ class FormationValidator:
                 self.result.add_error(
                     f"{service_identifier} custom auth headers must be a dictionary"
                 )
+
+    def _validate_scheduler_config(self, scheduler_config: Dict[str, Any]) -> None:
+        """Validate scheduler configuration."""
+        if not isinstance(scheduler_config, dict):
+            self.result.add_error("Scheduler configuration must be a dictionary")
+            return
+
+        # Validate enabled field (optional, defaults to false)
+        if "enabled" in scheduler_config:
+            enabled = scheduler_config["enabled"]
+            if not isinstance(enabled, bool):
+                self.result.add_error("Scheduler 'enabled' field must be a boolean")
+
+        # Validate timezone field (optional, defaults to "UTC")
+        if "timezone" in scheduler_config:
+            timezone = scheduler_config["timezone"]
+            if not isinstance(timezone, str) or not timezone.strip():
+                self.result.add_error("Scheduler 'timezone' field must be a non-empty string")
+
+        # Validate check_interval_minutes field (optional, defaults to 1)
+        if "check_interval_minutes" in scheduler_config:
+            interval = scheduler_config["check_interval_minutes"]
+            if not isinstance(interval, int) or interval <= 0:
+                self.result.add_error("Scheduler 'check_interval_minutes' must be a positive integer")
+
+        # Validate max_concurrent_jobs field (optional, defaults to 10)
+        if "max_concurrent_jobs" in scheduler_config:
+            max_jobs = scheduler_config["max_concurrent_jobs"]
+            if not isinstance(max_jobs, int) or max_jobs <= 0:
+                self.result.add_error("Scheduler 'max_concurrent_jobs' must be a positive integer")
+
+        # Validate max_failures_before_pause field (optional, defaults to 3)
+        if "max_failures_before_pause" in scheduler_config:
+            max_failures = scheduler_config["max_failures_before_pause"]
+            if not isinstance(max_failures, int) or max_failures <= 0:
+                self.result.add_error("Scheduler 'max_failures_before_pause' must be a positive integer")
 
 
 def validate_formation(
