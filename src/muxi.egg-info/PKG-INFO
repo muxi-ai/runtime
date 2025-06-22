@@ -77,6 +77,13 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Service Directory**: All reusable components organized in `src/muxi/runtime/services/`
 - **Clean Dependencies**: Eliminated backward compatibility layers
 
+### ZeroMQ Token + Encryption ✅ **COMPLETED**
+- **Format-Agnostic Encryption**: Works before message serialization with any format (msgpack/jsonl/protobuf)
+- **Auto-Detection**: Automatic encryption for `token + tcp://` configurations
+- **Production-Ready**: 45/45 tests passing with comprehensive error handling
+- **Architecture**: `Raw Event → TokenEncryption → Format → ZMQ Send`
+- **Backward Compatibility**: Zero breaking changes to existing functionality
+
 ### Hot Agent Deployment ✅ **READY**
 - **Runtime Agent Management**: Add/remove agents without formation restart
 - **State Preservation**: Maintain all existing traces, sessions, and memory state
@@ -88,6 +95,16 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Architectural Simplification**: No more legacy support burden, pure modern architecture
 - **Breaking Changes**: Full commitment to new Formation-Services-Overlord paradigm
 - **Development Velocity**: Faster iteration without compatibility constraints
+
+### MUXI Scheduler System ✅ **PRODUCTION READY**
+- **Dual Job Types**: Supports both recurring workflows and one-time scheduled tasks with intelligent detection
+- **Natural Language Scheduling**: Users schedule tasks conversationally using phrases like "check my email every hour" or "remind me to call mom tomorrow at 2pm"
+- **Proactive AI**: Transforms MUXI from reactive assistant into active digital assistant that executes tasks on schedule
+- **Unified Database Architecture**: Shared database infrastructure between scheduler and memory services with auto-detection (PostgreSQL/SQLite)
+- **Smart Datetime Parsing**: LLM-powered conversion of natural language to specific datetimes with timezone awareness
+- **Formation Integration**: Full lifecycle integration with Formation/Overlord architecture and configuration validation
+- **Context Preservation**: Maintains user context and permissions across scheduled executions with session-based isolation
+- **Automatic Completion**: One-time jobs automatically complete and clean up after execution
 
 ### Architectural Transformation Summary ✅ **COMPLETED**
 The MUXI Runtime has undergone a complete architectural transformation:
@@ -121,6 +138,8 @@ The MUXI Runtime has undergone a complete architectural transformation:
 - **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
 - **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
 - **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
+- **MCP Code Quality Enhancement**: Comprehensive code quality improvements including elimination of 150+ lines of duplicated code, enhanced error handling with logging, performance optimizations with caching, type safety improvements, JSON-RPC compliance, and proper subprocess safety patterns
+- **Task Scheduling System**: Natural language task scheduling for both recurring jobs ("check email every hour") and one-time tasks ("remind me tomorrow at 2pm") with intelligent detection, unified database architecture, and proactive AI capabilities
 
 ## Installation
 
@@ -176,6 +195,113 @@ formation.stop_overlord()
 formation.stop()
 ```
 
+### Runtime Formation Management ✅ **NEW**
+
+MUXI Runtime now supports dynamic addition and removal of agents and MCP servers at runtime, providing flexible component management for live formations:
+
+```python
+# Add agents dynamically using inline schema
+await formation.add_agent({
+    "schema": "1.0.0",
+    "id": "code_reviewer",
+    "name": "Code Review Assistant",
+    "description": "Specialized in code review and best practices",
+    "llm_models": [
+        {
+            "text": "anthropic/claude-3-opus",
+            "api_key": "${{ secrets.ANTHROPIC_API_KEY }}",
+            "settings": {"temperature": 0.1}
+        }
+    ],
+    "role": "specialist",
+    "specialties": ["code_review", "best_practices"]
+})
+
+# Add agents from YAML/JSON files
+await formation.add_agent("path/to/new_agent.yaml")
+
+# Add MCP servers dynamically
+await formation.add_mcp({
+    "schema": "1.0.0",
+    "id": "weather-tools",
+    "description": "Weather information tools",
+    "type": "http",
+    "endpoint": "https://api.weather.com/mcp",
+    "auth": {
+        "type": "api_key",
+        "key": "${{ secrets.WEATHER_API_KEY }}"
+    }
+})
+
+# Add MCP servers from configuration files
+await formation.add_mcp("configs/mcp/database-tools.yaml")
+
+# List available components
+agents = formation.list_agents()
+mcp_servers = formation.list_mcp_servers()
+
+# Check MCP server status
+status = formation.get_mcp_status("weather-tools")
+print(f"Weather Tools Status: {status}")
+
+# Remove components when no longer needed
+await formation.remove_agent("code_reviewer")
+await formation.remove_mcp("weather-tools")
+
+# Remove MCP servers with immediate disconnection
+formation.remove_mcp_async("database-tools")  # Non-blocking removal
+```
+
+#### Schema-Based Configuration
+
+The dynamic component system accepts both inline schemas and file paths:
+
+```python
+# Inline schema (Python dict)
+agent_schema = {
+    "schema": "1.0.0",
+    "id": "sales_assistant",
+    "name": "Sales Support Agent",
+    "description": "Helps with sales inquiries and product information",
+    "system_message": "You are a helpful sales assistant...",
+    "llm_models": [{"text": "openai/gpt-4o"}],
+    "knowledge": {
+        "enabled": True,
+        "sources": [
+            {"path": "knowledge/products/", "description": "Product catalog"}
+        ]
+    }
+}
+await formation.add_agent(agent_schema)
+
+# File path (YAML/JSON)
+await formation.add_agent("agents/support_agent.yaml")
+```
+
+#### Component Validation
+
+The system provides comprehensive validation:
+
+- **Schema compliance** checking (version, required fields)
+- **Conflict detection** (duplicate IDs, overlapping configurations)
+- **Resource validation** (model availability, MCP endpoint connectivity)
+- **Integration testing** (agent-to-overlord communication verification)
+
+```python
+# Validation errors provide helpful feedback
+try:
+    await formation.add_agent({"id": "existing_agent"})
+except ValueError as e:
+    print(f"Conflict detected: {e}")
+    # Output: "Agent with ID 'existing_agent' already exists"
+
+try:
+    await formation.add_mcp({"invalid": "schema"})
+except ValueError as e:
+    print(f"Schema error: {e}")
+    # Output: "Missing required field: 'id'"
+```
+
 ### Streaming Conversation (ChatGPT-like streaming)
 ```python
 async for chunk in overlord.chat(
@@ -185,6 +311,78 @@ async for chunk in overlord.chat(
     stream=True  # Enable streaming
 ):
     print(chunk, end="", flush=True)
+```
+
+### Task Scheduling (Natural Language) ✅ **NEW**
+
+MUXI Runtime now supports intelligent task scheduling through natural language, enabling both recurring workflows and one-time scheduled tasks:
+
+```python
+# Schedule recurring tasks using natural language
+response = overlord.chat(
+    message="Check my email every hour for messages from my wife",
+    user_id="user123",
+    session_id="session_abc"
+)
+# System intelligently detects this as a recurring job and sets up cron scheduling
+
+# Schedule one-time tasks using natural language
+response = overlord.chat(
+    message="Remind me to call mom tomorrow at 2pm",
+    user_id="user123", 
+    session_id="session_abc"
+)
+# System intelligently detects this as a one-time job and schedules for specific datetime
+
+# The scheduler automatically:
+# - Detects job type (recurring vs one-time)
+# - Converts natural language to proper scheduling format
+# - Executes tasks with preserved user context
+# - Maintains security isolation per user
+# - Handles timezone conversions and UTC storage
+# - Completes and cleans up one-time jobs automatically
+```
+
+#### Scheduler Configuration in Formation
+
+```yaml
+# formation.yaml
+scheduler:
+  enabled: true
+  check_interval_minutes: 1
+  max_concurrent_jobs: 10
+  max_failures_before_pause: 3
+  timezone: "America/New_York"
+
+memory:
+  persistent:
+    connection_string: "${POSTGRES_DATABASE_URL}"  # Shared with scheduler
+```
+
+#### Advanced Scheduling Features
+
+```python
+# The system handles complex scheduling patterns:
+# - "Every weekday at 9am except holidays"
+# - "First Monday of each month"
+# - "Every 30 minutes during business hours"
+# - "Tomorrow at 2pm but not if it's a weekend"
+
+# Scheduler provides comprehensive job management:
+from muxi.runtime.services.scheduler import SchedulerService
+
+scheduler = SchedulerService.get_instance(overlord)
+
+# List active jobs
+jobs = await scheduler.job_manager.get_jobs_by_user("user123")
+
+# Pause/resume jobs
+await scheduler.job_manager.pause_job(job_id)
+await scheduler.job_manager.resume_job(job_id)
+
+# Get job statistics
+stats = await scheduler.job_manager.get_job_statistics(job_id)
+print(f"Total runs: {stats['total_runs']}, Failures: {stats['total_failures']}")
 ```
 
 ### Legacy Pattern (Removed)
@@ -278,7 +476,9 @@ muxi/runtime/
 │   ├── a2a/                   # Agent-to-Agent communication
 │   ├── llm/                   # Language model services
 │   ├── observability/         # Monitoring and tracing
-│   └── secrets/               # Secrets management
+│   ├── secrets/               # Secrets management
+│   ├── scheduler/             # Task scheduling system (recurring & one-time jobs)
+│   └── db.py                  # Unified database manager (PostgreSQL/SQLite)
 ├── types/                     # Consolidated data types
 │   ├── errors.py              # Unified error types
 │   └── response.py            # Unified response format
