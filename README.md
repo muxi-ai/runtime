@@ -45,6 +45,16 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Breaking Changes**: Full commitment to new Formation-Services-Overlord paradigm
 - **Development Velocity**: Faster iteration without compatibility constraints
 
+### MUXI Scheduler System ✅ **PRODUCTION READY**
+- **Dual Job Types**: Supports both recurring workflows and one-time scheduled tasks with intelligent detection
+- **Natural Language Scheduling**: Users schedule tasks conversationally using phrases like "check my email every hour" or "remind me to call mom tomorrow at 2pm"
+- **Proactive AI**: Transforms MUXI from reactive assistant into active digital assistant that executes tasks on schedule
+- **Unified Database Architecture**: Shared database infrastructure between scheduler and memory services with auto-detection (PostgreSQL/SQLite)
+- **Smart Datetime Parsing**: LLM-powered conversion of natural language to specific datetimes with timezone awareness
+- **Formation Integration**: Full lifecycle integration with Formation/Overlord architecture and configuration validation
+- **Context Preservation**: Maintains user context and permissions across scheduled executions with session-based isolation
+- **Automatic Completion**: One-time jobs automatically complete and clean up after execution
+
 ### Architectural Transformation Summary ✅ **COMPLETED**
 The MUXI Runtime has undergone a complete architectural transformation:
 
@@ -78,6 +88,7 @@ The MUXI Runtime has undergone a complete architectural transformation:
 - **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
 - **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
 - **MCP Code Quality Enhancement**: Comprehensive code quality improvements including elimination of 150+ lines of duplicated code, enhanced error handling with logging, performance optimizations with caching, type safety improvements, JSON-RPC compliance, and proper subprocess safety patterns
+- **Task Scheduling System**: Natural language task scheduling for both recurring jobs ("check email every hour") and one-time tasks ("remind me tomorrow at 2pm") with intelligent detection, unified database architecture, and proactive AI capabilities
 
 ## Installation
 
@@ -251,6 +262,78 @@ async for chunk in overlord.chat(
     print(chunk, end="", flush=True)
 ```
 
+### Task Scheduling (Natural Language) ✅ **NEW**
+
+MUXI Runtime now supports intelligent task scheduling through natural language, enabling both recurring workflows and one-time scheduled tasks:
+
+```python
+# Schedule recurring tasks using natural language
+response = overlord.chat(
+    message="Check my email every hour for messages from my wife",
+    user_id="user123",
+    session_id="session_abc"
+)
+# System intelligently detects this as a recurring job and sets up cron scheduling
+
+# Schedule one-time tasks using natural language
+response = overlord.chat(
+    message="Remind me to call mom tomorrow at 2pm",
+    user_id="user123", 
+    session_id="session_abc"
+)
+# System intelligently detects this as a one-time job and schedules for specific datetime
+
+# The scheduler automatically:
+# - Detects job type (recurring vs one-time)
+# - Converts natural language to proper scheduling format
+# - Executes tasks with preserved user context
+# - Maintains security isolation per user
+# - Handles timezone conversions and UTC storage
+# - Completes and cleans up one-time jobs automatically
+```
+
+#### Scheduler Configuration in Formation
+
+```yaml
+# formation.yaml
+scheduler:
+  enabled: true
+  check_interval_minutes: 1
+  max_concurrent_jobs: 10
+  max_failures_before_pause: 3
+  timezone: "America/New_York"
+
+memory:
+  persistent:
+    connection_string: "${POSTGRES_DATABASE_URL}"  # Shared with scheduler
+```
+
+#### Advanced Scheduling Features
+
+```python
+# The system handles complex scheduling patterns:
+# - "Every weekday at 9am except holidays"
+# - "First Monday of each month"
+# - "Every 30 minutes during business hours"
+# - "Tomorrow at 2pm but not if it's a weekend"
+
+# Scheduler provides comprehensive job management:
+from muxi.runtime.services.scheduler import SchedulerService
+
+scheduler = SchedulerService.get_instance(overlord)
+
+# List active jobs
+jobs = await scheduler.job_manager.get_jobs_by_user("user123")
+
+# Pause/resume jobs
+await scheduler.job_manager.pause_job(job_id)
+await scheduler.job_manager.resume_job(job_id)
+
+# Get job statistics
+stats = await scheduler.job_manager.get_job_statistics(job_id)
+print(f"Total runs: {stats['total_runs']}, Failures: {stats['total_failures']}")
+```
+
 ### Legacy Pattern (Removed)
 ```python
 # ❌ No longer supported - use Formation-based architecture above
@@ -342,7 +425,9 @@ muxi/runtime/
 │   ├── a2a/                   # Agent-to-Agent communication
 │   ├── llm/                   # Language model services
 │   ├── observability/         # Monitoring and tracing
-│   └── secrets/               # Secrets management
+│   ├── secrets/               # Secrets management
+│   ├── scheduler/             # Task scheduling system (recurring & one-time jobs)
+│   └── db.py                  # Unified database manager (PostgreSQL/SQLite)
 ├── types/                     # Consolidated data types
 │   ├── errors.py              # Unified error types
 │   └── response.py            # Unified response format
