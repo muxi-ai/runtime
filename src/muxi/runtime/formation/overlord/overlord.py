@@ -544,6 +544,21 @@ class Overlord:
             ):
                 await self._process_pending_agent_registrations()
 
+            # Start scheduler service if enabled
+            if hasattr(self, "formation_config") and self.formation_config.get("scheduler", {}).get(
+                "enabled", False
+            ):
+                # Validate that database connection is available for scheduler
+                if not hasattr(self, "db_manager") or not self.db_manager:
+                    raise ValueError(
+                        "Scheduler is enabled but no database connection is configured. "
+                        "Please configure 'memory.persistent.connection_string' in formation.yaml "
+                        "or disable scheduler with 'scheduler.enabled: false'"
+                    )
+
+                self.scheduler_service = await SchedulerService.get_instance(self)
+                await self.scheduler_service.start()
+
             #  Info - TODO: add observability
             #  SystemEvents.STARTED (overlord)
 

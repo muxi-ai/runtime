@@ -200,19 +200,36 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
             #  Info - TODO: add observability
             # SystemEvents.INITIALIZING (persistent memory - PostgreSQL)
             from ...services.memory.memobase import Memobase
+            from ...services.memory.long_term import LongTermMemory
+            from ...services.db import get_database_manager
 
-            overlord.long_term_memory = Memobase(
-                connection_string=connection_string, model=embedding_model
+            # Create ONE DatabaseManager for the Formation
+            db_manager = get_database_manager(connection_string)
+
+            # Store db_manager on overlord for scheduler access
+            overlord.db_manager = db_manager
+
+            # Create LongTermMemory using the shared DatabaseManager
+            long_term_memory = LongTermMemory(
+                db_manager=db_manager, embedding_model=embedding_model
             )
+
+            # Create Memobase with the LongTermMemory instance
+            overlord.long_term_memory = Memobase(long_term_memory=long_term_memory)
 
         elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
             #  Info - TODO: add observability
             # SystemEvents.INITIALIZING (persistent memory - SQLite)
             from ...services.memory.sqlite import SQLiteMemory
+            from ...services.db import get_database_manager
 
             # Remove sqlite:// prefix if present
             db_path = connection_string.replace("sqlite://", "")
             overlord.long_term_memory = SQLiteMemory(db_path=db_path)
+
+            # Create DatabaseManager for scheduler access (SQLite)
+            db_manager = get_database_manager(connection_string)
+            overlord.db_manager = db_manager
 
             # Set the embedding provider after initialization
             if embedding_model:

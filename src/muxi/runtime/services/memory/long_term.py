@@ -30,19 +30,20 @@
 # =============================================================================
 
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, String, Text, create_engine, desc, func, select
+from sqlalchemy import Column, DateTime, String, Text, desc, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import Session, declarative_base
 
 # Note: No longer importing global config - values passed as parameters
 from ...utils.id_generator import get_default_nanoid
+from ...utils.datetime_utils import utc_now
 from ..llm import LLM
 from .. import observability
+from ..db import DatabaseManager
 
 # Create SQLAlchemy Base
 Base = declarative_base()
@@ -62,8 +63,8 @@ class Memory(Base):
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
     meta_data = Column(JSONB, nullable=False, default={})
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     collection = Column(String(255), nullable=False, index=True)
 
 
@@ -80,8 +81,8 @@ class Collection(Base):
     id = Column(String(21), primary_key=True, default=get_default_nanoid)
     name = Column(String(255), nullable=False, unique=True, index=True)
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
 class LongTermMemory:
@@ -96,31 +97,28 @@ class LongTermMemory:
 
     def __init__(
         self,
-        connection_string: Optional[str] = None,
+        db_manager: DatabaseManager,
         dimension: int = 1536,  # Default dimension for OpenAI embeddings
         default_collection: str = "default",
-        embedding_provider: Optional[LLM] = None,
+        embedding_model: Optional[LLM] = None,
     ):
         """
         Initialize the long-term memory.
 
         Args:
-            connection_string: The PostgreSQL connection string. If None, it
-                will be loaded from the configuration.
+            db_manager: Unified database manager instance (required)
             dimension: The dimension of the vectors to store.
             default_collection: The default collection to use.
-            embedding_provider: The embedding provider to use.
+            embedding_model: The embedding model to use.
         """
         self.dimension = dimension
         self.default_collection = default_collection
-        self.connection_string = connection_string
-        if not self.connection_string:
-            raise ValueError("connection_string is required for LongTermMemory")
-        self.embedding_provider = embedding_provider
+        self.embedding_model = embedding_model
 
-        # Create engine and session
-        self.engine = create_engine(self.connection_string)
-        self.Session = sessionmaker(bind=self.engine)
+        # Use provided database manager
+        self.db_manager = db_manager
+        self.engine = self.db_manager.engine
+        self.Session = self.db_manager.Session
 
         # Create tables if they don't exist
         self._create_tables()
@@ -136,17 +134,28 @@ class LongTermMemory:
         extension is loaded and all required tables are created.
         """
         try:
-            # Create extension if it doesn't exist
-            with self.engine.connect() as conn:
-                conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-                conn.commit()
+            # Use unified database manager to create tables
+            self.db_manager.create_tables(Base.metadata)
 
-            # Create tables
-            Base.metadata.create_all(self.engine)
-            #  Database initialization - TODO: add observability
+            # Create pgvector extension if using PostgreSQL
+            if self.db_manager.database_type == "postgresql":
+                with self.engine.connect() as conn:
+                    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                    conn.commit()
+
+            observability.observe(
+                event_type=observability.SystemEvents.MEMORY_DATABASE_INITIALIZED,
+                level=observability.EventLevel.INFO,
+                data={"database_type": self.db_manager.database_type},
+                description="Long-term memory database initialized with unified manager",
+            )
         except Exception as e:
-            #  Database creation error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ErrorEvents.MEMORY_DATABASE_INITIALIZATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "database_type": self.db_manager.database_type},
+                description=f"Failed to initialize long-term memory database: {e}",
+            )
             raise
 
     def _create_default_collection(self) -> None:
@@ -208,7 +217,7 @@ class LongTermMemory:
 
         # Generate embedding if not provided
         if embedding is None:
-            embedding = await self.embedding_provider.get_embedding(content)
+            embedding = await self.embedding_model.get_embedding(content)
 
         # Insert into database
         memory_id = self._add_internal(content, embedding, metadata, self.default_collection)
@@ -341,7 +350,7 @@ class LongTermMemory:
 
         # Generate embedding if not provided
         if query_embedding is None:
-            query_embedding = await self.embedding_provider.get_embedding(query)
+            query_embedding = await self.embedding_model.get_embedding(query)
 
         # Use default collection if not specified
         if collection is None:
