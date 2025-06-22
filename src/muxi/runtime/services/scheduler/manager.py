@@ -17,6 +17,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from .. import observability
 from ..db import DatabaseManager
 from .models import ScheduledJob
+from .validation import SchedulerInputValidator, validate_user_access
+from .limits import get_limits_enforcer
 
 
 class JobManager:
@@ -97,15 +99,33 @@ class JobManager:
             
         Returns:
             Job ID
+            
+        Raises:
+            ValueError: If input validation fails or limits are exceeded
         """
         await self.initialize()
+        
+        # SECURITY: Comprehensive input validation
+        SchedulerInputValidator.validate_job_creation(
+            user_id=user_id,
+            formation_id=formation_id,
+            title=title,
+            original_prompt=original_prompt,
+            execution_prompt=execution_prompt,
+            cron_expression=cron_expression,
+            scheduled_for=scheduled_for,
+            is_recurring=is_recurring
+        )
+        
+        # SECURITY: Validate user access to formation
+        validate_user_access(user_id, formation_id)
+        
+        # SECURITY: Check resource limits
+        limits_enforcer = get_limits_enforcer()
+        await limits_enforcer.check_job_creation_limits(self, user_id)
+        await limits_enforcer.check_system_limits(self)
+        
         job_id = f"sched_{uuid.uuid4().hex[:16]}"
-
-        # Validate job parameters
-        if is_recurring and not cron_expression:
-            raise ValueError("Recurring jobs require a cron_expression")
-        if not is_recurring and not scheduled_for:
-            raise ValueError("One-time jobs require a scheduled_for datetime")
 
         try:
             with self.db_manager.get_session() as session:
@@ -578,5 +598,37 @@ class JobManager:
                 level=observability.EventLevel.ERROR,
                 data={"operation": "get_statistics", "error": str(e), "user_id": user_id},
                 description=f"Failed to get job statistics: {e}",
+            )
+            raise
+    
+    async def get_user_jobs(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all jobs for a specific user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            List of job dictionaries
+        """
+        await self.initialize()
+        
+        try:
+            with self.db_manager.get_session() as session:
+                jobs = (
+                    session.query(ScheduledJob)
+                    .filter(ScheduledJob.user_id == user_id)
+                    .order_by(ScheduledJob.created_at.desc())
+                    .all()
+                )
+                
+                return [job.to_dict() for job in jobs]
+                
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"operation": "get_user_jobs", "error": str(e), "user_id": user_id},
+                description=f"Failed to get user jobs: {e}",
             )
             raise

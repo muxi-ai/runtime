@@ -32,6 +32,7 @@ import json
 from .. import observability
 from ...services.llm import LLM
 from ...utils.datetime_utils import utc_now
+from .validation import SchedulerInputValidator
 
 
 class ScheduleParser:
@@ -252,9 +253,26 @@ class ScheduleParser:
             # Fallback to recurring if LLM unavailable
             return "recurring"
         
-        prompt = f"""Determine if this is a ONE-TIME task or a RECURRING task.
+        # SECURITY: Sanitize input to prevent prompt injection
+        try:
+            sanitized_text = SchedulerInputValidator.sanitize_schedule_text(schedule_text)
+        except ValueError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "schedule_text": schedule_text[:100],  # Log only first 100 chars
+                    "error": str(e)
+                },
+                description=f"Schedule text sanitization failed: {e}"
+            )
+            return "recurring"  # Safe fallback
+        
+        # Use parameterized prompt construction for security
+        prompt_template = """Determine if this is a ONE-TIME task or a RECURRING task.
 
-Task: "{schedule_text}"
+Task: {task_text}
+(Input has been sanitized for security)
 
 ONE-TIME tasks are executed once at a specific time:
 - "remind me tomorrow at 2pm"
@@ -270,6 +288,10 @@ RECURRING tasks are repeated on a schedule:
 
 Respond with ONLY: "one_time" or "recurring"
 """
+        
+        # Limit length for additional safety and truncate if needed
+        safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
+        prompt = prompt_template.format(task_text=safe_text)
         
         try:
             response = await llm.generate_text(prompt)
@@ -316,9 +338,28 @@ Respond with ONLY: "one_time" or "recurring"
         tz = pytz.timezone(timezone)
         current_time = utc_now().astimezone(tz)
         
-        prompt = f"""Parse this request into a specific date and time.
+        # SECURITY: Sanitize input to prevent prompt injection
+        try:
+            sanitized_text = SchedulerInputValidator.sanitize_schedule_text(schedule_text)
+        except ValueError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "schedule_text": schedule_text[:100],  # Log only first 100 chars
+                    "error": str(e)
+                },
+                description=f"Schedule text sanitization failed: {e}"
+            )
+            return None  # Safe fallback
+        
+        safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
+        prompt_template = """Parse this request into a specific date and time.
 
-Request: "{schedule_text}"
+Request: {request_text}
+(Input has been sanitized for security)"""
+        
+        prompt = prompt_template.format(request_text=safe_text) + f"""
 
 Current date/time: {current_time.strftime('%Y-%m-%d %H:%M:%S %Z')}
 Target timezone: {timezone}
@@ -597,10 +638,30 @@ Return only valid JSON, no explanation.
             )
             return self._fallback_parse_schedule(schedule_text)
         
+        # SECURITY: Sanitize input to prevent prompt injection
+        try:
+            sanitized_text = SchedulerInputValidator.sanitize_schedule_text(schedule_text)
+        except ValueError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "schedule_text": schedule_text[:100],
+                    "error": str(e)
+                },
+                description=f"Schedule text sanitization failed: {e}"
+            )
+            return None  # Safe fallback
+        
+        safe_text = sanitized_text[:200] if len(sanitized_text) > 200 else sanitized_text
+        
         # Enhanced prompt with better instructions and examples
-        prompt = f"""You are a cron expression generator. Convert natural language schedules to cron format.
+        prompt_template = """You are a cron expression generator. Convert natural language schedules to cron format.
 
-SCHEDULE: "{schedule_text}"
+SCHEDULE: {schedule_text}
+(Input has been sanitized for security)"""
+        
+        prompt = prompt_template.format(schedule_text=safe_text) + f"""
 TIMEZONE: {timezone}
 
 CRON FORMAT: minute hour day-of-month month day-of-week
@@ -776,10 +837,30 @@ IMPORTANT: Return ONLY the cron expression, no explanation or additional text.
         Returns:
             Exclusion rule dict or None
         """
-        prompt = f"""
+        # SECURITY: Sanitize input to prevent prompt injection
+        try:
+            sanitized_description = SchedulerInputValidator.sanitize_schedule_text(description)
+        except ValueError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.SCHEDULER_INPUT_VALIDATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "description": description[:100],
+                    "error": str(e)
+                },
+                description=f"Exclusion description sanitization failed: {e}"
+            )
+            return {"type": "unknown", "pattern": "", "description": "Invalid exclusion"}
+        
+        safe_description = sanitized_description[:200] if len(sanitized_description) > 200 else sanitized_description
+        
+        prompt_template = """
 Convert the following exclusion description into a rule that represents when to EXCLUDE execution.
 
-Exclusion: "{description}"
+Exclusion: {description}
+(Input has been sanitized for security)"""
+        
+        prompt = prompt_template.format(description=safe_description) + """
 
 Return a JSON object with:
 - "type": "cron" or "complex_date" 
