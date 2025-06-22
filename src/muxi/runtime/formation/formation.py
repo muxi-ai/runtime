@@ -146,6 +146,7 @@ class Formation:
         self._logging_config: Dict[str, Any] = {}
         self._clarification_config: Dict[str, Any] = {}
         self._document_processing_config: Dict[str, Any] = {}
+        self._scheduler_config: Dict[str, Any] = {}
         self._agents_config: list = []
 
     def load(self, config_path: str) -> None:
@@ -495,6 +496,7 @@ class Formation:
         self._setup_logging_config()
         self._setup_clarification_config()
         self._setup_document_processing_config()
+        self._setup_scheduler_config()
         self._setup_agents_config()
 
         # Create comprehensive service bundle for overlord handoff
@@ -511,6 +513,7 @@ class Formation:
             "logging_config": self._logging_config,
             "clarification_config": self._clarification_config,
             "document_processing_config": self._document_processing_config,
+            "scheduler_config": self._scheduler_config,
             "agents_config": self._agents_config,
         }
 
@@ -718,6 +721,42 @@ class Formation:
         # Validate document processing structure
         if not isinstance(self._document_processing_config, dict):
             raise ValueError("Document processing configuration must be a dictionary")
+
+    def _setup_scheduler_config(self) -> None:
+        """Setup and validate scheduler configuration."""
+        self._scheduler_config = self.config.get("scheduler", {})
+
+        # Validate scheduler structure
+        if not isinstance(self._scheduler_config, dict):
+            raise ConfigurationValidationError(
+                ["Scheduler configuration must be a dictionary"],
+                {
+                    "current_type": type(self._scheduler_config).__name__,
+                    "suggestion": "Update your formation.yaml to have 'scheduler:' as a dictionary section",
+                    "example": {
+                        "scheduler": {
+                            "enabled": True,
+                            "timezone": "UTC",
+                            "check_interval_minutes": 1,
+                        }
+                    },
+                },
+            )
+
+        # Validate scheduler specific fields if enabled
+        if self._scheduler_config.get("enabled", False):
+            timezone = self._scheduler_config.get("timezone", "UTC")
+            check_interval = self._scheduler_config.get("check_interval_minutes", 1)
+
+            if not isinstance(check_interval, int) or check_interval < 1:
+                raise ConfigurationValidationError(
+                    ["Scheduler check_interval_minutes must be a positive integer"],
+                    {
+                        "current_value": check_interval,
+                        "suggestion": "Set check_interval_minutes to a positive integer (recommended: 1-60)",
+                        "example": {"scheduler": {"check_interval_minutes": 1}},
+                    },
+                )
 
     def _setup_agents_config(self) -> None:
         """Setup and validate agents configuration."""
@@ -1284,6 +1323,7 @@ class Formation:
             self._logging_config.clear()
             self._clarification_config.clear()
             self._document_processing_config.clear()
+            self._scheduler_config.clear()
             self._agents_config.clear()
 
         except Exception as e:

@@ -95,6 +95,7 @@ from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
+from ...services.scheduler.service import SchedulerService
 
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
@@ -480,6 +481,7 @@ class Overlord:
         self.inbound_registry_client: Optional[A2ARegistryClient] = None
         self.a2a_server: Optional[A2AServer] = None
         self.mcp_service = MCPService.get_instance()  # Get existing instance
+        self.scheduler_service: Optional[SchedulerService] = None
 
         # Initialize agent tracking for delayed external registration
         self.pending_external_registrations = set()
@@ -1181,6 +1183,14 @@ class Overlord:
 
     async def _actually_shutdown_overlord(self):
         """Actually shutdown overlord (called by active_agent_tracker)."""
+
+        # Stop scheduler service if running
+        if hasattr(self, "scheduler_service") and self.scheduler_service:
+            try:
+                await self.scheduler_service.stop()
+            except Exception as e:
+                print(f"⚠️  Error stopping scheduler service: {e}")
+
         print("✅ Overlord shutdown complete - no active requests remaining")
         # Additional cleanup logic here if needed
 
