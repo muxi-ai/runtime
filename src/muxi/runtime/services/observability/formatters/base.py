@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Union, Optional
-from datetime import datetime
+from ....utils.datetime_utils import utc_now_iso
 
 
 class BaseFormatter(ABC):
@@ -36,7 +36,7 @@ class BaseFormatter(ABC):
                 "formation_id": self.formation_id,
                 "service": self.service_name,
                 "version": self.version,
-                "_timestamp": datetime.utcnow().isoformat() + "Z",
+                "_timestamp": utc_now_iso(),
             }
         )
         return enriched

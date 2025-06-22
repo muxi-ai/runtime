@@ -12,6 +12,7 @@ import asyncio
 import aiohttp
 from typing import Any, Dict, Optional
 from datetime import datetime
+from ....utils.datetime_utils import utc_now_iso
 import uuid
 
 from .base import (
@@ -33,7 +34,7 @@ class StreamableHTTPTransport(BaseTransport):
 
     async def connect(self) -> bool:
         """Connect to the MCP server with health check."""
-        error_details = {"url": self.url, "timestamp": datetime.utcnow().isoformat()}
+        error_details = {"url": self.url, "timestamp": utc_now_iso()}
 
         try:
             self.session = aiohttp.ClientSession(
@@ -107,7 +108,7 @@ class StreamableHTTPTransport(BaseTransport):
             self.connection_stats["requests_sent"] = (
                 self.connection_stats.get("requests_sent", 0) + 1
             )
-            self.connection_stats["last_activity"] = datetime.utcnow().isoformat()
+            self.connection_stats["last_activity"] = utc_now_iso()
 
             return parsed_response
 
@@ -162,7 +163,7 @@ class StreamableHTTPTransport(BaseTransport):
             self.session = None
 
         self.connection_stats["connected"] = False
-        self.connection_stats["disconnected_at"] = datetime.utcnow().isoformat()
+        self.connection_stats["disconnected_at"] = utc_now_iso()
 
     @property
     def is_connected(self) -> bool:

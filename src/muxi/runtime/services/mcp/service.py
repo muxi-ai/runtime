@@ -32,7 +32,7 @@
 
 import asyncio
 from typing import Any, Dict, Optional
-from datetime import datetime
+from ...utils.datetime_utils import utc_now_iso
 
 from ..llm import LLM
 from .handler import MCPHandler, MCPConnectionError
@@ -972,7 +972,7 @@ class MCPService:
         """
         test_results = {
             "url": url,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utc_now_iso(),
             "timeout": timeout,
             "tests_performed": [],
             "recommended_action": None,
