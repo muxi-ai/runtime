@@ -334,6 +334,27 @@ class SystemEvents(Enum):
     # When database connection fails
 
     # ===================================================================
+    # SCHEDULER SYSTEM OPERATIONS
+    # ===================================================================
+    SCHEDULER_SERVICE_INITIALIZED = "scheduler.service.initialized"
+    # When scheduler service is initialized
+
+    SCHEDULER_MANAGER_INITIALIZED = "scheduler.manager.initialized"
+    # When scheduler job manager is initialized
+
+    SCHEDULER_PARSER_INITIALIZED = "scheduler.parser.initialized"
+    # When scheduler parser is initialized
+
+    SCHEDULER_DATABASE_INITIALIZED = "scheduler.database.initialized"
+    # When scheduler database is initialized
+
+    DATABASE_MANAGER_INITIALIZED = "database.manager.initialized"
+    # When database manager is initialized
+
+    DATABASE_TABLES_CREATED = "database.tables.created"
+    # When database tables are created
+
+    # ===================================================================
     # NETWORK/COMMUNICATION INFRASTRUCTURE
     # ===================================================================
     NETWORK_INTERFACE_INITIALIZED = "network.interface.initialized"
@@ -679,6 +700,27 @@ class ConversationEvents(Enum):
     CLARIFICATION_COMPLETED = "clarification.completed"
     # When clarification completes
 
+    # ===================================================================
+    # SCHEDULER OPERATIONS
+    # ===================================================================
+    SCHEDULED_JOB_CREATED = "scheduled.job.created"
+    # When a scheduled job is created
+
+    SCHEDULED_JOB_EXECUTED = "scheduled.job.executed"
+    # When a scheduled job is executed
+
+    SCHEDULED_JOB_COMPLETED = "scheduled.job.completed"
+    # When a one-time scheduled job is completed
+
+    SCHEDULED_JOB_FAILED = "scheduled.job.failed"
+    # When a scheduled job execution fails
+
+    SCHEDULED_JOB_EXECUTION_TRACKED = "scheduled.job.execution.tracked"
+    # When a scheduled job execution is tracked
+
+    ONETIME_JOB_MARKED_COMPLETED = "onetime.job.marked.completed"
+    # When a one-time job is marked as completed
+
 
 class ServerEvents(Enum):
     """Server event types for MUXI observability"""
@@ -770,6 +812,24 @@ class ErrorEvents(Enum):
 
     DEPENDENCY_ERROR = "error.dependency.error"
     # When external dependency fails or is unavailable
+
+    # ===================================================================
+    # LLM & AI SERVICE ERRORS
+    # ===================================================================
+    LLM_INITIALIZATION_FAILED = "error.llm.initialization.failed"
+    # When LLM service initialization fails
+
+    # ===================================================================
+    # DATABASE ERRORS
+    # ===================================================================
+    DATABASE_EXTENSION_FAILED = "error.database.extension.failed"
+    # When database extension loading fails
+
+    DATABASE_TABLE_CREATION_FAILED = "error.database.table.creation.failed"
+    # When database table creation fails
+
+    DATABASE_OPERATION_FAILED = "error.database.operation.failed"
+    # When a database operation fails
 
     # ===================================================================
     # DATA ERRORS
