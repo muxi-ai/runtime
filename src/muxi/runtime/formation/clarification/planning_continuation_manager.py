@@ -213,7 +213,8 @@ class PlanningContinuationManager:
             return "I'm processing the data to create your options..."
 
         response_parts = [
-            f"Based on the information gathered for your {session.workflow_request.planning_goal}, here's what I found:\n"
+            f"Based on the information gathered for your {session.workflow_request.planning_goal}, "
+            f"here's what I found:\n"
         ]
 
         # Add key insights
