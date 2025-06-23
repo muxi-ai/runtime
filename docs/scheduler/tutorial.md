@@ -66,7 +66,7 @@ async def setup_scheduler():
     # Load formation with scheduler enabled
     formation = Formation()
     formation.load("formation.yaml")
-    overlord = formation.start_overlord()
+    overlord = await formation.start_overlord()
     
     # Schedule a daily reminder using natural language
     response = await overlord.chat(
@@ -75,10 +75,10 @@ async def setup_scheduler():
     )
     
     print("Scheduling response:", response.content)
-    return overlord
+    return formation, overlord
 
 # Run the setup
-overlord = asyncio.run(setup_scheduler())
+formation, overlord = asyncio.run(setup_scheduler())
 ```
 
 ### Expected Output
@@ -112,17 +112,16 @@ response = await schedule_daily_reminder()
 
 ```python
 async def check_scheduled_jobs():
-    scheduler = overlord.scheduler_service
-    
-    # Get all jobs for our user
-    jobs = await scheduler.job_manager.get_jobs_for_user("tutorial_user")
+    # Using Formation API (recommended)
+    jobs = await formation.get_user_jobs("tutorial_user")
     
     for job in jobs:
-        print(f"\n📅 Job: {job.title}")
-        print(f"   Schedule: {job.cron_expression}")
-        print(f"   Status: {job.status}")
-        print(f"   Created: {job.created_at}")
-        print(f"   Original prompt: {job.original_prompt}")
+        print(f"\n📅 Job: {job['title']}")
+        print(f"   ID: {job['id']}")
+        print(f"   Schedule: {job['cron_expression']}")
+        print(f"   Status: {job['status']}")
+        print(f"   Created: {job['created_at']}")
+        print(f"   Original prompt: {job['original_prompt']}")
     
     return jobs
 
@@ -244,30 +243,61 @@ await schedule_with_exclusions()
 
 ## Chapter 5: Job Management and Monitoring
 
+### Using the Formation API
+
+The Formation API provides convenient methods for accessing scheduler data:
+
+```python
+async def explore_formation_api():
+    # Get all active jobs
+    active_jobs = await formation.get_active_jobs()
+    print(f"📊 Total active jobs: {len(active_jobs)}")
+    
+    # Get jobs for specific user
+    user_jobs = await formation.get_user_jobs("tutorial_user")
+    print(f"👤 Your jobs: {len(user_jobs)}")
+    
+    # Get job audit trail
+    if user_jobs:
+        job_id = user_jobs[0]['id']
+        audit_trail = await formation.get_job_audit_trail(job_id)
+        
+        print(f"\n📋 Audit trail for job {job_id}:")
+        for event in audit_trail[:5]:
+            print(f"   {event['timestamp']}: {event['action']}")
+            if event['reason']:
+                print(f"      Reason: {event['reason']}")
+    
+    # Get recent audit events
+    recent_events = await formation.get_recent_audit_trail(limit=10)
+    print(f"\n🔔 Recent scheduler events: {len(recent_events)}")
+
+await explore_formation_api()
+```
+
 ### Listing and Managing Jobs
 
 ```python
 async def manage_jobs():
-    scheduler = overlord.scheduler_service
-    
-    # Get all user jobs
-    jobs = await scheduler.job_manager.get_jobs_for_user("tutorial_user")
+    # Get all user jobs using Formation API
+    jobs = await formation.get_user_jobs("tutorial_user")
     
     print(f"📋 You have {len(jobs)} scheduled jobs:\n")
     
     for i, job in enumerate(jobs, 1):
-        # Get job statistics
-        stats = await scheduler.job_manager.get_job_statistics(job.id)
+        print(f"{i}. {job['title']}")
+        print(f"   📅 Schedule: {job['cron_expression'] or job['scheduled_for']}")
+        print(f"   ⚡ Status: {job['status']}")
+        print(f"   📊 Runs: {job['total_runs']} total, {job['total_failures']} failures")
         
-        print(f"{i}. {job.title}")
-        print(f"   📅 Schedule: {job.cron_expression}")
-        print(f"   ⚡ Status: {job.status}")
-        print(f"   📊 Runs: {stats['total_runs']} (Success rate: {stats['success_rate']:.1%})")
+        if job['total_runs'] > 0:
+            success_rate = (job['total_runs'] - job['total_failures']) / job['total_runs']
+            print(f"   ✅ Success rate: {success_rate:.1%}")
         
-        if job.last_run_at:
-            print(f"   🕐 Last run: {job.last_run_at}")
-            if job.last_run_status:
-                print(f"   ✅ Result: {job.last_run_status}")
+        if job['last_run_at']:
+            print(f"   🕐 Last run: {job['last_run_at']}")
+            if job['last_run_status']:
+                print(f"   📌 Result: {job['last_run_status']}")
         
         print()
 
@@ -278,23 +308,32 @@ await manage_jobs()
 
 ```python
 async def job_control_demo():
-    scheduler = overlord.scheduler_service
-    jobs = await scheduler.job_manager.get_jobs_for_user("tutorial_user")
+    # Get user's jobs using Formation API
+    jobs = await formation.get_user_jobs("tutorial_user")
     
     if jobs:
         job = jobs[0]  # Use first job for demo
+        job_id = job['id']
+        
+        # Get scheduler service for write operations
+        scheduler = await overlord.get_scheduler_service()
         
         # Pause a job
-        print(f"Pausing job: {job.title}")
-        await scheduler.job_manager.update_job_status(job.id, 'PAUSED')
+        print(f"Pausing job: {job['title']}")
+        await scheduler.manager.pause_job(job_id, "tutorial_user", "Demo pause")
+        
+        # Check audit trail
+        audit_trail = await formation.get_job_audit_trail(job_id)
+        latest_event = audit_trail[0]
+        print(f"Latest event: {latest_event['action']} - {latest_event['reason']}")
         
         # Resume the job
-        print(f"Resuming job: {job.title}")
-        await scheduler.job_manager.update_job_status(job.id, 'ACTIVE')
+        print(f"Resuming job: {job['title']}")
+        await scheduler.manager.resume_job(job_id, "tutorial_user")
         
         # Delete a job (be careful!)
-        # await scheduler.job_manager.delete_job(job.id)
-        # print(f"Deleted job: {job.title}")
+        # await scheduler.manager.delete_job(job_id, "tutorial_user", "Demo cleanup")
+        # print(f"Deleted job: {job['title']}")
 
 await job_control_demo()
 ```

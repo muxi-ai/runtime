@@ -36,6 +36,13 @@ The MUXI Scheduler transforms MUXI from a reactive assistant into a proactive AI
 - Graceful failure management with auto-pause
 - Connection pooling and performance optimization
 
+## Documentation Index
+
+- **[Formation API Reference](formation-api.md)** - Complete API reference for accessing scheduler data through Formation
+- **[One-Time Jobs](onetime-jobs.md)** - Guide for scheduling one-time tasks
+- **[Tutorial](tutorial.md)** - Step-by-step tutorial for common use cases
+- **[Audit Trail Guide](audit-trail-guide.md)** - Comprehensive guide to using the audit trail for monitoring and compliance
+
 ## Quick Start Guide
 
 ### 1. Enable Scheduler in Formation
@@ -75,17 +82,19 @@ response = await overlord.chat(
 ### 3. Verify Scheduled Jobs
 
 ```python
-# Get scheduler service
-scheduler = overlord.scheduler_service
-
-# List all active jobs for current user
-jobs = await scheduler.job_manager.get_jobs_for_user(user_id="your_user_id")
+# Using Formation API (recommended for read operations)
+jobs = await formation.get_user_jobs("your_user_id")
 
 for job in jobs:
-    print(f"Job: {job.title}")
-    print(f"Schedule: {job.cron_expression}")
-    print(f"Status: {job.status}")
-    print(f"Last run: {job.last_run_at}")
+    print(f"Job: {job['title']}")
+    print(f"Schedule: {job['cron_expression']}")
+    print(f"Status: {job['status']}")
+    print(f"Last run: {job['last_run_at']}")
+
+# Get job audit trail
+audit_trail = await formation.get_job_audit_trail(job['id'])
+for event in audit_trail[:5]:  # Last 5 events
+    print(f"  {event['timestamp']}: {event['action']}")
 ```
 
 ## Architecture
@@ -201,6 +210,8 @@ memory:
 ```
 
 ## API Reference
+
+> **Note**: For complete Formation API documentation including job retrieval methods, see [Formation API Reference](formation-api.md).
 
 ### SchedulerService
 
