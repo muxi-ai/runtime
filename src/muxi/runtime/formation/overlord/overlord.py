@@ -81,11 +81,10 @@ import asyncio
 import hashlib
 import time
 from typing import Any, Dict, List, Optional, Union, AsyncGenerator
-import datetime
 import os
 
 from ..agents import Agent
-from ..background.request_tracker import RequestState, RequestStatus
+from ..background.request_tracker import RequestStatus
 from ...services import observability
 from ...datatypes.response import MuxiResponse
 from ...services.mcp.service import MCPService
@@ -95,6 +94,10 @@ from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
+from .agent_router import AgentRouter
+from .chat_orchestrator import ChatOrchestrator
+from .mcp_coordinator import MCPCoordinator
+from .a2a_coordinator import A2ACoordinator
 from ...services.scheduler.service import SchedulerService
 
 # A2A models imported when needed
@@ -134,7 +137,6 @@ from ...datatypes.exceptions import (
     AgentNotFoundError,
     AgentHasDependentsError,
     OverlordShuttingDownError,
-    NoAvailableAgentsError,
 )
 
 # Import multimodal and synthesis components
@@ -191,7 +193,6 @@ from ..background import (
 )
 
 # Unified Response Components
-from ...utils.response_converter import create_unified_response, extract_user_content
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
 from ...utils.user_dirs import set_formation_id
 
@@ -300,12 +301,23 @@ class Overlord:
         self.agents: Dict[str, Agent] = {}
         self.agent_descriptions: Dict[str, str] = {}  # Agent descriptions for routing
         self.agent_metadata: Dict[str, Dict[str, Any]] = {}  # Enhanced metadata
-        self._routing_cache: Dict[str, str] = {}  # Cache for message routing decisions
         self._user_id_cache = {}  # User ID caching for routing
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
 
         # Dynamic Agent Management - Ultra-simple "delete when done" tracking
         self.active_agent_tracker = ActiveAgentsTracker()
+
+        # Agent routing system
+        self.agent_router = AgentRouter(self)
+
+        # Chat orchestration system
+        self.chat_orchestrator = ChatOrchestrator(self)
+
+        # MCP coordination system
+        self.mcp_coordinator = MCPCoordinator(self)
+
+        # A2A coordination system
+        self.a2a_coordinator = A2ACoordinator(self)
 
         # Set up callbacks for actual deletion
         self.active_agent_tracker._delete_agent = self._actually_delete_agent
@@ -536,7 +548,7 @@ class Overlord:
             # A2A services are now initialized by Formation
             # Start A2A formation server if initialized by Formation
             if hasattr(self, "a2a_server") and self.a2a_server:
-                await self._start_a2a_server()
+                await self.a2a_coordinator._start_a2a_server()
 
             # Process pending external agent registrations if available
             if (
@@ -544,7 +556,7 @@ class Overlord:
                 and self.inbound_registry_client
                 and hasattr(self, "pending_external_registrations")
             ):
-                await self._process_pending_agent_registrations()
+                await self.a2a_coordinator._process_pending_agent_registrations()
 
             # Start scheduler service if enabled
             if hasattr(self, "formation_config") and self.formation_config.get("scheduler", {}).get(
@@ -637,47 +649,6 @@ class Overlord:
             f"<system-message>\n{system_message}\n</system-message>\n\n"
             f"<persona>\n{persona}\n</persona>"
         )
-
-        try:
-            # Only initialize if document processing is enabled
-            if (
-                not hasattr(self, "document_processing_config")
-                or not self.document_processing_config.is_enabled()
-            ):
-                return
-
-            # Subtask 3.7: Document Storage Foundation Layer
-            self.document_chunker = DocumentChunkManager()
-            self.document_metadata_store = DocumentMetadataStore()
-            self.document_reference_system = DocumentReferenceSystem()
-
-            # Subtask 3.8: Document User Experience Layer
-            # Get the persona manager for acknowledgments
-            persona_manager = getattr(self, "persona_manager", None)
-            self.document_acknowledger = DocumentAcknowledgmentGenerator(persona_manager)
-            self.document_summarizer = DocumentSummarizer()
-            self.document_error_handler = DocumentErrorHandler()
-
-            # Subtask 3.9: Document Workflow Integration Layer
-            workflow_manager = getattr(self, "workflow_executor", None)
-            self.document_workflow_integrator = DocumentWorkflowIntegrator(workflow_manager)
-            self.document_cross_referencer = DocumentCrossReferenceManager()
-            self.document_context_preserver = DocumentContextPreserver()
-
-        except Exception as e:
-            #  Warning - TODO: add observability
-            # ErrorEvents.FAILED_INITIALIZATION (document processing components)
-            _ = e  # remove this after implementing observability
-            # Set all components to None on failure
-            self.document_chunker = None
-            self.document_metadata_store = None
-            self.document_reference_system = None
-            self.document_acknowledger = None
-            self.document_summarizer = None
-            self.document_error_handler = None
-            self.document_workflow_integrator = None
-            self.document_cross_referencer = None
-            self.document_context_preserver = None
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
@@ -903,7 +874,9 @@ class Overlord:
             **kwargs,
         )
 
-    # Memory access methods
+    # ===================================================================
+    # MEMORY ACCESS METHODS
+    # ===================================================================
 
     async def add_to_buffer_memory(
         self,
@@ -1054,7 +1027,7 @@ class Overlord:
         # SystemEvents.MEMORY_CLEAR
 
     # ===================================================================
-    # SECRETS MANAGEMENT
+    # AGENT MANAGEMENT
     # ===================================================================
 
     def get_agent(self, agent_id: Optional[str] = None) -> Agent:
@@ -1136,7 +1109,9 @@ class Overlord:
             if hasattr(self, "external_registry_client") and self.external_registry_client:
                 try:
                     # Run deregistration in background - don't block removal
-                    asyncio.create_task(self.deregister_agent_from_external_registry(agent_id))
+                    asyncio.create_task(
+                        self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
+                    )
                 except Exception as e:
                     # Log warning but don't fail the removal
                     #  Error - TODO: add observability
@@ -1274,273 +1249,7 @@ class Overlord:
         Raises:
             ValueError: If no agents are available in the overlord.
         """
-        # If there are no agents, raise an error
-        if not self.agents:
-            raise NoAvailableAgentsError("No agents available")
-
-        # Get available agents (not marked for deletion)
-        available_agents = await self.active_agent_tracker.get_available_agents(
-            list(self.agents.keys())
-        )
-
-        if not available_agents:
-            raise NoAvailableAgentsError("No agents available for new requests")
-
-        # If there's only one available agent, use it
-        if len(available_agents) == 1:
-            return available_agents[0]
-
-        # Get caching configuration
-        overlord_config = self.formation_config.get("overlord", {})
-        config_section = overlord_config.get("config", {})
-        caching_config = config_section.get("caching", {})
-
-        caching_enabled = caching_config.get("enabled", True)  # Default: enabled
-        cache_ttl = caching_config.get("ttl", 3600)  # Default: 3600 seconds (1 hour)
-
-        # Check if we've seen this message before (use cached routing decision)
-        if caching_enabled and message in self._routing_cache:
-            cached_entry = self._routing_cache[message]
-
-            # Check if cache entry is a simple string (old format) or dict with timestamp
-            if isinstance(cached_entry, str):
-                # Old format - assume it's still valid
-                return cached_entry
-            elif isinstance(cached_entry, dict):
-                # New format with timestamp
-                cached_time = cached_entry.get("timestamp", 0)
-                cached_agent = cached_entry.get("agent_id")
-
-                # Check if cache entry is still valid (within TTL)
-                if time.time() - cached_time < cache_ttl:
-                    return cached_agent
-                else:
-                    # Cache entry expired, remove it
-                    del self._routing_cache[message]
-
-        # Get routing model if not available
-        routing_model = self.routing_model
-        if not hasattr(self, "routing_model") or self.routing_model is None:
-            try:
-                # Try to get text model from formation
-                routing_model = await self.get_model_for_capability("text")
-                #  Info - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_COMPLETED
-            except Exception as e:
-                # Fall back to intelligent selection if model creation fails
-                #  Warning - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_FAILED
-                _ = e  # remove this after implementing observability
-                return await self._select_best_available_agent(message)
-
-        try:
-            # Create a prompt for the routing model
-            prompt = self._create_routing_prompt(message)
-
-            # Query the routing model
-            response = await routing_model.generate_text(prompt)
-
-            # Parse the response
-            selected_agent_id = self._parse_routing_response(response)
-
-            # If parsing failed or the agent doesn't exist, use intelligent fallback
-            if selected_agent_id is None or selected_agent_id not in self.agents:
-                selected_agent_id = await self._select_best_available_agent(message)
-                #  Warning - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_COMPLETED
-                # Routing model returned invalid agent. Selected best available agent
-            else:
-                #  Info - TODO: add observability
-                # ConversationEvents.OVERLORD_ROUTING_COMPLETED
-                _ = None  # remove this after implementing observability
-
-            # Cache the result for future identical messages (if caching is enabled)
-            if caching_enabled:
-                self._routing_cache[message] = {
-                    "agent_id": selected_agent_id,
-                    "timestamp": time.time(),
-                }
-
-            return selected_agent_id
-
-        except Exception as e:
-            # If anything goes wrong, use intelligent selection
-            #  Warning - TODO: add observability
-            # ConversationEvents.OVERLORD_ROUTING_FAILED
-            _ = e  # remove this after implementing observability
-            return await self._select_best_available_agent(message)
-
-    def _create_routing_prompt(self, message: str) -> str:
-        """
-        Create a prompt for the routing model to determine the appropriate agent.
-
-        This internal method constructs a prompt that instructs the LLM to select
-        the most appropriate agent based on agent descriptions and the user's message.
-        The prompt includes descriptions of all available agents and asks the model
-        to select the best one for the given message.
-
-        Args:
-            message: The user's message that needs to be routed to an appropriate agent.
-
-        Returns:
-            A formatted prompt string for the routing model.
-        """
-
-        #  Info - TODO: add observability
-        # ConversationEvents.OVERLORD_ROUTING_STARTED
-        # Get enhanced agent descriptions with metadata
-        agent_descriptions = []
-        for agent_id in self.agents.keys():
-            # Use enhanced metadata
-            metadata = self.agent_metadata[agent_id]
-            name = metadata["name"]
-            role = metadata["role"]
-            specialties = metadata["specialties"]
-            description = metadata["description"]
-
-            # Format: "ID: Name (Role) - Specialties: [list] - Description"
-            agent_line = f"{agent_id}: {name}"
-            if role:
-                agent_line += f" ({role})"
-            if specialties:
-                specialty_list = ", ".join(specialties)
-                agent_line += f" - Specialties: {specialty_list}"
-            if description:
-                agent_line += f" - {description}"
-
-            agent_descriptions.append(agent_line)
-
-        # Get persona from config or use default
-        custom_persona = getattr(self, "routing_persona", None)
-
-        # Create complete system message using persona
-        complete_system_message = self._create_overlord_system_message(custom_persona)
-
-        # Add current date/time to the prompt
-        current_time = datetime.datetime.now()
-        date_time_str = current_time.strftime("Today is %d %m %Y, %H:%M")
-        prompt = f"{complete_system_message}\n\n<date-time>\n{date_time_str}\n</date-time>\n\n"
-
-        # Add available agents section
-        prompt += "<available-agents>\n"
-        # Add agent descriptions
-        for description in agent_descriptions:
-            prompt += f"- {description}\n"
-        prompt += "</available-agents>\n\n"
-
-        # Add the message
-        prompt += f"<user-message>\n{message}\n</user-message>\n"
-
-        return prompt
-
-    async def _select_best_available_agent(self, message: str) -> str:
-        """
-        Intelligently select the best available agent based on message content.
-
-        This method uses simple heuristics to match message content with agent
-        descriptions when the routing model fails or is unavailable. Only considers
-        agents that are not marked for deletion.
-
-        Args:
-            message: The message to analyze for agent selection
-
-        Returns:
-            The ID of the best matching agent
-        """
-        # Get available agents (not marked for deletion)
-        available_agents = await self.active_agent_tracker.get_available_agents(
-            list(self.agents.keys())
-        )
-
-        if not available_agents:
-            raise NoAvailableAgentsError("No agents available for new requests")
-
-        # If only one available agent, return it
-        if len(available_agents) == 1:
-            return available_agents[0]
-
-        # Keywords for simple agent matching heuristics
-        AGENT_MATCHING_KEYWORDS = {
-            "business",
-            "writer",
-            "assistant",
-            "help",
-            "support",
-            "analysis",
-            "research",
-        }
-
-        # Simple keyword matching against agent descriptions
-        message_lower = message.lower()
-        best_match = None
-        best_score = 0
-
-        for agent_id in available_agents:
-            description = self.agent_descriptions.get(agent_id, "")
-            if not description:
-                continue
-
-            description_lower = description.lower()
-            score = 0
-
-            # Simple keyword scoring
-            for keyword in AGENT_MATCHING_KEYWORDS:
-                if keyword in message_lower and keyword in description_lower:
-                    score += 1
-
-            if score > best_score:
-                best_score = score
-                best_match = agent_id
-
-        # If no good match found, return the first available agent
-        best_match = best_match or available_agents[0]
-
-        #  Info - TODO: add observability
-        # ConversationEvents.OVERLORD_ROUTING_COMPLETED
-        # Selected best available agent: '{best_match}'
-        return best_match
-
-    def _parse_routing_response(self, response: str) -> Optional[str]:
-        """
-        Parse the routing model's response to extract the selected agent ID.
-
-        This internal method processes the LLM's response to identify which agent ID
-        was selected. It uses various heuristics to extract the agent ID from the
-        model's response, which might not always be in the exact format requested.
-
-        Args:
-            response: The raw text response from the routing model.
-
-        Returns:
-            The ID of the selected agent if successfully parsed, or None if parsing failed.
-            A successful return value will be one of the agent IDs registered with this
-            overlord.
-        """
-        # If the response is empty, return None
-        if not response:
-            return None
-
-        # First, check if the response exactly matches an agent ID
-        if response.strip() in self.agents:
-            return response.strip()
-
-        # Try to extract an agent ID using various heuristics
-        for line in response.split("\n"):
-            # Look for a clean statement like "Agent ID: xyz"
-            if ":" in line:
-                parts = line.split(":", 1)
-                key, value = parts[0].strip().lower(), parts[1].strip()
-                if "agent" in key and "id" in key:
-                    if value in self.agents:
-                        return value
-
-            # Check if any agent ID is mentioned in the line
-            for agent_id in self.agents:
-                if agent_id in line:
-                    return agent_id
-
-        # If no agent ID was found, return None
-        return None
+        return await self.agent_router.select_agent_for_message(message)
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -1624,38 +1333,9 @@ class Overlord:
                 }
             }
         """
-        available_agents = {}
-
-        for agent_id, agent in self.agents.items():
-            # Don't include the requesting agent
-            if agent_id == requesting_agent_id:
-                continue
-
-            # Check if agent participates in internal A2A communication
-            # Default to True if not specified
-            if not getattr(agent, "a2a_internal", True):
-                continue
-
-            # Get agent capabilities if available
-            capabilities = []
-            if hasattr(agent, "get_capabilities"):
-                capabilities = agent.get_capabilities()
-            elif hasattr(agent, "capabilities"):
-                capabilities = agent.capabilities
-
-            # Apply capability filter if specified
-            if capability_filter:
-                if not capabilities or not any(cap in capabilities for cap in capability_filter):
-                    continue
-
-            # Add agent to available list
-            available_agents[agent_id] = {
-                "description": self.agent_descriptions.get(agent_id, ""),
-                "capabilities": capabilities,
-                "status": "active",  # If it's in the registry, it's active
-            }
-
-        return available_agents
+        return self.a2a_coordinator.get_available_agents_for_a2a(
+            requesting_agent_id=requesting_agent_id, capability_filter=capability_filter
+        )
 
     async def handle_user_information_extraction(
         self,
@@ -1778,124 +1458,6 @@ class Overlord:
             support is not enabled).
         """
         return await self.user_context_manager.clear_user_context(user_id, keys, agent_id)
-
-    async def register_mcp_server(
-        self,
-        server_id: str,
-        url: Optional[str] = None,
-        command: Optional[str] = None,
-        auth: Optional[Dict[str, Any]] = None,
-        model: Optional[LLM] = None,
-        request_timeout: Optional[int] = None,
-    ) -> str:
-        """
-        Register an MCP server with the centralized MCP service with secrets support.
-
-        This method adds a Model Context Protocol (MCP) server to the overlord,
-        making its tools available to agents. Supports GitHub Actions-style secrets
-        interpolation in credentials. MCP servers can be external HTTP services,
-        local command-line tools, or other tool providers that implement the MCP protocol.
-
-        Args:
-            server_id: Unique identifier for the MCP server. Used to reference the
-                server when invoking tools or updating its configuration.
-            url: URL for HTTP/SSE MCP servers. Required for web-based MCP servers,
-                providing the endpoint to send MCP requests to.
-            command: Command for command-line MCP servers. Required for CLI-based MCP
-                servers, specifying the command to execute.
-            auth: Optional authentication configuration for the MCP server.
-                Supports secrets interpolation with ${{ secrets.NAME }} syntax.
-                Format depends on the server's requirements.
-            model: Optional model to use for this MCP handler. Some MCP servers
-                require a model for processing tool invocations.
-            request_timeout: Optional timeout in seconds for requests to this server.
-                Defaults to the overlord's global timeout setting if not specified.
-
-        Returns:
-            The server_id of the registered server, confirming successful registration.
-
-        Raises:
-            ValueError: If neither url nor command is provided, or if both are provided.
-            ConnectionError: If the MCP server cannot be contacted during registration.
-        """
-        # Use overlord's default timeout if none specified
-        timeout = request_timeout if request_timeout is not None else self.request_timeout
-
-        # Interpolate secrets in auth if provided
-        final_auth = auth
-        if auth:
-            try:
-                final_auth = await self.interpolate_secrets(auth)
-            except Exception as e:
-                #  Warning - TODO: add observability
-                # SystemEvents.MCP_SERVER_REGISTRATION_FAILED
-                _ = e  # remove this after implementing observability
-                # Continue with original auth
-
-        # Register the server with the MCP service
-        res = await self.mcp_service.register_mcp_server(
-            server_id=server_id,
-            url=url,
-            command=command,
-            credentials=final_auth,
-            model=model,
-            request_timeout=timeout,
-        )
-
-        #  Info - TODO: add observability
-        # ConversationEvents.MCP_SERVER_REGISTERED
-        return res
-
-    async def list_mcp_tools(
-        self, server_id: Optional[str] = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        List available tools from MCP servers.
-
-        This method retrieves information about the tools available from registered
-        MCP servers, including their names, descriptions, parameters, and the servers
-        they belong to.
-
-        Args:
-            server_id: Optional server ID to list tools from a specific server.
-                If not provided, lists tools from all registered servers.
-
-        Returns:
-            Dictionary mapping server IDs to lists of available tools, where each
-            tool is represented as a dictionary with:
-            - "name": The tool's name
-            - "description": The tool's description
-            - "parameters": The tool's parameter schema (if any)
-            - "returns": The tool's return type schema (if available)
-
-            Example:
-            {
-                "weather_server": [
-                    {
-                        "name": "get_weather",
-                        "description": "Get current weather for a location",
-                        "parameters": {...}
-                    }
-                ]
-            }
-        """
-        res = await self.mcp_service.list_tools(server_id=server_id)
-
-        # Info - TODO: add observability
-        # SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED
-        return res
-
-    def get_mcp_service(self) -> MCPService:
-        """
-        Get the centralized MCP service.
-
-        This method provides access to the underlying MCPService instance that
-        manages all MCP servers and tool invocations.
-
-        Returns:
-            The MCPService instance used by this overlord.
-        """
-        return self.mcp_service
 
     async def add_message_to_memory(
         self,
@@ -2379,162 +1941,16 @@ class Overlord:
                 AsyncGenerator if streaming
             For async processing: Dict with request_id, status, and processing info
         """
-        # Generate unique request ID for all requests (for tracking and logging)
-        request_id = f"req_{generate_nanoid()}"
-        timestamp = time.time()
-
-        # Start request tracking with observability
-        async with self.observability_manager.track_request(
-            request_id=request_id,
-            formation_id=self.formation_id,
-            user_id=str(user_id) if user_id is not None else None,
-        ):
-            # Emit request received event
-            observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_RECEIVED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "message_length": len(message),
-                    "agent_name": agent_name,
-                    "user_id": str(user_id) if user_id is not None else None,
-                    "use_async": use_async,
-                    "has_webhook": webhook_url is not None,
-                },
-                description=f"Request {request_id} received",
-            )
-
-            # Emit request validation event (basic validation)
-            observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_VALIDATED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "message_valid": len(message.strip()) > 0,
-                    "agent_exists": agent_name is None or agent_name in self.agents,
-                },
-                description=f"Request {request_id} validated",
-            )
-
-            # Use provided values or formation defaults
-            webhook_url = webhook_url or self.async_webhook_url
-            threshold_seconds = threshold_seconds or self.async_threshold_seconds
-
-            # Determine streaming behavior
-            use_streaming = stream if stream is not None else self.streaming
-
-            # Async decision logic
-            if use_async is False:
-                use_async_mode = False  # Force synchronous
-            elif use_async is True:
-                use_async_mode = True  # Force asynchronous
-                #  Debug - TODO: add observability
-            else:  # use_async is None - intelligent decision
-                if self.async_enable_estimation:
-                    estimated_time = await self.time_estimator.estimate_processing_time(message)
-                    use_async_mode = self.time_estimator.should_use_async(
-                        estimated_time, threshold_seconds
-                    )
-                    #  Info - TODO: add observability
-                    # ConversationEvents.ASYNC_THRESHOLD_DETECTED
-                    #     f"Request {request_id}: Estimated {estimated_time:.1f}s, "
-                    #     f"threshold {threshold_seconds}s, async={use_async_mode}"
-                    # )
-
-            if use_async_mode:
-                # Async processing path
-                estimated_time = (
-                    await self.time_estimator.estimate_processing_time(message)
-                    if self.async_enable_estimation
-                    else None
-                )
-
-                #  Info - TODO: add observability
-                # ConversationEvents.ASYNC_PROCESSING_STARTED
-                #     f"Request {request_id}: Started async processing "
-                #     f"(estimated: {estimated_time:.1f}s)"
-                # )
-
-                initial_state = RequestState(
-                    id=request_id,
-                    status=RequestStatus.PROCESSING,
-                    start_time=timestamp,
-                    webhook_url=webhook_url,
-                    estimated_completion=estimated_time,
-                    user_id=user_id,
-                    session_id=session_id,
-                )
-                await self.request_tracker.track_request(request_id, initial_state)
-
-                # Start background processing
-                asyncio.create_task(
-                    self._execute_async_request(request_id, message, agent_name, user_id)
-                )
-
-                # Return immediate async response using unified format
-                return create_unified_response(
-                    request_id=request_id,
-                    status="processing",
-                    content=[],  # Empty content for processing status
-                    formation_id=self.formation_id,
-                    processing_mode="async",
-                    processing_time=None,  # Not available yet
-                    webhook_url=webhook_url,
-                    error=None,
-                    user_id=str(user_id) if user_id is not None else None,
-                )
-            else:
-                # Synchronous processing path
-                if use_streaming:
-                    # Return streaming generator
-                    return self._process_streaming_chat(message, agent_name, user_id)
-                else:
-                    # Non-streaming synchronous processing
-                    start_time = time.time()
-
-                    result = await self._process_sync_chat(message, agent_name, user_id)
-                    processing_time = time.time() - start_time
-
-                    # Emit performance monitoring completed event
-                    observability.observe(
-                        event_type=observability.SystemEvents.PERFORMANCE_DURATION_RECORDED,
-                        level=observability.EventLevel.DEBUG,
-                        data={
-                            "operation": "sync_chat",
-                            "processing_time": processing_time,
-                            "message_length": len(message),
-                            "performance_score": "good" if processing_time < 5.0 else "slow",
-                            "phase": "completed",
-                        },
-                        description=f"Performance monitoring completed: {processing_time:.2f}s",
-                    )
-
-                    # Extract user-facing content from result
-                    result_content = result.content if hasattr(result, "content") else str(result)
-                    user_content = extract_user_content(result_content)
-
-                    # Create unified response for internal consistency (streaming, observability)
-                    # Note: unified_response is created for internal tracking but not returned
-                    _ = create_unified_response(
-                        request_id=request_id,
-                        status="completed",
-                        content=user_content,
-                        formation_id=self.formation_id,
-                        processing_mode="sync",
-                        processing_time=processing_time,
-                        webhook_url=None,  # Not used for sync
-                        error=None,
-                        user_id=str(user_id) if user_id is not None else None,
-                    )
-
-                    # For sync mode, extract and return just the string content for user convenience
-                    if user_content and len(user_content) > 0:
-                        first_item = user_content[0]
-                        if isinstance(first_item, dict) and "text" in first_item:
-                            return first_item["text"]
-                        elif isinstance(first_item, str):
-                            return first_item
-
-                    # Fallback to empty string
-                    return ""
+        return await self.chat_orchestrator.chat(
+            message=message,
+            agent_name=agent_name,
+            user_id=user_id,
+            session_id=session_id,
+            use_async=use_async,
+            webhook_url=webhook_url,
+            threshold_seconds=threshold_seconds,
+            stream=stream,
+        )
 
     async def _execute_async_request(
         self, request_id: str, message: str, agent_name: Optional[str], user_id: Any
@@ -3610,159 +3026,3 @@ class Overlord:
             "internal_id": synthetic_id,
             "isolation_key": f"user_{synthetic_id}_{external_id_hash[:8]}",
         }
-
-    # The following operational setup methods have been moved to Formation:
-    # - _initialize_memory_extractor() -> Formation handles memory extractor setup
-    # - _initialize_external_registry_client() -> Formation handles A2A client setup
-    # - _initialize_inbound_registry_client() -> Formation handles A2A registration setup
-    # - _initialize_a2a_server() -> Formation handles A2A server setup
-
-    async def _start_a2a_server(self) -> None:
-        """
-        Start the A2A formation server.
-
-        This method starts the FastAPI-based HTTP server that hosts A2A services,
-        allowing external formations to discover and communicate with this formation's
-        agents. The server runs asynchronously and provides REST endpoints for:
-        - Agent discovery and capability queries
-        - Message routing to local agents
-        - Health checks and status monitoring
-
-        The server only starts if it was previously initialized in the configuration.
-        If startup fails, an error is logged but the overlord continues operating
-        without A2A server capabilities.
-
-        Side Effects:
-            - Starts HTTP server on configured host/port
-            - Emits observability events for server startup success/failure
-            - Makes local agents discoverable to external formations
-        """
-        try:
-            if self.a2a_server:
-                await self.a2a_server.start()
-
-                #  Info - TODO: add observability
-                # SystemEvents.A2A_SERVER_STARTED
-
-        except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.A2A_SERVER_START_FAILED
-            _ = e  # remove this after implementing observability
-
-    async def _process_pending_agent_registrations(self) -> None:
-        """
-        Process pending external agent registrations.
-
-        This method handles registration of agents with external A2A registries that
-        were created before the A2A system was fully initialized. During overlord
-        startup, agents may be created before the registry clients are available,
-        so their registration is deferred until this method is called.
-
-        The method processes all agents in the pending_external_registrations set
-        and registers them concurrently with the external registry. Failed
-        registrations are logged but don't prevent other registrations from proceeding.
-
-        Side Effects:
-            - Registers pending agents with external registries
-            - Clears the pending_external_registrations set
-            - Emits observability events for registration completion
-        """
-        try:
-            # Skip if no registry client or no pending registrations
-            if not self.inbound_registry_client or not hasattr(
-                self, "pending_external_registrations"
-            ):
-                return
-
-            # Collect registration tasks for concurrent execution
-            registration_tasks = []
-
-            for agent_id in self.pending_external_registrations:
-                # Only register agents that still exist in the registry
-                if agent_id in self.agents:
-                    # Create async registration task for this agent
-                    task = self._register_agent_with_external_registry(agent_id)
-                    registration_tasks.append(task)
-
-            # Execute all registrations concurrently to minimize latency
-            if registration_tasks:
-                await asyncio.gather(*registration_tasks, return_exceptions=True)
-
-                # Clear the pending registrations set now that processing is complete
-                self.pending_external_registrations.clear()
-
-                #  Info - TODO: add observability
-                # SystemEvents.A2A_AGENT_REGISTRATIONS_COMPLETED
-
-        except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.A2A_AGENT_REGISTRATION_FAILED
-            _ = e  # remove this after implementing observability
-
-    async def _register_agent_with_external_registry(self, agent_id: str) -> None:
-        """
-        Register a single agent with external registry.
-
-        This method registers a local agent with an external A2A registry, making it
-        discoverable and accessible to other formations. The registration includes
-        the agent's metadata such as description, capabilities, and current status.
-
-        The method handles registration failures gracefully, logging errors without
-        stopping the registration process for other agents.
-
-        Args:
-            agent_id: ID of the agent to register. Must exist in self.agents.
-
-        Side Effects:
-            - Sends registration request to external registry
-            - Emits observability events for registration success/failure
-            - Makes the agent discoverable to external formations
-        """
-        try:
-            # Skip if no registry client available or agent doesn't exist
-            if not self.inbound_registry_client or agent_id not in self.agents:
-                return
-
-            # Get the agent instance for metadata extraction
-            agent = self.agents[agent_id]
-
-            # Create agent registration payload with all relevant metadata
-            agent_info = {
-                "agent_id": agent_id,
-                "formation_id": self.formation_id,
-                "description": self.agent_descriptions.get(agent_id, ""),
-                "capabilities": getattr(agent, "capabilities", []),
-                "status": "active",  # All registered agents are considered active
-            }
-
-            # Send registration request to external registry
-            await self.inbound_registry_client.register_agent(agent_info)
-
-            #  Info - TODO: add observability
-            # SystemEvents.A2A_AGENT_REGISTERED
-
-        except Exception as e:
-            #  Warning - TODO: add observability
-            # SystemEvents.A2A_AGENT_REGISTRATION_FAILED
-            _ = e  # remove this after implementing observability
-
-    async def deregister_agent_from_external_registry(self, agent_id: str) -> None:
-        """
-        Deregister an agent from external registry.
-
-        Args:
-            agent_id: ID of the agent to deregister
-        """
-        try:
-            if not self.inbound_registry_client:
-                return
-
-            await self.inbound_registry_client.deregister_agent(agent_id, self.formation_id)
-
-            #  Info - TODO: add observability
-            # SystemEvents.A2A_AGENT_DEREGISTERED
-
-        except Exception as e:
-            #  Warning - TODO: add observability
-            # SystemEvents.A2A_AGENT_DEREGISTRATION_FAILED
-            _ = e  # remove this after implementing observability
