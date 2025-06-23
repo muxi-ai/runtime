@@ -6,6 +6,7 @@ import uuid
 from pydantic import BaseModel, Field, field_validator, computed_field, ConfigDict
 
 from .task_status import TaskStatus
+from .type_definitions import TaskOutput as TaskOutputType
 
 
 class WorkflowStatus(Enum):
@@ -161,7 +162,9 @@ class TaskResult(BaseModel):
 
     task_id: str = Field(..., min_length=1, description="ID of executed task")
     status: TaskStatus = Field(..., description="Task execution status")
-    outputs: Dict[str, Any] = Field(default_factory=dict, description="Task outputs by name")
+    outputs: Dict[str, TaskOutputType] = Field(
+        default_factory=dict, description="Task outputs by name"
+    )
     agent_id: Optional[str] = Field(default=None, description="ID of agent that executed task")
     error_message: Optional[str] = Field(default=None, description="Error message if failed")
     execution_time: Optional[float] = Field(

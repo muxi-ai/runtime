@@ -12,6 +12,13 @@ import time
 import uuid
 from ..utils.id_generator import generate_nanoid
 
+from .type_definitions import (
+    ToolParameters,
+    AvailableInformation,
+    CollectedInformation,
+    Context,
+)
+
 
 class ClarificationStatus(Enum):
     """Status of a clarification request"""
@@ -111,7 +118,7 @@ class ToolCall:
     """Represents a tool call extracted from model response"""
 
     name: str
-    parameters: Dict[str, Any]
+    parameters: ToolParameters
     call_id: Optional[str] = None
 
     def __post_init__(self):
@@ -135,7 +142,7 @@ class InformationAnalysis:
     """Result of analyzing information requirements"""
 
     missing_info: List[str]
-    available_info: Dict[str, Any]
+    available_info: AvailableInformation
     confidence_scores: Dict[str, float]
     suggestions: List[str]
     can_proceed: bool
@@ -196,11 +203,11 @@ class ClarificationRequest:
     request_id: Optional[str] = None
     tool_name: Optional[str] = None
     intent: str = ""
-    provided_info: Dict[str, Any] = field(default_factory=dict)
+    provided_info: CollectedInformation = field(default_factory=dict)
     missing_info: List[str] = field(default_factory=list)
     clarification_plan: List[ClarificationQuestion] = field(default_factory=list)
     current_step: int = 0
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: Context = field(default_factory=dict)
     created_at: float = field(default_factory=time.time)
     updated_at: float = field(default_factory=time.time)
     status: ClarificationStatus = ClarificationStatus.CLARIFYING

@@ -5,11 +5,13 @@ Core data structures for managing async operations with timeout and cancellation
 """
 
 import asyncio
-from typing import Any, Dict, Optional, Callable, Set
+from typing import Any, Optional, Callable, Set
 from enum import Enum
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+from .type_definitions import OperationMetadata
 
 
 class OperationStatus(Enum):
@@ -88,7 +90,7 @@ class OperationContext(BaseModel):
     cancellation_token: Optional[Any] = Field(
         default=None, description="Token for operation cancellation", exclude=True
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: OperationMetadata = Field(
         default_factory=dict, description="Additional operation metadata"
     )
 
@@ -234,7 +236,9 @@ class AsyncOperationResult(BaseModel):
     elapsed_time: float = Field(default=0.0, ge=0.0, description="Total operation time in seconds")
     was_cancelled: bool = Field(default=False, description="Whether operation was cancelled")
     was_timeout: bool = Field(default=False, description="Whether operation timed out")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional result metadata")
+    metadata: OperationMetadata = Field(
+        default_factory=dict, description="Additional result metadata"
+    )
 
     @property
     def is_success(self) -> bool:
