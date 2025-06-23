@@ -7,7 +7,7 @@ when LLM services are experiencing issues.
 
 import time
 import asyncio
-from typing import Callable, Optional, TypeVar, Union
+from typing import Callable, Optional, TypeVar
 from enum import Enum
 
 from ...services import observability

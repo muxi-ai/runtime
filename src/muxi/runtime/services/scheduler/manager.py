@@ -1017,26 +1017,26 @@ class JobManager:
             job = session.query(ScheduledJob).filter(ScheduledJob.id == job_id).first()
             if not job:
                 raise ValueError(f"Job {job_id} not found")
-            
+
             # Validate user ownership
             if job.user_id != user_id:
                 raise ValueError(f"User {user_id} does not have permission to update job {job_id}")
-            
+
             # Build update dict
             update_fields = {}
             changes = {}
-            
+
             if new_title:
                 SchedulerInputValidator.validate_title(new_title)
                 update_fields["title"] = new_title
                 changes["title"] = {"old": job.title, "new": new_title}
-            
+
             if new_prompt:
                 SchedulerInputValidator.validate_prompt(new_prompt, "new_prompt")
                 update_fields["original_prompt"] = new_prompt
                 update_fields["execution_prompt"] = new_prompt
                 changes["prompt"] = {"old": job.original_prompt[:50] + "...", "new": new_prompt[:50] + "..."}
-            
+
             if new_schedule:
                 if job.is_recurring:
                     SchedulerInputValidator.validate_cron_expression(new_schedule)
@@ -1056,20 +1056,20 @@ class JobManager:
                         "old": job.scheduled_for.isoformat() if job.scheduled_for else None,
                         "new": scheduled_datetime.isoformat()
                     }
-            
+
             # Handle additional kwargs
             if "exclusion_rules" in kwargs:
                 update_fields["exclusion_rules"] = kwargs["exclusion_rules"]
                 changes["exclusion_rules"] = "updated"
-            
+
             if not update_fields:
                 return (job_id, "unchanged")
-            
+
             # Apply updates
             update_fields["updated_at"] = utc_now()
             session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(update_fields)
             session.commit()
-            
+
             # Audit the update
             await self._audit_job_action(
                 job_id=job_id,
@@ -1078,7 +1078,7 @@ class JobManager:
                 changes=changes,
                 reason=f"Job updated with {len(changes)} changes"
             )
-            
+
             observability.observe(
                 event_type=observability.ConversationEvents.SCHEDULED_JOB_UPDATED,
                 level=observability.EventLevel.INFO,
@@ -1090,7 +1090,7 @@ class JobManager:
                 },
                 description=f"Job {job_id} updated successfully"
             )
-            
+
             return (job_id, "updated")
 
     async def _is_significant_prompt_change(self, old_prompt: str, new_prompt: str) -> bool:
@@ -1126,7 +1126,8 @@ class JobManager:
 
             llm = LLM(service=llm_service)
 
-            prompt = """Compare these two scheduling task descriptions and determine if they represent fundamentally different tasks:
+            prompt = """
+Compare these two scheduling task descriptions and determine if they represent fundamentally different tasks:
 
 Task 1: {old_prompt}
 Task 2: {new_prompt}
@@ -1144,7 +1145,7 @@ Consider them the SAME task if:
 - Grammatical variations or synonyms
 - Added/removed articles or small words
 
-Be language-agnostic - same task in different languages should be considered the same.""".format(
+Be language-agnostic - same task in different languages should be considered the same.""".trim().format(
                 old_prompt=old_prompt,
                 new_prompt=new_prompt
             )
@@ -1179,4 +1180,3 @@ Be language-agnostic - same task in different languages should be considered the
             )
             # Fallback: consider all changes significant if LLM fails
             return True
-
