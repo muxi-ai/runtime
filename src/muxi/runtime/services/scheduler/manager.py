@@ -6,7 +6,7 @@ All methods converted to use SQLAlchemy ORM with cross-database support.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from ...utils.datetime_utils import utc_now
@@ -85,7 +85,7 @@ class JobManager:
     ) -> str:
         """
         Create a new scheduled job (recurring or one-time).
-        
+
         Args:
             user_id: User who created the job
             formation_id: Formation ID
@@ -96,15 +96,15 @@ class JobManager:
             scheduled_for: Specific datetime for one-time jobs (required if is_recurring=False)
             is_recurring: Whether this is a recurring or one-time job
             exclusion_rules: List of exclusion rules
-            
+
         Returns:
             Job ID
-            
+
         Raises:
             ValueError: If input validation fails or limits are exceeded
         """
         await self.initialize()
-        
+
         # SECURITY: Comprehensive input validation
         SchedulerInputValidator.validate_job_creation(
             user_id=user_id,
@@ -114,17 +114,17 @@ class JobManager:
             execution_prompt=execution_prompt,
             cron_expression=cron_expression,
             scheduled_for=scheduled_for,
-            is_recurring=is_recurring
+            is_recurring=is_recurring,
         )
-        
+
         # SECURITY: Validate user access to formation
         validate_user_access(user_id, formation_id)
-        
+
         # SECURITY: Check resource limits
         limits_enforcer = get_limits_enforcer()
         await limits_enforcer.check_job_creation_limits(self, user_id)
         await limits_enforcer.check_system_limits(self)
-        
+
         job_id = f"sched_{uuid.uuid4().hex[:16]}"
 
         try:
@@ -328,10 +328,10 @@ class JobManager:
     async def complete_onetime_job(self, job_id: str) -> bool:
         """
         Mark a one-time job as completed.
-        
+
         Args:
             job_id: ID of the job to complete
-            
+
         Returns:
             True if job was successfully marked as completed, False otherwise
         """
@@ -341,15 +341,14 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 updated = (
                     session.query(ScheduledJob)
-                    .filter(and_(
-                        ScheduledJob.id == job_id, 
-                        ScheduledJob.is_recurring == False,
-                        ScheduledJob.status == "ACTIVE"
-                    ))
-                    .update({
-                        "status": "COMPLETED", 
-                        "updated_at": utc_now()
-                    })
+                    .filter(
+                        and_(
+                            ScheduledJob.id == job_id,
+                            ScheduledJob.is_recurring.is_(False),
+                            ScheduledJob.status == "ACTIVE",
+                        )
+                    )
+                    .update({"status": "COMPLETED", "updated_at": utc_now()})
                 )
 
                 session.commit()
@@ -369,7 +368,7 @@ class JobManager:
                     data={"job_id": job_id, "reason": "Job not found or not a one-time job"},
                     description=f"Failed to mark one-time job as completed: {job_id}",
                 )
-                
+
             return success
 
         except SQLAlchemyError as e:
@@ -587,9 +586,9 @@ class JobManager:
                     "paused_jobs": status_counts.get("PAUSED", 0),
                     "total_runs": total_runs,
                     "total_failures": total_failures,
-                    "success_rate": (total_runs - total_failures) / total_runs
-                    if total_runs > 0
-                    else 0,
+                    "success_rate": (
+                        (total_runs - total_failures) / total_runs if total_runs > 0 else 0
+                    ),
                 }
 
         except SQLAlchemyError as e:
@@ -600,35 +599,137 @@ class JobManager:
                 description=f"Failed to get job statistics: {e}",
             )
             raise
-    
-    async def get_user_jobs(self, user_id: str) -> List[Dict[str, Any]]:
+
+    # Batch processing methods for performance optimization
+
+    async def get_active_jobs_count(self) -> int:
         """
-        Get all jobs for a specific user.
-        
-        Args:
-            user_id: User identifier
-            
+        Get total count of active jobs without loading them.
+
         Returns:
-            List of job dictionaries
+            Total number of active jobs
         """
         await self.initialize()
-        
+
         try:
             with self.db_manager.get_session() as session:
-                jobs = (
-                    session.query(ScheduledJob)
-                    .filter(ScheduledJob.user_id == user_id)
-                    .order_by(ScheduledJob.created_at.desc())
-                    .all()
+                count = (
+                    session.query(func.count(ScheduledJob.id))
+                    .filter(ScheduledJob.status == "ACTIVE")
+                    .scalar()
                 )
-                
-                return [job.to_dict() for job in jobs]
-                
+                return count or 0
+
         except SQLAlchemyError as e:
             observability.observe(
                 event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
-                data={"operation": "get_user_jobs", "error": str(e), "user_id": user_id},
-                description=f"Failed to get user jobs: {e}",
+                data={"operation": "get_active_jobs_count", "error": str(e)},
+                description=f"Failed to count active jobs: {e}",
+            )
+            raise
+
+    async def get_active_jobs_batch(self, offset: int, limit: int) -> List[Dict[str, Any]]:
+        """
+        Get a batch of active jobs for processing.
+
+        Args:
+            offset: Number of jobs to skip
+            limit: Maximum number of jobs to return
+
+        Returns:
+            List of job dictionaries
+        """
+        await self.initialize()
+
+        try:
+            with self.db_manager.get_session() as session:
+                jobs = (
+                    session.query(ScheduledJob)
+                    .filter(ScheduledJob.status == "ACTIVE")
+                    .order_by(ScheduledJob.created_at)
+                    .offset(offset)
+                    .limit(limit)
+                    .all()
+                )
+
+                return [job.to_dict() for job in jobs]
+
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "get_active_jobs_batch",
+                    "error": str(e),
+                    "offset": offset,
+                    "limit": limit,
+                },
+                description=f"Failed to get active jobs batch: {e}",
+            )
+            raise
+
+    async def cleanup_old_jobs_batch(self, retention_days: int, offset: int, limit: int) -> int:
+        """
+        Clean up old completed jobs in batches.
+
+        Args:
+            retention_days: Number of days to retain completed jobs
+            offset: Number of jobs to skip
+            limit: Maximum number of jobs to process
+
+        Returns:
+            Number of jobs deleted
+        """
+        await self.initialize()
+
+        try:
+            with self.db_manager.get_session() as session:
+                cutoff_date = utc_now() - timedelta(days=retention_days)
+
+                # Get old completed jobs
+                old_jobs = (
+                    session.query(ScheduledJob)
+                    .filter(
+                        ScheduledJob.status.in_(["COMPLETED", "FAILED"]),
+                        ScheduledJob.last_run_at < cutoff_date,
+                    )
+                    .offset(offset)
+                    .limit(limit)
+                    .all()
+                )
+
+                # Delete jobs
+                deleted_count = 0
+                for job in old_jobs:
+                    session.delete(job)
+                    deleted_count += 1
+
+                session.commit()
+
+                if deleted_count > 0:
+                    observability.observe(
+                        event_type=observability.SystemEvents.SCHEDULER_CLEANUP_BATCH,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "deleted_count": deleted_count,
+                            "retention_days": retention_days,
+                            "batch_offset": offset,
+                        },
+                        description=f"Cleaned up {deleted_count} old jobs in batch",
+                    )
+
+                return deleted_count
+
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "cleanup_old_jobs_batch",
+                    "error": str(e),
+                    "retention_days": retention_days,
+                },
+                description=f"Failed to cleanup old jobs: {e}",
             )
             raise

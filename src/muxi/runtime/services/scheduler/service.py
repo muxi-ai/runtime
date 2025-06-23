@@ -24,7 +24,7 @@ import asyncio
 import signal
 import time
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from ...utils.datetime_utils import utc_now
 
@@ -37,6 +37,9 @@ from ..db import get_database_manager
 from .manager import JobManager
 from .parser import ScheduleParser
 from .rewriter import PromptRewriter
+from .batch_processor import JobBatchProcessor
+from .cache import SchedulerCache
+from .circuit_breaker import LLMCircuitBreaker
 
 # Configure multitasking
 multitasking.set_engine("thread")
@@ -92,17 +95,42 @@ class SchedulerService:
         self.formation_timezone = self._config.get("timezone", "UTC")
 
         # Services - use unified database manager from overlord
-        if hasattr(overlord, 'db_manager') and overlord.db_manager:
+        if hasattr(overlord, "db_manager") and overlord.db_manager:
             self.db_manager = overlord.db_manager
         else:
             # Fallback to creating own database manager
             self.db_manager = get_database_manager()
         self.job_manager = JobManager(self.db_manager)
-        self.schedule_parser = ScheduleParser()
+
+        # Performance optimization components
+        scheduler_config = None
+        if overlord and hasattr(overlord, "_configured_services"):
+            scheduler_config = overlord._configured_services.get("scheduler_config")
+
+        self.batch_processor = JobBatchProcessor(self.job_manager, config=scheduler_config)
+        self.cache = SchedulerCache(
+            cache_ttl=self._config.get("cache_ttl", 300),
+            max_cache_size=self._config.get("max_cache_size", 1000),
+        )
+        self.llm_circuit_breaker = LLMCircuitBreaker(
+            failure_threshold=self._config.get("llm_failure_threshold", 5),
+            timeout=self._config.get("llm_circuit_timeout", 60.0),
+        )
+
+        # Initialize parser and rewriter with performance components
+        self.schedule_parser = ScheduleParser(
+            cache=self.cache, circuit_breaker=self.llm_circuit_breaker
+        )
         self.prompt_rewriter = PromptRewriter()
 
         # State tracking
         self._active_executions = set()
+        self._performance_stats = {
+            "cycles_completed": 0,
+            "jobs_processed": 0,
+            "llm_calls_saved": 0,
+            "batch_processing_time": 0.0,
+        }
 
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_SERVICE_STARTED,
@@ -309,9 +337,9 @@ class SchedulerService:
 
     async def get_due_jobs_map_reduce(self, current_time: datetime) -> List[Dict[str, Any]]:
         """
-        Get jobs due for execution using map/reduce pattern.
+        Get jobs due for execution using map/reduce pattern with batch processing.
 
-        MAP: Fetch all active jobs (both recurring and one-time)
+        MAP: Fetch active jobs in batches
         REDUCE: Filter jobs that match current time and don't match exclusion rules
 
         Args:
@@ -320,53 +348,52 @@ class SchedulerService:
         Returns:
             List of jobs due for execution
         """
-        # MAP: Get all active jobs (both recurring and one-time)
-        all_active_jobs = await self.job_manager.get_active_jobs()
+        start_time = time.time()
 
-        due_jobs = []
+        # Define helper functions for batch processing
+        async def is_job_due(job: Dict[str, Any], current_time: datetime) -> bool:
+            """Check if a job is due for execution."""
+            if job.get("is_recurring", True):
+                # Handle recurring jobs
+                if job.get("cron_expression"):
+                    return await self._is_recurring_job_due(job, current_time)
+            else:
+                # Handle one-time jobs
+                return await self._is_onetime_job_due(job, current_time)
+            return False
 
-        # REDUCE: Filter jobs that are due
-        for job in all_active_jobs:
-            try:
-                is_due = False
-                
-                if job.get("is_recurring", True):
-                    # Handle recurring jobs (existing logic)
-                    if job.get("cron_expression"):
-                        is_due = await self._is_recurring_job_due(job, current_time)
-                else:
-                    # Handle one-time jobs
-                    is_due = await self._is_onetime_job_due(job, current_time)
-                
-                if is_due:
-                    # Check exclusion rules (applies to both job types)
-                    if not await self._check_exclusion_rules(job, current_time):
-                        due_jobs.append(job)
+        # Use batch processor to get due jobs efficiently
+        due_jobs = await self.batch_processor.process_due_jobs(
+            current_time=current_time,
+            is_job_due_func=is_job_due,
+            check_exclusion_func=self._check_exclusion_rules,
+        )
 
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.SCHEDULER_JOB_EVALUATION_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "job_id": job["id"],
-                        "error": str(e),
-                        "job_type": "recurring" if job.get("is_recurring", True) else "one_time",
-                        "cron_expression": job.get("cron_expression"),
-                        "scheduled_for": job.get("scheduled_for"),
-                    },
-                    description=f"Failed to evaluate job {job['id']}: {e}",
-                )
+        # Update performance stats
+        batch_time = time.time() - start_time
+        self._performance_stats["batch_processing_time"] = batch_time
+
+        observability.observe(
+            event_type=observability.SystemEvents.SCHEDULER_BATCH_PROCESSING_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            data={
+                "due_jobs_count": len(due_jobs),
+                "processing_time": batch_time,
+                "batch_size": self.batch_processor.get_batch_size(),
+            },
+            description=f"Batch processing completed in {batch_time:.2f}s",
+        )
 
         return due_jobs
-    
+
     async def _is_recurring_job_due(self, job: Dict[str, Any], current_time: datetime) -> bool:
         """
         Check if a recurring job is due for execution.
-        
+
         Args:
             job: Job data dict
             current_time: Current time in formation timezone
-            
+
         Returns:
             True if job should execute, False otherwise
         """
@@ -384,37 +411,37 @@ class SchedulerService:
             if time_diff <= window_seconds:
                 # Check if job has already run recently
                 return await self._should_execute_job(job, prev_time)
-            
+
             return False
         except Exception:
             return False
-    
+
     async def _is_onetime_job_due(self, job: Dict[str, Any], current_time: datetime) -> bool:
         """
         Check if a one-time job is due for execution.
-        
+
         Args:
             job: Job data dict
             current_time: Current time in formation timezone
-            
+
         Returns:
             True if job should execute, False otherwise
         """
         scheduled_for_str = job.get("scheduled_for")
         if not scheduled_for_str:
             return False
-        
+
         try:
             # Parse the scheduled datetime (stored in UTC)
             scheduled_for_utc = datetime.fromisoformat(scheduled_for_str.replace("Z", "+00:00"))
-            
+
             # Convert current time to UTC for comparison
             current_time_utc = current_time.astimezone(pytz.UTC)
-            
+
             # Check if the scheduled time has passed and we're within the execution window
             time_diff = (current_time_utc - scheduled_for_utc).total_seconds()
             window_seconds = self.check_interval_minutes * 60
-            
+
             # Job is due if:
             # 1. The scheduled time has passed (time_diff >= 0)
             # 2. We're within the execution window (time_diff <= window_seconds)
@@ -422,7 +449,7 @@ class SchedulerService:
             if 0 <= time_diff <= window_seconds:
                 # Check if job has already been executed
                 return not job.get("last_run_at")  # One-time jobs should only run once
-            
+
             return False
         except Exception:
             return False
@@ -483,7 +510,7 @@ class SchedulerService:
                             description=f"Job {job['id']} excluded by rule: {rule.get('description')}",
                         )
                         return True
-                
+
                 elif rule.get("type") == "complex_date":
                     # Check complex date patterns
                     if self._check_complex_date_exclusion(rule["pattern"], current_time):
@@ -508,15 +535,15 @@ class SchedulerService:
                 )
 
         return False  # Not excluded
-    
+
     def _check_complex_date_exclusion(self, pattern: str, current_time: datetime) -> bool:
         """
         Check if current time matches a complex date pattern.
-        
+
         Args:
             pattern: Complex date pattern (e.g., "last_friday_of_month")
             current_time: Current time to check
-            
+
         Returns:
             True if current date matches the pattern (should exclude)
         """
@@ -524,86 +551,96 @@ class SchedulerService:
             # Get current date info in formation timezone
             tz = pytz.timezone(self.formation_timezone)
             local_time = current_time.astimezone(tz)
-            
+
             pattern_lower = pattern.lower()
-            
+
             # Parse different pattern types
-            if pattern_lower.startswith('first_') and pattern_lower.endswith('_of_month'):
+            if pattern_lower.startswith("first_") and pattern_lower.endswith("_of_month"):
                 # first_monday_of_month, first_friday_of_month, etc.
                 weekday_name = pattern_lower[6:-9]  # Extract weekday name
                 return self._is_nth_weekday_of_month(local_time, 1, weekday_name)
-                
-            elif pattern_lower.startswith('last_') and pattern_lower.endswith('_of_month'):
+
+            elif pattern_lower.startswith("last_") and pattern_lower.endswith("_of_month"):
                 # last_friday_of_month, last_monday_of_month, etc.
                 weekday_name = pattern_lower[5:-9]  # Extract weekday name
                 return self._is_last_weekday_of_month(local_time, weekday_name)
-                
-            elif pattern_lower.startswith('nth_weekday:'):
+
+            elif pattern_lower.startswith("nth_weekday:"):
                 # nth_weekday:3:tuesday
-                parts = pattern_lower.split(':')
+                parts = pattern_lower.split(":")
                 if len(parts) == 3:
                     n = int(parts[1])
                     weekday_name = parts[2]
                     return self._is_nth_weekday_of_month(local_time, n, weekday_name)
-                    
-            elif pattern_lower.startswith('nth_day:'):
+
+            elif pattern_lower.startswith("nth_day:"):
                 # nth_day:15 (15th day of month)
                 day = int(pattern_lower[8:])
                 return local_time.day == day
-                
-            elif pattern_lower.startswith('last_day_minus:'):
+
+            elif pattern_lower.startswith("last_day_minus:"):
                 # last_day_minus:2 (2 days before end of month)
                 days_before = int(pattern_lower[15:])
                 return self._is_n_days_before_month_end(local_time, days_before)
-                
+
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.COMPLEX_DATE_EVALUATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"pattern": pattern, "error": str(e)},
-                description=f"Failed to evaluate complex date pattern: {e}"
+                description=f"Failed to evaluate complex date pattern: {e}",
             )
-            
+
         return False
-    
+
     def _is_nth_weekday_of_month(self, dt: datetime, n: int, weekday_name: str) -> bool:
         """Check if date is the Nth occurrence of a weekday in the month."""
         weekday_map = {
-            'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
-            'friday': 4, 'saturday': 5, 'sunday': 6
+            "monday": 0,
+            "tuesday": 1,
+            "wednesday": 2,
+            "thursday": 3,
+            "friday": 4,
+            "saturday": 5,
+            "sunday": 6,
         }
-        
+
         target_weekday = weekday_map.get(weekday_name.lower())
         if target_weekday is None:
             return False
-            
+
         # Check if current date is the target weekday
         if dt.weekday() != target_weekday:
             return False
-            
+
         # Calculate which occurrence this is
         occurrence = (dt.day - 1) // 7 + 1
         return occurrence == n
-    
+
     def _is_last_weekday_of_month(self, dt: datetime, weekday_name: str) -> bool:
         """Check if date is the last occurrence of a weekday in the month."""
         weekday_map = {
-            'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
-            'friday': 4, 'saturday': 5, 'sunday': 6
+            "monday": 0,
+            "tuesday": 1,
+            "wednesday": 2,
+            "thursday": 3,
+            "friday": 4,
+            "saturday": 5,
+            "sunday": 6,
         }
-        
+
         target_weekday = weekday_map.get(weekday_name.lower())
         if target_weekday is None:
             return False
-            
+
         # Check if current date is the target weekday
         if dt.weekday() != target_weekday:
             return False
-            
+
         # Check if adding 7 days would be in the next month
         next_week = dt + timedelta(days=7)
         return next_week.month != dt.month
-    
+
     def _is_n_days_before_month_end(self, dt: datetime, n: int) -> bool:
         """Check if date is N days before the end of the month."""
         # Get last day of current month
@@ -611,7 +648,7 @@ class SchedulerService:
             last_day = datetime(dt.year + 1, 1, 1, tzinfo=dt.tzinfo) - timedelta(days=1)
         else:
             last_day = datetime(dt.year, dt.month + 1, 1, tzinfo=dt.tzinfo) - timedelta(days=1)
-            
+
         # Check if current date is N days before last day
         target_date = last_day - timedelta(days=n)
         return dt.date() == target_date.date()
@@ -679,11 +716,11 @@ class SchedulerService:
 
                 # Mark job as successful
                 await self.job_manager.mark_job_execution_success(job_id, str(response))
-                
+
                 # For one-time jobs, mark as completed after successful execution
                 if not job.get("is_recurring", True):
                     await self.job_manager.complete_onetime_job(job_id)
-                    
+
                     observability.observe(
                         event_type=observability.ConversationEvents.ONETIME_JOB_COMPLETED,
                         level=observability.EventLevel.INFO,
@@ -886,3 +923,79 @@ class SchedulerService:
             List of job data dicts
         """
         return await self.job_manager.get_user_jobs(user_id)
+
+    # Performance monitoring methods
+
+    async def get_performance_stats(self) -> Dict[str, Any]:
+        """
+        Get current performance statistics.
+
+        Returns:
+            Dictionary with performance metrics
+        """
+        # Get cache statistics
+        cache_stats = self.cache.get_cache_stats() if self.cache else {}
+
+        # Get circuit breaker stats
+        circuit_stats = self.llm_circuit_breaker.get_stats() if self.llm_circuit_breaker else {}
+
+        # Get job count
+        active_jobs_count = await self.job_manager.count_active_jobs()
+
+        # Calculate LLM calls saved
+        llm_calls_saved = cache_stats.get("hits", 0)
+
+        return {
+            "scheduler_stats": {
+                "cycles_completed": self._performance_stats["cycles_completed"],
+                "jobs_processed": self._performance_stats["jobs_processed"],
+                "batch_processing_time": self._performance_stats["batch_processing_time"],
+                "active_jobs": active_jobs_count,
+                "batch_size": self.batch_processor.get_batch_size(),
+            },
+            "cache_stats": cache_stats,
+            "circuit_breaker_stats": circuit_stats,
+            "performance_improvements": {
+                "llm_calls_saved": llm_calls_saved,
+                "estimated_cost_savings": llm_calls_saved * 0.002,  # Rough estimate
+                "cache_hit_rate": cache_stats.get("hit_rate", 0.0),
+                "memory_efficient": True,  # Using batch processing
+            },
+        }
+
+    async def cleanup_performance_caches(self) -> Dict[str, int]:
+        """
+        Clean up expired cache entries and old job records.
+
+        Returns:
+            Dictionary with cleanup statistics
+        """
+        # Clean expired cache entries
+        cache_cleaned = self.cache.cleanup_expired() if self.cache else 0
+
+        # Clean old job records
+        retention_days = self._config.get("retention_days", 30)
+        jobs_cleaned = await self.batch_processor.cleanup_old_jobs(retention_days)
+
+        observability.observe(
+            event_type=observability.SystemEvents.SCHEDULER_CLEANUP_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={"cache_entries_removed": cache_cleaned, "old_jobs_removed": jobs_cleaned},
+            description=f"Scheduler cleanup completed: {cache_cleaned} cache entries, {jobs_cleaned} old jobs",
+        )
+
+        return {"cache_entries_removed": cache_cleaned, "old_jobs_removed": jobs_cleaned}
+
+    def reset_circuit_breaker(self) -> None:
+        """
+        Manually reset the LLM circuit breaker.
+
+        Useful for recovering from extended LLM outages.
+        """
+        if self.llm_circuit_breaker:
+            self.llm_circuit_breaker.reset()
+            observability.observe(
+                event_type=observability.SystemEvents.SCHEDULER_CIRCUIT_BREAKER_RESET,
+                level=observability.EventLevel.INFO,
+                description="LLM circuit breaker manually reset",
+            )

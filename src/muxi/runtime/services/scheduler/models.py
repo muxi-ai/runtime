@@ -9,12 +9,10 @@ Models:
 """
 
 import json
-from datetime import datetime
 from ...utils.datetime_utils import utc_now
-from typing import Any, Dict, List
+from typing import Any, Dict
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID as PostgresUUID
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
 from sqlalchemy.types import TEXT, TypeDecorator
 
 from ..db import Base
