@@ -38,6 +38,59 @@ class JSONType(TypeDecorator):
         return json.loads(value)
 
 
+class ScheduledJobAudit(Base):
+    """
+    Audit trail for scheduled job lifecycle events.
+
+    Tracks when jobs are created, updated, paused, resumed, deleted, or replaced.
+    Does not track execution logs - those are handled by observability.
+    """
+
+    __tablename__ = "scheduled_job_audit"
+
+    # Primary key
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Job and user identification
+    job_id = Column(String(255), nullable=False, index=True)
+    user_id = Column(String(255), nullable=False, index=True)
+
+    # Audit information
+    action = Column(
+        String(50), nullable=False
+    )  # created, updated, paused, resumed, deleted, replaced
+    timestamp = Column(DateTime, nullable=False, default=utc_now, index=True)
+    changes = Column(Text, nullable=True)  # JSON string of what changed
+    reason = Column(Text, nullable=True)  # Optional reason for the action
+
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index("idx_job_audit_job_id", "job_id"),
+        Index("idx_job_audit_user_id", "user_id"),
+        Index("idx_job_audit_timestamp", "timestamp"),
+    )
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert audit entry to dictionary."""
+        result = {
+            "id": self.id,
+            "job_id": self.job_id,
+            "user_id": self.user_id,
+            "action": self.action,
+            "timestamp": self.timestamp.isoformat() if self.timestamp else None,
+            "reason": self.reason,
+        }
+
+        # Parse changes if it's a JSON string
+        if self.changes:
+            try:
+                result["changes"] = json.loads(self.changes)
+            except json.JSONDecodeError:
+                result["changes"] = self.changes
+
+        return result
+
+
 class ScheduledJob(Base):
     """
     Scheduled job model for storing both recurring and one-time AI tasks.
@@ -65,7 +118,9 @@ class ScheduledJob(Base):
     # Scheduling configuration
     is_recurring = Column(Boolean, nullable=False, default=True, index=True)
     cron_expression = Column(String(255), nullable=True, index=True)  # NULL for one-time jobs
-    scheduled_for = Column(DateTime, nullable=True, index=True)  # Specific datetime for one-time jobs
+    scheduled_for = Column(
+        DateTime, nullable=True, index=True
+    )  # Specific datetime for one-time jobs
     exclusion_rules = Column(JSONType, default=list)
 
     # Status management

@@ -6,8 +6,9 @@ All methods converted to use SQLAlchemy ORM with cross-database support.
 """
 
 import uuid
+import json
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ...utils.datetime_utils import utc_now
 
@@ -16,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .. import observability
 from ..db import DatabaseManager
-from .models import ScheduledJob
+from .models import ScheduledJob, ScheduledJobAudit
 from .validation import SchedulerInputValidator, validate_user_access
 from .limits import get_limits_enforcer
 
@@ -145,6 +146,20 @@ class JobManager:
                 session.commit()
 
             job_type = "recurring" if is_recurring else "one_time"
+            # Audit the creation
+            await self._audit_job_action(
+                job_id=job_id,
+                user_id=user_id,
+                action="created",
+                changes={
+                    "title": title,
+                    "prompt": original_prompt,
+                    "type": job_type,
+                    "schedule": cron_expression
+                    or (scheduled_for.isoformat() if scheduled_for else None),
+                },
+            )
+
             observability.observe(
                 event_type=observability.ConversationEvents.SCHEDULED_JOB_CREATED,
                 level=observability.EventLevel.INFO,
@@ -259,7 +274,7 @@ class JobManager:
             )
             raise
 
-    async def pause_job(self, job_id: str) -> bool:
+    async def pause_job(self, job_id: str, user_id: str, reason: Optional[str] = None) -> bool:
         """Pause a scheduled job."""
         await self.initialize()
 
@@ -275,10 +290,20 @@ class JobManager:
                 success = updated > 0
 
             if success:
+                # Audit the pause action
+                await self._audit_job_action(
+                    job_id=job_id, user_id=user_id, action="paused", reason=reason
+                )
+
                 observability.observe(
-                    event_type=observability.ConversationEvents.SCHEDULED_JOB_PAUSED,
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_EXECUTION_TRACKED,
                     level=observability.EventLevel.INFO,
-                    data={"job_id": job_id},
+                    data={
+                        "job_id": job_id,
+                        "action": "paused",
+                        "user_id": user_id,
+                        "status": "paused",
+                    },
                     description=f"Job paused: {job_id}",
                 )
             return success
@@ -292,7 +317,7 @@ class JobManager:
             )
             raise
 
-    async def resume_job(self, job_id: str) -> bool:
+    async def resume_job(self, job_id: str, user_id: str) -> bool:
         """Resume a paused scheduled job."""
         await self.initialize()
 
@@ -308,10 +333,18 @@ class JobManager:
                 success = updated > 0
 
             if success:
+                # Audit the resume action
+                await self._audit_job_action(job_id=job_id, user_id=user_id, action="resumed")
+
                 observability.observe(
-                    event_type=observability.ConversationEvents.SCHEDULED_JOB_RESUMED,
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_EXECUTION_TRACKED,
                     level=observability.EventLevel.INFO,
-                    data={"job_id": job_id},
+                    data={
+                        "job_id": job_id,
+                        "action": "resumed",
+                        "user_id": user_id,
+                        "status": "resumed",
+                    },
                     description=f"Job resumed: {job_id}",
                 )
             return success
@@ -380,7 +413,7 @@ class JobManager:
             )
             raise
 
-    async def delete_job(self, job_id: str) -> bool:
+    async def delete_job(self, job_id: str, user_id: str, reason: Optional[str] = None) -> bool:
         """Delete a scheduled job."""
         await self.initialize()
 
@@ -392,10 +425,15 @@ class JobManager:
                 success = deleted > 0
 
             if success:
+                # Audit the deletion
+                await self._audit_job_action(
+                    job_id=job_id, user_id=user_id, action="deleted", reason=reason
+                )
+
                 observability.observe(
-                    event_type=observability.ConversationEvents.SCHEDULED_JOB_DELETED,
+                    event_type=observability.ConversationEvents.SCHEDULED_JOB_EXECUTION_TRACKED,
                     level=observability.EventLevel.INFO,
-                    data={"job_id": job_id},
+                    data={"job_id": job_id, "action": "deleted", "user_id": user_id},
                     description=f"Job deleted: {job_id}",
                 )
             return success
@@ -476,10 +514,13 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
+                # Update job statistics
                 session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(
                     {
                         "last_run_status": "failed",
-                        "last_run_failure_message": error_message,
+                        "last_run_failure_message": error_message[
+                            :1000
+                        ],  # Truncate to prevent overflow
                         "total_runs": ScheduledJob.total_runs + 1,
                         "total_failures": ScheduledJob.total_failures + 1,
                         "consecutive_failures": ScheduledJob.consecutive_failures + 1,
@@ -491,7 +532,11 @@ class JobManager:
             observability.observe(
                 event_type=observability.ConversationEvents.SCHEDULED_JOB_EXECUTION_TRACKED,
                 level=observability.EventLevel.ERROR,
-                data={"job_id": job_id, "status": "failed", "error_message": error_message},
+                data={
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error_message": error_message,
+                },
                 description=f"Job execution failure tracked: {job_id}",
             )
 
@@ -597,6 +642,65 @@ class JobManager:
                 level=observability.EventLevel.ERROR,
                 data={"operation": "get_statistics", "error": str(e), "user_id": user_id},
                 description=f"Failed to get job statistics: {e}",
+            )
+            raise
+
+    async def _audit_job_action(
+        self,
+        job_id: str,
+        user_id: str,
+        action: str,
+        changes: Optional[Dict[str, Any]] = None,
+        reason: Optional[str] = None,
+    ) -> None:
+        """Record job lifecycle action in audit trail."""
+        try:
+            with self.db_manager.get_session() as session:
+                audit_entry = ScheduledJobAudit(
+                    job_id=job_id,
+                    user_id=user_id,
+                    action=action,
+                    changes=json.dumps(changes) if changes else None,
+                    reason=reason,
+                )
+                session.add(audit_entry)
+                session.commit()
+
+        except SQLAlchemyError as e:
+            # Log but don't fail the main operation
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "operation": "audit_job_action",
+                    "error": str(e),
+                    "job_id": job_id,
+                    "action": action,
+                },
+                description=f"Failed to audit job action: {e}",
+            )
+
+    async def get_job_audit_trail(self, job_id: str) -> List[Dict[str, Any]]:
+        """Get audit trail for a specific job."""
+        await self.initialize()
+
+        try:
+            with self.db_manager.get_session() as session:
+                audit_entries = (
+                    session.query(ScheduledJobAudit)
+                    .filter(ScheduledJobAudit.job_id == job_id)
+                    .order_by(ScheduledJobAudit.timestamp.desc())
+                    .all()
+                )
+
+                return [entry.to_dict() for entry in audit_entries]
+
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"operation": "get_job_audit_trail", "error": str(e), "job_id": job_id},
+                description=f"Failed to get job audit trail: {e}",
             )
             raise
 
@@ -733,3 +837,197 @@ class JobManager:
                 description=f"Failed to cleanup old jobs: {e}",
             )
             raise
+
+    async def update_or_replace_job(
+        self,
+        job_id: str,
+        user_id: str,
+        new_prompt: Optional[str] = None,
+        new_title: Optional[str] = None,
+        new_schedule: Optional[str] = None,
+        **kwargs,
+    ) -> Tuple[str, str]:
+        """
+        Update a job or replace it if the prompt changed significantly.
+
+        Returns:
+            Tuple of (job_id, action) where action is 'updated' or 'replaced'
+        """
+        await self.initialize()
+
+        if new_prompt:
+            # Get the current job
+            current_job = await self.get_job(job_id)
+            if not current_job:
+                raise ValueError(f"Job {job_id} not found")
+
+            # Check if this is a significant change
+            if self._is_significant_prompt_change(current_job["original_prompt"], new_prompt):
+                # This is a different task - replace the job
+                # 1. Create new job with same schedule but new prompt
+                new_job_id = await self.create_job(
+                    user_id=user_id,
+                    formation_id=current_job["formation_id"],
+                    title=new_title or f"Updated: {current_job['title']}",
+                    original_prompt=new_prompt,
+                    execution_prompt=new_prompt,  # Will be rewritten by the rewriter
+                    cron_expression=new_schedule or current_job.get("cron_expression"),
+                    scheduled_for=(
+                        current_job.get("scheduled_for")
+                        if not current_job["is_recurring"]
+                        else None
+                    ),
+                    is_recurring=current_job["is_recurring"],
+                    exclusion_rules=current_job.get("exclusion_rules", []),
+                )
+
+                # 2. Delete the old job
+                await self.delete_job(job_id, user_id, reason="Replaced by new task")
+
+                # 3. Audit the replacement
+                await self._audit_job_action(
+                    job_id,
+                    user_id,
+                    "replaced",
+                    changes={"replaced_by": new_job_id, "reason": "significant_prompt_change"},
+                    reason=f"Task changed from '{current_job['original_prompt']}' to '{new_prompt}'",
+                )
+
+                return (new_job_id, "replaced")
+
+        # Otherwise, do a normal update
+        # For now, since we don't have update_job implemented:
+        raise NotImplementedError("Regular job updates not yet implemented")
+
+    def _is_significant_prompt_change(self, old_prompt: str, new_prompt: str) -> bool:
+        """
+        Determine if a prompt change represents a fundamentally different task.
+
+        Examples of significant changes:
+        - "check my email" -> "send me a text"
+        - "generate a report" -> "backup my files"
+
+        Examples of minor changes:
+        - "check my email" -> "check my emails"
+        - "send daily report" -> "send a daily report"
+        """
+        # Simple heuristic approach
+        old_normalized = old_prompt.lower().strip()
+        new_normalized = new_prompt.lower().strip()
+
+        if old_normalized == new_normalized:
+            return False
+
+        # Extract key verbs/actions
+        old_verbs = self._extract_action_words(old_normalized)
+        new_verbs = self._extract_action_words(new_normalized)
+
+        # If the main actions changed, it's significant
+        if old_verbs != new_verbs:
+            return True
+
+        # Extract key nouns/objects
+        old_objects = self._extract_object_words(old_normalized)
+        new_objects = self._extract_object_words(new_normalized)
+
+        # If the main objects changed significantly, it's a different task
+        if len(old_objects) > 0:
+            overlap = len(old_objects.intersection(new_objects))
+            if overlap / len(old_objects) < 0.5:
+                return True
+
+        return False
+
+    def _extract_action_words(self, text_input: str) -> set:
+        """Extract action verbs from text."""
+        # Common action verbs in scheduling context
+        action_verbs = {
+            "check",
+            "send",
+            "email",
+            "text",
+            "call",
+            "notify",
+            "alert",
+            "backup",
+            "sync",
+            "upload",
+            "download",
+            "generate",
+            "create",
+            "update",
+            "delete",
+            "fetch",
+            "retrieve",
+            "analyze",
+            "report",
+            "remind",
+            "schedule",
+            "run",
+            "execute",
+            "process",
+            "monitor",
+        }
+
+        words = set(text_input.split())
+        return words.intersection(action_verbs)
+
+    def _extract_object_words(self, text_input: str) -> set:
+        """Extract object/noun words from text."""
+        # Common objects in scheduling context
+        common_objects = {
+            "email",
+            "emails",
+            "message",
+            "messages",
+            "text",
+            "texts",
+            "file",
+            "files",
+            "report",
+            "reports",
+            "data",
+            "database",
+            "backup",
+            "backups",
+            "notification",
+            "notifications",
+            "reminder",
+            "reminders",
+            "calendar",
+            "meeting",
+            "meetings",
+            "task",
+            "tasks",
+            "job",
+            "jobs",
+            "system",
+            "server",
+        }
+
+        # Remove common stop words
+        stop_words = {
+            "a",
+            "an",
+            "the",
+            "my",
+            "your",
+            "our",
+            "their",
+            "is",
+            "are",
+            "to",
+            "from",
+            "for",
+            "of",
+            "and",
+            "or",
+        }
+
+        words = set(text_input.split())
+        words = words - stop_words
+
+        # Return words that are likely objects
+        return words.intersection(common_objects) | {
+            w for w in words if len(w) > 3 and w not in self._extract_action_words(text_input)
+        }

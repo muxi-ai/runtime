@@ -6,7 +6,7 @@ ensuring consistent validation, documentation, and initialization across the fra
 """
 
 from pydantic import BaseModel, Field, field_validator
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from abc import ABC, abstractmethod
 
 
@@ -72,7 +72,7 @@ class BaseServiceSchema(BaseModel, ABC):
 class LLMServiceSchema(BaseServiceSchema):
     """Configuration for LLM service."""
 
-    service_name: str = Field(default="llm", const=True)
+    service_name: Literal["llm"] = Field(default="llm")
     default_model: str = Field(..., description="Default LLM model to use")
     max_tokens: int = Field(
         default=4096, ge=1, le=32768, description="Maximum tokens for generation"
@@ -101,7 +101,7 @@ class LLMServiceSchema(BaseServiceSchema):
 class MemoryServiceSchema(BaseServiceSchema):
     """Configuration for memory services."""
 
-    service_name: str = Field(default="memory", const=True)
+    service_name: Literal["memory"] = Field(default="memory")
 
     # Buffer memory config
     buffer_enabled: bool = Field(default=True, description="Enable buffer memory")
@@ -129,7 +129,7 @@ class MemoryServiceSchema(BaseServiceSchema):
 class MCPServiceSchema(BaseServiceSchema):
     """Configuration for MCP service."""
 
-    service_name: str = Field(default="mcp", const=True)
+    service_name: Literal["mcp"] = Field(default="mcp")
     max_concurrent_servers: int = Field(
         default=10, ge=1, le=100, description="Maximum concurrent MCP servers"
     )
@@ -152,7 +152,7 @@ class MCPServiceSchema(BaseServiceSchema):
 class A2AServiceSchema(BaseServiceSchema):
     """Configuration for A2A (Agent-to-Agent) service."""
 
-    service_name: str = Field(default="a2a", const=True)
+    service_name: Literal["a2a"] = Field(default="a2a")
 
     # Server configuration
     server_enabled: bool = Field(
@@ -188,7 +188,7 @@ class A2AServiceSchema(BaseServiceSchema):
 class SchedulerServiceSchema(BaseServiceSchema):
     """Configuration for scheduler service."""
 
-    service_name: str = Field(default="scheduler", const=True)
+    service_name: Literal["scheduler"] = Field(default="scheduler")
 
     # Job limits
     max_jobs_per_user: int = Field(default=100, ge=1, le=10000, description="Maximum jobs per user")
@@ -226,7 +226,7 @@ class SchedulerServiceSchema(BaseServiceSchema):
 class FormationSchema(BaseServiceSchema):
     """Configuration for formation orchestration."""
 
-    service_name: str = Field(default="formation", const=True)
+    service_name: Literal["formation"] = Field(default="formation")
     formation_id: str = Field(..., description="Unique formation identifier")
 
     # Agent configuration
