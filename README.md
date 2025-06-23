@@ -14,6 +14,16 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 
 ## Recent Architecture Improvements
 
+### File Generation MCP ✅ **PRODUCTION READY**
+- **Built-in MCP Server**: Comprehensive file generation capabilities through secure Python code execution
+- **Multi-Format Support**: Charts (matplotlib), documents (docx, PDF), spreadsheets (Excel, CSV), images (PIL, QR codes), presentations (pptx)
+- **Security First**: AST-based code validation with whitelist of allowed libraries, no exec/eval allowed
+- **Sandboxed Execution**: Subprocess isolation with 30-second timeout, restricted to `outputs/` directory, no network access
+- **Auto-Registration**: Built-in MCPs automatically register at formation startup with granular configuration control
+- **Dynamic System Prompts**: Automatic augmentation of agent prompts with file generation instructions and examples
+- **Formation Integration**: Support for both simple boolean and granular array configuration modes via `runtime.built_in_mcps`
+- **Production Ready**: Complete dependency management, testing infrastructure, comprehensive error handling
+
 ### Task Scheduling System ✅ **PRODUCTION READY**
 - **Dual Job Types**: Supports both recurring workflows ("check email every hour") and one-time scheduled tasks ("remind me tomorrow at 2pm") with intelligent detection
 - **Natural Language Scheduling**: Users schedule tasks conversationally using phrases like "check my email every hour for messages from my wife" or "remind me to call mom tomorrow at 2pm"
@@ -78,6 +88,7 @@ The MUXI Runtime has undergone a complete architectural transformation:
 | Backward compatibility burden | Clean, modern APIs only |
 | Static agent management | Hot agent deployment |
 | Manual task management | Intelligent task scheduling |
+| External-only MCP servers | Built-in MCP servers with auto-registration |
 
 ## Features
 
@@ -89,6 +100,7 @@ The MUXI Runtime has undergone a complete architectural transformation:
 - **Unified Services Architecture**: Consolidated multimodal, memory, MCP, A2A, and observability services
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
+- **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
