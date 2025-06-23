@@ -1968,3 +1968,159 @@ class Formation:
             raise MCPServerNotFoundError(server_id)
 
         return servers[server_id]
+
+    # Scheduler Methods
+    async def get_active_jobs(self) -> List[Dict[str, Any]]:
+        """
+        Get all active scheduled jobs.
+
+        Returns:
+            List of active scheduled jobs with their details
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_active_jobs"},
+            )
+
+        scheduler_service = await self._overlord.get_scheduler_service()
+        if not scheduler_service:
+            return []
+
+        return await scheduler_service.manager.get_all_jobs(status="active")
+
+    async def get_all_jobs(
+        self,
+        status: Optional[str] = None,
+        user_id: Optional[str] = None,
+        is_recurring: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get all scheduled jobs with optional filtering.
+
+        Args:
+            status: Filter by job status ('active', 'paused', 'completed', 'failed')
+            user_id: Filter by user ID
+            is_recurring: Filter by job type (True for recurring, False for one-time)
+            limit: Maximum number of jobs to return
+            offset: Number of jobs to skip for pagination
+
+        Returns:
+            List of scheduled jobs matching the criteria
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_all_jobs"},
+            )
+
+        scheduler_service = await self._overlord.get_scheduler_service()
+        if not scheduler_service:
+            return []
+
+        return await scheduler_service.manager.get_all_jobs(
+            status=status,
+            user_id=user_id,
+            is_recurring=is_recurring,
+            limit=limit,
+            offset=offset
+        )
+
+    async def get_user_jobs(self, user_id: str) -> List[Dict[str, Any]]:
+        """
+        Get all scheduled jobs for a specific user.
+
+        Args:
+            user_id: The user ID to get jobs for
+
+        Returns:
+            List of scheduled jobs for the user
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_user_jobs"},
+            )
+
+        scheduler_service = await self._overlord.get_scheduler_service()
+        if not scheduler_service:
+            return []
+
+        return await scheduler_service.manager.get_all_jobs(user_id=user_id)
+
+    async def get_job_audit_trail(self, job_id: str) -> List[Dict[str, Any]]:
+        """
+        Get the audit trail for a specific job.
+
+        Args:
+            job_id: The job ID to get audit trail for
+
+        Returns:
+            List of audit events for the job
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_job_audit_trail"},
+            )
+
+        scheduler_service = await self._overlord.get_scheduler_service()
+        if not scheduler_service:
+            return []
+
+        return await scheduler_service.manager.get_job_audit_trail(job_id)
+
+    async def get_recent_audit_trail(
+        self,
+        limit: int = 100,
+        user_id: Optional[str] = None,
+        action: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recent audit trail events.
+
+        Args:
+            limit: Maximum number of events to return (default: 100)
+            user_id: Filter by user ID
+            action: Filter by action type
+
+        Returns:
+            List of recent audit events
+
+        Raises:
+            OverlordStateError: If overlord is not running
+        """
+        if not self._is_running or not self._overlord:
+            raise OverlordStateError(
+                "stopped",
+                "running",
+                {"operation": "get_recent_audit_trail"},
+            )
+
+        scheduler_service = await self._overlord.get_scheduler_service()
+        if not scheduler_service:
+            return []
+
+        return await scheduler_service.manager.get_recent_audit_trail(
+            limit=limit,
+            user_id=user_id,
+            action=action
+        )

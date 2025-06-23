@@ -234,6 +234,58 @@ class JobManager:
             )
             raise
 
+    async def get_all_jobs(
+        self,
+        status: Optional[str] = None,
+        user_id: Optional[str] = None,
+        is_recurring: Optional[bool] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """Get all jobs with optional filters."""
+        await self.initialize()
+
+        try:
+            with self.db_manager.get_session() as session:
+                query = session.query(ScheduledJob)
+
+                if status:
+                    query = query.filter(ScheduledJob.status == status)
+
+                if user_id:
+                    query = query.filter(ScheduledJob.user_id == user_id)
+
+                if is_recurring is not None:
+                    query = query.filter(ScheduledJob.is_recurring == is_recurring)
+
+                query = query.order_by(ScheduledJob.created_at.desc())
+
+                if offset:
+                    query = query.offset(offset)
+
+                if limit:
+                    query = query.limit(limit)
+
+                jobs = query.all()
+                return [job.to_dict() for job in jobs]
+
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "get_all_jobs",
+                    "error": str(e),
+                    "filters": {
+                        "status": status,
+                        "user_id": user_id,
+                        "is_recurring": is_recurring,
+                    },
+                },
+                description=f"Failed to get all jobs: {e}",
+            )
+            raise
+
     async def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get a specific job by ID."""
         await self.initialize()
@@ -701,6 +753,70 @@ class JobManager:
                 level=observability.EventLevel.ERROR,
                 data={"operation": "get_job_audit_trail", "error": str(e), "job_id": job_id},
                 description=f"Failed to get job audit trail: {e}",
+            )
+            raise
+
+    async def get_user_audit_trail(
+        self, user_id: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get audit trail for all jobs belonging to a specific user."""
+        await self.initialize()
+
+        try:
+            with self.db_manager.get_session() as session:
+                query = (
+                    session.query(ScheduledJobAudit)
+                    .filter(ScheduledJobAudit.user_id == user_id)
+                    .order_by(ScheduledJobAudit.timestamp.desc())
+                )
+
+                if limit:
+                    query = query.limit(limit)
+
+                audit_entries = query.all()
+                return [entry.to_dict() for entry in audit_entries]
+
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"operation": "get_user_audit_trail", "error": str(e), "user_id": user_id},
+                description=f"Failed to get user audit trail: {e}",
+            )
+            raise
+
+    async def get_recent_audit_trail(
+        self, limit: int = 100, user_id: Optional[str] = None, action: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """Get recent audit trail entries with optional filters."""
+        await self.initialize()
+
+        try:
+            with self.db_manager.get_session() as session:
+                query = session.query(ScheduledJobAudit)
+
+                if user_id:
+                    query = query.filter(ScheduledJobAudit.user_id == user_id)
+
+                if action:
+                    query = query.filter(ScheduledJobAudit.action == action)
+
+                audit_entries = (
+                    query.order_by(ScheduledJobAudit.timestamp.desc()).limit(limit).all()
+                )
+
+                return [entry.to_dict() for entry in audit_entries]
+
+        except SQLAlchemyError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.DATABASE_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "operation": "get_recent_audit_trail",
+                    "error": str(e),
+                    "filters": {"user_id": user_id, "action": action},
+                },
+                description=f"Failed to get recent audit trail: {e}",
             )
             raise
 
