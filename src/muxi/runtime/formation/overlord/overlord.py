@@ -831,6 +831,8 @@ class Overlord:
         api_key: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
+        max_retries: Optional[int] = None,
+        fallback_model: Optional[str] = None,
         **kwargs,
     ) -> LLM:
         """
@@ -850,6 +852,10 @@ class Overlord:
                 where higher values produce more random outputs.
             max_tokens: Maximum tokens to generate in responses. If None, uses
                 provider defaults.
+            max_retries: Maximum retry attempts for the same model. If None, uses
+                formation defaults.
+            fallback_model: Fallback model if primary model fails. If None, uses
+                formation defaults.
             **kwargs: Additional parameters passed directly to the model.
 
         Returns:
@@ -867,12 +873,18 @@ class Overlord:
                 _ = e  # remove this after implementing observability
                 # Continue with original api_key
 
+        # Apply global LLM settings with parameter overrides
+        final_max_retries = max_retries or self._global_llm_settings.get("max_retries", 3)
+        final_fallback_model = fallback_model or self._global_llm_settings.get("fallback_model")
+
         # Create and return a new model instance
         return LLM(
             model=model,
             api_key=final_api_key,
             temperature=temperature,
             max_tokens=max_tokens,
+            max_retries=final_max_retries,
+            fallback_model=final_fallback_model,
             **kwargs,
         )
 

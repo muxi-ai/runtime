@@ -567,6 +567,7 @@ class LLM:
         max_tokens: Optional[int] = None,
         timeout: float = 30.0,
         max_retries: int = 3,
+        fallback_model: Optional[str] = None,
         base_retry_delay: float = 1.0,
         max_retry_delay: float = 60.0,
         enable_circuit_breaker: bool = True,
@@ -584,6 +585,7 @@ class LLM:
             max_tokens: Maximum tokens to generate in responses.
             timeout: Request timeout in seconds.
             max_retries: Maximum number of retry attempts.
+            fallback_model: Fallback model to use if primary model fails completely.
             base_retry_delay: Base delay for exponential backoff.
             max_retry_delay: Maximum delay for exponential backoff.
             enable_circuit_breaker: Enable circuit breaker pattern.
@@ -597,6 +599,7 @@ class LLM:
         self.api_key = api_key
         self.timeout = timeout
         self.max_retries = max_retries
+        self.fallback_model = fallback_model
         self.base_retry_delay = base_retry_delay
         self.max_retry_delay = max_retry_delay
         self.enable_circuit_breaker = enable_circuit_breaker
@@ -635,6 +638,7 @@ class LLM:
                 "model": self._model,
                 "timeout": timeout,
                 "max_retries": max_retries,
+                "fallback_model": fallback_model,
                 "circuit_breaker_enabled": enable_circuit_breaker,
             },
             description=f"Initialized LLM with {self.model_name}",
@@ -736,7 +740,7 @@ class LLM:
         return await self._basic_chat_with_files(messages, None, **kwargs)
 
     async def _execute_with_resilience(self, func, *args, **kwargs):
-        """Execute a function with full resilience patterns."""
+        """Execute a function with full resilience patterns including fallback model support."""
 
         async def _wrapped_func(*args, **kwargs):
             try:
@@ -756,15 +760,87 @@ class LLM:
         else:
             func_to_retry = _wrapped_func
 
-        # Apply exponential backoff retry
-        return await _exponential_backoff_retry(
-            func_to_retry,
-            max_retries=self.max_retries,
-            base_delay=self.base_retry_delay,
-            max_delay=self.max_retry_delay,
-            *args,
-            **kwargs,
-        )
+        # First try the primary model with exponential backoff retry
+        try:
+            return await _exponential_backoff_retry(
+                func_to_retry,
+                max_retries=self.max_retries,
+                base_delay=self.base_retry_delay,
+                max_delay=self.max_retry_delay,
+                *args,
+                **kwargs,
+            )
+        except LLMError as primary_error:
+            # If primary model fails completely and fallback is available, try fallback
+            if self.fallback_model and self.fallback_model != self.model_name:
+                observability.observe(
+                    event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "primary_model": self.model_name,
+                        "fallback_model": self.fallback_model,
+                        "primary_error": str(primary_error),
+                    },
+                    description=f"Primary model {self.model_name} failed, attempting fallback to {self.fallback_model}",
+                )
+
+                # Temporarily switch to fallback model
+                original_model = self.model_name
+                original_provider = self._provider
+                original_model_name = self._model
+
+                try:
+                    # Parse fallback model
+                    if "/" in self.fallback_model:
+                        self._provider, self._model = self.fallback_model.split("/", 1)
+                    else:
+                        self._provider = "openai"
+                        self._model = self.fallback_model
+                    self.model_name = self.fallback_model
+
+                    # Try the fallback model (without retries to avoid double retry)
+                    result = await _wrapped_func(*args, **kwargs)
+
+                    observability.observe(
+                        event_type=observability.ConversationEvents.MODEL_REQUEST_COMPLETED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "primary_model": original_model,
+                            "fallback_model": self.fallback_model,
+                            "fallback_success": True,
+                        },
+                        description=f"Fallback model {self.fallback_model} succeeded after {original_model} failed",
+                    )
+
+                    return result
+                except Exception as fallback_error:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "primary_model": original_model,
+                            "fallback_model": self.fallback_model,
+                            "primary_error": str(primary_error),
+                            "fallback_error": str(fallback_error),
+                        },
+                        description=(
+                            f"Both primary model {original_model} and fallback model {self.fallback_model} failed"
+                        ),
+                    )
+                    # Restore original model settings
+                    self.model_name = original_model
+                    self._provider = original_provider
+                    self._model = original_model_name
+                    # Re-raise the original primary error since that's the main failure
+                    raise primary_error
+                finally:
+                    # Always restore original model settings
+                    self.model_name = original_model
+                    self._provider = original_provider
+                    self._model = original_model_name
+            else:
+                # No fallback model available, re-raise original error
+                raise primary_error
 
     async def chat(
         self,

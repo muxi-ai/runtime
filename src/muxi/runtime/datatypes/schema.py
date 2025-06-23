@@ -80,6 +80,15 @@ class LLMServiceSchema(BaseServiceSchema):
     temperature: float = Field(
         default=0.7, ge=0.0, le=2.0, description="Temperature for generation randomness"
     )
+    timeout_seconds: float = Field(
+        default=30.0, ge=1.0, le=300.0, description="Request timeout in seconds"
+    )
+    max_retries: int = Field(
+        default=3, ge=0, le=10, description="Maximum retry attempts for the same model"
+    )
+    fallback_model: Optional[str] = Field(
+        default=None, description="Fallback model if primary model fails"
+    )
     cache_enabled: bool = Field(default=True, description="Enable response caching")
     cache_ttl: int = Field(default=3600, ge=0, description="Cache TTL in seconds")
     api_key: Optional[str] = Field(default=None, description="API key for LLM provider")
@@ -92,10 +101,21 @@ class LLMServiceSchema(BaseServiceSchema):
             raise ValueError("Model must be in format 'provider/model'")
         return v
 
+    @field_validator("fallback_model")
+    @classmethod
+    def validate_fallback_model(cls, v):
+        """Ensure fallback model format is valid if specified."""
+        if v is not None and (not v or "/" not in v):
+            raise ValueError("Fallback model must be in format 'provider/model'")
+        return v
+
     def validate_service_specific(self) -> None:
         """Validate LLM-specific configuration."""
         if self.cache_enabled and self.cache_ttl == 0:
             raise ValueError("Cache TTL must be > 0 when cache is enabled")
+
+        if self.fallback_model and self.fallback_model == self.default_model:
+            raise ValueError("Fallback model cannot be the same as default model")
 
 
 class MemoryServiceSchema(BaseServiceSchema):
