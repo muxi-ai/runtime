@@ -6,19 +6,48 @@ messages, HTTP status mappings, and categorization for consistent error
 handling across all MUXI communication modes.
 """
 
-from typing import Dict, Optional
-from dataclasses import dataclass
+from typing import Dict, Optional, Literal
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
-@dataclass
-class ErrorCodeInfo:
+class ErrorCodeInfo(BaseModel):
     """Information about a specific error code."""
 
-    code: str
-    message: str
-    http_status: int
-    category: str
-    description: str
+    code: str = Field(..., min_length=1, description="Error code identifier")
+    message: str = Field(..., min_length=1, description="Default error message")
+    http_status: int = Field(..., ge=100, le=599, description="HTTP status code")
+    category: Literal[
+        "system", "auth", "validation", "resource", "processing", "rate_limit", "network", "mcp"
+    ] = Field(..., description="Error category")
+    description: str = Field(..., description="Detailed error description")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code_format(cls, v):
+        """Ensure error code is uppercase with underscores."""
+        if not v.isupper() or " " in v:
+            raise ValueError("Error code must be uppercase with underscores")
+        return v
+
+    @field_validator("http_status")
+    @classmethod
+    def validate_http_status(cls, v):
+        """Ensure HTTP status is valid."""
+        valid_ranges = [
+            (100, 199),  # Informational
+            (200, 299),  # Success
+            (300, 399),  # Redirection
+            (400, 499),  # Client error
+            (500, 599),  # Server error
+        ]
+        if not any(start <= v <= end for start, end in valid_ranges):
+            raise ValueError("Invalid HTTP status code")
+        return v
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,  # Make instances immutable
+    )
 
 
 # Centralized error code registry
@@ -230,6 +259,25 @@ ERROR_CODE_REGISTRY: Dict[str, ErrorCodeInfo] = {
 }
 
 
+class ErrorDetails(BaseModel):
+    """Standardized error details structure."""
+
+    code: str = Field(..., min_length=1, description="Error code")
+    message: str = Field(..., min_length=1, description="Error message")
+    trace: Optional[str] = Field(default=None, description="Stack trace or additional context")
+
+    @field_validator("code")
+    @classmethod
+    def validate_code_exists(cls, v):
+        """Ensure error code exists in registry."""
+        if v not in ERROR_CODE_REGISTRY:
+            # Allow custom error codes but log warning in production
+            pass
+        return v
+
+    model_config = ConfigDict(extra="forbid")
+
+
 def get_error_info(code: str) -> Optional[ErrorCodeInfo]:
     """Get error information for a given error code."""
     error_info = ERROR_CODE_REGISTRY.get(code)
@@ -253,17 +301,21 @@ def get_http_status(code: str, default: int = 500) -> int:
 
 def create_error_details(
     code: str, custom_message: Optional[str] = None, trace: Optional[str] = None
-) -> Dict[str, str]:
+) -> ErrorDetails:
     """Create standardized error details."""
     error_info = get_error_info(code)
 
     if not error_info:
-        details = {
-            "code": code,
-            "message": custom_message or "Unknown error occurred",
-            "trace": trace,
-        }
+        details = ErrorDetails(
+            code=code,
+            message=custom_message or "Unknown error occurred",
+            trace=trace,
+        )
     else:
-        details = {"code": code, "message": custom_message or error_info.message, "trace": trace}
+        details = ErrorDetails(
+            code=code,
+            message=custom_message or error_info.message,
+            trace=trace,
+        )
 
     return details

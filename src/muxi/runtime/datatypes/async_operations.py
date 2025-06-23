@@ -6,9 +6,10 @@ Core data structures for managing async operations with timeout and cancellation
 
 import asyncio
 from typing import Any, Dict, Optional, Callable, Set
-from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime, timezone
+
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 
 class OperationStatus(Enum):
@@ -22,37 +23,74 @@ class OperationStatus(Enum):
     FAILED = "failed"
 
 
-@dataclass
-class TimeoutConfig:
+class TimeoutConfig(BaseModel):
     """Configuration for operation timeouts."""
 
     # Default timeouts for different operation types
-    config_load_timeout: float = 30.0
-    secrets_operation_timeout: float = 10.0
-    service_startup_timeout: float = 60.0
-    overlord_startup_timeout: float = 120.0
-    cleanup_timeout: float = 30.0
+    config_load_timeout: float = Field(
+        default=30.0, ge=0.1, le=300.0, description="Timeout for loading configuration"
+    )
+    secrets_operation_timeout: float = Field(
+        default=10.0, ge=0.1, le=60.0, description="Timeout for secrets operations"
+    )
+    service_startup_timeout: float = Field(
+        default=60.0, ge=1.0, le=600.0, description="Timeout for service startup"
+    )
+    overlord_startup_timeout: float = Field(
+        default=120.0, ge=1.0, le=1200.0, description="Timeout for overlord startup"
+    )
+    cleanup_timeout: float = Field(
+        default=30.0, ge=0.1, le=300.0, description="Timeout for cleanup operations"
+    )
 
     # Global timeout settings
-    enable_timeouts: bool = True
-    default_timeout: float = 60.0
-    cancellation_grace_period: float = 5.0  # Time to wait for graceful cancellation
+    enable_timeouts: bool = Field(default=True, description="Enable timeout enforcement globally")
+    default_timeout: float = Field(
+        default=60.0, ge=0.1, le=600.0, description="Default timeout for unspecified operations"
+    )
+    cancellation_grace_period: float = Field(
+        default=5.0,
+        ge=0.1,
+        le=60.0,
+        description="Time to wait for graceful cancellation before forcing",
+    )
+
+    @field_validator("default_timeout")
+    @classmethod
+    def validate_default_timeout(cls, v, info):
+        """Ensure default timeout is reasonable."""
+        if v > 300:
+            raise ValueError("Default timeout should not exceed 5 minutes")
+        return v
+
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+    )
 
 
-@dataclass
-class OperationContext:
+class OperationContext(BaseModel):
     """Context information for an async operation."""
 
-    operation_id: str
-    operation_type: str
-    description: str
-    timeout: float
-    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    status: OperationStatus = OperationStatus.PENDING
-    result: Optional[Any] = None
-    error: Optional[Exception] = None
-    cancellation_token: Optional["CancellationToken"] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    operation_id: str = Field(..., min_length=1, description="Unique operation identifier")
+    operation_type: str = Field(..., min_length=1, description="Type of operation")
+    description: str = Field(..., description="Human-readable operation description")
+    timeout: float = Field(..., ge=0.1, le=3600.0, description="Operation timeout in seconds")
+    start_time: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="Operation start time",
+    )
+    status: OperationStatus = Field(
+        default=OperationStatus.PENDING, description="Current operation status"
+    )
+    result: Optional[Any] = Field(default=None, description="Operation result when completed")
+    error: Optional[str] = Field(default=None, description="Error message if operation failed")
+    cancellation_token: Optional[Any] = Field(
+        default=None, description="Token for operation cancellation", exclude=True
+    )
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional operation metadata"
+    )
 
     @property
     def elapsed_time(self) -> float:
@@ -68,6 +106,30 @@ class OperationContext:
     def time_remaining(self) -> float:
         """Get remaining time before timeout."""
         return max(0, self.timeout - self.elapsed_time)
+
+    @field_validator("operation_id", "operation_type")
+    @classmethod
+    def validate_non_empty(cls, v):
+        """Ensure string fields are not empty."""
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v
+
+    @field_validator("timeout")
+    @classmethod
+    def validate_timeout(cls, v):
+        """Ensure timeout is within reasonable bounds."""
+        if v <= 0:
+            raise ValueError("Timeout must be positive")
+        if v > 3600:
+            raise ValueError("Timeout cannot exceed 1 hour")
+        return v
+
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        use_enum_values=True,
+    )
 
 
 class CancellationToken:
@@ -162,18 +224,17 @@ class OperationTimeoutError(Exception):
         self.operation_id = operation_id
 
 
-@dataclass
-class AsyncOperationResult:
+class AsyncOperationResult(BaseModel):
     """Result of an async operation with timeout/cancellation handling."""
 
-    operation_id: str
-    status: OperationStatus
-    result: Optional[Any] = None
-    error: Optional[Exception] = None
-    elapsed_time: float = 0.0
-    was_cancelled: bool = False
-    was_timeout: bool = False
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    operation_id: str = Field(..., min_length=1, description="Unique operation identifier")
+    status: OperationStatus = Field(..., description="Final operation status")
+    result: Optional[Any] = Field(default=None, description="Operation result if successful")
+    error: Optional[str] = Field(default=None, description="Error message if failed")
+    elapsed_time: float = Field(default=0.0, ge=0.0, description="Total operation time in seconds")
+    was_cancelled: bool = Field(default=False, description="Whether operation was cancelled")
+    was_timeout: bool = Field(default=False, description="Whether operation timed out")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional result metadata")
 
     @property
     def is_success(self) -> bool:
@@ -188,3 +249,30 @@ class AsyncOperationResult:
             OperationStatus.TIMEOUT,
             OperationStatus.CANCELLED,
         ]
+
+    @field_validator("elapsed_time")
+    @classmethod
+    def validate_elapsed_time(cls, v):
+        """Ensure elapsed time is non-negative."""
+        if v < 0:
+            raise ValueError("Elapsed time cannot be negative")
+        return v
+
+    @field_validator("error")
+    @classmethod
+    def validate_error_consistency(cls, v, info):
+        """Ensure error is present for failure statuses."""
+        if info.data.get("status") in [
+            OperationStatus.FAILED,
+            OperationStatus.TIMEOUT,
+            OperationStatus.CANCELLED,
+        ]:
+            if not v:
+                raise ValueError("Error message required for failure status")
+        return v
+
+    model_config = ConfigDict(
+        extra="forbid",
+        validate_assignment=True,
+        use_enum_values=True,
+    )
