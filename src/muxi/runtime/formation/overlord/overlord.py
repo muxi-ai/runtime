@@ -104,6 +104,9 @@ from ...services.scheduler.service import SchedulerService
 from ...services.secrets.secrets_manager import SecretsManager
 from ...utils.id_generator import generate_nanoid
 
+# Built-in MCP imports
+from ...services.mcp.built_in import list_builtin_mcps
+
 # Enhanced workflow capabilities
 from ..workflow import (
     RequestAnalyzer,
@@ -646,6 +649,11 @@ class Overlord:
         if persona is None:
             persona = getattr(self, "_default_persona", "You are a friendly and helpful assistant.")
 
+        # Add built-in MCP system prompts if enabled
+        builtin_mcp_prompts = self._get_builtin_mcp_prompts()
+        if builtin_mcp_prompts:
+            system_message += f"\n\n## Built-in Tools\n\n{builtin_mcp_prompts}"
+
         # Combine technical instructions with persona
         return (
             f"<system-message>\n{system_message}\n</system-message>\n\n"
@@ -1121,6 +1129,7 @@ class Overlord:
         if agent_id in self.agents:
             # Deregister from external registries if configured
             if hasattr(self, "external_registry_client") and self.external_registry_client:
+
                 async def _deregister_with_error_handling():
                     """Wrapper to handle errors in background deregistration."""
                     try:
@@ -1128,11 +1137,8 @@ class Overlord:
                         observability.observe(
                             event_type=observability.SystemEvents.AGENT_DEREGISTRATION_COMPLETED,
                             level=observability.EventLevel.DEBUG,
-                            data={
-                                "agent_id": agent_id,
-                                "registry": "external"
-                            },
-                            description=f"Successfully deregistered agent {agent_id} from external registry"
+                            data={"agent_id": agent_id, "registry": "external"},
+                            description=f"Successfully deregistered agent {agent_id} from external registry",
                         )
                     except Exception as e:
                         # Log error but don't fail the removal
@@ -1143,9 +1149,9 @@ class Overlord:
                                 "agent_id": agent_id,
                                 "error_type": type(e).__name__,
                                 "error_message": str(e),
-                                "operation": "external_deregistration"
+                                "operation": "external_deregistration",
                             },
-                            description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}"
+                            description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}",
                         )
 
                 # Create task with error handling
@@ -3061,3 +3067,74 @@ class Overlord:
             "internal_id": synthetic_id,
             "isolation_key": f"user_{synthetic_id}_{external_id_hash[:8]}",
         }
+
+    def _get_builtin_mcp_prompts(self) -> str:
+        """
+        Get system prompt additions for enabled built-in MCP servers.
+
+        Returns:
+            Concatenated system prompts for all enabled built-in MCPs
+        """
+        # Get runtime configuration from configured services
+        runtime_config = self.configured_services.get("runtime_config", {})
+        builtin_mcps_config = runtime_config.get("built_in_mcps", True)
+
+        # If built-in MCPs are disabled, return empty string
+        if builtin_mcps_config is False:
+            return ""
+
+        # Get all available built-in MCPs
+        try:
+            available_mcps = list_builtin_mcps()
+
+            # Determine which MCPs are enabled
+            enabled_mcps = []
+
+            if isinstance(builtin_mcps_config, bool) and builtin_mcps_config:
+                # Simple mode - all enabled
+                enabled_mcps = list(available_mcps.keys())
+            elif isinstance(builtin_mcps_config, list):
+                # Granular mode - only specified MCPs
+                enabled_mcps = [
+                    mcp_name for mcp_name in builtin_mcps_config if mcp_name in available_mcps
+                ]
+
+            # Load system prompts for enabled MCPs
+            prompts = []
+
+            for mcp_name in enabled_mcps:
+                mcp_path = available_mcps[mcp_name]
+                # Look for corresponding .md file
+                prompt_path = mcp_path.with_suffix(".md")
+
+                if prompt_path.exists():
+                    try:
+                        with open(prompt_path, "r", encoding="utf-8") as f:
+                            prompt_content = f.read().strip()
+                            if prompt_content:
+                                prompts.append(prompt_content)
+                    except Exception as e:
+                        # Log warning about failed prompt loading
+                        observability.observe(
+                            event_type=observability.SystemEvents.BUILTIN_MCP_PROMPT_LOAD_FAILED,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "mcp_name": mcp_name,
+                                "prompt_path": str(prompt_path),
+                                "error": str(e),
+                            },
+                            description=f"Failed to load system prompt for built-in MCP '{mcp_name}': {e}",
+                        )
+
+            # Join all prompts with double newlines
+            return "\n\n".join(prompts)
+
+        except Exception as e:
+            # Log error and return empty string to not break startup
+            observability.observe(
+                event_type=observability.SystemEvents.BUILTIN_MCP_INITIALIZATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "builtin_mcps_config": str(builtin_mcps_config)},
+                description=f"Failed to initialize built-in MCP prompts: {e}",
+            )
+            return ""

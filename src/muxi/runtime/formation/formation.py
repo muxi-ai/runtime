@@ -72,6 +72,7 @@ from ..datatypes.exceptions import (
 # Utility imports
 from .utils import generate_api_key
 from ..utils.user_dirs import set_formation_id
+import shlex
 
 
 class Formation:
@@ -147,6 +148,7 @@ class Formation:
         self._clarification_config: Dict[str, Any] = {}
         self._document_processing_config: Dict[str, Any] = {}
         self._scheduler_config: Dict[str, Any] = {}
+        self._runtime_config: Dict[str, Any] = {}
         self._agents_config: list = []
 
     def load(self, config_path: str) -> None:
@@ -497,6 +499,7 @@ class Formation:
         self._setup_clarification_config()
         self._setup_document_processing_config()
         self._setup_scheduler_config()
+        self._setup_runtime_config()
         self._setup_agents_config()
 
         # Create standardized configuration objects
@@ -522,7 +525,7 @@ class Formation:
                     f"default_timeout={self._mcp_config.get('default_timeout')}, "
                     f"retry_attempts={self._mcp_config.get('retry_attempts')}, "
                     f"retry_delay={self._mcp_config.get('retry_delay')}",
-                    flush=True
+                    flush=True,
                 )
                 mcp_config_obj = MCPServiceSchema()
 
@@ -554,7 +557,7 @@ class Formation:
                     f"server_port={self._a2a_config.get('server', {}).get('port')}, "
                     f"external_registry_enabled={self._a2a_config.get('outbound', {}).get('registries') is not None}, "
                     f"require_auth={self._a2a_config.get('security', {}).get('require_auth')}",
-                    flush=True
+                    flush=True,
                 )
                 a2a_config_obj = A2AServiceSchema()
 
@@ -573,6 +576,7 @@ class Formation:
             "clarification_config": self._clarification_config,
             "document_processing_config": self._document_processing_config,
             "scheduler_config": self._scheduler_config,
+            "runtime_config": self._runtime_config,
             "agents_config": self._agents_config,
         }
 
@@ -815,6 +819,23 @@ class Formation:
                         "example": {"scheduler": {"check_interval_minutes": 1}},
                     },
                 )
+
+    def _setup_runtime_config(self) -> None:
+        """Setup and validate runtime configuration."""
+        self._runtime_config = self.config.get("runtime", {})
+
+        # Validate runtime structure
+        if not isinstance(self._runtime_config, dict):
+            raise ConfigurationValidationError(
+                ["Runtime configuration must be a dictionary"],
+                {
+                    "current_type": type(self._runtime_config).__name__,
+                    "suggestion": "Update your formation.yaml to have 'runtime:' as a dictionary section",
+                    "example": {
+                        "runtime": {"built_in_mcps": True}  # or ["file-generation", "web-search"]
+                    },
+                },
+            )
 
     def _setup_agents_config(self) -> None:
         """Setup and validate agents configuration."""
@@ -1208,6 +1229,18 @@ class Formation:
 
             # Mark as running
             self._is_running = True
+
+            # Register built-in MCP servers if enabled
+            # Check if we're already in an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # Schedule the coroutine in the existing loop
+                task = loop.create_task(self._register_builtin_mcps())
+                # Store task reference to prevent garbage collection
+                self._builtin_mcp_task = task
+            except RuntimeError:
+                # No event loop running, create one
+                asyncio.run(self._register_builtin_mcps())
 
             return self._overlord
 
@@ -2015,7 +2048,7 @@ class Formation:
         user_id: Optional[str] = None,
         is_recurring: Optional[bool] = None,
         limit: Optional[int] = None,
-        offset: Optional[int] = None
+        offset: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         """
         Get all scheduled jobs with optional filtering.
@@ -2045,11 +2078,7 @@ class Formation:
             return []
 
         return await scheduler_service.manager.get_all_jobs(
-            status=status,
-            user_id=user_id,
-            is_recurring=is_recurring,
-            limit=limit,
-            offset=offset
+            status=status, user_id=user_id, is_recurring=is_recurring, limit=limit, offset=offset
         )
 
     async def get_user_jobs(self, user_id: str) -> List[Dict[str, Any]]:
@@ -2105,10 +2134,7 @@ class Formation:
         return await scheduler_service.manager.get_job_audit_trail(job_id)
 
     async def get_recent_audit_trail(
-        self,
-        limit: int = 100,
-        user_id: Optional[str] = None,
-        action: Optional[str] = None
+        self, limit: int = 100, user_id: Optional[str] = None, action: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get recent audit trail events.
@@ -2136,7 +2162,89 @@ class Formation:
             return []
 
         return await scheduler_service.manager.get_recent_audit_trail(
-            limit=limit,
-            user_id=user_id,
-            action=action
+            limit=limit, user_id=user_id, action=action
         )
+
+    async def _register_builtin_mcps(self) -> None:
+        """
+        Register built-in MCP servers based on runtime configuration.
+
+        This method checks the runtime configuration and registers any enabled
+        built-in MCP servers with the overlord's MCP service.
+        """
+        if not self._overlord or not self._overlord.mcp_service:
+            return
+
+        # Get built-in MCP configuration
+        builtin_mcps_config = self._runtime_config.get("built_in_mcps", True)
+
+        # Import built-in MCP registry
+        from ..services.mcp.built_in import list_builtin_mcps
+        import sys
+
+        # Get all available built-in MCPs
+        available_mcps = list_builtin_mcps()
+
+        # Determine which MCPs to register
+        mcps_to_register = []
+
+        if isinstance(builtin_mcps_config, bool):
+            # Simple mode - all on or all off
+            if builtin_mcps_config:
+                mcps_to_register = list(available_mcps.keys())
+        elif isinstance(builtin_mcps_config, list):
+            # Granular mode - only specified MCPs
+            mcps_to_register = [
+                mcp_name for mcp_name in builtin_mcps_config if mcp_name in available_mcps
+            ]
+
+        # Register each enabled MCP
+        for mcp_name in mcps_to_register:
+            mcp_path = available_mcps[mcp_name]
+
+            # Check if the script exists
+            if not mcp_path.exists():
+                observability.observe(
+                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "mcp_name": mcp_name,
+                        "mcp_path": str(mcp_path),
+                        "error": "Script file not found",
+                    },
+                    description=f"Built-in MCP script not found: {mcp_path}",
+                )
+                continue
+
+            try:
+                # Register the MCP server with properly escaped command
+                await self._overlord.mcp_service.register_mcp_server(
+                    server_id=f"builtin-{mcp_name}",
+                    command=f"{shlex.quote(sys.executable)} {shlex.quote(str(mcp_path))}",
+                    transport_type="command",
+                    request_timeout=30,
+                )
+
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "mcp_name": mcp_name,
+                        "server_id": f"builtin-{mcp_name}",
+                        "mcp_path": str(mcp_path),
+                    },
+                    description=f"Built-in MCP server registered: {mcp_name}",
+                )
+
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "mcp_name": mcp_name,
+                        "server_id": f"builtin-{mcp_name}",
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Failed to register built-in MCP server {mcp_name}: {e}",
+                )

@@ -10,9 +10,17 @@ from pathlib import Path
 import yaml
 import json
 
+# Import the MCP registry to get valid MCP names dynamically
+try:
+    from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
+except ImportError:
+    # Fallback if import fails
+    BUILTIN_MCP_REGISTRY = {}
+
 
 class ValidationError(Exception):
     """Raised when formation validation fails."""
+
     pass
 
 
@@ -343,6 +351,10 @@ class FormationValidator:
         # Validate scheduler configuration
         if "scheduler" in config:
             self._validate_scheduler_config(config["scheduler"])
+
+        # Validate runtime configuration
+        if "runtime" in config:
+            self._validate_runtime_config(config["runtime"])
 
     def _validate_agents(self, agents_config: List[Dict[str, Any]]) -> None:
         """Validate agents configuration."""
@@ -2152,7 +2164,9 @@ class FormationValidator:
         if "check_interval_minutes" in scheduler_config:
             interval = scheduler_config["check_interval_minutes"]
             if not isinstance(interval, int) or interval <= 0:
-                self.result.add_error("Scheduler 'check_interval_minutes' must be a positive integer")
+                self.result.add_error(
+                    "Scheduler 'check_interval_minutes' must be a positive integer"
+                )
 
         # Validate max_concurrent_jobs field (optional, defaults to 10)
         if "max_concurrent_jobs" in scheduler_config:
@@ -2164,7 +2178,43 @@ class FormationValidator:
         if "max_failures_before_pause" in scheduler_config:
             max_failures = scheduler_config["max_failures_before_pause"]
             if not isinstance(max_failures, int) or max_failures <= 0:
-                self.result.add_error("Scheduler 'max_failures_before_pause' must be a positive integer")
+                self.result.add_error(
+                    "Scheduler 'max_failures_before_pause' must be a positive integer"
+                )
+
+    def _validate_runtime_config(self, runtime_config: Dict[str, Any]) -> None:
+        """Validate runtime configuration."""
+        if not isinstance(runtime_config, dict):
+            self.result.add_error("Runtime configuration must be a dictionary")
+            return
+
+        # Validate built_in_mcps field (optional, defaults to true)
+        if "built_in_mcps" in runtime_config:
+            built_in_mcps = runtime_config["built_in_mcps"]
+
+            # Support both boolean (simple mode) and list (granular mode)
+            if isinstance(built_in_mcps, bool):
+                # Simple mode - all on or all off
+                pass
+            elif isinstance(built_in_mcps, list):
+                # Granular mode - validate each MCP name
+                # Use dynamic registry or fallback to known MCPs
+                valid_mcps = set(BUILTIN_MCP_REGISTRY.keys()) if BUILTIN_MCP_REGISTRY else {"file-generation"}
+                # Add future planned MCPs for forward compatibility
+                valid_mcps.update({"web-search", "database"})
+
+                for i, mcp_name in enumerate(built_in_mcps):
+                    if not isinstance(mcp_name, str):
+                        self.result.add_error(f"Runtime built_in_mcps[{i}] must be a string")
+                    elif mcp_name not in valid_mcps:
+                        self.result.add_error(
+                            f"Runtime built_in_mcps[{i}] has invalid value '{mcp_name}'. "
+                            f"Valid values are: {', '.join(sorted(valid_mcps))}"
+                        )
+            else:
+                self.result.add_error(
+                    "Runtime 'built_in_mcps' must be either a boolean or a list of MCP names"
+                )
 
 
 def validate_formation(
