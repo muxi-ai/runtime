@@ -186,7 +186,7 @@ class SchedulerInputValidator:
     @staticmethod
     def validate_cron_expression(cron_expr: str) -> None:
         """
-        Validate cron expression format.
+        Validate cron expression format and semantic correctness.
 
         Args:
             cron_expr: Cron expression string
@@ -197,14 +197,26 @@ class SchedulerInputValidator:
         if not cron_expr or not isinstance(cron_expr, str):
             raise ValueError("cron_expression must be a non-empty string")
 
-        # Basic cron pattern validation (5 fields)
-        cron_pattern = re.compile(r'^([0-9\*\-\,\/]+\s+){4}[0-9\*\-\,\/]+$')
-        if not cron_pattern.match(cron_expr):
-            raise ValueError("Invalid cron expression format")
-
-        # Additional safety checks
+        # Length safety check
         if len(cron_expr) > 100:
             raise ValueError("Cron expression too long")
+
+        # Use croniter for comprehensive validation
+        try:
+            from croniter import croniter
+            from datetime import datetime
+
+            # Test if croniter can parse the expression
+            cron = croniter(cron_expr, datetime.now())
+            # Try to get the next execution time to ensure it's valid
+            next_time = cron.get_next(datetime)
+            if next_time is None:
+                raise ValueError("Cron expression produces no valid execution times")
+
+        except ImportError:
+            raise ValueError("croniter library not available for cron validation")
+        except Exception as e:
+            raise ValueError(f"Invalid cron expression: {str(e)}")
 
     @staticmethod
     def validate_job_creation(

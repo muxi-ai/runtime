@@ -29,7 +29,7 @@ from .clarification import (
 )
 from .exceptions import (
     FormationError,
-    FormationSchemaurationError,
+    FormationConfigurationError,
     ConfigurationLoadError,
     ConfigurationValidationError,
     OverlordStateError,
@@ -129,7 +129,7 @@ __all__ = [
     "ClarificationSession",
     # Exceptions
     "FormationError",
-    "FormationSchemaurationError",
+    "FormationConfigurationError",
     "ConfigurationLoadError",
     "ConfigurationValidationError",
     "OverlordStateError",

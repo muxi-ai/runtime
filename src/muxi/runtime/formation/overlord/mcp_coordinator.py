@@ -113,10 +113,15 @@ class MCPCoordinator:
             try:
                 final_auth = await self.overlord.interpolate_secrets(auth)
             except Exception as e:
-                #  Warning - TODO: add observability
-                # SystemEvents.MCP_SERVER_REGISTRATION_FAILED
-                _ = e  # remove this after implementing observability
-                # Continue with original auth
+                # Log secret interpolation failure - this is critical for auth debugging
+                error_msg = f"Secret interpolation failed for MCP server {server_id}: {str(e)}"
+                print(f"ERROR: {error_msg}", flush=True)
+
+                # TODO: Add observability event - SystemEvents.MCP_SERVER_REGISTRATION_FAILED
+
+                # Do NOT continue with original auth - this would cause silent auth failures
+                # Instead, raise the error so the caller knows secrets interpolation failed
+                raise ValueError(f"Failed to interpolate secrets for MCP server {server_id}: {str(e)}") from e
 
         # Register the server with the MCP service
         res = await self.mcp_service.register_mcp_server(

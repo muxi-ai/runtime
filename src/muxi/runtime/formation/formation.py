@@ -515,7 +515,15 @@ class Formation:
                 )
                 mcp_config_obj.validate()
             except Exception as e:
-                print(f"Warning: Invalid MCP configuration, using defaults: {e}")
+                print(
+                    f"Warning: Invalid MCP configuration, using defaults. "
+                    f"Validation error: {str(e)}. "
+                    f"Config values: max_concurrent_servers={self._mcp_config.get('max_concurrent_servers')}, "
+                    f"default_timeout={self._mcp_config.get('default_timeout')}, "
+                    f"retry_attempts={self._mcp_config.get('retry_attempts')}, "
+                    f"retry_delay={self._mcp_config.get('retry_delay')}",
+                    flush=True
+                )
                 mcp_config_obj = MCPServiceSchema()
 
         # Create A2A configuration object
@@ -539,7 +547,15 @@ class Formation:
                 )
                 a2a_config_obj.validate()
             except Exception as e:
-                print(f"Warning: Invalid A2A configuration, using defaults: {e}")
+                print(
+                    f"Warning: Invalid A2A configuration, using defaults. "
+                    f"Validation error: {str(e)}. "
+                    f"Config values: server_enabled={self._a2a_config.get('server', {}).get('enabled')}, "
+                    f"server_port={self._a2a_config.get('server', {}).get('port')}, "
+                    f"external_registry_enabled={self._a2a_config.get('outbound', {}).get('registries') is not None}, "
+                    f"require_auth={self._a2a_config.get('security', {}).get('require_auth')}",
+                    flush=True
+                )
                 a2a_config_obj = A2AServiceSchema()
 
         # Create comprehensive service bundle for overlord handoff

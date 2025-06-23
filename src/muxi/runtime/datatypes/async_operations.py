@@ -61,8 +61,8 @@ class TimeoutConfig(BaseModel):
     @classmethod
     def validate_default_timeout(cls, v, info):
         """Ensure default timeout is reasonable."""
-        if v > 300:
-            raise ValueError("Default timeout should not exceed 5 minutes")
+        if v > 600:
+            raise ValueError("Default timeout should not exceed 10 minutes")
         return v
 
     model_config = ConfigDict(

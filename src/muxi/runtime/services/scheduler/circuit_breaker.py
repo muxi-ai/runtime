@@ -123,7 +123,7 @@ class LLMCircuitBreaker:
             and time.time() - self.last_failure_time >= self.timeout
         )
 
-    async def call(self, func: Callable[..., Union[T, Callable[..., T]]], *args, **kwargs) -> T:
+    async def call(self, func: Callable[..., T], *args, **kwargs) -> T:
         """
         Call function with circuit breaker protection.
 
@@ -148,9 +148,10 @@ class LLMCircuitBreaker:
         # Reject calls if circuit is open
         if self.state == CircuitState.OPEN:
             self._stats["rejected_calls"] += 1
+            retry_time = max(0, self.timeout - (time.time() - self.last_failure_time))
             raise CircuitBreakerError(
                 f"Circuit breaker is OPEN. Service marked as unavailable. "
-                f"Will retry in {self.timeout - (time.time() - self.last_failure_time):.1f} seconds."
+                f"Will retry in {retry_time:.1f} seconds."
             )
 
         # Apply timeout in half-open state
@@ -269,11 +270,11 @@ class MultiLLMCircuitBreaker:
             default_config: Default configuration for new circuit breakers
         """
         self.breakers: dict[str, LLMCircuitBreaker] = {}
-        self.default_config = default_config or {
+        self.default_config = (default_config or {
             "failure_threshold": 5,
             "success_threshold": 2,
             "timeout": 60.0,
-        }
+        }).copy()
 
     def get_breaker(self, provider: str) -> LLMCircuitBreaker:
         """

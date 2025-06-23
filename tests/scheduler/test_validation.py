@@ -10,7 +10,7 @@ import sys
 import os
 import time
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, AsyncMock, patch
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
@@ -462,18 +462,18 @@ class TestSchedulerLimitsEnforcer:
         
         # Mock job manager
         mock_job_manager = Mock()
-        mock_job_manager.get_user_jobs.return_value = [
+        mock_job_manager.get_user_jobs = AsyncMock(return_value=[
             {"status": "ACTIVE", "last_execution_status": "SUCCESS"},
-        ]
+        ])
         
         # Should pass with 1 active job (under limit of 2)
         await enforcer.check_job_creation_limits(mock_job_manager, "test_user")
         
         # Mock hitting the limit
-        mock_job_manager.get_user_jobs.return_value = [
+        mock_job_manager.get_user_jobs = AsyncMock(return_value=[
             {"status": "ACTIVE", "last_execution_status": "SUCCESS"},
             {"status": "ACTIVE", "last_execution_status": "SUCCESS"},
-        ]
+        ])
         
         # Should fail with 2 active jobs (at limit)
         with pytest.raises(ValueError, match="maximum job limit"):
@@ -487,17 +487,17 @@ class TestSchedulerLimitsEnforcer:
         
         # Mock job manager
         mock_job_manager = Mock()
-        mock_job_manager.get_active_jobs.return_value = [
+        mock_job_manager.get_active_jobs = AsyncMock(return_value=[
             {"id": "job1"}, {"id": "job2"}
-        ]
+        ])
         
         # Should pass with 2 jobs (under limit of 3)
         await enforcer.check_system_limits(mock_job_manager)
         
         # Mock hitting system limit
-        mock_job_manager.get_active_jobs.return_value = [
+        mock_job_manager.get_active_jobs = AsyncMock(return_value=[
             {"id": "job1"}, {"id": "job2"}, {"id": "job3"}
-        ]
+        ])
         
         # Should fail with 3 jobs (at limit)
         with pytest.raises(ValueError, match="maximum active job limit"):

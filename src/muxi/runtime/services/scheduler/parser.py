@@ -449,6 +449,7 @@ Return only valid JSON, no explanation.
 """
         )
 
+        response = None
         try:
             response = await llm.generate_text(prompt)
 
@@ -488,7 +489,7 @@ Return only valid JSON, no explanation.
                 level=observability.EventLevel.ERROR,
                 data={
                     "schedule_text": schedule_text,
-                    "response": response[:200] if "response" in locals() else "No response",
+                    "response": response[:200] if response is not None else "No response",
                     "error": str(e),
                 },
                 description=f"Failed to parse specific datetime: {e}",
@@ -969,6 +970,7 @@ Return only valid JSON, no explanation.
 """
         )
 
+        response = None
         try:
             response = await llm.generate_text(prompt)
 
@@ -997,7 +999,7 @@ Return only valid JSON, no explanation.
                 level=observability.EventLevel.ERROR,
                 data={
                     "description": description,
-                    "response": response[:200] if "response" in locals() else "No response",
+                    "response": response[:200] if response is not None else "No response",
                     "error": str(e),
                 },
                 description=f"Failed to parse exclusion rule JSON: {e}",

@@ -1121,16 +1121,37 @@ class Overlord:
         if agent_id in self.agents:
             # Deregister from external registries if configured
             if hasattr(self, "external_registry_client") and self.external_registry_client:
-                try:
-                    # Run deregistration in background - don't block removal
-                    asyncio.create_task(
-                        self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
-                    )
-                except Exception as e:
-                    # Log warning but don't fail the removal
-                    #  Error - TODO: add observability
-                    # ErrorEvents.INTERNAL_ERROR
-                    _ = e  # remove this after implementing observability
+                async def _deregister_with_error_handling():
+                    """Wrapper to handle errors in background deregistration."""
+                    try:
+                        await self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
+                        observability.observe(
+                            event_type=observability.SystemEvents.AGENT_DEREGISTRATION_COMPLETED,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "agent_id": agent_id,
+                                "registry": "external"
+                            },
+                            description=f"Successfully deregistered agent {agent_id} from external registry"
+                        )
+                    except Exception as e:
+                        # Log error but don't fail the removal
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "agent_id": agent_id,
+                                "error_type": type(e).__name__,
+                                "error_message": str(e),
+                                "operation": "external_deregistration"
+                            },
+                            description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}"
+                        )
+
+                # Create task with error handling
+                task = asyncio.create_task(_deregister_with_error_handling())
+                # Set task name for better debugging
+                task.set_name(f"deregister_agent_{agent_id}")
 
             # Invalidate all cached responses for this agent
             try:

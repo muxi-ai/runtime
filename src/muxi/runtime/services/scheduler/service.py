@@ -325,6 +325,9 @@ class SchedulerService:
 
         self._last_execution_time = utc_now().isoformat()
 
+        # Update performance stats
+        self._performance_stats["cycles_completed"] += 1
+
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_CYCLE_COMPLETED,
             level=observability.EventLevel.DEBUG,
@@ -372,6 +375,7 @@ class SchedulerService:
         # Update performance stats
         batch_time = time.time() - start_time
         self._performance_stats["batch_processing_time"] = batch_time
+        self._performance_stats["jobs_processed"] += len(due_jobs)
 
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_BATCH_PROCESSING_COMPLETED,

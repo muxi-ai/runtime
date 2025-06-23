@@ -6,8 +6,12 @@ messages, HTTP status mappings, and categorization for consistent error
 handling across all MUXI communication modes.
 """
 
+import os
+import logging
 from typing import Dict, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class ErrorCodeInfo(BaseModel):
@@ -25,8 +29,9 @@ class ErrorCodeInfo(BaseModel):
     @classmethod
     def validate_code_format(cls, v):
         """Ensure error code is uppercase with underscores."""
-        if not v.isupper() or " " in v:
-            raise ValueError("Error code must be uppercase with underscores")
+        import re
+        if not re.match(r'^[A-Z_]+$', v):
+            raise ValueError("Error code must contain only uppercase letters and underscores")
         return v
 
     @field_validator("http_status")
@@ -271,8 +276,14 @@ class ErrorDetails(BaseModel):
     def validate_code_exists(cls, v):
         """Ensure error code exists in registry."""
         if v not in ERROR_CODE_REGISTRY:
-            # Allow custom error codes but log warning in production
-            pass
+            # Check if we're in production environment
+            env = os.getenv("MUXI_ENV", os.getenv("ENVIRONMENT", "development")).lower()
+            if env in ["production", "prod"]:
+                logger.warning(
+                    f"Custom error code '{v}' used in production environment. "
+                    f"This code is not in the standard ERROR_CODE_REGISTRY. "
+                    f"Consider adding it to the registry for consistency."
+                )
         return v
 
     model_config = ConfigDict(extra="forbid")

@@ -206,7 +206,18 @@ class SchedulerCache:
         """
         try:
             return croniter(expr)
-        except Exception:
+        except (ValueError, TypeError) as e:
+            # Log the specific error for debugging
+            observability.observe(
+                event_type=observability.SystemEvents.SCHEDULER_CRON_PARSE_ERROR,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "expression": expr,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e)
+                },
+                description=f"Failed to parse cron expression: {expr}"
+            )
             return None
 
     # Cache management

@@ -126,8 +126,10 @@ class JobBatchProcessor:
                 if await is_job_due_func(job, current_time):
                     if not await check_exclusion_func(job, current_time):
                         return job
-            except Exception:
+            except Exception as e:
                 # Log error but don't fail entire batch
+                # TODO: Add observability event for job check failures
+                print(f"Error checking job {job.get('id', 'unknown')}: {str(e)}", flush=True)
                 pass
             return None
 

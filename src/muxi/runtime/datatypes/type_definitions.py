@@ -94,13 +94,9 @@ class TaskOutput(TypedDict, total=False):
     artifacts: List[str]  # Generated file paths or IDs
 
 
-class WorkflowOutputs(TypedDict):
-    """Collection of workflow task outputs."""
-
-    # Dynamic keys for task outputs
-    # Each key is a task ID, value is TaskOutput
-    # Using more specific base type
-    __root__: Dict[str, TaskOutput]
+# Type alias for workflow outputs mapping task IDs to their outputs
+WorkflowOutputs = Dict[str, TaskOutput]
+"""Collection of workflow task outputs. Maps task IDs to TaskOutput objects."""
 
 
 # ===== Context Types =====
@@ -294,28 +290,6 @@ Outputs = Union[TaskOutput, WorkflowOutputs, Dict[str, Any]]
 # ===== Helper Functions =====
 
 
-def validate_metadata(data: Dict[str, Any], expected_type: type) -> bool:
-    """
-    Validate that a dictionary conforms to a TypedDict structure.
-
-    Args:
-        data: Dictionary to validate
-        expected_type: TypedDict type to validate against
-
-    Returns:
-        bool: True if valid, False otherwise
-    """
-    # This is a simple validation - could be enhanced with
-    # more sophisticated type checking
-    if not isinstance(data, dict):
-        return False
-
-    # Get required and optional keys from TypedDict
-    # Note: This is simplified - real implementation would need
-    # to handle TypedDict introspection properly
-    return True
-
-
 def cast_to_type(data: Dict[str, Any], target_type: type) -> Any:
     """
     Cast a dictionary to a specific TypedDict type.
@@ -367,6 +341,5 @@ __all__ = [
     "Context",
     "Outputs",
     # Helper functions
-    "validate_metadata",
     "cast_to_type",
 ]

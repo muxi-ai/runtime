@@ -25,8 +25,11 @@ def up() -> str:
         -- Create audit trail table for job lifecycle events
         CREATE TABLE scheduled_job_audit (
             id SERIAL PRIMARY KEY,
-            job_id VARCHAR(255) NOT NULL,
-            user_id VARCHAR(255) NOT NULL,
+            -- Note: job_id and user_id use VARCHAR(255) to match scheduled_jobs table
+            -- Foreign key constraints are not added here to maintain SQLite compatibility
+            -- Referential integrity is enforced at the application level in JobManager
+            job_id VARCHAR(255) NOT NULL,  -- References scheduled_jobs.id
+            user_id VARCHAR(255) NOT NULL, -- References the user system
             action VARCHAR(50) NOT NULL,
             timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             changes TEXT,  -- JSON string of what changed

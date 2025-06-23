@@ -17,6 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from .. import observability
 from ..db import DatabaseManager
+from ..llm import LLM
 from .models import ScheduledJob, ScheduledJobAudit
 from .validation import SchedulerInputValidator, validate_user_access
 from .limits import get_limits_enforcer
@@ -978,7 +979,7 @@ class JobManager:
                 raise ValueError(f"Job {job_id} not found")
 
             # Check if this is a significant change
-            if self._is_significant_prompt_change(current_job["original_prompt"], new_prompt):
+            if await self._is_significant_prompt_change(current_job["original_prompt"], new_prompt):
                 # This is a different task - replace the job
                 # 1. Create new job with same schedule but new prompt
                 new_job_id = await self.create_job(
@@ -1012,138 +1013,170 @@ class JobManager:
                 return (new_job_id, "replaced")
 
         # Otherwise, do a normal update
-        # For now, since we don't have update_job implemented:
-        raise NotImplementedError("Regular job updates not yet implemented")
+        with self.db_manager.get_session() as session:
+            job = session.query(ScheduledJob).filter(ScheduledJob.id == job_id).first()
+            if not job:
+                raise ValueError(f"Job {job_id} not found")
+            
+            # Validate user ownership
+            if job.user_id != user_id:
+                raise ValueError(f"User {user_id} does not have permission to update job {job_id}")
+            
+            # Build update dict
+            update_fields = {}
+            changes = {}
+            
+            if new_title:
+                SchedulerInputValidator.validate_title(new_title)
+                update_fields["title"] = new_title
+                changes["title"] = {"old": job.title, "new": new_title}
+            
+            if new_prompt:
+                SchedulerInputValidator.validate_prompt(new_prompt, "new_prompt")
+                update_fields["original_prompt"] = new_prompt
+                update_fields["execution_prompt"] = new_prompt
+                changes["prompt"] = {"old": job.original_prompt[:50] + "...", "new": new_prompt[:50] + "..."}
+            
+            if new_schedule:
+                if job.is_recurring:
+                    SchedulerInputValidator.validate_cron_expression(new_schedule)
+                    update_fields["cron_expression"] = new_schedule
+                    changes["schedule"] = {"old": job.cron_expression, "new": new_schedule}
+                else:
+                    # Parse datetime for one-time jobs
+                    from dateutil import parser as date_parser
+                    from pytz import UTC
+                    scheduled_datetime = date_parser.parse(new_schedule)
+                    if scheduled_datetime.tzinfo is None:
+                        scheduled_datetime = scheduled_datetime.replace(tzinfo=UTC)
+                    if scheduled_datetime <= utc_now():
+                        raise ValueError("Scheduled time must be in the future")
+                    update_fields["scheduled_for"] = scheduled_datetime
+                    changes["schedule"] = {
+                        "old": job.scheduled_for.isoformat() if job.scheduled_for else None,
+                        "new": scheduled_datetime.isoformat()
+                    }
+            
+            # Handle additional kwargs
+            if "exclusion_rules" in kwargs:
+                update_fields["exclusion_rules"] = kwargs["exclusion_rules"]
+                changes["exclusion_rules"] = "updated"
+            
+            if not update_fields:
+                return (job_id, "unchanged")
+            
+            # Apply updates
+            update_fields["updated_at"] = utc_now()
+            session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(update_fields)
+            session.commit()
+            
+            # Audit the update
+            await self._audit_job_action(
+                job_id=job_id,
+                user_id=user_id,
+                action="updated",
+                changes=changes,
+                reason=f"Job updated with {len(changes)} changes"
+            )
+            
+            observability.observe(
+                event_type=observability.ConversationEvents.SCHEDULED_JOB_UPDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "job_id": job_id,
+                    "user_id": user_id,
+                    "changes": changes,
+                    "fields_updated": list(update_fields.keys())
+                },
+                description=f"Job {job_id} updated successfully"
+            )
+            
+            return (job_id, "updated")
 
-    def _is_significant_prompt_change(self, old_prompt: str, new_prompt: str) -> bool:
+    async def _is_significant_prompt_change(self, old_prompt: str, new_prompt: str) -> bool:
         """
         Determine if a prompt change represents a fundamentally different task.
+        Uses LLM to understand semantic similarity across languages.
 
         Examples of significant changes:
         - "check my email" -> "send me a text"
         - "generate a report" -> "backup my files"
+        - "每天检查邮件" -> "每天发送报告" (Chinese: check email -> send report)
 
         Examples of minor changes:
         - "check my email" -> "check my emails"
         - "send daily report" -> "send a daily report"
+        - "check email" -> "verificar correo" (English -> Spanish, same task)
         """
-        # Simple heuristic approach
-        old_normalized = old_prompt.lower().strip()
-        new_normalized = new_prompt.lower().strip()
-
-        if old_normalized == new_normalized:
+        # Quick exact match check
+        if old_prompt.strip().lower() == new_prompt.strip().lower():
             return False
 
-        # Extract key verbs/actions
-        old_verbs = self._extract_action_words(old_normalized)
-        new_verbs = self._extract_action_words(new_normalized)
+        # Use LLM for semantic comparison
+        try:
+            llm_service = self.db_manager._services.get('llm')
+            if not llm_service:
+                observability.observe(
+                    event_type=observability.ErrorEvents.SERVICE_NOT_AVAILABLE,
+                    level=observability.EventLevel.WARNING,
+                    data={"service": "llm", "fallback": "consider_all_changes_significant"},
+                    description="LLM service not available for prompt comparison"
+                )
+                return True  # Fallback: consider all changes significant
 
-        # If the main actions changed, it's significant
-        if old_verbs != new_verbs:
+            llm = LLM(service=llm_service)
+
+            prompt = """Compare these two scheduling task descriptions and determine if they represent fundamentally different tasks:
+
+Task 1: {old_prompt}
+Task 2: {new_prompt}
+
+Return JSON: {{"different_task": true/false, "reason": "brief explanation"}}
+
+Consider them DIFFERENT tasks if:
+- The main action changes (e.g., "send email" vs "backup files")
+- The target/object changes significantly (e.g., "email boss" vs "email team")
+- The core purpose changes (e.g., "notify" vs "analyze")
+
+Consider them the SAME task if:
+- Only minor wording changes
+- Same intent expressed in different languages
+- Grammatical variations or synonyms
+- Added/removed articles or small words
+
+Be language-agnostic - same task in different languages should be considered the same.""".format(
+                old_prompt=old_prompt,
+                new_prompt=new_prompt
+            )
+
+            response = await llm.generate_json(prompt)
+            result = response.get("different_task", True)
+
+            observability.observe(
+                event_type=observability.SystemEvents.SCHEDULER_PROMPT_COMPARISON,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "old_prompt": old_prompt[:50] + "..." if len(old_prompt) > 50 else old_prompt,
+                    "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt,
+                    "different_task": result,
+                    "reason": response.get("reason", "")
+                },
+                description="Prompt change comparison completed"
+            )
+
+            return result
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "old_prompt": old_prompt[:50] + "..." if len(old_prompt) > 50 else old_prompt,
+                    "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt
+                },
+                description=f"Failed to compare prompts using LLM: {str(e)}"
+            )
+            # Fallback: consider all changes significant if LLM fails
             return True
 
-        # Extract key nouns/objects
-        old_objects = self._extract_object_words(old_normalized)
-        new_objects = self._extract_object_words(new_normalized)
-
-        # If the main objects changed significantly, it's a different task
-        if len(old_objects) > 0:
-            overlap = len(old_objects.intersection(new_objects))
-            if overlap / len(old_objects) < 0.5:
-                return True
-
-        return False
-
-    def _extract_action_words(self, text_input: str) -> set:
-        """Extract action verbs from text."""
-        # Common action verbs in scheduling context
-        action_verbs = {
-            "check",
-            "send",
-            "email",
-            "text",
-            "call",
-            "notify",
-            "alert",
-            "backup",
-            "sync",
-            "upload",
-            "download",
-            "generate",
-            "create",
-            "update",
-            "delete",
-            "fetch",
-            "retrieve",
-            "analyze",
-            "report",
-            "remind",
-            "schedule",
-            "run",
-            "execute",
-            "process",
-            "monitor",
-        }
-
-        words = set(text_input.split())
-        return words.intersection(action_verbs)
-
-    def _extract_object_words(self, text_input: str) -> set:
-        """Extract object/noun words from text."""
-        # Common objects in scheduling context
-        common_objects = {
-            "email",
-            "emails",
-            "message",
-            "messages",
-            "text",
-            "texts",
-            "file",
-            "files",
-            "report",
-            "reports",
-            "data",
-            "database",
-            "backup",
-            "backups",
-            "notification",
-            "notifications",
-            "reminder",
-            "reminders",
-            "calendar",
-            "meeting",
-            "meetings",
-            "task",
-            "tasks",
-            "job",
-            "jobs",
-            "system",
-            "server",
-        }
-
-        # Remove common stop words
-        stop_words = {
-            "a",
-            "an",
-            "the",
-            "my",
-            "your",
-            "our",
-            "their",
-            "is",
-            "are",
-            "to",
-            "from",
-            "for",
-            "of",
-            "and",
-            "or",
-        }
-
-        words = set(text_input.split())
-        words = words - stop_words
-
-        # Return words that are likely objects
-        return words.intersection(common_objects) | {
-            w for w in words if len(w) > 3 and w not in self._extract_action_words(text_input)
-        }

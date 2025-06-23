@@ -77,21 +77,25 @@ class AgentRouter:
         if caching_enabled and message in self._routing_cache:
             cached_entry = self._routing_cache[message]
 
-            # Check if cache entry is a simple string (old format) or dict with timestamp
-            if isinstance(cached_entry, str):
-                # Old format - assume it's still valid
-                return cached_entry
-            elif isinstance(cached_entry, dict):
-                # New format with timestamp
+            # Cache entries must be in dict format with timestamp
+            if isinstance(cached_entry, dict):
                 cached_time = cached_entry.get("timestamp", 0)
                 cached_agent = cached_entry.get("agent_id")
 
                 # Check if cache entry is still valid (within TTL)
                 if time.time() - cached_time < cache_ttl:
-                    return cached_agent
+                    # Verify the cached agent is still available
+                    if cached_agent in self.overlord.agents:
+                        return cached_agent
+                    else:
+                        # Cached agent no longer available, remove from cache
+                        del self._routing_cache[message]
                 else:
                     # Cache entry expired, remove it
                     del self._routing_cache[message]
+            else:
+                # Invalid cache entry format, remove it
+                del self._routing_cache[message]
 
         # Get routing model if not available
         routing_model = getattr(self.overlord, "routing_model", None)
