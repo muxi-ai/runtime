@@ -67,7 +67,7 @@ class SecretsManager:
 
             # Observability: Encryption initialization completed
             observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description="Secrets manager encryption initialization completed",
                 data={
@@ -81,10 +81,11 @@ class SecretsManager:
         except Exception as e:
             # Observability: Encryption initialization failed
             observability.observe(
-                event_type=observability.SystemEvents.ENCRYPTION_COMPLETED,
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Secrets manager encryption initialization failed: {str(e)}",
                 data={
+                    "operation_type": "encryption",
                     "formation_dir": str(self.formation_dir),
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -167,10 +168,11 @@ class SecretsManager:
         """
         # Observability: Secret storage started
         observability.observe(
-            event_type=observability.SystemEvents.SECRET_STORAGE_STARTED,
+            event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
             level=observability.EventLevel.INFO,
             description=f"Starting secret storage for: {name}",
             data={
+                "operation_type": "storage_started",
                 "secret_name": name,
                 "normalized_name": self._normalize_secret_name(name),
                 "overwrite": overwrite,
@@ -195,10 +197,11 @@ class SecretsManager:
 
                     # Observability: Secret storage failed (already exists)
                     observability.observe(
-                        event_type=observability.SystemEvents.SECRET_STORAGE_FAILED,
+                        event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
                         level=observability.EventLevel.ERROR,
                         description=f"Secret storage failed for {name}: {error_msg}",
                         data={
+                            "operation_type": "storage",
                             "secret_name": name,
                             "normalized_name": normalized_name,
                             "error": error_msg,
@@ -215,7 +218,7 @@ class SecretsManager:
 
                 # Observability: Secret storage completed successfully
                 observability.observe(
-                    event_type=observability.SystemEvents.SECRET_STORAGE_COMPLETED,
+                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
                     level=observability.EventLevel.INFO,
                     description=f"Secret storage completed for: {name}",
                     data={
@@ -231,10 +234,11 @@ class SecretsManager:
         except Exception as e:
             # Observability: Secret storage failed with exception
             observability.observe(
-                event_type=observability.SystemEvents.SECRET_STORAGE_FAILED,
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Secret storage failed for {name}: {str(e)}",
                 data={
+                    "operation_type": "storage",
                     "secret_name": name,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -317,7 +321,7 @@ class SecretsManager:
 
                 if normalized_name not in secrets:
                     observability.observe(
-                        event_type=observability.SystemEvents.SECRET_DELETION_COMPLETED,
+                        event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
                         level=observability.EventLevel.DEBUG,
                         description=f"Secret deletion completed for {name}: not found",
                         data={
