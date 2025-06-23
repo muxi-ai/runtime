@@ -62,6 +62,11 @@ class TestCodeValidation:
             ("eval('2+2')", "Function not allowed: eval"),
             ("compile('x=1', 'test', 'exec')", "Function not allowed: compile"),
             ("__import__('os')", "Function not allowed: __import__"),
+            ("getattr(os, 'system')", "Function not allowed: getattr"),
+            ("builtins.exec('print(1)')", "Access to module not allowed: builtins.exec"),
+            ("sys.modules['os']", "Access to sys.modules not allowed"),
+            ("x.__class__", "Attribute access not allowed: __class__"),
+            ("obj.__globals__", "Attribute access not allowed: __globals__"),
         ]
         
         for code, expected_error in test_cases:

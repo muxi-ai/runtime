@@ -10,7 +10,6 @@ import sys
 import tempfile
 import yaml
 from pathlib import Path
-import subprocess
 
 # Add runtime source to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
@@ -18,16 +17,17 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 from muxi.runtime import Formation
 
 
-def test_file_generation():
+async def test_file_generation():
     """Test file generation capability end-to-end."""
     # Configuration for the test
+    # Note: Uses environment variable for API key for security
     config = {
         "schema": "1.0.0",
         "id": "file-gen-test",
         "description": "Test file generation capability",
         "llm": {
             "api_keys": {
-                "openai": "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"
+                "openai": os.environ.get("OPENAI_API_KEY", "test-key-for-testing")
             },
             "models": [
                 {"text": "gpt-3.5-turbo", "provider": "openai"}
@@ -43,29 +43,29 @@ def test_file_generation():
             "built_in_mcps": ["file-generation"]  # Enable file generation MCP
         }
     }
-    
+
     # Create temporary directory for the test
     with tempfile.TemporaryDirectory() as tmpdir:
         # Save configuration
         config_path = Path(tmpdir) / "formation.yaml"
         with open(config_path, "w") as f:
             yaml.dump(config, f)
-        
+
         # Change to temp directory so outputs go there
         original_cwd = os.getcwd()
         os.chdir(tmpdir)
-        
+
         try:
             print("🚀 Starting MUXI Runtime with File Generation MCP...")
-            
+
             # Create and load formation
             formation = Formation()
             formation.load(str(config_path))
-            
+
             # Start overlord
             overlord = formation.start_overlord()
             print("✅ Formation loaded and Overlord started")
-            
+
             # Test 1: Generate a simple chart
             print("\n📊 Test 1: Generating a bar chart...")
             response1 = await overlord.chat(
@@ -73,7 +73,7 @@ def test_file_generation():
                 user_id="test-user"
             )
             print(f"Response: {response1}")
-            
+
             # Test 2: Generate a data file
             print("\n📄 Test 2: Generating a JSON data file...")
             response2 = await overlord.chat(
@@ -81,7 +81,7 @@ def test_file_generation():
                 user_id="test-user"
             )
             print(f"Response: {response2}")
-            
+
             # Test 3: Generate a CSV spreadsheet
             print("\n📊 Test 3: Generating a CSV file...")
             response3 = await overlord.chat(
@@ -89,7 +89,7 @@ def test_file_generation():
                 user_id="test-user"
             )
             print(f"Response: {response3}")
-            
+
             # Check generated files
             print("\n📁 Checking generated files...")
             outputs_dir = Path(tmpdir) / "outputs"
@@ -100,13 +100,13 @@ def test_file_generation():
                     print(f"  - {file.name} ({file.stat().st_size} bytes)")
             else:
                 print("No outputs directory found")
-            
+
             # Cleanup
             print("\n🧹 Cleaning up...")
             formation.stop_overlord()
             formation.stop()
             print("✅ Test completed successfully!")
-            
+
         finally:
             os.chdir(original_cwd)
 
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print("File Generation MCP - End-to-End Test")
     print("=" * 60)
-    
+
     try:
         asyncio.run(test_file_generation())
     except KeyboardInterrupt:
