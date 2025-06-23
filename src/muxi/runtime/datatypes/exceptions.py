@@ -18,13 +18,13 @@ class FormationError(Exception):
 
 
 # Configuration Errors
-class FormationConfigurationError(FormationError):
+class FormationSchemaurationError(FormationError):
     """Base class for configuration-related errors."""
 
     pass
 
 
-class ConfigurationNotFoundError(FormationConfigurationError):
+class ConfigurationNotFoundError(FormationSchemaurationError):
     """Raised when formation configuration file/directory cannot be found."""
 
     def __init__(self, path: str, details: Optional[Dict[str, Any]] = None):
@@ -33,7 +33,7 @@ class ConfigurationNotFoundError(FormationConfigurationError):
         self.path = path
 
 
-class ConfigurationValidationError(FormationConfigurationError):
+class ConfigurationValidationError(FormationSchemaurationError):
     """Raised when formation configuration fails validation."""
 
     def __init__(self, errors: List[str], details: Optional[Dict[str, Any]] = None):
@@ -42,7 +42,7 @@ class ConfigurationValidationError(FormationConfigurationError):
         self.validation_errors = errors
 
 
-class ConfigurationLoadError(FormationConfigurationError):
+class ConfigurationLoadError(FormationSchemaurationError):
     """Raised when formation configuration cannot be loaded."""
 
     def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):

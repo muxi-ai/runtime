@@ -29,7 +29,7 @@ from .clarification import (
 )
 from .exceptions import (
     FormationError,
-    FormationConfigurationError,
+    FormationSchemaurationError,
     ConfigurationLoadError,
     ConfigurationValidationError,
     OverlordStateError,
@@ -97,6 +97,15 @@ from .workflow import (
     TaskResult,
     Workflow,
 )
+from .schema import (
+    BaseServiceSchema,
+    LLMServiceSchema,
+    MemoryServiceSchema,
+    MCPServiceSchema,
+    A2AServiceSchema,
+    SchedulerServiceSchema,
+    FormationSchema,
+)
 
 __all__ = [
     # Async operations
@@ -120,7 +129,7 @@ __all__ = [
     "ClarificationSession",
     # Exceptions
     "FormationError",
-    "FormationConfigurationError",
+    "FormationSchemaurationError",
     "ConfigurationLoadError",
     "ConfigurationValidationError",
     "OverlordStateError",
@@ -179,4 +188,12 @@ __all__ = [
     "RequestAnalysis",
     "TaskResult",
     "Workflow",
+    # Configuration
+    "BaseServiceSchema",
+    "LLMServiceSchema",
+    "MemoryServiceSchema",
+    "MCPServiceSchema",
+    "A2AServiceSchema",
+    "SchedulerServiceSchema",
+    "FormationSchema",
 ]
