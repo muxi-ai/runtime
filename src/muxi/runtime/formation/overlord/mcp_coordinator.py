@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
+from ...datatypes.schema import MCPServiceSchema
 
 
 class MCPCoordinator:
@@ -20,15 +21,41 @@ class MCPCoordinator:
     and better maintainability for Model Context Protocol operations.
     """
 
-    def __init__(self, overlord):
+    def __init__(self, overlord, config: Optional[MCPServiceSchema] = None):
         """
-        Initialize the MCP coordinator.
+        Initialize the MCP coordinator with standardized configuration.
 
         Args:
             overlord: Reference to the overlord instance
+            config: Optional MCP service configuration. If not provided,
+                    defaults will be used.
         """
         self.overlord = overlord
+
+        # Use provided config or create default
+        self.config = config or MCPServiceSchema()
+
+        # Validate configuration
+        self.config.validate()
+
+        # Get singleton MCP service instance
         self.mcp_service = MCPService.get_instance()
+
+        # Apply configuration
+        self._apply_configuration()
+
+    def _apply_configuration(self) -> None:
+        """Apply the standardized configuration to internal settings."""
+        # Server limits
+        self.max_concurrent_servers = self.config.max_concurrent_servers
+
+        # Timeout settings
+        self.default_timeout = self.config.default_timeout
+        self.operation_timeout = self.config.timeout or 30.0
+
+        # Retry settings
+        self.retry_attempts = self.config.retry_attempts
+        self.retry_delay = self.config.retry_delay
 
     async def register_mcp_server(
         self,
@@ -60,7 +87,7 @@ class MCPCoordinator:
             model: Optional model to use for this MCP handler. Some MCP servers
                 require a model for processing tool invocations.
             request_timeout: Optional timeout in seconds for requests to this server.
-                Defaults to the overlord's global timeout setting if not specified.
+                Defaults to the coordinator's default timeout if not specified.
 
         Returns:
             The server_id of the registered server, confirming successful registration.
@@ -69,8 +96,16 @@ class MCPCoordinator:
             ValueError: If neither url nor command is provided, or if both are provided.
             ConnectionError: If the MCP server cannot be contacted during registration.
         """
-        # Use overlord's default timeout if none specified
-        timeout = request_timeout if request_timeout is not None else self.overlord.request_timeout
+        # Check if we've reached max concurrent servers
+        current_server_count = len(await self.mcp_service.list_servers())
+        if current_server_count >= self.max_concurrent_servers:
+            raise ValueError(
+                f"Maximum concurrent MCP servers ({self.max_concurrent_servers}) reached. "
+                f"Increase max_concurrent_servers in configuration or remove unused servers."
+            )
+
+        # Use configured default timeout if none specified
+        timeout = request_timeout if request_timeout is not None else self.default_timeout
 
         # Interpolate secrets in auth if provided
         final_auth = auth
@@ -147,3 +182,74 @@ class MCPCoordinator:
             The MCPService instance used by this overlord.
         """
         return self.mcp_service
+
+    def get_configuration(self) -> MCPServiceSchema:
+        """
+        Get the current MCP service configuration.
+
+        Returns:
+            The current MCPServiceSchema instance
+        """
+        return self.config
+
+    def update_configuration(self, config: MCPServiceSchema) -> None:
+        """
+        Update the MCP service configuration.
+
+        Args:
+            config: New MCP service configuration
+
+        Raises:
+            ValueError: If configuration validation fails
+        """
+        # Validate new configuration
+        config.validate()
+
+        # Update configuration
+        self.config = config
+
+        # Apply new configuration
+        self._apply_configuration()
+
+    async def unregister_mcp_server(self, server_id: str) -> None:
+        """
+        Unregister an MCP server.
+
+        Args:
+            server_id: ID of the server to unregister
+
+        Raises:
+            KeyError: If server_id is not registered
+        """
+        await self.mcp_service.unregister_server(server_id)
+
+        #  Info - TODO: add observability
+        # ConversationEvents.MCP_SERVER_UNREGISTERED
+
+    async def get_server_status(self, server_id: str) -> Dict[str, Any]:
+        """
+        Get the status of a specific MCP server.
+
+        Args:
+            server_id: ID of the server to check
+
+        Returns:
+            Dict with server status information including:
+            - "connected": Whether the server is connected
+            - "tools_count": Number of tools available
+            - "last_error": Last error message if any
+            - "uptime": Server uptime in seconds
+        """
+        servers = await self.mcp_service.list_servers()
+        if server_id not in servers:
+            raise KeyError(f"MCP server '{server_id}' not found")
+
+        server_info = servers[server_id]
+        tools = await self.mcp_service.list_tools(server_id=server_id)
+
+        return {
+            "connected": server_info.get("connected", False),
+            "tools_count": len(tools.get(server_id, [])),
+            "last_error": server_info.get("last_error"),
+            "uptime": server_info.get("uptime", 0),
+        }

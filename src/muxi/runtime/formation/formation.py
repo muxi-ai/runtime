@@ -499,6 +499,49 @@ class Formation:
         self._setup_scheduler_config()
         self._setup_agents_config()
 
+        # Create standardized configuration objects
+        from ..datatypes.schema import MCPServiceSchema, A2AServiceSchema
+
+        # Create MCP configuration object
+        mcp_config_obj = None
+        if self._mcp_config:
+            try:
+                mcp_config_obj = MCPServiceSchema(
+                    enabled=self._mcp_config.get("enabled", True),
+                    max_concurrent_servers=self._mcp_config.get("max_concurrent_servers", 10),
+                    default_timeout=self._mcp_config.get("default_timeout", 30.0),
+                    retry_attempts=self._mcp_config.get("retry_attempts", 3),
+                    retry_delay=self._mcp_config.get("retry_delay", 1.0),
+                )
+                mcp_config_obj.validate()
+            except Exception as e:
+                print(f"Warning: Invalid MCP configuration, using defaults: {e}")
+                mcp_config_obj = MCPServiceSchema()
+
+        # Create A2A configuration object
+        a2a_config_obj = None
+        if self._a2a_config:
+            try:
+                a2a_config_obj = A2AServiceSchema(
+                    enabled=self._a2a_config.get("enabled", True),
+                    server_enabled=self._a2a_config.get("server", {}).get("enabled", False),
+                    server_host=self._a2a_config.get("server", {}).get("host", "0.0.0.0"),
+                    server_port=self._a2a_config.get("server", {}).get("port", 8080),
+                    external_registry_enabled=self._a2a_config.get("external_registry", {}).get(
+                        "enabled", False
+                    ),
+                    registry_url=self._a2a_config.get("external_registry", {}).get("url"),
+                    registration_timeout=self._a2a_config.get("external_registry", {}).get(
+                        "timeout", 30.0
+                    ),
+                    require_auth=self._a2a_config.get("security", {}).get("require_auth", False),
+                    allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
+                )
+                a2a_config_obj.validate()
+            except Exception as e:
+                print(f"Warning: Invalid A2A configuration, using defaults: {e}")
+                a2a_config_obj = A2AServiceSchema()
+
         # Create comprehensive service bundle for overlord handoff
         self._configured_services = {
             "formation_config": self.config,
@@ -508,8 +551,8 @@ class Formation:
             # Service-specific configurations (validated and preprocessed)
             "llm_config": self._llm_config,
             "memory_config": self._memory_config,
-            "mcp_config": self._mcp_config,
-            "a2a_config": self._a2a_config,
+            "mcp_config": mcp_config_obj,  # Standardized config object
+            "a2a_config": a2a_config_obj,  # Standardized config object
             "logging_config": self._logging_config,
             "clarification_config": self._clarification_config,
             "document_processing_config": self._document_processing_config,

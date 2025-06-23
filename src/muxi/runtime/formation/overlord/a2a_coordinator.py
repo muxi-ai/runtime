@@ -9,6 +9,8 @@ embedded in the main Overlord class.
 import asyncio
 from typing import Dict, List, Optional, Any
 
+from ...datatypes.schema import A2AServiceSchema
+
 
 class A2ACoordinator:
     """
@@ -19,14 +21,44 @@ class A2ACoordinator:
     and better maintainability for Agent-to-Agent communication operations.
     """
 
-    def __init__(self, overlord):
+    def __init__(self, overlord, config: Optional[A2AServiceSchema] = None):
         """
-        Initialize the A2A coordinator.
+        Initialize the A2A coordinator with standardized configuration.
 
         Args:
             overlord: Reference to the overlord instance
+            config: Optional A2A service configuration. If not provided,
+                    defaults will be used.
         """
         self.overlord = overlord
+
+        # Use provided config or create default
+        self.config = config or A2AServiceSchema()
+
+        # Validate configuration
+        self.config.validate()
+
+        # Apply configuration
+        self._apply_configuration()
+
+    def _apply_configuration(self) -> None:
+        """Apply the standardized configuration to internal settings."""
+        # Server settings
+        self.server_enabled = self.config.server_enabled
+        self.server_host = self.config.server_host
+        self.server_port = self.config.server_port
+
+        # Registry settings
+        self.external_registry_enabled = self.config.external_registry_enabled
+        self.registry_url = self.config.registry_url
+        self.registration_timeout = self.config.registration_timeout
+
+        # Security settings
+        self.require_auth = self.config.require_auth
+        self.allowed_origins = self.config.allowed_origins or []
+
+        # Timeout settings from base config
+        self.operation_timeout = self.config.timeout or 30.0
 
     def get_available_agents_for_a2a(
         self, requesting_agent_id: str, capability_filter: Optional[List[str]] = None
@@ -104,7 +136,7 @@ class A2ACoordinator:
         - Message routing to local agents
         - Health checks and status monitoring
 
-        The server only starts if it was previously initialized in the configuration.
+        The server only starts if it was enabled in the configuration.
         If startup fails, an error is logged but the overlord continues operating
         without A2A server capabilities.
 
@@ -114,6 +146,10 @@ class A2ACoordinator:
             - Makes local agents discoverable to external formations
         """
         try:
+            # Only start if server is enabled in config
+            if not self.server_enabled:
+                return
+
             if self.overlord.a2a_server:
                 await self.overlord.a2a_server.start()
 
@@ -144,12 +180,27 @@ class A2ACoordinator:
             - Emits observability events for registration completion
         """
         try:
+            # Skip if external registry not enabled or no pending registrations
+            if not self.external_registry_enabled:
+                return
+
             # Skip if no registry client or no pending registrations
             if (
                 not self.overlord.inbound_registry_client
                 or not self.overlord.pending_external_registrations
             ):
                 return
+
+            # Apply timeout to registration operations
+            async def _register_with_timeout(agent_id: str):
+                try:
+                    await asyncio.wait_for(
+                        self._register_agent_with_external_registry(agent_id),
+                        timeout=self.registration_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    # Log timeout but don't fail the entire batch
+                    _ = f"Registration timeout for agent {agent_id}"
 
             # Collect registration tasks for concurrent execution
             registration_tasks = []
@@ -158,7 +209,7 @@ class A2ACoordinator:
                 # Only register agents that still exist in the registry
                 if agent_id in self.overlord.agents:
                     # Create async registration task for this agent
-                    task = self._register_agent_with_external_registry(agent_id)
+                    task = _register_with_timeout(agent_id)
                     registration_tasks.append(task)
 
             # Execute all registrations concurrently to minimize latency
@@ -196,6 +247,10 @@ class A2ACoordinator:
             - Makes the agent discoverable to external formations
         """
         try:
+            # Skip if external registry not enabled
+            if not self.external_registry_enabled:
+                return
+
             # Skip if no registry client available or agent doesn't exist
             if not self.overlord.inbound_registry_client or agent_id not in self.overlord.agents:
                 return
@@ -231,6 +286,10 @@ class A2ACoordinator:
             agent_id: ID of the agent to deregister
         """
         try:
+            # Skip if external registry not enabled
+            if not self.external_registry_enabled:
+                return
+
             if not self.overlord.inbound_registry_client:
                 return
 
@@ -245,3 +304,31 @@ class A2ACoordinator:
             #  Warning - TODO: add observability
             # SystemEvents.A2A_AGENT_DEREGISTRATION_FAILED
             _ = e  # remove this after implementing observability
+
+    def get_configuration(self) -> A2AServiceSchema:
+        """
+        Get the current A2A service configuration.
+
+        Returns:
+            The current A2AServiceSchema instance
+        """
+        return self.config
+
+    def update_configuration(self, config: A2AServiceSchema) -> None:
+        """
+        Update the A2A service configuration.
+
+        Args:
+            config: New A2A service configuration
+
+        Raises:
+            ValueError: If configuration validation fails
+        """
+        # Validate new configuration
+        config.validate()
+
+        # Update configuration
+        self.config = config
+
+        # Apply new configuration
+        self._apply_configuration()

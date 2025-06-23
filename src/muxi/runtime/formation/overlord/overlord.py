@@ -313,11 +313,13 @@ class Overlord:
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
 
-        # MCP coordination system
-        self.mcp_coordinator = MCPCoordinator(self)
+        # MCP coordination system with configuration
+        mcp_config = configured_services.get("mcp_config") if configured_services else None
+        self.mcp_coordinator = MCPCoordinator(self, config=mcp_config)
 
-        # A2A coordination system
-        self.a2a_coordinator = A2ACoordinator(self)
+        # A2A coordination system with configuration
+        a2a_config = configured_services.get("a2a_config") if configured_services else None
+        self.a2a_coordinator = A2ACoordinator(self, config=a2a_config)
 
         # Set up callbacks for actual deletion
         self.active_agent_tracker._delete_agent = self._actually_delete_agent
