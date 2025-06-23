@@ -1,0 +1,29 @@
+schema: "1.0.0"
+id: "file-generation-test"
+description: "Formation with built-in MCP file generation enabled"
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 4000
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o"
+
+memory:
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: true
+
+runtime:
+  built_in_mcps: ["file-generation"]
+
+logging:
+  streams:
+    - transport: "stdout"
+      level: "info"
+      format: "jsonl"
+
+# Agent and MCP configuration will be auto-discovered from directories

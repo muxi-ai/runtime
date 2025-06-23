@@ -1,0 +1,70 @@
+schema: "1.0.0"
+id: "complete-test-formation"
+description: "Comprehensive formation with multiple agents, MCP servers, and A2A communication"
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 3000
+    timeout_seconds: 30
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o"
+    - embedding: "openai/text-embedding-3-small"
+
+overlord:
+  persona: |
+    You are an intelligent task orchestrator that routes requests to specialized agents.
+    Break down complex tasks and delegate to the appropriate specialists.
+  llm:
+    model: "openai/gpt-4o-mini"
+    settings:
+      temperature: 0.2
+      max_tokens: 2000
+  config:
+    max_tool_calls: -1
+    response:
+      format: "markdown"
+      interactive_elements: true
+  streaming: true
+
+memory:
+  working:
+    max_memory_mb: 512
+    fifo_interval_min: 5
+    vector_dimension: 1536
+    
+  buffer:
+    size: 100
+    multiplier: 10
+    vector_search: true
+    
+  persistent:
+    connection_string: "sqlite:///knowledge.db"
+
+runtime:
+  built_in_mcps: ["file-generation"]
+
+mcp:
+  default_retry_attempts: 3
+  default_timeout_seconds: 30
+
+a2a:
+  enabled: true
+  outbound:
+    enabled: true
+    default_retry_attempts: 3
+    default_timeout_seconds: 30
+  inbound:
+    enabled: true
+    port: 8181
+
+logging:
+  streams:
+    - transport: "stdout"
+      level: "info"
+      format: "jsonl"
+
+# Agents, MCP servers, and A2A services will be auto-discovered from directories

@@ -1,0 +1,43 @@
+schema: "1.0.0"
+id: "multi-agent-test"
+description: "Multiple agents for testing routing and collaboration"
+
+llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 3000
+    timeout_seconds: 30
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o"
+
+overlord:
+  llm:
+    model: "openai/gpt-4o-mini"
+    settings:
+      temperature: 0.2
+      max_tokens: 2000
+  config:
+    max_tool_calls: -1
+
+memory:
+  buffer:
+    size: 100
+    multiplier: 10
+    vector_search: true
+
+a2a:
+  enabled: true
+  inbound:
+    enabled: true
+    port: 8181
+
+logging:
+  streams:
+    - transport: "stdout"
+      level: "debug"
+      format: "jsonl"
+
+# Agents and A2A configurations will be auto-discovered from directories
