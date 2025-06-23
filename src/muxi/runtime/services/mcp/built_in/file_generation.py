@@ -128,11 +128,45 @@ def validate_code(code: str) -> tuple[bool, Optional[str]]:
         elif isinstance(node, (ast.Global, ast.Nonlocal)):
             return False, f"Operation not allowed: {type(node).__name__}"
 
-        # Check for file operations outside of allowed methods
+        # Check for dangerous function calls
         elif isinstance(node, ast.Call):
+            # Direct function calls (e.g., exec(), eval())
             if isinstance(node.func, ast.Name):
-                if node.func.id in {"exec", "eval", "compile", "__import__"}:
+                if node.func.id in {"exec", "eval", "compile", "__import__", "getattr", "setattr", "delattr", "hasattr", "vars", "dir", "globals", "locals"}:
                     return False, f"Function not allowed: {node.func.id}"
+            
+            # Attribute-based calls (e.g., builtins.exec, sys.modules)
+            elif isinstance(node.func, ast.Attribute):
+                # Check for dangerous attribute access patterns
+                dangerous_attrs = {
+                    "exec", "eval", "compile", "__import__", 
+                    "getattr", "setattr", "delattr", "hasattr",
+                    "vars", "dir", "globals", "locals"
+                }
+                if node.func.attr in dangerous_attrs:
+                    return False, f"Attribute access not allowed: {node.func.attr}"
+                
+                # Check for module-based dangerous access
+                if isinstance(node.func.value, ast.Name):
+                    dangerous_modules = {"builtins", "sys", "__builtins__"}
+                    if node.func.value.id in dangerous_modules:
+                        return False, f"Access to module not allowed: {node.func.value.id}.{node.func.attr}"
+        
+        # Check for dangerous attribute access (non-function calls)
+        elif isinstance(node, ast.Attribute):
+            dangerous_attrs = {
+                "__class__", "__bases__", "__subclasses__", "__mro__",
+                "__globals__", "__code__", "__closure__", "__defaults__",
+                "__dict__", "__module__"
+            }
+            if node.attr in dangerous_attrs:
+                return False, f"Attribute access not allowed: {node.attr}"
+        
+        # Check for dangerous subscript access (e.g., sys.modules['os'])
+        elif isinstance(node, ast.Subscript):
+            if isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name):
+                if node.value.value.id == "sys" and node.value.attr == "modules":
+                    return False, "Access to sys.modules not allowed"
 
     return True, None
 
@@ -429,12 +463,7 @@ def main():
             if not line:
                 continue
 
-            # Ensure we got a complete JSON line
-            if not line.endswith("}"):
-                # Incomplete line, might be partial data
-                continue
-
-            # Parse JSON request
+            # Parse JSON request - let json.loads() handle validation
             try:
                 request = json.loads(line)
             except json.JSONDecodeError as e:

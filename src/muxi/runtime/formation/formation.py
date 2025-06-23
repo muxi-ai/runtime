@@ -132,6 +132,9 @@ class Formation:
         )
         self._retry_manager = get_retry_manager()
 
+        # Built-in MCP registration tracking
+        self._builtin_mcp_task: Optional[asyncio.Task] = None
+
         # Dependency validation
         self._dependency_validator = DependencyValidator()
 
@@ -1238,6 +1241,21 @@ class Formation:
                 task = loop.create_task(self._register_builtin_mcps())
                 # Store task reference to prevent garbage collection
                 self._builtin_mcp_task = task
+                # Wait for registration to complete to avoid race conditions
+                # Use a timeout to prevent blocking indefinitely
+                try:
+                    import concurrent.futures
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run_coroutine_threadsafe, task, loop)
+                        future.result(timeout=30)  # 30 second timeout
+                except Exception as e:
+                    # Log error but don't fail startup
+                    observability.observe(
+                        event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e)},
+                        description=f"Built-in MCP registration task failed to complete: {e}"
+                    )
             except RuntimeError:
                 # No event loop running, create one
                 asyncio.run(self._register_builtin_mcps())
@@ -2248,3 +2266,48 @@ class Formation:
                     },
                     description=f"Failed to register built-in MCP server {mcp_name}: {e}",
                 )
+
+    async def wait_for_mcp_readiness(self, timeout: float = 30.0) -> bool:
+        """
+        Wait for built-in MCP registration to complete.
+        
+        Args:
+            timeout: Maximum time to wait in seconds
+            
+        Returns:
+            True if registration completed successfully, False if timed out or failed
+        """
+        if not self._builtin_mcp_task:
+            # No registration task running
+            return True
+        
+        try:
+            await asyncio.wait_for(self._builtin_mcp_task, timeout=timeout)
+            return True
+        except asyncio.TimeoutError:
+            observability.observe(
+                event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={"timeout": timeout},
+                description=f"Built-in MCP registration timed out after {timeout} seconds"
+            )
+            return False
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e)},
+                description=f"Built-in MCP registration failed: {e}"
+            )
+            return False
+
+    def is_mcp_ready(self) -> bool:
+        """
+        Check if built-in MCP registration is complete.
+        
+        Returns:
+            True if registration is complete or not needed, False if still in progress
+        """
+        if not self._builtin_mcp_task:
+            return True
+        return self._builtin_mcp_task.done()
