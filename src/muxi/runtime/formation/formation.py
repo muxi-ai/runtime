@@ -1245,6 +1245,7 @@ class Formation:
                 # Use a timeout to prevent blocking indefinitely
                 try:
                     import concurrent.futures
+
                     with concurrent.futures.ThreadPoolExecutor() as executor:
                         future = executor.submit(asyncio.run_coroutine_threadsafe, task, loop)
                         future.result(timeout=30)  # 30 second timeout
@@ -1254,7 +1255,7 @@ class Formation:
                         event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(e)},
-                        description=f"Built-in MCP registration task failed to complete: {e}"
+                        description=f"Built-in MCP registration task failed to complete: {e}",
                     )
             except RuntimeError:
                 # No event loop running, create one
@@ -2270,17 +2271,17 @@ class Formation:
     async def wait_for_mcp_readiness(self, timeout: float = 30.0) -> bool:
         """
         Wait for built-in MCP registration to complete.
-        
+
         Args:
             timeout: Maximum time to wait in seconds
-            
+
         Returns:
             True if registration completed successfully, False if timed out or failed
         """
         if not self._builtin_mcp_task:
             # No registration task running
             return True
-        
+
         try:
             await asyncio.wait_for(self._builtin_mcp_task, timeout=timeout)
             return True
@@ -2289,7 +2290,7 @@ class Formation:
                 event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"timeout": timeout},
-                description=f"Built-in MCP registration timed out after {timeout} seconds"
+                description=f"Built-in MCP registration timed out after {timeout} seconds",
             )
             return False
         except Exception as e:
@@ -2297,14 +2298,14 @@ class Formation:
                 event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e)},
-                description=f"Built-in MCP registration failed: {e}"
+                description=f"Built-in MCP registration failed: {e}",
             )
             return False
 
     def is_mcp_ready(self) -> bool:
         """
         Check if built-in MCP registration is complete.
-        
+
         Returns:
             True if registration is complete or not needed, False if still in progress
         """

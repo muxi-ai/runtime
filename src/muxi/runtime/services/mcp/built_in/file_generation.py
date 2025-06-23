@@ -132,36 +132,68 @@ def validate_code(code: str) -> tuple[bool, Optional[str]]:
         elif isinstance(node, ast.Call):
             # Direct function calls (e.g., exec(), eval())
             if isinstance(node.func, ast.Name):
-                if node.func.id in {"exec", "eval", "compile", "__import__", "getattr", "setattr", "delattr", "hasattr", "vars", "dir", "globals", "locals"}:
+                dangerous_funcs = {
+                    "exec",
+                    "eval",
+                    "compile",
+                    "__import__",
+                    "getattr",
+                    "setattr",
+                    "delattr",
+                    "hasattr",
+                    "vars",
+                    "dir",
+                    "globals",
+                    "locals",
+                }
+                if node.func.id in dangerous_funcs:
                     return False, f"Function not allowed: {node.func.id}"
-            
             # Attribute-based calls (e.g., builtins.exec, sys.modules)
             elif isinstance(node.func, ast.Attribute):
                 # Check for dangerous attribute access patterns
                 dangerous_attrs = {
-                    "exec", "eval", "compile", "__import__", 
-                    "getattr", "setattr", "delattr", "hasattr",
-                    "vars", "dir", "globals", "locals"
+                    "exec",
+                    "eval",
+                    "compile",
+                    "__import__",
+                    "getattr",
+                    "setattr",
+                    "delattr",
+                    "hasattr",
+                    "vars",
+                    "dir",
+                    "globals",
+                    "locals",
                 }
                 if node.func.attr in dangerous_attrs:
                     return False, f"Attribute access not allowed: {node.func.attr}"
-                
+
                 # Check for module-based dangerous access
                 if isinstance(node.func.value, ast.Name):
                     dangerous_modules = {"builtins", "sys", "__builtins__"}
                     if node.func.value.id in dangerous_modules:
-                        return False, f"Access to module not allowed: {node.func.value.id}.{node.func.attr}"
-        
+                        return (
+                            False,
+                            f"Access to module not allowed: {node.func.value.id}.{node.func.attr}",
+                        )
+
         # Check for dangerous attribute access (non-function calls)
         elif isinstance(node, ast.Attribute):
             dangerous_attrs = {
-                "__class__", "__bases__", "__subclasses__", "__mro__",
-                "__globals__", "__code__", "__closure__", "__defaults__",
-                "__dict__", "__module__"
+                "__class__",
+                "__bases__",
+                "__subclasses__",
+                "__mro__",
+                "__globals__",
+                "__code__",
+                "__closure__",
+                "__defaults__",
+                "__dict__",
+                "__module__",
             }
             if node.attr in dangerous_attrs:
                 return False, f"Attribute access not allowed: {node.attr}"
-        
+
         # Check for dangerous subscript access (e.g., sys.modules['os'])
         elif isinstance(node, ast.Subscript):
             if isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name):
@@ -285,30 +317,49 @@ atexit.register(_save_file_list)
             if any(key.startswith(prefix) for prefix in sensitive_prefixes):
                 del env[key]
 
-        # Prepare subprocess with resource limits
-        # Note: Resource limits work best on Unix-like systems
-        if sys.platform != "win32":
-            import resource
+        # Prepare subprocess with resource limits (where supported)
+        try:
+            if sys.platform != "win32":
+                import resource
 
-            def set_limits():
-                # Set memory limit
-                resource.setrlimit(resource.RLIMIT_AS, (MAX_MEMORY_BYTES, MAX_MEMORY_BYTES))
-                # Set CPU time limit (slightly higher than timeout to allow graceful shutdown)
-                resource.setrlimit(
-                    resource.RLIMIT_CPU, (MAX_EXECUTION_TIME + 5, MAX_EXECUTION_TIME + 5)
+                def set_limits():
+                    try:
+                        # Set memory limit (some systems may not support this)
+                        resource.setrlimit(resource.RLIMIT_AS, (MAX_MEMORY_BYTES, MAX_MEMORY_BYTES))
+                    except (OSError, ValueError):
+                        # Memory limit not supported on this system
+                        pass
+                    
+                    try:
+                        # Set CPU time limit (slightly higher than timeout to allow graceful shutdown)
+                        resource.setrlimit(
+                            resource.RLIMIT_CPU, (MAX_EXECUTION_TIME + 5, MAX_EXECUTION_TIME + 5)
+                        )
+                    except (OSError, ValueError):
+                        # CPU limit not supported on this system
+                        pass
+
+                result = subprocess.run(
+                    [sys.executable, tmp_file_path],
+                    cwd=str(output_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=MAX_EXECUTION_TIME,
+                    env=env,
+                    preexec_fn=set_limits,
                 )
-
-            result = subprocess.run(
-                [sys.executable, tmp_file_path],
-                cwd=str(output_dir),
-                capture_output=True,
-                text=True,
-                timeout=MAX_EXECUTION_TIME,
-                env=env,
-                preexec_fn=set_limits,
-            )
-        else:
-            # Windows doesn't support preexec_fn or resource limits in the same way
+            else:
+                # Windows doesn't support preexec_fn or resource limits
+                result = subprocess.run(
+                    [sys.executable, tmp_file_path],
+                    cwd=str(output_dir),
+                    capture_output=True,
+                    text=True,
+                    timeout=MAX_EXECUTION_TIME,
+                    env=env,
+                )
+        except Exception as e:
+            # Fallback: run without resource limits if that fails
             result = subprocess.run(
                 [sys.executable, tmp_file_path],
                 cwd=str(output_dir),

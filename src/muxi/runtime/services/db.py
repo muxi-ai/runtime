@@ -59,9 +59,9 @@ class DatabaseManager:
             level=observability.EventLevel.INFO,
             data={
                 "database_type": self.database_type,
-                "connection_configured": bool(self.connection_string)
+                "connection_configured": bool(self.connection_string),
             },
-            description=f"Database manager initialized with {self.database_type}"
+            description=f"Database manager initialized with {self.database_type}",
         )
 
     def _resolve_connection_string(self, connection_string: Optional[str]) -> str:
@@ -78,12 +78,12 @@ class DatabaseManager:
             return connection_string
 
         # Try environment variables
-        postgres_url = os.getenv('POSTGRES_DATABASE_URL')
+        postgres_url = os.getenv("POSTGRES_DATABASE_URL")
         if postgres_url:
             return postgres_url
 
         # Try SQLite environment variable
-        sqlite_path = os.getenv('SQLITE_DATABASE_PATH')
+        sqlite_path = os.getenv("SQLITE_DATABASE_PATH")
         if sqlite_path:
             return f"sqlite:///{sqlite_path}"
 
@@ -105,10 +105,10 @@ class DatabaseManager:
         parsed = urlparse(connection_string)
         scheme = parsed.scheme.lower()
 
-        if scheme in ('postgresql', 'postgres'):
-            return 'postgresql'
-        elif scheme == 'sqlite' or connection_string.endswith('.db'):
-            return 'sqlite'
+        if scheme in ("postgresql", "postgres"):
+            return "postgresql"
+        elif scheme == "sqlite" or connection_string.endswith(".db"):
+            return "sqlite"
         else:
             # Default to SQLite for unknown schemes
             observability.observe(
@@ -117,11 +117,11 @@ class DatabaseManager:
                 data={
                     "connection_string": connection_string,
                     "detected_scheme": scheme,
-                    "fallback_to": "sqlite"
+                    "fallback_to": "sqlite",
                 },
-                description=f"Unknown database scheme '{scheme}', falling back to SQLite"
+                description=f"Unknown database scheme '{scheme}', falling back to SQLite",
             )
-            return 'sqlite'
+            return "sqlite"
 
     def _create_engine(self):
         """
@@ -130,7 +130,7 @@ class DatabaseManager:
         Returns:
             Configured SQLAlchemy engine
         """
-        if self.database_type == 'postgresql':
+        if self.database_type == "postgresql":
             # PostgreSQL configuration with connection pooling
             engine = create_engine(
                 self.connection_string,
@@ -138,7 +138,7 @@ class DatabaseManager:
                 max_overflow=10,
                 pool_timeout=30,
                 pool_recycle=1800,
-                echo=False  # Set to True for SQL debugging
+                echo=False,  # Set to True for SQL debugging
             )
 
             # Enable pgvector extension for PostgreSQL
@@ -151,7 +151,7 @@ class DatabaseManager:
                     event_type=observability.ErrorEvents.DATABASE_EXTENSION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
-                    description="Failed to create pgvector extension (may not be needed)"
+                    description="Failed to create pgvector extension (may not be needed)",
                 )
 
         else:  # SQLite
@@ -159,7 +159,7 @@ class DatabaseManager:
             engine = create_engine(
                 self.connection_string,
                 echo=False,  # Set to True for SQL debugging
-                connect_args={"check_same_thread": False}  # Allow multi-threading
+                connect_args={"check_same_thread": False},  # Allow multi-threading
             )
 
         return engine
@@ -186,17 +186,14 @@ class DatabaseManager:
                 event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
                 level=observability.EventLevel.INFO,
                 data={"database_type": self.database_type},
-                description="Database tables created successfully"
+                description="Database tables created successfully",
             )
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,
                 level=observability.EventLevel.ERROR,
-                data={
-                    "error": str(e),
-                    "database_type": self.database_type
-                },
-                description=f"Failed to create database tables: {e}"
+                data={"error": str(e), "database_type": self.database_type},
+                description=f"Failed to create database tables: {e}",
             )
             raise
 
@@ -210,18 +207,24 @@ class DatabaseManager:
         return {
             "database_type": self.database_type,
             "connection_string": self.connection_string,
-            "engine_pool_size": getattr(self.engine.pool, 'size', None) if hasattr(self.engine, 'pool') else None,
-            "engine_pool_checked_out": getattr(self.engine.pool, 'checkedout', None) if hasattr(self.engine, 'pool') else None,
+            "engine_pool_size": (
+                getattr(self.engine.pool, "size", None) if hasattr(self.engine, "pool") else None
+            ),
+            "engine_pool_checked_out": (
+                getattr(self.engine.pool, "checkedout", None)
+                if hasattr(self.engine, "pool")
+                else None
+            ),
         }
 
     def close(self) -> None:
         """Close the database connection and cleanup resources."""
-        if hasattr(self, 'engine'):
+        if hasattr(self, "engine"):
             self.engine.dispose()
             observability.observe(
                 event_type=observability.SystemEvents.DATABASE_MANAGER_CLOSED,
                 level=observability.EventLevel.INFO,
-                description="Database manager closed and resources cleaned up"
+                description="Database manager closed and resources cleaned up",
             )
 
 
