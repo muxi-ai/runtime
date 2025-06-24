@@ -46,7 +46,7 @@ from ..utils import DependencyValidator
 
 # Async operation imports
 from ..utils.async_operation_manager import get_operation_manager, execute_with_timeout
-from ..datatypes.async_operations import TimeoutConfig, CancellationToken
+from ..datatypes.async_operations import TimeoutConfig, CancellationToken, OperationStatus
 
 # Retry logic imports
 from ..utils.retry_manager import get_retry_manager
@@ -193,8 +193,15 @@ class Formation:
             # Store formation path for secrets management
             self._formation_path = normalized_path
 
-            # Initialize secrets manager
-            self.secrets_manager = SecretsManager(normalized_path)
+            # Initialize secrets manager with directory path
+            # If normalized_path is a file, use its directory; otherwise use the path itself
+            import os
+
+            if os.path.isfile(normalized_path):
+                secrets_dir = os.path.dirname(normalized_path)
+            else:
+                secrets_dir = normalized_path
+            self.secrets_manager = SecretsManager(secrets_dir)
 
             # Validate configuration (fail fast with detailed messages)
             validation_result = self._validate_config(normalized_path)
@@ -211,7 +218,7 @@ class Formation:
                 )
 
             # Load configuration
-            self.config = asyncio.run(self._load_config(normalized_path))
+            self.config = asyncio.run(self._load_config(config_path, normalized_path))
 
             # Validate dependencies before proceeding
             dependency_result = self._dependency_validator.validate_formation_dependencies(
@@ -232,8 +239,10 @@ class Formation:
                 }
                 raise DependencyValidationError(dependency_result.errors, error_details)
 
-            # Set formation ID
-            self.formation_id = self.config.get("formation_id", "default-formation")
+            # Set formation ID (check both 'id' and 'formation_id' for compatibility)
+            self.formation_id = self.config.get("id") or self.config.get(
+                "formation_id", "default-formation"
+            )
             set_formation_id(self.formation_id)
 
             # Prepare services (but don't start them yet)
@@ -363,12 +372,13 @@ class Formation:
                 "detailed_report": f"Validation failed with exception: {str(e)}",
             }
 
-    async def _load_config(self, config_path: str) -> Dict[str, Any]:
+    async def _load_config(self, config_path: str, normalized_config_path: str) -> Dict[str, Any]:
         """
         Load formation configuration from file with timeout and retry support.
 
         Args:
-            config_path: Path to formation configuration
+            config_path: Original path passed to load() (directory or file)
+            normalized_config_path: Normalized path to formation.yaml file
 
         Returns:
             Loaded configuration dictionary
@@ -380,9 +390,21 @@ class Formation:
         async def _load_operation():
             """Load configuration with timeout and error handling for retry logic."""
 
+            # Determine the correct path for FormationLoader
+            # If original config_path was a directory, use it directly for modular loading
+            import os
+
+            if os.path.isdir(config_path):
+                # Modular formation - pass directory path
+                loader_path = config_path
+            else:
+                # Flattened formation - use normalized file path
+                loader_path = normalized_config_path
+
             async def _timeout_operation():
                 formation_loader = FormationLoader()
-                return await formation_loader.load(config_path, self.secrets_manager)
+                result = await formation_loader.load(loader_path, self.secrets_manager)
+                return result
 
             result = await execute_with_timeout(
                 _timeout_operation,
@@ -391,6 +413,14 @@ class Formation:
                 timeout=self._timeout_config.config_load_timeout,
                 cancellation_token=self._formation_cancellation_token,
             )
+
+            # Check if operation succeeded (handle both enum and string status)
+            status_value = (
+                result.status.value if isinstance(result.status, OperationStatus) else result.status
+            )
+            if status_value == "completed" and result.result is not None:
+                # Operation completed successfully with a result
+                return result.result
 
             if not result.is_success:
                 if result.was_timeout:
@@ -412,22 +442,42 @@ class Formation:
                         },
                     )
                 else:
-                    # Check if the error is retryable (e.g., network issues, file system issues)
-                    error_str = str(result.error).lower()
-                    if any(
-                        pattern in error_str
-                        for pattern in ["network", "connection", "timeout", "temporary"]
-                    ):
-                        raise NetworkTransientError(
-                            f"Configuration loading failed: {result.error}",
-                            details={
+                    # Check if we have an error message
+                    if result.error:
+                        error_str = result.error.lower()
+                        if any(
+                            pattern in error_str
+                            for pattern in ["network", "connection", "timeout", "temporary"]
+                        ):
+                            raise NetworkTransientError(
+                                f"Configuration loading failed: {result.error}",
+                                details={
+                                    "config_path": config_path,
+                                    "original_error": result.error,
+                                },
+                            )
+                        else:
+                            # Non-retryable error
+                            raise ConfigurationLoadError(
+                                f"❌ Configuration loading failed: {result.error}",
+                                {"config_path": config_path},
+                            )
+                    else:
+                        # No error message but operation failed
+                        raise ConfigurationLoadError(
+                            f"❌ Configuration loading failed with status: {result.status}",
+                            {
                                 "config_path": config_path,
-                                "original_error": str(result.error),
+                                "status": (
+                                    result.status.value
+                                    if hasattr(result.status, "value")
+                                    else str(result.status)
+                                ),
+                                "is_success": result.is_success,
+                                "result": result.result,
+                                "metadata": result.metadata,
                             },
                         )
-                    else:
-                        # Non-retryable error - re-raise as is
-                        raise result.error
 
             return result.result
 
@@ -1233,33 +1283,49 @@ class Formation:
             # Mark as running
             self._is_running = True
 
-            # Register built-in MCP servers if enabled
+            # Start the overlord (loads agents, initializes services)
             # Check if we're already in an event loop
             try:
                 loop = asyncio.get_running_loop()
-                # Schedule the coroutine in the existing loop
-                task = loop.create_task(self._register_builtin_mcps())
-                # Store task reference to prevent garbage collection
-                self._builtin_mcp_task = task
-                # Wait for registration to complete to avoid race conditions
-                # Use a timeout to prevent blocking indefinitely
+                # Schedule overlord startup and MCP registration in the existing loop
+                overlord_start_task = loop.create_task(self._overlord.start())
+                mcp_task = loop.create_task(self._register_builtin_mcps())
+
+                # Store task references to prevent garbage collection
+                self._overlord_start_task = overlord_start_task
+                self._builtin_mcp_task = mcp_task
+
+                # Wait for both tasks to complete
                 try:
                     import concurrent.futures
 
                     with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run_coroutine_threadsafe, task, loop)
-                        future.result(timeout=30)  # 30 second timeout
+                        # Wait for overlord startup first (critical)
+                        overlord_future = executor.submit(
+                            asyncio.run_coroutine_threadsafe, overlord_start_task, loop
+                        )
+                        overlord_future.result(timeout=30)  # 30 second timeout
+
+                        # Wait for MCP registration (less critical)
+                        mcp_future = executor.submit(
+                            asyncio.run_coroutine_threadsafe, mcp_task, loop
+                        )
+                        mcp_future.result(timeout=30)  # 30 second timeout
                 except Exception as e:
-                    # Log error but don't fail startup
+                    # Log error but don't fail startup for MCP issues
                     observability.observe(
                         event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(e)},
-                        description=f"Built-in MCP registration task failed to complete: {e}",
+                        description=f"Overlord startup or MCP registration failed: {e}",
                     )
             except RuntimeError:
                 # No event loop running, create one
-                asyncio.run(self._register_builtin_mcps())
+                async def startup_sequence():
+                    await self._overlord.start()
+                    await self._register_builtin_mcps()
+
+                asyncio.run(startup_sequence())
 
             return self._overlord
 
