@@ -18,7 +18,7 @@ from ..datatypes.async_operations import (
     OperationTimeoutError,
 )
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class AsyncOperationManager:
@@ -50,7 +50,7 @@ class AsyncOperationManager:
         operation_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> AsyncOperationResult:
         """
         Execute an async operation with timeout and cancellation support.
@@ -83,7 +83,7 @@ class AsyncOperationManager:
             description=description,
             timeout=timeout,
             cancellation_token=cancellation_token,
-            metadata=metadata or {}
+            metadata=metadata or {},
         )
 
         # Track the operation
@@ -102,7 +102,7 @@ class AsyncOperationManager:
                     operation_id=operation_id,
                     status=OperationStatus.COMPLETED,
                     result=result,
-                    elapsed_time=context.elapsed_time
+                    elapsed_time=context.elapsed_time,
                 )
 
             # Execute with timeout and cancellation handling
@@ -143,38 +143,35 @@ class AsyncOperationManager:
                     operation_id=operation_id,
                     status=OperationStatus.COMPLETED,
                     result=result,
-                    elapsed_time=context.elapsed_time
+                    elapsed_time=context.elapsed_time,
                 )
 
             except asyncio.TimeoutError:
                 context.status = OperationStatus.TIMEOUT
                 context.error = OperationTimeoutError(
-                    f"Operation '{description}' timed out after {timeout}s",
-                    timeout,
-                    operation_id
+                    f"Operation '{description}' timed out after {timeout}s", timeout, operation_id
                 )
 
                 return AsyncOperationResult(
                     operation_id=operation_id,
                     status=OperationStatus.TIMEOUT,
-                    error=context.error,
+                    error=str(context.error),
                     elapsed_time=context.elapsed_time,
-                    was_timeout=True
+                    was_timeout=True,
                 )
 
             except asyncio.CancelledError:
                 context.status = OperationStatus.CANCELLED
                 context.error = CancellationError(
-                    f"Operation '{description}' was cancelled",
-                    operation_id
+                    f"Operation '{description}' was cancelled", operation_id
                 )
 
                 return AsyncOperationResult(
                     operation_id=operation_id,
                     status=OperationStatus.CANCELLED,
-                    error=context.error,
+                    error=str(context.error),
                     elapsed_time=context.elapsed_time,
-                    was_cancelled=True
+                    was_cancelled=True,
                 )
 
         except Exception as e:
@@ -184,8 +181,8 @@ class AsyncOperationManager:
             return AsyncOperationResult(
                 operation_id=operation_id,
                 status=OperationStatus.FAILED,
-                error=e,
-                elapsed_time=context.elapsed_time
+                error=str(e),
+                elapsed_time=context.elapsed_time,
             )
 
         finally:
@@ -199,11 +196,11 @@ class AsyncOperationManager:
     def _get_default_timeout(self, operation_type: str) -> float:
         """Get default timeout for an operation type."""
         timeout_map = {
-            'config_load': self.timeout_config.config_load_timeout,
-            'secrets_operation': self.timeout_config.secrets_operation_timeout,
-            'service_startup': self.timeout_config.service_startup_timeout,
-            'overlord_startup': self.timeout_config.overlord_startup_timeout,
-            'cleanup': self.timeout_config.cleanup_timeout,
+            "config_load": self.timeout_config.config_load_timeout,
+            "secrets_operation": self.timeout_config.secrets_operation_timeout,
+            "service_startup": self.timeout_config.service_startup_timeout,
+            "overlord_startup": self.timeout_config.overlord_startup_timeout,
+            "cleanup": self.timeout_config.cleanup_timeout,
         }
 
         return timeout_map.get(operation_type, self.timeout_config.default_timeout)
@@ -259,10 +256,7 @@ class AsyncOperationManager:
 
         try:
             # Give operations a chance to complete gracefully
-            await asyncio.wait_for(
-                self._wait_for_operations_completion(),
-                timeout=shutdown_timeout
-            )
+            await asyncio.wait_for(self._wait_for_operations_completion(), timeout=shutdown_timeout)
         except asyncio.TimeoutError:
             # Force cancel all operations if they don't complete in time
             self.cancel_all_operations()
@@ -271,7 +265,7 @@ class AsyncOperationManager:
             try:
                 await asyncio.wait_for(
                     self._wait_for_operations_completion(),
-                    timeout=self.timeout_config.cancellation_grace_period
+                    timeout=self.timeout_config.cancellation_grace_period,
                 )
             except asyncio.TimeoutError:
                 # Operations didn't cancel gracefully, they'll be cleaned up by garbage collection
@@ -311,7 +305,7 @@ async def execute_with_timeout(
     timeout: Optional[float] = None,
     cancellation_token: Optional[CancellationToken] = None,
     *args,
-    **kwargs
+    **kwargs,
 ) -> AsyncOperationResult:
     """
     Convenience function to execute an operation with timeout using the global manager.
