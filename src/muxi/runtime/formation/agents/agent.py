@@ -891,9 +891,7 @@ class Agent:
         # Create response message
         response = MuxiResponse(role="assistant", content=content)
 
-        # Add clarification metadata if needed
-        if clarification_request:
-            response.metadata = clarification_request
+        # Note: clarification_request is tracked in observability but not stored in response
 
         # Add response to conversation context
         self._messages.append({"role": "assistant", "content": response.content})
