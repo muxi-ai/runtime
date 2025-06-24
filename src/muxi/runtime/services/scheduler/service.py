@@ -43,7 +43,13 @@ from .circuit_breaker import LLMCircuitBreaker
 
 # Configure multitasking
 multitasking.set_engine("thread")
-signal.signal(signal.SIGINT, multitasking.killall)
+# Only register signal handlers in main thread to avoid errors in tests
+try:
+    signal.signal(signal.SIGINT, multitasking.killall)
+except ValueError:
+    # Signal handlers can only be registered in main thread
+    # This is expected in tests or when imported from threads
+    pass
 
 
 class SchedulerService:
