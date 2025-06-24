@@ -195,6 +195,17 @@ from ..background import (
     TimeEstimator,
 )
 
+# Initialize configuration from formation before starting services
+from .initialization import (
+    initialize_llm_config,
+    initialize_auth_config,
+    initialize_memory_config,
+    initialize_logging_config,
+    initialize_clarification_config,
+    initialize_document_processing_config,
+    load_agents_from_configuration,
+)
+
 # Unified Response Components
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
 from ...utils.user_dirs import set_formation_id
@@ -313,6 +324,9 @@ class Overlord:
         # Agent routing system
         self.agent_router = AgentRouter(self)
 
+        # Initialize observability system early (needed by chat orchestrator)
+        self.observability_manager = observability.ObservabilityManager()
+
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
 
@@ -368,6 +382,10 @@ class Overlord:
         self.auto_extract_user_info = auto_extract_user_info
         self.extraction_model = extraction_model
         self.memory_extractor = None  # Will be initialized later
+
+        # Multi-user mode configuration (intelligence concerns)
+        # Will be set during memory initialization based on PostgreSQL detection
+        self.is_multi_user = False
 
         # Track message counts per user for extraction (intelligence)
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
@@ -540,15 +558,29 @@ class Overlord:
     async def start(self) -> None:
         """Start all overlord services including cache manager."""
         try:
-            # Initialize the routing model (async)
+            # Initialize LLM configuration first (needed for routing model)
+            await initialize_llm_config(self)
+
+            # Initialize other configurations
+            await initialize_auth_config(self)
+            await initialize_memory_config(self)
+            await initialize_logging_config(self)
+            await initialize_clarification_config(self)
+            await initialize_document_processing_config(self)
+
+            # Initialize the routing model (async) - now that LLM config is ready
             await self._initialize_routing_model()
 
             # Start cache manager
             await self.cache_manager.start()
 
-            # Initialize observability system (gets reconfigured after formation config)
-            self.observability_manager = observability.ObservabilityManager()
+            # Start observability system (already initialized in __init__)
             await self.observability_manager.start()
+
+            # Load agents from formation configuration
+            print("DEBUG: About to load agents from configuration")
+            await load_agents_from_configuration(self)
+            print("DEBUG: Agent loading completed")
 
             # A2A services are now initialized by Formation
             # Start A2A formation server if initialized by Formation

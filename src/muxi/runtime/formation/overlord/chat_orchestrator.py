@@ -133,20 +133,20 @@ class ChatOrchestrator:
             else:
                 # Execute sync request
                 if use_streaming:
-                    return await self._process_streaming_chat(
+                    # Collect all chunks from the async generator for non-streaming response
+                    chunks = []
+                    async for chunk in self._process_streaming_chat(
                         message=message,
                         agent_name=agent_name,
                         user_id=user_id,
-                        session_id=session_id,
-                        request_id=request_id,
-                    )
+                    ):
+                        chunks.append(chunk)
+                    return "".join(chunks)
                 else:
                     return await self._process_sync_chat(
                         message=message,
                         agent_name=agent_name,
                         user_id=user_id,
-                        session_id=session_id,
-                        request_id=request_id,
                     )
 
     async def _determine_async_mode(
@@ -204,7 +204,7 @@ class ChatOrchestrator:
         except Exception as e:
             # If estimation fails, default to sync
             observability.observe(
-                event_type=observability.ConversationEvents.ASYNC_DECISION_FAILED,
+                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e)},
                 description="Time estimation failed, defaulting to sync processing",
@@ -252,8 +252,6 @@ class ChatOrchestrator:
         message: str,
         agent_name: Optional[str],
         user_id: Any,
-        session_id: Optional[str],
-        request_id: str,
     ) -> str:
         """
         Process a chat request synchronously.
@@ -262,8 +260,6 @@ class ChatOrchestrator:
             message: The user's message
             agent_name: Optional specific agent
             user_id: Optional user ID
-            session_id: Optional session ID
-            request_id: Unique request ID
 
         Returns:
             The response string
@@ -273,8 +269,6 @@ class ChatOrchestrator:
             message=message,
             agent_name=agent_name,
             user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
         )
 
     async def _process_streaming_chat(
@@ -282,8 +276,6 @@ class ChatOrchestrator:
         message: str,
         agent_name: Optional[str],
         user_id: Any,
-        session_id: Optional[str],
-        request_id: str,
     ) -> AsyncGenerator[str, None]:
         """
         Process a chat request with streaming.
@@ -292,8 +284,6 @@ class ChatOrchestrator:
             message: The user's message
             agent_name: Optional specific agent
             user_id: Optional user ID
-            session_id: Optional session ID
-            request_id: Unique request ID
 
         Yields:
             Stream of response chunks
@@ -303,7 +293,5 @@ class ChatOrchestrator:
             message=message,
             agent_name=agent_name,
             user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
         ):
             yield chunk

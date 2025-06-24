@@ -203,6 +203,9 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
             from ...services.memory.long_term import LongTermMemory
             from ...services.db import get_database_manager
 
+            # PostgreSQL means multi-user mode
+            overlord.is_multi_user = True
+
             # Create ONE DatabaseManager for the Formation
             db_manager = get_database_manager(connection_string)
 
@@ -222,6 +225,9 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
             # SystemEvents.INITIALIZING (persistent memory - SQLite)
             from ...services.memory.sqlite import SQLiteMemory
             from ...services.db import get_database_manager
+
+            # SQLite means single-user mode
+            overlord.is_multi_user = False
 
             # Remove sqlite:// prefix if present
             db_path = connection_string.replace("sqlite://", "")
@@ -473,3 +479,128 @@ async def initialize_document_processing_config(overlord) -> None:
         from ..config.document_processing import DocumentProcessingConfig
 
         overlord.document_processing_config = DocumentProcessingConfig({})
+
+
+async def load_agents_from_configuration(overlord) -> None:
+    """
+    Load agents from formation configuration during overlord startup.
+
+    This method reads the agents_config from configured_services and creates
+    Agent instances for each configured agent, adding them to overlord.agents.
+    """
+    from ...services import observability
+
+    print(f"DEBUG: load_agents_from_configuration called")
+    print(
+        f"DEBUG: overlord._configured_services keys: {list(overlord._configured_services.keys())}"
+    )
+
+    # Get agents configuration from configured services
+    agents_config = overlord._configured_services.get("agents_config", [])
+    print(f"DEBUG: agents_config: {agents_config}")
+
+    if not agents_config:
+        # No agents configured - this is valid for some formations
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.INFO,
+            data={"agent_count": 0},
+            description="No agents configured in formation",
+        )
+        return
+
+    # Load each agent configuration
+    loaded_count = 0
+    for agent_config in agents_config:
+        try:
+            agent_id = agent_config.get("id")
+            if not agent_id:
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": "Agent missing ID"},
+                    description="Skipping agent without ID",
+                )
+                continue
+
+            # Create agent from configuration
+            agent = await create_agent_from_config(overlord, agent_config)
+
+            # Add to agents dictionary
+            overlord.agents[agent_id] = agent
+
+            # Store agent metadata for routing
+            overlord.agent_descriptions[agent_id] = agent_config.get("description", "")
+            overlord.agent_metadata[agent_id] = {
+                "name": agent_config.get("name", agent_id),
+                "role": agent_config.get("role", "general"),
+                "specialties": agent_config.get("specialties", []),
+                "system_message": agent_config.get("system_message", ""),
+            }
+
+            loaded_count += 1
+
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": agent_id,
+                    "name": agent_config.get("name", agent_id),
+                    "role": agent_config.get("role", "general"),
+                },
+                description=f"Agent '{agent_id}' loaded successfully",
+            )
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                level=observability.EventLevel.ERROR,
+                data={"agent_id": agent_config.get("id", "unknown"), "error": str(e)},
+                description=f"Failed to load agent: {str(e)}",
+            )
+            continue
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"agent_count": loaded_count},
+        description=f"Loaded {loaded_count} agents from formation configuration",
+    )
+
+
+async def create_agent_from_config(overlord, agent_config: Dict[str, Any]) -> "Agent":
+    """
+    Create an Agent instance from configuration.
+
+    Args:
+        overlord: The overlord instance
+        agent_config: Agent configuration dictionary from formation
+
+    Returns:
+        Agent: Configured agent instance
+    """
+    from ..agents.agent import Agent
+    from ...services.llm.service import OneLLMService
+
+    # Get or create LLM model for the agent
+    # Use overlord's model creation capability
+    try:
+        # Try to use overlord's model creation (it should be initialized by now)
+        model = await overlord.get_model_for_capability("text")
+    except Exception:
+        # Fallback: create a basic model using OneLLMService
+        llm_service = await OneLLMService.get_instance()
+        # Use a basic text model for the agent
+        model = await llm_service.get_model("gpt-4o-mini")  # Basic fallback model
+
+    # Create agent instance
+    agent = Agent(
+        model=model,
+        overlord=overlord,
+        agent_id=agent_config.get("id"),
+        name=agent_config.get("name"),
+        system_message=agent_config.get("system_message"),
+        knowledge_config=agent_config.get("knowledge"),
+    )
+
+    return agent
