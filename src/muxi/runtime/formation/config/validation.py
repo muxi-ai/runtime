@@ -1824,11 +1824,10 @@ class FormationValidator:
                 "Overlord 'response_format' is no longer supported. Use 'response.format' instead."
             )
 
-        # Validate response configuration (required structure)
+        # Validate response configuration (optional structure)
         if "response" in config:
             self._validate_overlord_response_config(config["response"])
-        else:
-            self.result.add_error("Overlord 'response' configuration is required")
+        # response is optional - runtime has defaults (format: "markdown", interactive_elements: true)
 
         # Validate intelligence configuration
         if "learn_user_preference" in config:
