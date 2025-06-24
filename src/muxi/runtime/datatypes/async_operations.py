@@ -243,7 +243,11 @@ class AsyncOperationResult(BaseModel):
     @property
     def is_success(self) -> bool:
         """Check if operation completed successfully."""
-        return self.status == OperationStatus.COMPLETED and self.error is None
+        # Handle both enum and string values due to Pydantic serialization
+        status_value = (
+            self.status.value if isinstance(self.status, OperationStatus) else self.status
+        )
+        return status_value == "completed" and self.error is None
 
     @property
     def is_failure(self) -> bool:
