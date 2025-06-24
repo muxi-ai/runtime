@@ -80,7 +80,13 @@ from .. import observability
 multitasking.set_engine("thread")
 
 # Kill all tasks on ctrl-c for clean shutdown
-signal.signal(signal.SIGINT, multitasking.killall)
+# Only register signal handlers in main thread to avoid errors in tests
+try:
+    signal.signal(signal.SIGINT, multitasking.killall)
+except ValueError:
+    # Signal handlers can only be registered in main thread
+    # This is expected in tests or when imported from threads
+    pass
 
 
 class ShortTermMemory:
@@ -353,7 +359,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size:]
+            recent_items = list(self.buffer)[-self.max_size :]
 
         # Apply filtering if specified
         if filter_metadata or namespace:
