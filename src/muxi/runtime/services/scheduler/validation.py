@@ -7,7 +7,6 @@ to prevent security vulnerabilities and ensure data integrity.
 Security Features:
 - Input sanitization for LLM prompts
 - Length validation for all inputs
-- User access control validation
 - Resource limit enforcement
 """
 
@@ -28,28 +27,28 @@ class SchedulerInputValidator:
 
     # Dangerous patterns that could be exploited
     DANGEROUS_PATTERNS = [
-        r'```[^`]*```',         # Code blocks
-        r'<[^>]*>',             # HTML/XML tags
-        r'\{[^}]*\}',           # JSON-like structures that could contain code
-        r'`[^`]*`',             # Inline code
-        r'javascript:',         # JavaScript URLs
-        r'data:',               # Data URLs
-        r'file://',             # File URLs
-        r'\\x[0-9a-fA-F]{2}',   # Hex escape sequences
-        r'\\u[0-9a-fA-F]{4}',   # Unicode escape sequences
-        r'eval\s*\(',           # eval function calls
-        r'exec\s*\(',           # exec function calls
-        r'import\s+',           # Python imports
-        r'from\s+\w+\s+import',  # Python from imports
-        r'__[a-zA-Z]+__',       # Python dunder methods
-        r'subprocess\.',        # Subprocess calls
-        r'os\.',                # OS module calls
-        r'system\(',            # System calls
-        r'shell=True',          # Shell execution
+        r"```[^`]*```",  # Code blocks
+        r"<[^>]*>",  # HTML/XML tags
+        r"\{[^}]*\}",  # JSON-like structures that could contain code
+        r"`[^`]*`",  # Inline code
+        r"javascript:",  # JavaScript URLs
+        r"data:",  # Data URLs
+        r"file://",  # File URLs
+        r"\\x[0-9a-fA-F]{2}",  # Hex escape sequences
+        r"\\u[0-9a-fA-F]{4}",  # Unicode escape sequences
+        r"eval\s*\(",  # eval function calls
+        r"exec\s*\(",  # exec function calls
+        r"import\s+",  # Python imports
+        r"from\s+\w+\s+import",  # Python from imports
+        r"__[a-zA-Z]+__",  # Python dunder methods
+        r"subprocess\.",  # Subprocess calls
+        r"os\.",  # OS module calls
+        r"system\(",  # System calls
+        r"shell=True",  # Shell execution
     ]
 
     # Valid patterns for user IDs and formation IDs
-    VALID_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\.]+$')
+    VALID_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_\-\.]+$")
 
     @staticmethod
     def sanitize_schedule_text(text: str) -> str:
@@ -69,16 +68,18 @@ class SchedulerInputValidator:
             raise ValueError("Schedule text must be a non-empty string")
 
         if len(text) > SchedulerInputValidator.MAX_SCHEDULE_TEXT_LENGTH:
-            raise ValueError(f"Schedule text too long (max {SchedulerInputValidator.MAX_SCHEDULE_TEXT_LENGTH} "
-                             f"characters)")
+            raise ValueError(
+                f"Schedule text too long (max {SchedulerInputValidator.MAX_SCHEDULE_TEXT_LENGTH} "
+                f"characters)"
+            )
 
         # Remove dangerous patterns
         sanitized = text
         for pattern in SchedulerInputValidator.DANGEROUS_PATTERNS:
-            sanitized = re.sub(pattern, '', sanitized, flags=re.IGNORECASE)
+            sanitized = re.sub(pattern, "", sanitized, flags=re.IGNORECASE)
 
         # Remove multiple whitespace and normalize
-        sanitized = re.sub(r'\s+', ' ', sanitized).strip()
+        sanitized = re.sub(r"\s+", " ", sanitized).strip()
 
         # Ensure we still have content after sanitization
         if not sanitized:
@@ -101,11 +102,15 @@ class SchedulerInputValidator:
             raise ValueError("user_id must be a non-empty string")
 
         if len(user_id) > SchedulerInputValidator.MAX_USER_ID_LENGTH:
-            raise ValueError(f"user_id too long (max {SchedulerInputValidator.MAX_USER_ID_LENGTH} characters)")
+            raise ValueError(
+                f"user_id too long (max {SchedulerInputValidator.MAX_USER_ID_LENGTH} characters)"
+            )
 
         if not SchedulerInputValidator.VALID_ID_PATTERN.match(user_id):
-            raise ValueError("user_id contains invalid characters (only alphanumeric, underscore, hyphen, "
-                             "dot allowed)")
+            raise ValueError(
+                "user_id contains invalid characters (only alphanumeric, underscore, hyphen, "
+                "dot allowed)"
+            )
 
     @staticmethod
     def validate_formation_id(formation_id: str) -> None:
@@ -122,12 +127,16 @@ class SchedulerInputValidator:
             raise ValueError("formation_id must be a non-empty string")
 
         if len(formation_id) > SchedulerInputValidator.MAX_FORMATION_ID_LENGTH:
-            raise ValueError(f"formation_id too long (max {SchedulerInputValidator.MAX_FORMATION_ID_LENGTH} "
-                             f"characters)")
+            raise ValueError(
+                f"formation_id too long (max {SchedulerInputValidator.MAX_FORMATION_ID_LENGTH} "
+                f"characters)"
+            )
 
         if not SchedulerInputValidator.VALID_ID_PATTERN.match(formation_id):
-            raise ValueError("formation_id contains invalid characters (only alphanumeric, underscore, hyphen, "
-                             "dot allowed)")
+            raise ValueError(
+                "formation_id contains invalid characters (only alphanumeric, underscore, hyphen, "
+                "dot allowed)"
+            )
 
     @staticmethod
     def validate_title(title: str) -> None:
@@ -144,7 +153,9 @@ class SchedulerInputValidator:
             raise ValueError("title must be a non-empty string")
 
         if len(title) > SchedulerInputValidator.MAX_TITLE_LENGTH:
-            raise ValueError(f"title too long (max {SchedulerInputValidator.MAX_TITLE_LENGTH} characters)")
+            raise ValueError(
+                f"title too long (max {SchedulerInputValidator.MAX_TITLE_LENGTH} characters)"
+            )
 
         # Remove dangerous patterns from title
         for pattern in SchedulerInputValidator.DANGEROUS_PATTERNS:
@@ -167,16 +178,18 @@ class SchedulerInputValidator:
             raise ValueError(f"{field_name} must be a non-empty string")
 
         if len(prompt) > SchedulerInputValidator.MAX_PROMPT_LENGTH:
-            raise ValueError(f"{field_name} too long (max {SchedulerInputValidator.MAX_PROMPT_LENGTH} characters)")
+            raise ValueError(
+                f"{field_name} too long (max {SchedulerInputValidator.MAX_PROMPT_LENGTH} characters)"
+            )
 
         # Check for extremely dangerous patterns in prompts
         dangerous_prompt_patterns = [
-            r'exec\s*\(',
-            r'eval\s*\(',
-            r'__import__',
-            r'subprocess',
-            r'system\(',
-            r'shell=True',
+            r"exec\s*\(",
+            r"eval\s*\(",
+            r"__import__",
+            r"subprocess",
+            r"system\(",
+            r"shell=True",
         ]
 
         for pattern in dangerous_prompt_patterns:
@@ -227,7 +240,7 @@ class SchedulerInputValidator:
         execution_prompt: str,
         cron_expression: Optional[str] = None,
         scheduled_for: Optional[datetime] = None,
-        is_recurring: bool = True
+        is_recurring: bool = True,
     ) -> None:
         """
         Comprehensive validation for job creation parameters.
@@ -267,43 +280,6 @@ class SchedulerInputValidator:
 
             # Validate scheduled_for is in the future
             from ...utils.datetime_utils import utc_now
+
             if scheduled_for <= utc_now():
                 raise ValueError("scheduled_for must be in the future")
-
-
-class SchedulerSecurityError(Exception):
-    """Custom exception for scheduler security violations."""
-    pass
-
-
-def validate_user_access(user_id: str, formation_id: str) -> None:
-    """
-    Validate that user has access to the specified formation.
-
-    TODO: Implement actual access control logic when authentication system is ready.
-    For now, this is a placeholder that validates IDs and could be extended.
-
-    Args:
-        user_id: User identifier
-        formation_id: Formation identifier
-
-    Raises:
-        SchedulerSecurityError: If user doesn't have access
-        ValueError: If IDs are invalid
-    """
-    # Validate ID formats first
-    SchedulerInputValidator.validate_user_id(user_id)
-    SchedulerInputValidator.validate_formation_id(formation_id)
-
-    # TODO: Add actual access control checks here
-    # This would typically involve:
-    # 1. Checking user permissions in the database
-    # 2. Verifying formation ownership or sharing
-    # 3. Checking role-based access control
-
-    # For now, we just ensure the IDs are valid
-    # In the future, this would be something like:
-    # if not has_formation_access(user_id, formation_id):
-    #     raise SchedulerSecurityError(f"User {user_id} does not have access to formation {formation_id}")
-
-    pass

@@ -19,7 +19,7 @@ from .. import observability
 from ..db import DatabaseManager
 from ..llm import LLM
 from .models import ScheduledJob, ScheduledJobAudit
-from .validation import SchedulerInputValidator, validate_user_access
+from .validation import SchedulerInputValidator
 from .limits import get_limits_enforcer
 
 
@@ -118,9 +118,6 @@ class JobManager:
             scheduled_for=scheduled_for,
             is_recurring=is_recurring,
         )
-
-        # SECURITY: Validate user access to formation
-        validate_user_access(user_id, formation_id)
 
         # SECURITY: Check resource limits
         limits_enforcer = get_limits_enforcer()
@@ -1035,7 +1032,10 @@ class JobManager:
                 SchedulerInputValidator.validate_prompt(new_prompt, "new_prompt")
                 update_fields["original_prompt"] = new_prompt
                 update_fields["execution_prompt"] = new_prompt
-                changes["prompt"] = {"old": job.original_prompt[:50] + "...", "new": new_prompt[:50] + "..."}
+                changes["prompt"] = {
+                    "old": job.original_prompt[:50] + "...",
+                    "new": new_prompt[:50] + "...",
+                }
 
             if new_schedule:
                 if job.is_recurring:
@@ -1046,6 +1046,7 @@ class JobManager:
                     # Parse datetime for one-time jobs
                     from dateutil import parser as date_parser
                     from pytz import UTC
+
                     scheduled_datetime = date_parser.parse(new_schedule)
                     if scheduled_datetime.tzinfo is None:
                         scheduled_datetime = scheduled_datetime.replace(tzinfo=UTC)
@@ -1054,7 +1055,7 @@ class JobManager:
                     update_fields["scheduled_for"] = scheduled_datetime
                     changes["schedule"] = {
                         "old": job.scheduled_for.isoformat() if job.scheduled_for else None,
-                        "new": scheduled_datetime.isoformat()
+                        "new": scheduled_datetime.isoformat(),
                     }
 
             # Handle additional kwargs
@@ -1076,7 +1077,7 @@ class JobManager:
                 user_id=user_id,
                 action="updated",
                 changes=changes,
-                reason=f"Job updated with {len(changes)} changes"
+                reason=f"Job updated with {len(changes)} changes",
             )
 
             observability.observe(
@@ -1086,9 +1087,9 @@ class JobManager:
                     "job_id": job_id,
                     "user_id": user_id,
                     "changes": changes,
-                    "fields_updated": list(update_fields.keys())
+                    "fields_updated": list(update_fields.keys()),
                 },
-                description=f"Job {job_id} updated successfully"
+                description=f"Job {job_id} updated successfully",
             )
 
             return (job_id, "updated")
@@ -1114,13 +1115,13 @@ class JobManager:
 
         # Use LLM for semantic comparison
         try:
-            llm_service = self.db_manager._services.get('llm')
+            llm_service = self.db_manager._services.get("llm")
             if not llm_service:
                 observability.observe(
                     event_type=observability.ErrorEvents.SERVICE_NOT_AVAILABLE,
                     level=observability.EventLevel.WARNING,
                     data={"service": "llm", "fallback": "consider_all_changes_significant"},
-                    description="LLM service not available for prompt comparison"
+                    description="LLM service not available for prompt comparison",
                 )
                 return True  # Fallback: consider all changes significant
 
@@ -1146,8 +1147,7 @@ Consider them the SAME task if:
 - Added/removed articles or small words
 
 Be language-agnostic - same task in different languages should be considered the same.""".trim().format(
-                old_prompt=old_prompt,
-                new_prompt=new_prompt
+                old_prompt=old_prompt, new_prompt=new_prompt
             )
 
             response = await llm.generate_json(prompt)
@@ -1160,9 +1160,9 @@ Be language-agnostic - same task in different languages should be considered the
                     "old_prompt": old_prompt[:50] + "..." if len(old_prompt) > 50 else old_prompt,
                     "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt,
                     "different_task": result,
-                    "reason": response.get("reason", "")
+                    "reason": response.get("reason", ""),
                 },
-                description="Prompt change comparison completed"
+                description="Prompt change comparison completed",
             )
 
             return result
@@ -1174,9 +1174,9 @@ Be language-agnostic - same task in different languages should be considered the
                 data={
                     "error": str(e),
                     "old_prompt": old_prompt[:50] + "..." if len(old_prompt) > 50 else old_prompt,
-                    "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt
+                    "new_prompt": new_prompt[:50] + "..." if len(new_prompt) > 50 else new_prompt,
                 },
-                description=f"Failed to compare prompts using LLM: {str(e)}"
+                description=f"Failed to compare prompts using LLM: {str(e)}",
             )
             # Fallback: consider all changes significant if LLM fails
             return True
