@@ -3267,7 +3267,7 @@ class Overlord:
         self,
         user_id: str,
         properties: Union[dict, str],
-    ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
+    ) -> str:
         """Store user properties as contextual memory.
 
         Args:
@@ -3275,13 +3275,26 @@ class Overlord:
             properties: Dictionary of user properties to remember, or a string prompt
 
         Returns:
-            The response from the chat function (string, dict, or async generator)
+            A string response confirming the memory was saved
         """
         # Handle both dict and string inputs
         if isinstance(properties, dict):
             # Convert properties to first-person prompt with JSON
+            try:
+                # Use compact JSON format to minimize tokens
+                json_str = json.dumps(properties, separators=(",", ":"), default=str)
+            except (TypeError, ValueError) as e:
+                # Fallback to string representation if JSON serialization fails
+                observability.observe(
+                    event_type=observability.SystemEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "properties_type": type(properties).__name__},
+                    description="Failed to serialize properties to JSON, using string representation",
+                )
+                json_str = str(properties)
+
             prompt = (
-                f"Here's my updated information: {json.dumps(properties)}. "
+                f"Here's my updated information: {json_str}. "
                 "Please save this information in your memory. "
                 "Once you're done storing this, reply only with 'Memories saved'."
             )
@@ -3293,9 +3306,15 @@ class Overlord:
                 "Once you're done storing this, reply only with 'Memories saved'."
             )
 
-        # Use chat function with synchronous mode to ensure completion and return its response
-        return await self.chat(
-            user_id=user_id,
-            message=prompt,
-            use_async=False
-        )
+        # Use chat function with synchronous mode to ensure completion
+        result = await self.chat(user_id=user_id, message=prompt, use_async=False)
+
+        # Handle async generator to ensure non-streaming response
+        if hasattr(result, "__aiter__"):
+            # Collect all chunks from async generator
+            chunks = []
+            async for chunk in result:
+                chunks.append(chunk)
+            return "".join(chunks)
+
+        return result
