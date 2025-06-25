@@ -19,7 +19,7 @@ The system follows this flow:
 
 1. **Receive External ID**: The `user_id` parameter is the developer's external identifier
 2. **Hash for Lookup**: Calculate hash of external_user_id for efficient lookup
-3. **Find/Create User**: 
+3. **Find/Create User**:
    - Query: `SELECT id FROM users WHERE external_user_id_hash = ?`
    - If not found, create new user record
 4. **Use Internal ID**: All subsequent operations use the internal `users.id`
@@ -46,7 +46,7 @@ For SQLite deployments, we maintain the same structure but with a single default
 
 ```sql
 -- On initialization, create default user
-INSERT INTO users (id, external_user_id, external_user_id_hash, created_at) 
+INSERT INTO users (id, external_user_id, external_user_id_hash, created_at)
 VALUES (1, '0', hash('0'), CURRENT_TIMESTAMP);
 ```
 
@@ -86,7 +86,7 @@ Every table that needs user isolation must:
 
 Example tables:
 - `memories` - user_id FK
-- `conversations` - user_id FK  
+- `conversations` - user_id FK
 - `collections` - user_id FK
 - `knowledge_items` - user_id FK
 
