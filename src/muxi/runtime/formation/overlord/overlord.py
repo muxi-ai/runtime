@@ -248,7 +248,7 @@ class Overlord:
         is_multi_user (bool): Whether multi-user mode is enabled
         mcp_service (MCPService): Service for managing Model Context Protocol servers
         request_timeout (int): Default timeout for MCP requests in seconds
-        user_api_key (str): API key for user-level access
+        client_api_key (str): API key for user-level access
         admin_api_key (str): API key for admin-level access
         formation_config (Dict[str, Any]): Formation configuration including A2A settings
         external_registry_client (Optional[A2ARegistryClient]): Client for external A2A registries
@@ -357,16 +357,16 @@ class Overlord:
 
         # Accept pre-generated API keys from Formation
         api_keys = api_keys or {}
-        self.user_api_key = api_keys.get("user")
+        self.client_api_key = api_keys.get("user")
         self.admin_api_key = api_keys.get("admin")
 
         # Track whether keys were provided or need generation
-        self._client_key_auto_generated = self.user_api_key is None
+        self._client_key_auto_generated = self.client_api_key is None
         self._admin_key_auto_generated = self.admin_api_key is None
 
         # Generate keys if not provided by Formation
-        if self.user_api_key is None:
-            self.user_api_key = generate_api_key("user")
+        if self.client_api_key is None:
+            self.client_api_key = generate_api_key("user")
         if self.admin_api_key is None:
             self.admin_api_key = generate_api_key("admin")
 

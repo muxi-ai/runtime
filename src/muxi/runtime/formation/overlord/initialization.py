@@ -48,8 +48,6 @@ async def initialize_llm_config(overlord) -> None:
     overlord._global_llm_settings = llm_config.get("settings", {})
     overlord._global_api_keys = llm_config.get("api_keys", {})
 
-    from ...services import observability
-
     capabilities = list(overlord._capability_models.keys())
     observability.observe(
         event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
@@ -102,7 +100,7 @@ async def initialize_auth_config(overlord) -> None:
                     description=f"Failed to interpolate client_key secret: {str(e)}",
                 )
 
-        overlord.user_api_key = client_key
+        overlord.client_api_key = client_key
 
 
 async def initialize_memory_config(overlord) -> None:

@@ -642,7 +642,7 @@ class Formation:
         auth_config = self.config.get("auth", {}) if self.config else {}
 
         # Generate or use configured API keys
-        self._api_keys["user"] = auth_config.get("user_api_key") or generate_api_key("user")
+        self._api_keys["user"] = auth_config.get("client_api_key") or generate_api_key("user")
         self._api_keys["admin"] = auth_config.get("admin_api_key") or generate_api_key("admin")
 
     def _setup_llm_config(self) -> None:
