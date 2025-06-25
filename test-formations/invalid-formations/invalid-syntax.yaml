@@ -1,0 +1,19 @@
+schema: "1.0.0"
+id: "invalid-syntax-test"
+description: "This YAML has syntax errors"
+
+# Invalid YAML syntax below
+agents:
+  - id: "agent1"
+    model: "openai/gpt-4o-mini
+    system_message: "Missing closing quote above
+  - id: "agent2"
+    model: [this should not be a list]
+    
+memory:
+  buffer:
+    size: : double colon error
+    
+# Inconsistent indentation
+   logging:
+ level: "info"

@@ -1,0 +1,11 @@
+schema: "99.99.99"  # Invalid schema version
+id: "invalid-schema-test"
+description: "This formation has an invalid schema version"
+
+agents:
+  - id: "assistant"
+    model: "openai/gpt-4o-mini"
+    
+memory:
+  buffer:
+    size: 10

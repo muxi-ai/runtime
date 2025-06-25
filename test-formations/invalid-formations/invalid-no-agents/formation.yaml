@@ -1,0 +1,9 @@
+schema: "1.0.0"
+id: "invalid-no-agents"
+description: "This formation directory is missing the agents/ subdirectory"
+
+memory:
+  buffer:
+    size: 10
+    
+# Note: This directory structure is missing the required agents/ subdirectory

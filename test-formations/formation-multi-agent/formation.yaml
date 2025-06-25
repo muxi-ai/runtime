@@ -6,7 +6,6 @@ llm:
   settings:
     temperature: 0.7
     max_tokens: 3000
-    timeout_seconds: 30
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"
     anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
@@ -29,10 +28,7 @@ memory:
     vector_search: true
 
 a2a:
-  enabled: true
-  inbound:
-    enabled: true
-    port: 8181
+  enabled: false
 
 logging:
   streams:

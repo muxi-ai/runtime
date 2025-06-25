@@ -36,7 +36,7 @@ async def test_formation_scheduler_api():
     
     try:
         # Initialize formation to set up database
-        await formation.start_overlord()
+        formation.start_overlord()
         
         # Check that scheduler methods exist
         scheduler_methods = [

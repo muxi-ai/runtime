@@ -1,0 +1,24 @@
+schema: "1.0.0"
+id: "invalid-values-test"
+description: "This formation has invalid configuration values"
+
+llm:
+  settings:
+    temperature: 2.5  # Invalid - should be 0-2
+    max_tokens: -100  # Invalid - negative value
+  models:
+    - text: "invalid/model/name/format"
+
+memory:
+  buffer:
+    size: -5  # Invalid - negative buffer size
+    multiplier: "not a number"  # Invalid - should be numeric
+    
+agents:
+  - id: ""  # Invalid - empty ID
+    model: "openai/gpt-4o-mini"
+    
+logging:
+  streams:
+    - transport: "invalid-transport"
+      level: "invalid-level"
