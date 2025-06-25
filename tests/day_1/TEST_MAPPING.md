@@ -33,6 +33,15 @@ This file contains 5 test methods covering all of Test Group 1A:
   - Verifies inline-assistant agent loaded
   - Verifies local-tools MCP server loaded
 
+- **1A5: Remote Memory Validation** → `test_1a5_remote_memory_validation.py`
+  - Tests remote memory configuration requirements:
+    - Remote mode requires URL
+    - Remote mode requires tenant ID
+    - Remote mode requires explicit max_memory_mb (not "auto")
+    - Valid remote configuration loading
+    - Local mode allows "auto" for max_memory_mb
+    - Remote mode with authentication
+
 ## Secondary Test File: `test_1a4_flattened_formation_loading.py`
 This file contains a TestSimpleFormationLoading class with 5 test methods:
 
@@ -55,12 +64,19 @@ This file contains a TestSimpleFormationLoading class with 5 test methods:
 ### Actual Test Functions:
 - **test_1a1_basic_yaml_formation.py**: 5 test methods
 - **test_1a4_flattened_formation_loading.py**: 5 test methods
+- **test_1a5_remote_memory_validation.py**: 6 test functions (NEW)
+  - Remote memory requires URL
+  - Remote memory requires tenant
+  - Remote memory requires explicit max_memory_mb
+  - Valid remote configuration
+  - Local mode allows auto
+  - Remote with authentication
 - **test_1a2_directory_structure_formation.py**: 1 test function
 - **test_1a3_formation_validation_failures.py**: 1 test function
 - **test_1b1_single_agent_response.py**: Standalone script
 - **test_1b2_agent_routing_validation.py**: 1 async test function
 
-**Total identifiable test functions: 13+**
+**Total identifiable test functions: 19+**
 
 ### Invalid Formations Tested:
 1. `invalid-empty.yaml` - Empty YAML file
