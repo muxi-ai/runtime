@@ -3,16 +3,19 @@ id: "memory-limits-test"
 description: "Formation for testing memory size limits and FIFO cleanup"
 
 llm:
+  settings:
+    temperature: 0.7
+    max_tokens: 500
   api_keys:
-    test: "test-key"
+    openai: "${{ secrets.OPENAI_API_KEY }}"
   models:
-    - text: "test/mock"
+    - text: "openai/gpt-4o-mini"
 
 agents:
   - id: "memory-test-agent"
     name: "Memory Test Agent"
     description: "Agent for testing memory limits and FIFO cleanup"
-    model: "test/mock"
+    model: "openai/gpt-4o-mini"
     specialty: "general"
     system_message: |
       You are a helpful assistant designed for memory testing.

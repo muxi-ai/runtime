@@ -1,5 +1,6 @@
 schema: "1.0.0"
 id: "assistant"
+active: true  # default is true
 name: "Basic Assistant"
 description: "General purpose assistant for testing basic formation functionality"
 

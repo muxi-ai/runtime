@@ -15,9 +15,7 @@ llm:
 memory:
   working:
     # Shared storage backend configuration (always enabled with defaults)
-    max_memory_mb: auto # Automatically calculate based on system memory
-                        # If not set or set to auto, we default to using 10% of available RAM,
-                        # capped at 1GB, with minimum of 64 MB.
+    max_memory_mb: 512 # Explicit memory limit required for remote mode
     fifo_interval_min: 5 # FIFO cleanup interval in minutes
     vector_dimension: 1536 # Dimension for embedding vectors
     mode: "remote" # "local" or "remote"

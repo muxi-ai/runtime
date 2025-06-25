@@ -25,7 +25,8 @@ memory:
     vector_search: true
 
   persistent:
-    connection_string: "sqlite:///sqlite.db"
+    provider: "sqlite"
+    connection_string: "memory_test.db"
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
@@ -34,4 +35,29 @@ logging:
       level: "debug"
       format: "jsonl"
 
-# Agent will be auto-discovered from agents/ directory
+# Agent configuration (will also auto-discover from agents/ directory if present)
+agents:
+  - schema: "1.0.0"
+    id: "memory_agent"
+    name: "Memory Test Agent"
+    description: "AI assistant designed to test and demonstrate memory system capabilities"
+    system_message: |
+      You are an AI assistant designed to test memory systems.
+      You should remember context from previous messages and be able to recall information.
+      Help test both buffer memory (recent context) and persistent memory (long-term storage).
+      
+      Memory behaviors:
+      - Actively remember important information shared by users
+      - Acknowledge when you're recalling previous information
+      - If asked about something from earlier, explicitly state whether you remember it
+      - Track user preferences and adapt your responses accordingly
+      - Help users test memory persistence by referencing earlier conversations
+      
+      When users say phrases like "remember this", "important", "don't forget", or "key point",
+      pay special attention and ensure that information is retained.
+    role: "general"
+    specialties:
+      - "context_retention"
+      - "information_recall"
+      - "preference_tracking"
+      - "conversation_continuity"

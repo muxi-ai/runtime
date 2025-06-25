@@ -15,14 +15,16 @@ llm:
 memory:
   working:
     # Shared storage backend configuration (always enabled with defaults)
-    max_memory_mb: auto # Automatically calculate based on system memory
+    max_memory_mb: 512 # Automatically calculate based on system memory
                         # If not set or set to auto, we default to using 10% of available RAM,
                         # capped at 1GB, with minimum of 64 MB.
+                        # Explicit memory limit required for remote mode
     fifo_interval_min: 5 # FIFO cleanup interval in minutes
     vector_dimension: 1536 # Dimension for embedding vectors
     mode: "remote" # "local" or "remote"
     remote: # Remote buffer configuration (if mode is "remote")
       url: "tcp://localhost:45678" # FAISSx Server URL
+      tenant: "${{ secrets.FAISSX_TENANT_ID }}" # Buffer Tenant ID
 
   # Buffer configuration (always enabled)
   buffer:
