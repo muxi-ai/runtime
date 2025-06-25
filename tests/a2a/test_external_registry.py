@@ -47,7 +47,7 @@ async def test_external_registry():
 
     # Create overlord with formation config
     overlord = Overlord(
-        user_api_key="test_user_key",
+        user_api_key="test_client_key",
         admin_api_key="test_admin_key",
         formation_config=formation_config
     )

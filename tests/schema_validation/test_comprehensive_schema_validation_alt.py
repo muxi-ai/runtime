@@ -38,7 +38,7 @@ class TestComprehensiveSchemaValidation:
             'auth': {
                 'api_keys': {
                     'admin_key': '${{ secrets.ADMIN_KEY }}',
-                    'user_key': '${{ secrets.USER_KEY }}'
+                    'client_key': '${{ secrets.CLIENT_KEY }}'
                 }
             },
 

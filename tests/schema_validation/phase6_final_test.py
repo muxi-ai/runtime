@@ -23,7 +23,7 @@ def main():
         'auth': {
             'api_keys': {
                 'admin_key': '${{ secrets.PHASE6_ADMIN_KEY }}',
-                'user_key': '${{ secrets.PHASE6_USER_KEY }}'
+                'client_key': '${{ secrets.PHASE6_CLIENT_KEY }}'
             }
         },
 

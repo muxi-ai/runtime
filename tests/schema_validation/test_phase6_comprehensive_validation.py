@@ -37,7 +37,7 @@ class TestPhase6ComprehensiveSchemaValidation:
             "auth": {
                 "api_keys": {
                     "admin_key": "${{ secrets.PHASE6_ADMIN_KEY }}",
-                    "user_key": "${{ secrets.PHASE6_USER_KEY }}",
+                    "client_key": "${{ secrets.PHASE6_CLIENT_KEY }}",
                 }
             },
             # Complete LLM configuration with ALL capabilities
@@ -323,7 +323,7 @@ class TestPhase6ComprehensiveSchemaValidation:
             "auth": {
                 "api_keys": {
                     "admin_key": "${{ secrets.COMPREHENSIVE_ADMIN_KEY }}",
-                    "user_key": "${{ secrets.COMPREHENSIVE_USER_KEY }}",
+                    "client_key": "${{ secrets.COMPREHENSIVE_CLIENT_KEY }}",
                 }
             },
             # LLM secrets (all providers and models)
@@ -609,7 +609,7 @@ class TestPhase6EdgeCases:
                 "schema": "1.0.0",
                 "id": "user-only",
                 "description": "Formation with user key only",
-                "auth": {"api_keys": {"user_key": "${{ secrets.USER_ONLY_KEY }}"}},
+                "auth": {"api_keys": {"client_key": "${{ secrets.USER_ONLY_KEY }}"}},
             },
             # Both keys
             {
@@ -619,7 +619,7 @@ class TestPhase6EdgeCases:
                 "auth": {
                     "api_keys": {
                         "admin_key": "${{ secrets.ADMIN_KEY }}",
-                        "user_key": "${{ secrets.USER_KEY }}",
+                        "client_key": "${{ secrets.CLIENT_KEY }}",
                     }
                 },
             },

@@ -10,7 +10,7 @@ version: "1.0.0"
 auth:
   api_keys:
     admin_key: "${{ secrets.FORMATION_ADMIN_API_KEY }}"
-    user_key: "${{ secrets.FORMATION_USER_API_KEY }}"
+    client_key: "${{ secrets.FORMATION_USER_API_KEY }}"
 
 # Multi-modal LLM configuration
 llm:

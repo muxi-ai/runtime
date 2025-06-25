@@ -370,7 +370,7 @@ class TestPhase6SchemaValidatorAudit:
             'auth': {
                 'api_keys': {
                     'admin_key': '${{ secrets.ADMIN_API_KEY }}',
-                    'user_key': '${{ secrets.USER_API_KEY }}'
+                    'client_key': '${{ secrets.USER_API_KEY }}'
                 }
             }
         }
