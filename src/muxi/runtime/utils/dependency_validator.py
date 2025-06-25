@@ -319,9 +319,17 @@ class DependencyValidator:
         if config.get("llm"):
             llm_config = config["llm"]
 
-            # Require at least one API key
+            # Check if using test/mock models
+            models = llm_config.get("models", [])
+            is_test_model = any(
+                model.get(capability, "").startswith(("test/", "mock/"))
+                for model in models
+                for capability in ["text", "vision", "audio", "documents", "embedding"]
+            )
+
+            # Require at least one API key (unless using test/mock models)
             api_keys = llm_config.get("api_keys", {})
-            if not api_keys:
+            if not api_keys and not is_test_model:
                 errors.append(
                     "❌ LLM service requires at least one API key in 'llm.api_keys'. "
                     "Add: llm.api_keys.openai: 'sk-your-key'"

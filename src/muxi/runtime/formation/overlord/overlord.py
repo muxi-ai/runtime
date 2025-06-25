@@ -555,63 +555,68 @@ class Overlord:
         # NOTE: Service initialization will be handled by Formation
         # The overlord constructor now focuses purely on intelligence setup
 
-    async def start(self) -> None:
+    def start(self) -> None:
         """Start all overlord services including cache manager."""
         try:
-            # Initialize LLM configuration first (needed for routing model)
-            await initialize_llm_config(self)
+            # Run all async initialization in a new event loop
+            async def _async_startup():
+                # Initialize LLM configuration first (needed for routing model)
+                await initialize_llm_config(self)
 
-            # Initialize other configurations
-            await initialize_auth_config(self)
-            await initialize_memory_config(self)
-            await initialize_logging_config(self)
-            await initialize_clarification_config(self)
-            await initialize_document_processing_config(self)
+                # Initialize other configurations
+                await initialize_auth_config(self)
+                await initialize_memory_config(self)
+                await initialize_logging_config(self)
+                await initialize_clarification_config(self)
+                await initialize_document_processing_config(self)
 
-            # Initialize the routing model (async) - now that LLM config is ready
-            await self._initialize_routing_model()
+                # Initialize the routing model (async) - now that LLM config is ready
+                await self._initialize_routing_model()
 
-            # Start cache manager
-            await self.cache_manager.start()
+                # Start cache manager
+                await self.cache_manager.start()
 
-            # Start observability system (already initialized in __init__)
-            await self.observability_manager.start()
+                # Start observability system (already initialized in __init__)
+                await self.observability_manager.start()
 
-            # Load agents from formation configuration
-            print("DEBUG: About to load agents from configuration")
-            await load_agents_from_configuration(self)
-            print("DEBUG: Agent loading completed")
+                # Load agents from formation configuration
+                print("DEBUG: About to load agents from configuration")
+                await load_agents_from_configuration(self)
+                print("DEBUG: Agent loading completed")
 
-            # A2A services are now initialized by Formation
-            # Start A2A formation server if initialized by Formation
-            if hasattr(self, "a2a_server") and self.a2a_server:
-                await self.a2a_coordinator._start_a2a_server()
+                # A2A services are now initialized by Formation
+                # Start A2A formation server if initialized by Formation
+                if hasattr(self, "a2a_server") and self.a2a_server:
+                    await self.a2a_coordinator._start_a2a_server()
 
-            # Process pending external agent registrations if available
-            if (
-                hasattr(self, "inbound_registry_client")
-                and self.inbound_registry_client
-                and hasattr(self, "pending_external_registrations")
-            ):
-                await self.a2a_coordinator._process_pending_agent_registrations()
+                # Process pending external agent registrations if available
+                if (
+                    hasattr(self, "inbound_registry_client")
+                    and self.inbound_registry_client
+                    and hasattr(self, "pending_external_registrations")
+                ):
+                    await self.a2a_coordinator._process_pending_agent_registrations()
 
-            # Start scheduler service if enabled
-            if hasattr(self, "formation_config") and self.formation_config.get("scheduler", {}).get(
-                "enabled", False
-            ):
-                # Validate that database connection is available for scheduler
-                if not hasattr(self, "db_manager") or not self.db_manager:
-                    raise ValueError(
-                        "Scheduler is enabled but no database connection is configured. "
-                        "Please configure 'memory.persistent.connection_string' in formation.yaml "
-                        "or disable scheduler with 'scheduler.enabled: false'"
-                    )
+                # Start scheduler service if enabled
+                if hasattr(self, "formation_config") and self.formation_config.get(
+                    "scheduler", {}
+                ).get("enabled", False):
+                    # Validate that database connection is available for scheduler
+                    if not hasattr(self, "db_manager") or not self.db_manager:
+                        raise ValueError(
+                            "Scheduler is enabled but no database connection is configured. "
+                            "Please configure 'memory.persistent.connection_string' in formation.yaml "
+                            "or disable scheduler with 'scheduler.enabled: false'"
+                        )
 
-                self.scheduler_service = await SchedulerService.get_instance(self)
-                await self.scheduler_service.start()
+                    self.scheduler_service = await SchedulerService.get_instance(self)
+                    await self.scheduler_service.start()
 
-            #  Info - TODO: add observability
-            #  SystemEvents.STARTED (overlord)
+                #  Info - TODO: add observability
+                #  SystemEvents.STARTED (overlord)
+
+            # Execute the async startup synchronously
+            asyncio.run(_async_startup())
 
         except Exception:
             #  Error - TODO: add observability

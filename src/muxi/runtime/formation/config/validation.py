@@ -281,8 +281,8 @@ class FormationValidator:
                 self.result.add_error("Agent configuration must be a dictionary")
                 return
 
-            # Validate as a single agent
-            self._validate_agents([config])
+            # Validate as a single agent (standalone agent file requires schema)
+            self._validate_agents([config], is_inline=False)
 
         except yaml.YAMLError as e:
             self.result.add_error(f"YAML parsing error: {str(e)}")
@@ -303,6 +303,10 @@ class FormationValidator:
             schema = config["schema"]
             if not isinstance(schema, str) or not schema.strip():
                 self.result.add_error("Formation schema must be a non-empty string")
+            elif schema != "1.0.0":
+                self.result.add_error(
+                    f"Invalid formation schema version: {schema}. Only '1.0.0' is supported."
+                )
 
         # Validate id
         if "id" in config:
@@ -356,8 +360,14 @@ class FormationValidator:
         if "runtime" in config:
             self._validate_runtime_config(config["runtime"])
 
-    def _validate_agents(self, agents_config: List[Dict[str, Any]]) -> None:
-        """Validate agents configuration."""
+    def _validate_agents(self, agents_config: List[Dict[str, Any]], is_inline: bool = True) -> None:
+        """Validate agents configuration.
+
+        Args:
+            agents_config: List of agent configurations
+            is_inline: True if agents are inline in a flattened formation (no schema required),
+                      False if they are standalone agent files (schema required)
+        """
         if not isinstance(agents_config, list):
             self.result.add_error("Agents configuration must be a list")
             return
@@ -369,7 +379,11 @@ class FormationValidator:
                 continue
 
             # Check required fields
-            for field in self.REQUIRED_AGENT_FIELDS:
+            # For inline agents in flattened formations, schema is not required
+            required_fields = [
+                field for field in self.REQUIRED_AGENT_FIELDS if field != "schema" or not is_inline
+            ]
+            for field in required_fields:
                 if field not in agent_config:
                     self.result.add_error(f"Agent {i} missing required field: {field}")
 
@@ -407,8 +421,14 @@ class FormationValidator:
 
         # Allow any provider users want to use
 
-    def _validate_mcp_config(self, mcp_config: Dict[str, Any]) -> None:
-        """Validate MCP configuration according to SCHEMA_GUIDE.md."""
+    def _validate_mcp_config(self, mcp_config: Dict[str, Any], is_inline: bool = True) -> None:
+        """Validate MCP configuration according to SCHEMA_GUIDE.md.
+        
+        Args:
+            mcp_config: MCP configuration dictionary
+            is_inline: True if servers are inline in a flattened formation (no schema required),
+                      False if they are standalone MCP files (schema required)
+        """
         if not isinstance(mcp_config, dict):
             self.result.add_error("MCP configuration must be a dictionary")
             return
@@ -426,14 +446,24 @@ class FormationValidator:
                     self.result.add_error(f"MCP server {i} configuration must be a dictionary")
                     continue
 
-                self._validate_single_mcp_server(server_config, i, server_ids)
+                self._validate_single_mcp_server(server_config, i, server_ids, is_inline)
 
     def _validate_single_mcp_server(
-        self, server_config: Dict[str, Any], index: int, server_ids: set
+        self, server_config: Dict[str, Any], index: int, server_ids: set, is_inline: bool = True
     ) -> None:
-        """Validate a single MCP server configuration according to SCHEMA_GUIDE.md."""
+        """Validate a single MCP server configuration according to SCHEMA_GUIDE.md.
+        
+        Args:
+            server_config: MCP server configuration
+            index: Index of the server in the list
+            server_ids: Set of already seen server IDs for duplicate detection
+            is_inline: True if server is inline in a flattened formation (no schema required),
+                      False if it's a standalone MCP file (schema required)
+        """
         # Check required fields
-        for field in self.REQUIRED_MCP_SERVER_FIELDS:
+        # For inline MCP servers in flattened formations, schema is not required
+        required_fields = [field for field in self.REQUIRED_MCP_SERVER_FIELDS if field != "schema" or not is_inline]
+        for field in required_fields:
             if field not in server_config:
                 self.result.add_error(f"MCP server {index} missing required field: {field}")
 
@@ -950,7 +980,7 @@ class FormationValidator:
                     if "id" not in agent_config:
                         agent_config["id"] = agent_file.stem
 
-                    self._validate_agents([agent_config])
+                    self._validate_agents([agent_config], is_inline=False)
                 else:
                     self.result.add_error(f"Agent file {agent_file.name} must contain a dictionary")
 
@@ -985,9 +1015,9 @@ class FormationValidator:
                     if "id" not in mcp_config:
                         mcp_config["id"] = mcp_file.stem
 
-                    # Create servers list structure for validation
+                    # Create servers list structure for validation (standalone files require schema)
                     servers_config = {"servers": [mcp_config]}
-                    self._validate_mcp_config(servers_config)
+                    self._validate_mcp_config(servers_config, is_inline=False)
                 else:
                     self.result.add_error(f"MCP file {mcp_file.name} must contain a dictionary")
 
@@ -2198,7 +2228,11 @@ class FormationValidator:
             elif isinstance(built_in_mcps, list):
                 # Granular mode - validate each MCP name
                 # Use dynamic registry or fallback to known MCPs
-                valid_mcps = set(BUILTIN_MCP_REGISTRY.keys()) if BUILTIN_MCP_REGISTRY else {"file-generation"}
+                valid_mcps = (
+                    set(BUILTIN_MCP_REGISTRY.keys())
+                    if BUILTIN_MCP_REGISTRY
+                    else {"file-generation"}
+                )
                 # Add future planned MCPs for forward compatibility
                 valid_mcps.update({"web-search", "database"})
 

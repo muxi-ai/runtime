@@ -1284,48 +1284,19 @@ class Formation:
             self._is_running = True
 
             # Start the overlord (loads agents, initializes services)
-            # Check if we're already in an event loop
+            self._overlord.start()
+
+            # Register built-in MCP servers if enabled
             try:
-                loop = asyncio.get_running_loop()
-                # Schedule overlord startup and MCP registration in the existing loop
-                overlord_start_task = loop.create_task(self._overlord.start())
-                mcp_task = loop.create_task(self._register_builtin_mcps())
-
-                # Store task references to prevent garbage collection
-                self._overlord_start_task = overlord_start_task
-                self._builtin_mcp_task = mcp_task
-
-                # Wait for both tasks to complete
-                try:
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        # Wait for overlord startup first (critical)
-                        overlord_future = executor.submit(
-                            asyncio.run_coroutine_threadsafe, overlord_start_task, loop
-                        )
-                        overlord_future.result(timeout=30)  # 30 second timeout
-
-                        # Wait for MCP registration (less critical)
-                        mcp_future = executor.submit(
-                            asyncio.run_coroutine_threadsafe, mcp_task, loop
-                        )
-                        mcp_future.result(timeout=30)  # 30 second timeout
-                except Exception as e:
-                    # Log error but don't fail startup for MCP issues
-                    observability.observe(
-                        event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e)},
-                        description=f"Overlord startup or MCP registration failed: {e}",
-                    )
-            except RuntimeError:
-                # No event loop running, create one
-                async def startup_sequence():
-                    await self._overlord.start()
-                    await self._register_builtin_mcps()
-
-                asyncio.run(startup_sequence())
+                self._register_builtin_mcps()
+            except Exception as e:
+                # Log error but don't fail startup for MCP issues
+                observability.observe(
+                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e)},
+                    description=f"Built-in MCP registration failed: {e}",
+                )
 
             return self._overlord
 
@@ -2250,7 +2221,7 @@ class Formation:
             limit=limit, user_id=user_id, action=action
         )
 
-    async def _register_builtin_mcps(self) -> None:
+    def _register_builtin_mcps(self) -> None:
         """
         Register built-in MCP servers based on runtime configuration.
 
@@ -2260,79 +2231,84 @@ class Formation:
         if not self._overlord or not self._overlord.mcp_service:
             return
 
-        # Get built-in MCP configuration
-        builtin_mcps_config = self._runtime_config.get("built_in_mcps", True)
+        # Run the async registration in a new event loop
+        async def _async_register():
+            # Get built-in MCP configuration
+            builtin_mcps_config = self._runtime_config.get("built_in_mcps", True)
 
-        # Import built-in MCP registry
-        from ..services.mcp.built_in import list_builtin_mcps
-        import sys
+            # Import built-in MCP registry
+            from ..services.mcp.built_in import list_builtin_mcps
+            import sys
 
-        # Get all available built-in MCPs
-        available_mcps = list_builtin_mcps()
+            # Get all available built-in MCPs
+            available_mcps = list_builtin_mcps()
 
-        # Determine which MCPs to register
-        mcps_to_register = []
+            # Determine which MCPs to register
+            mcps_to_register = []
 
-        if isinstance(builtin_mcps_config, bool):
-            # Simple mode - all on or all off
-            if builtin_mcps_config:
-                mcps_to_register = list(available_mcps.keys())
-        elif isinstance(builtin_mcps_config, list):
-            # Granular mode - only specified MCPs
-            mcps_to_register = [
-                mcp_name for mcp_name in builtin_mcps_config if mcp_name in available_mcps
-            ]
+            if isinstance(builtin_mcps_config, bool):
+                # Simple mode - all on or all off
+                if builtin_mcps_config:
+                    mcps_to_register = list(available_mcps.keys())
+            elif isinstance(builtin_mcps_config, list):
+                # Granular mode - only specified MCPs
+                mcps_to_register = [
+                    mcp_name for mcp_name in builtin_mcps_config if mcp_name in available_mcps
+                ]
 
-        # Register each enabled MCP
-        for mcp_name in mcps_to_register:
-            mcp_path = available_mcps[mcp_name]
+            # Register each enabled MCP
+            for mcp_name in mcps_to_register:
+                mcp_path = available_mcps[mcp_name]
 
-            # Check if the script exists
-            if not mcp_path.exists():
-                observability.observe(
-                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "mcp_name": mcp_name,
-                        "mcp_path": str(mcp_path),
-                        "error": "Script file not found",
-                    },
-                    description=f"Built-in MCP script not found: {mcp_path}",
-                )
-                continue
+                # Check if the script exists
+                if not mcp_path.exists():
+                    observability.observe(
+                        event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "mcp_name": mcp_name,
+                            "mcp_path": str(mcp_path),
+                            "error": "Script file not found",
+                        },
+                        description=f"Built-in MCP script not found: {mcp_path}",
+                    )
+                    continue
 
-            try:
-                # Register the MCP server with properly escaped command
-                await self._overlord.mcp_service.register_mcp_server(
-                    server_id=f"builtin-{mcp_name}",
-                    command=f"{shlex.quote(sys.executable)} {shlex.quote(str(mcp_path))}",
-                    transport_type="command",
-                    request_timeout=30,
-                )
+                try:
+                    # Register the MCP server with properly escaped command
+                    await self._overlord.mcp_service.register_mcp_server(
+                        server_id=f"builtin-{mcp_name}",
+                        command=f"{shlex.quote(sys.executable)} {shlex.quote(str(mcp_path))}",
+                        transport_type="command",
+                        request_timeout=30,
+                    )
 
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "mcp_name": mcp_name,
-                        "server_id": f"builtin-{mcp_name}",
-                        "mcp_path": str(mcp_path),
-                    },
-                    description=f"Built-in MCP server registered: {mcp_name}",
-                )
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "mcp_name": mcp_name,
+                            "server_id": f"builtin-{mcp_name}",
+                            "mcp_path": str(mcp_path),
+                        },
+                        description=f"Built-in MCP server registered: {mcp_name}",
+                    )
 
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "mcp_name": mcp_name,
-                        "server_id": f"builtin-{mcp_name}",
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    description=f"Failed to register built-in MCP server {mcp_name}: {e}",
-                )
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "mcp_name": mcp_name,
+                            "server_id": f"builtin-{mcp_name}",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        },
+                        description=f"Failed to register built-in MCP server {mcp_name}: {e}",
+                    )
+
+        # Execute the async registration synchronously
+        asyncio.run(_async_register())
 
     async def wait_for_mcp_readiness(self, timeout: float = 30.0) -> bool:
         """

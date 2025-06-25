@@ -176,7 +176,7 @@ class AsyncOperationManager:
 
         except Exception as e:
             context.status = OperationStatus.FAILED
-            context.error = e
+            context.error = str(e)
 
             return AsyncOperationResult(
                 operation_id=operation_id,
