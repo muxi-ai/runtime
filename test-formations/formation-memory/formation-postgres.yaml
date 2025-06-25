@@ -14,18 +14,18 @@ llm:
 
 memory:
   working:
-    max_memory_mb: 256
+    max_memory_mb: 1
     fifo_interval_min: 5
     vector_dimension: 1536
     mode: "local"
-    
+
   buffer:
     size: 50
     multiplier: 10
     vector_search: true
-    
+
   persistent:
-    connection_string: "sqlite:///sqlite.db"
+    connection_string: "${{ secrets.POSTGRES_URI }}"
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
