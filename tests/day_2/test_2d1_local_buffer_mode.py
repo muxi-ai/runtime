@@ -4,11 +4,9 @@
 import sys
 
 sys.path.insert(0, ".")
-import asyncio
-import os
-from concurrent.futures import ThreadPoolExecutor
-
-from src.muxi.runtime.formation.formation import Formation
+import asyncio  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+from src.muxi.runtime.formation.formation import Formation  # noqa: E402
 
 
 # Create mock LLM for embedding

@@ -217,6 +217,8 @@ class Formation:
 
             # Initialize SecretsManager if not already injected via dependency injection
             if not hasattr(self, "secrets_manager") or self.secrets_manager is None:
+                # Initialize secrets_dir with default to prevent UnboundLocalError
+                secrets_dir = normalized_path
                 try:
                     if os.path.isfile(normalized_path):
                         secrets_dir = os.path.dirname(normalized_path)

@@ -580,8 +580,6 @@ class Overlord:
                 await self.observability_manager.start()
 
                 # Load agents from formation configuration
-                from ...services import observability
-
                 observability.observe(
                     event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
                     level=observability.EventLevel.DEBUG,
@@ -1165,8 +1163,6 @@ class Overlord:
         await self.active_agent_tracker.mark_agent_for_deletion(agent_id)
 
         if await self.active_agent_tracker.is_agent_busy(agent_id):
-            from ...services import observability
-
             observability.observe(
                 event_type=observability.SystemEvents.AGENT_REMOVED,
                 level=observability.EventLevel.INFO,
@@ -1174,8 +1170,6 @@ class Overlord:
                 description=f"Agent '{agent_id}' marked for deletion - will be removed when current request completes",
             )
         else:
-            from ...services import observability
-
             observability.observe(
                 event_type=observability.SystemEvents.AGENT_REMOVED,
                 level=observability.EventLevel.INFO,
@@ -1266,16 +1260,12 @@ class Overlord:
             try:
                 await self.scheduler_service.stop()
             except Exception as e:
-                from ...services import observability
-
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "service": "scheduler"},
                     description=f"Error stopping scheduler service: {e}",
                 )
-
-        from ...services import observability
 
         observability.observe(
             event_type=observability.SystemEvents.OVERLORD_SHUTDOWN,
@@ -1591,17 +1581,32 @@ class Overlord:
             internal_user_id: Internal user ID for Memobase
             user_id: External user ID for LongTermMemory
         """
-        if isinstance(self.long_term_memory, Memobase):
-            await self.long_term_memory.add(
-                content=content,
-                metadata=metadata,
-                user_id=internal_user_id,
-                external_user_id=user_id,
-            )
-        else:
-            # LongTermMemory expects external_user_id
-            await self.long_term_memory.add(
-                content=content, metadata=metadata, external_user_id=user_id
+        try:
+            if isinstance(self.long_term_memory, Memobase):
+                await self.long_term_memory.add(
+                    content=content,
+                    metadata=metadata,
+                    user_id=internal_user_id,
+                    external_user_id=user_id,
+                )
+            else:
+                # LongTermMemory expects external_user_id
+                await self.long_term_memory.add(
+                    content=content, metadata=metadata, external_user_id=user_id
+                )
+        except Exception as e:
+            # Log memory storage error but don't propagate to avoid breaking conversation flow
+            observability.observe(
+                event_type=observability.ErrorEvents.MEMORY_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "memory_type": type(self.long_term_memory).__name__,
+                    "content_length": len(content) if content else 0,
+                    "user_id": str(user_id) if user_id else None,
+                    "internal_user_id": internal_user_id,
+                },
+                description=f"Failed to add content to long-term memory: {str(e)}",
             )
 
     async def add_message_to_memory(

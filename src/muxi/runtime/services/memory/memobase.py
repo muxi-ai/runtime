@@ -149,11 +149,14 @@ class Memobase:
 
         try:
             # Add to long-term memory (it will handle collection creation internally)
-            # If external_user_id is not provided, try to get it from somewhere
-            if external_user_id is None and user_id != 0:
-                # For now, we'll use the user_id as external_user_id if not provided
-                # This is a temporary fix - ideally external_user_id should always be provided
-                external_user_id = str(user_id)
+            # Handle external_user_id requirement more robustly
+            if external_user_id is None:
+                if user_id is not None and user_id != 0:
+                    # Convert user_id to string format for external_user_id
+                    external_user_id = str(user_id)
+                else:
+                    # Use default user for anonymous/system operations
+                    external_user_id = "default_user"
 
             memory_id = await self.long_term_memory.add(
                 content=content,
