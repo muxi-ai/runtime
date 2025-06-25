@@ -580,9 +580,21 @@ class Overlord:
                 await self.observability_manager.start()
 
                 # Load agents from formation configuration
-                print("DEBUG: About to load agents from configuration")
+                from ...services import observability
+
+                observability.observe(
+                    event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                    level=observability.EventLevel.DEBUG,
+                    data={},
+                    description="Starting agent loading from formation configuration",
+                )
                 await load_agents_from_configuration(self)
-                print("DEBUG: Agent loading completed")
+                observability.observe(
+                    event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                    level=observability.EventLevel.INFO,
+                    data={"agent_count": len(self.agents)},
+                    description=f"Agent loading completed. Loaded {len(self.agents)} agents.",
+                )
 
                 # A2A services are now initialized by Formation
                 # Start A2A formation server if initialized by Formation
@@ -1153,11 +1165,23 @@ class Overlord:
         await self.active_agent_tracker.mark_agent_for_deletion(agent_id)
 
         if await self.active_agent_tracker.is_agent_busy(agent_id):
-            print(
-                f"⏳ Agent '{agent_id}' marked for deletion - will be removed when current request completes"
+            from ...services import observability
+
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_REMOVED,
+                level=observability.EventLevel.INFO,
+                data={"agent_id": agent_id, "removal_status": "deferred", "reason": "agent_busy"},
+                description=f"Agent '{agent_id}' marked for deletion - will be removed when current request completes",
             )
         else:
-            print(f"✅ Agent '{agent_id}' removed immediately (not busy)")
+            from ...services import observability
+
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_REMOVED,
+                level=observability.EventLevel.INFO,
+                data={"agent_id": agent_id, "removal_status": "immediate", "reason": "agent_idle"},
+                description=f"Agent '{agent_id}' removed immediately (not busy)",
+            )
 
         return True
 
@@ -1242,9 +1266,23 @@ class Overlord:
             try:
                 await self.scheduler_service.stop()
             except Exception as e:
-                print(f"⚠️  Error stopping scheduler service: {e}")
+                from ...services import observability
 
-        print("✅ Overlord shutdown complete - no active requests remaining")
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "service": "scheduler"},
+                    description=f"Error stopping scheduler service: {e}",
+                )
+
+        from ...services import observability
+
+        observability.observe(
+            event_type=observability.SystemEvents.OVERLORD_SHUTDOWN,
+            level=observability.EventLevel.INFO,
+            data={"active_requests": 0},
+            description="Overlord shutdown complete - no active requests remaining",
+        )
         # Additional cleanup logic here if needed
 
     def _get_dependent_agents(self, agent_id: str) -> List[str]:
@@ -1537,6 +1575,35 @@ class Overlord:
         """
         return await self.user_context_manager.clear_user_context(user_id, keys, agent_id)
 
+    async def _add_to_long_term_memory(
+        self,
+        content: str,
+        metadata: Dict[str, Any],
+        internal_user_id: Optional[int],
+        user_id: Optional[str],
+    ) -> None:
+        """
+        Helper method to add content to long-term memory, handling both Memobase and LongTermMemory interfaces.
+
+        Args:
+            content: The content to store
+            metadata: Metadata to associate with the content
+            internal_user_id: Internal user ID for Memobase
+            user_id: External user ID for LongTermMemory
+        """
+        if isinstance(self.long_term_memory, Memobase):
+            await self.long_term_memory.add(
+                content=content,
+                metadata=metadata,
+                user_id=internal_user_id,
+                external_user_id=user_id,
+            )
+        else:
+            # LongTermMemory expects external_user_id
+            await self.long_term_memory.add(
+                content=content, metadata=metadata, external_user_id=user_id
+            )
+
     async def add_message_to_memory(
         self,
         content: str,
@@ -1609,69 +1676,41 @@ class Overlord:
                         metadata["enhanced"] = True
                         metadata["original_content"] = content
 
-                        # Check if we're using Memobase or LongTermMemory
-                        if isinstance(self.long_term_memory, Memobase):
-                            await self.long_term_memory.add(
-                                content=enhanced_content,
-                                metadata=metadata,
-                                user_id=internal_user_id,
-                                external_user_id=user_id,
-                            )
-                        else:
-                            # LongTermMemory expects external_user_id
-                            await self.long_term_memory.add(
-                                content=enhanced_content,
-                                metadata=metadata,
-                                external_user_id=user_id,
-                            )
+                        # Store the enhanced content using helper method
+                        await self._add_to_long_term_memory(
+                            content=enhanced_content,
+                            metadata=metadata,
+                            internal_user_id=internal_user_id,
+                            user_id=user_id,
+                        )
                     else:
-                        # Store the original content
-                        # Check if we're using Memobase or LongTermMemory
-                        if isinstance(self.long_term_memory, Memobase):
-                            await self.long_term_memory.add(
-                                content=content,
-                                metadata=metadata,
-                                user_id=internal_user_id,
-                                external_user_id=user_id,
-                            )
-                        else:
-                            # LongTermMemory expects external_user_id
-                            await self.long_term_memory.add(
-                                content=content, metadata=metadata, external_user_id=user_id
-                            )
+                        # Store the original content using helper method
+                        await self._add_to_long_term_memory(
+                            content=content,
+                            metadata=metadata,
+                            internal_user_id=internal_user_id,
+                            user_id=user_id,
+                        )
                 except Exception as e:
                     # Log error and fall back to original message
                     #  Error - TODO: add observability
                     # ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED
                     _ = e  # remove this after implementing observability
-                    # Check if we're using Memobase or LongTermMemory
-                    if isinstance(self.long_term_memory, Memobase):
-                        await self.long_term_memory.add(
-                            content=content,
-                            metadata=metadata,
-                            user_id=internal_user_id,
-                            external_user_id=user_id,
-                        )
-                    else:
-                        # LongTermMemory expects external_user_id
-                        await self.long_term_memory.add(
-                            content=content, metadata=metadata, external_user_id=user_id
-                        )
-            else:
-                # For non-user messages, just store directly
-                # Check if we're using Memobase or LongTermMemory
-                if isinstance(self.long_term_memory, Memobase):
-                    await self.long_term_memory.add(
+                    # Fallback to original content using helper method
+                    await self._add_to_long_term_memory(
                         content=content,
                         metadata=metadata,
-                        user_id=internal_user_id,
-                        external_user_id=user_id,
+                        internal_user_id=internal_user_id,
+                        user_id=user_id,
                     )
-                else:
-                    # LongTermMemory expects external_user_id
-                    await self.long_term_memory.add(
-                        content=content, metadata=metadata, external_user_id=user_id
-                    )
+            else:
+                # For non-user messages, just store directly using helper method
+                await self._add_to_long_term_memory(
+                    content=content,
+                    metadata=metadata,
+                    internal_user_id=internal_user_id,
+                    user_id=user_id,
+                )
 
             #  Info - TODO: add observability
             # ConversationEvents.MEMORY_LONG_TERM_ENHANCED

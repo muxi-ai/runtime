@@ -64,9 +64,15 @@ class ChatOrchestrator:
                 False=disable streaming. Only applies to sync processing.
 
         Returns:
-            For sync processing: str with the agent's response content, or
-                AsyncGenerator if streaming
+            For sync processing without streaming: str with the agent's response content
+            For sync processing with streaming: AsyncGenerator[str, None] yielding chunks
             For async processing: Dict with request_id, status, and processing info
+            
+        Note:
+            When streaming is enabled (stream=True) and sync processing is used,
+            this method returns an AsyncGenerator that yields response chunks as they
+            arrive from the model. This preserves true streaming behavior and prevents
+            memory issues from collecting all chunks before returning.
         """
         # Generate unique request ID for all requests (for tracking and logging)
         request_id = f"req_{generate_nanoid()}"
@@ -133,15 +139,12 @@ class ChatOrchestrator:
             else:
                 # Execute sync request
                 if use_streaming:
-                    # Collect all chunks from the async generator for non-streaming response
-                    chunks = []
-                    async for chunk in self._process_streaming_chat(
+                    # Return async generator directly for streaming behavior
+                    return self._process_streaming_chat(
                         message=message,
                         agent_name=agent_name,
                         user_id=user_id,
-                    ):
-                        chunks.append(chunk)
-                    return "".join(chunks)
+                    )
                 else:
                     return await self._process_sync_chat(
                         message=message,

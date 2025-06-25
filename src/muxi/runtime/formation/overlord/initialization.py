@@ -233,6 +233,16 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
                     # ErrorEvents.FAILED_INITIALIZATION (embedding model)
                     _ = e2  # remove this after implementing observability
 
+        # Determine multi-user mode - check explicit config first, then infer from database type
+        explicit_multi_user = persistent_config.get("multi_user")
+        if explicit_multi_user is not None:
+            overlord.is_multi_user = bool(explicit_multi_user)
+        else:
+            # Fall back to inferring from database type
+            overlord.is_multi_user = connection_string.startswith(
+                "postgresql://"
+            ) or connection_string.startswith("postgres://")
+
         # Determine memory type based on connection string
         if connection_string.startswith("postgresql://") or connection_string.startswith(
             "postgres://"
@@ -240,15 +250,19 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
             observability.observe(
                 event_type=observability.SystemEvents.INITIALIZING,
                 level=observability.EventLevel.INFO,
-                data={"database_type": "postgresql", "memory_type": "persistent"},
-                description="Initializing persistent memory with PostgreSQL backend",
+                data={
+                    "database_type": "postgresql",
+                    "memory_type": "persistent",
+                    "multi_user": overlord.is_multi_user,
+                },
+                description=(
+                    "Initializing persistent memory with PostgreSQL backend "
+                    f"(multi-user: {overlord.is_multi_user})"
+                ),
             )
             from ...services.memory.memobase import Memobase
             from ...services.memory.long_term import LongTermMemory
             from ...services.db import get_database_manager
-
-            # PostgreSQL means multi-user mode
-            overlord.is_multi_user = True
 
             # Create ONE DatabaseManager for the Formation
             db_manager = get_database_manager(connection_string)
@@ -269,14 +283,18 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
             observability.observe(
                 event_type=observability.SystemEvents.INITIALIZING,
                 level=observability.EventLevel.INFO,
-                data={"database_type": "sqlite", "memory_type": "persistent"},
-                description="Initializing persistent memory with SQLite backend",
+                data={
+                    "database_type": "sqlite",
+                    "memory_type": "persistent",
+                    "multi_user": overlord.is_multi_user,
+                },
+                description=(
+                    "Initializing persistent memory with SQLite backend "
+                    f"(multi-user: {overlord.is_multi_user})"
+                ),
             )
             from ...services.memory.sqlite import SQLiteMemory
             from ...services.db import get_database_manager
-
-            # SQLite means single-user mode
-            overlord.is_multi_user = False
 
             # Remove sqlite:// prefix if present
             db_path = connection_string.replace("sqlite://", "")
@@ -652,18 +670,31 @@ async def create_agent_from_config(overlord, agent_config: Dict[str, Any]):
         Agent: Configured agent instance
     """
     from ..agents.agent import Agent
-    from ...services.llm.service import OneLLMService
 
     # Get or create LLM model for the agent
     # Use overlord's model creation capability
     try:
         # Try to use overlord's model creation (it should be initialized by now)
         model = await overlord.get_model_for_capability("text")
-    except Exception:
-        # Fallback: create a basic model using OneLLMService
-        llm_service = await OneLLMService.get_instance()
-        # Use a basic text model for the agent
-        model = await llm_service.get_model("gpt-4o-mini")  # Basic fallback model
+    except Exception as e:
+        # Configuration error - text capability must be properly configured
+        observability.observe(
+            event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+            level=observability.EventLevel.ERROR,
+            data={
+                "error": str(e),
+                "agent_id": agent_config.get("id", "unknown"),
+                "capability": "text",
+                "config_type": "llm_model",
+            },
+            description=(
+                f"Failed to get text model for agent {agent_config.get('id', 'unknown')}: "
+                f"{str(e)}. LLM configuration with text capability is mandatory."
+            ),
+        )
+        raise ValueError(
+            f"LLM text capability configuration is mandatory for agent creation. Error: {str(e)}"
+        )
 
     # Create agent instance
     agent = Agent(

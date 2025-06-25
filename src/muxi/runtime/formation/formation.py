@@ -154,6 +154,24 @@ class Formation:
         self._runtime_config: Dict[str, Any] = {}
         self._agents_config: list = []
 
+    def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
+        """
+        Inject a pre-configured SecretsManager instance.
+
+        This method enables dependency injection for testing and advanced scenarios
+        where a custom SecretsManager configuration is needed.
+
+        Args:
+            secrets_manager: Pre-configured SecretsManager instance
+        """
+        self.secrets_manager = secrets_manager
+        observability.observe(
+            event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
+            level=observability.EventLevel.DEBUG,
+            data={"operation": "secrets_manager_injection"},
+            description="SecretsManager injected via dependency injection",
+        )
+
     def load(self, config_path: str) -> None:
         """
         Load and validate formation configuration.
@@ -197,11 +215,52 @@ class Formation:
             # If normalized_path is a file, use its directory; otherwise use the path itself
             import os
 
-            if os.path.isfile(normalized_path):
-                secrets_dir = os.path.dirname(normalized_path)
+            # Initialize SecretsManager if not already injected via dependency injection
+            if not hasattr(self, "secrets_manager") or self.secrets_manager is None:
+                try:
+                    if os.path.isfile(normalized_path):
+                        secrets_dir = os.path.dirname(normalized_path)
+                    else:
+                        secrets_dir = normalized_path
+
+                    # Ensure the secrets directory exists and is accessible
+                    if not os.path.exists(secrets_dir):
+                        os.makedirs(secrets_dir, exist_ok=True)
+
+                    self.secrets_manager = SecretsManager(secrets_dir)
+
+                    # Emit observability event for successful SecretsManager initialization
+                    observability.observe(
+                        event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
+                        level=observability.EventLevel.DEBUG,
+                        data={"secrets_dir": secrets_dir, "operation": "secrets_manager_init"},
+                        description=f"SecretsManager initialized with directory: {secrets_dir}",
+                    )
+
+                except Exception as e:
+                    # Log the SecretsManager initialization failure
+                    observability.observe(
+                        event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "error": str(e),
+                            "secrets_dir": secrets_dir,
+                            "config_path": config_path,
+                        },
+                        description=f"Failed to initialize SecretsManager: {str(e)}",
+                    )
+                    raise ConfigurationLoadError(
+                        f"Failed to initialize SecretsManager for formation at {secrets_dir}: {str(e)}",
+                        {"config_path": config_path, "secrets_dir": secrets_dir},
+                    )
             else:
-                secrets_dir = normalized_path
-            self.secrets_manager = SecretsManager(secrets_dir)
+                # SecretsManager was already injected
+                observability.observe(
+                    event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
+                    level=observability.EventLevel.DEBUG,
+                    data={"operation": "secrets_manager_injected"},
+                    description="Using pre-injected SecretsManager instance",
+                )
 
             # Validate configuration (fail fast with detailed messages)
             validation_result = self._validate_config(normalized_path)
