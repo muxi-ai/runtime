@@ -84,28 +84,42 @@ def main():
     src_path = Path(__file__).parent.parent.parent / "src"
     os.environ["PYTHONPATH"] = str(src_path) + ":" + os.environ.get("PYTHONPATH", "")
     
+    # Change to runtime directory so formation paths work
+    runtime_dir = Path(__file__).parent.parent.parent
+    os.chdir(runtime_dir)
+    print(f"Working directory: {os.getcwd()}")
+    
     total_passed = 0
     total_failed = 0
     
     # Test Group 1A: Formation Loading (5 tests from plan)
     print(f"\n{YELLOW}Test Group 1A: Formation Loading{RESET}")
     
-    # 1A1-1A4: The flattened formation file contains 5 test methods
+    # Run the comprehensive test file that contains all 1A tests
+    test_dir = Path(__file__).parent
     passed, failed = run_pytest_file(
-        "test_1a4_flattened_formation_loading.py",
-        "Test Group 1A: All Formation Loading Tests (5 tests)"
+        test_dir / "test_1a1_basic_yaml_formation.py",
+        "Test Group 1A: Comprehensive Formation Loading Tests (5 methods)"
     )
     total_passed += passed
     total_failed += failed
     
-    # The other 1A files are validation scripts
+    # Also run the secondary test file
+    passed, failed = run_pytest_file(
+        test_dir / "test_1a4_flattened_formation_loading.py",
+        "Test Group 1A: Simple Formation Loading Tests (5 methods)"
+    )
+    total_passed += passed
+    total_failed += failed
+    
+    # The other test files are standalone scripts
     for script, desc in [
-        ("test_1a1_basic_yaml_formation.py", "1A1: Basic YAML Formation"),
         ("test_1a2_directory_structure_formation.py", "1A2: Directory Structure"),
         ("test_1a3_formation_validation_failures.py", "1A3: Validation Failures"),
     ]:
-        if Path(script).exists():
-            p, f = run_script_file(script, desc)
+        script_path = test_dir / script
+        if script_path.exists():
+            p, f = run_script_file(script_path, desc)
             total_passed += p
             total_failed += f
     
@@ -116,8 +130,9 @@ def main():
         ("test_1b1_single_agent_response.py", "1B1: Single Agent Response"),
         ("test_1b2_agent_routing_validation.py", "1B2: Agent Routing Validation"),
     ]:
-        if Path(script).exists():
-            p, f = run_script_file(script, desc)
+        script_path = test_dir / script
+        if script_path.exists():
+            p, f = run_script_file(script_path, desc)
             total_passed += p
             total_failed += f
     
