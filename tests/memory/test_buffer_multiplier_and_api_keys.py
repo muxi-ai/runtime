@@ -121,19 +121,19 @@ class TestAPIKeys(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures."""
         # Mock API keys
-        self.user_api_key = "sk_muxi_user_12345"
+        self.client_api_key = "sk_muxi_user_12345"
         self.admin_api_key = "sk_muxi_admin_67890"
 
     def test_overlord_api_keys(self):
         """Test that API keys can be provided to the Overlord."""
         # Create overlord with API keys
         overlord = Overlord(
-            user_api_key=self.user_api_key,
+            client_api_key=self.client_api_key,
             admin_api_key=self.admin_api_key
         )
 
         # Check that keys were stored
-        self.assertEqual(overlord.user_api_key, self.user_api_key)
+        self.assertEqual(overlord.client_api_key, self.client_api_key)
         self.assertEqual(overlord.admin_api_key, self.admin_api_key)
 
     @patch("muxi.runtime.memory.short_term.ShortTermMemory")
@@ -143,27 +143,27 @@ class TestAPIKeys(unittest.TestCase):
         with patch("muxi.runtime.overlord.Overlord") as mock_overlord:
             # Mock a muxi function that creates an overlord
             def mock_muxi(buffer_size=10, buffer_multiplier=10,
-                          user_api_key=None, admin_api_key=None):
+                          client_api_key=None, admin_api_key=None):
                 # Create a ShortTermMemory instance to trigger the mock
                 ShortTermMemory(max_size=buffer_size, buffer_multiplier=buffer_multiplier)
                 # Return an overlord with the buffer
                 return mock_overlord(
                     buffer_memory=mock_buffer(),
-                    user_api_key=user_api_key,
+                    client_api_key=client_api_key,
                     admin_api_key=admin_api_key)
 
             # Call our mock function with the API keys
             mock_muxi(
                 buffer_size=10,
                 buffer_multiplier=10,
-                user_api_key=self.user_api_key,
+                client_api_key=self.client_api_key,
                 admin_api_key=self.admin_api_key
             )
 
             # Verify the overlord was created with the keys
             mock_overlord.assert_called_once()
             _, kwargs = mock_overlord.call_args
-            self.assertEqual(kwargs.get("user_api_key"), self.user_api_key)
+            self.assertEqual(kwargs.get("client_api_key"), self.client_api_key)
             self.assertEqual(kwargs.get("admin_api_key"), self.admin_api_key)
 
     @patch("muxi.runtime.memory.short_term.ShortTermMemory")
