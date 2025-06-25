@@ -79,6 +79,7 @@
 
 import asyncio
 import hashlib
+import json
 import time
 from typing import Any, Dict, List, Optional, Union, AsyncGenerator
 import os
@@ -3261,3 +3262,40 @@ class Overlord:
                 description=f"Failed to initialize built-in MCP prompts: {e}",
             )
             return ""
+
+    async def remember_user_info(
+        self,
+        user_id: str,
+        properties: Union[dict, str],
+    ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
+        """Store user properties as contextual memory.
+
+        Args:
+            user_id: External user identifier
+            properties: Dictionary of user properties to remember, or a string prompt
+
+        Returns:
+            The response from the chat function (string, dict, or async generator)
+        """
+        # Handle both dict and string inputs
+        if isinstance(properties, dict):
+            # Convert properties to first-person prompt with JSON
+            prompt = (
+                f"Here's my updated information: {json.dumps(properties)}. "
+                "Please save this information in your memory. "
+                "Once you're done storing this, reply only with 'Memories saved'."
+            )
+        else:
+            # Use string directly as prompt, append instruction
+            prompt = (
+                f"{properties}. "
+                "Please save this information in your memory. "
+                "Once you're done storing this, reply only with 'Memories saved'."
+            )
+
+        # Use chat function with synchronous mode to ensure completion and return its response
+        return await self.chat(
+            user_id=user_id,
+            message=prompt,
+            use_async=False
+        )
