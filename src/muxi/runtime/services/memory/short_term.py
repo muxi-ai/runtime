@@ -212,14 +212,30 @@ class ShortTermMemory:
             try:
                 # Generate embedding for the text
                 embedding = await self.model.embed(text)
-                item["embedding"] = embedding
+
+                # Handle different response types from LLM.embed()
+                if hasattr(embedding, "embedding"):
+                    embedding_vector = embedding.embedding
+                elif hasattr(embedding, "data") and len(embedding.data) > 0:
+                    embedding_vector = embedding.data[0].embedding
+                elif isinstance(embedding, list):
+                    embedding_vector = embedding
+                else:
+                    embedding_vector = list(embedding)
+
+                item["embedding"] = embedding_vector
 
                 # Record the mapping from buffer index to FAISS index
                 buffer_idx = len(self.buffer)
                 self.index_mapping[buffer_idx] = self.index_count
 
-                # Add the embedding to the FAISS index
-                embedding_array = np.array([embedding], dtype=np.float32)
+                # Normalize embedding for better cosine similarity in FAISS
+                embedding_array = np.array([embedding_vector], dtype=np.float32)
+                norm = np.linalg.norm(embedding_array[0])
+                if norm > 0:
+                    embedding_array = embedding_array / norm
+
+                # Add the normalized embedding to the FAISS index
                 self.index.add(embedding_array)
 
                 # Increment the FAISS index counter
@@ -359,7 +375,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size :]
+            recent_items = list(self.buffer)[-self.max_size:]
 
         # Apply filtering if specified
         if filter_metadata or namespace:
@@ -466,7 +482,18 @@ class ShortTermMemory:
         # Generate a query vector if not provided
         if query_vector is None:
             try:
-                query_vector = await self.model.embed(query)
+                query_embedding = await self.model.embed(query)
+
+                # Handle different response types
+                if hasattr(query_embedding, "embedding"):
+                    query_vector = query_embedding.embedding
+                elif hasattr(query_embedding, "data") and len(query_embedding.data) > 0:
+                    query_vector = query_embedding.data[0].embedding
+                elif isinstance(query_embedding, list):
+                    query_vector = query_embedding
+                else:
+                    query_vector = list(query_embedding)
+
             except Exception as e:
                 #  Query embedding error - TODO: add observability
                 # Fallback to recency search if embedding generation fails
@@ -499,8 +526,11 @@ class ShortTermMemory:
             )
 
         try:
-            # Convert query vector to numpy array
+            # Convert query vector to numpy array and normalize
             query_np = np.array([query_vector], dtype=np.float32)
+            norm = np.linalg.norm(query_np[0])
+            if norm > 0:
+                query_np = query_np / norm
 
             # Search the FAISS index for similar vectors
             k = min(limit * 2, self.index_count)  # Get more results to allow for filtering

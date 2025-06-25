@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, String, Text, desc, func, select
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, desc, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base
 
@@ -49,6 +49,22 @@ from ..db import DatabaseManager
 Base = declarative_base()
 
 
+class User(Base):
+    """
+    User table for multi-user support.
+
+    Maps external user IDs to internal database IDs.
+    """
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    external_user_id = Column(String(255), nullable=False, unique=True, index=True)
+    external_user_id_hash = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
 class Memory(Base):
     """
     Memory table for storing vector embeddings and metadata.
@@ -60,6 +76,7 @@ class Memory(Base):
     __tablename__ = "memories"
 
     id = Column(String(21), primary_key=True, default=get_default_nanoid)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
     meta_data = Column(JSONB, nullable=False, default={})
@@ -78,8 +95,9 @@ class Collection(Base):
 
     __tablename__ = "collections"
 
-    id = Column(String(21), primary_key=True, default=get_default_nanoid)
-    name = Column(String(255), nullable=False, unique=True, index=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False, index=True)
     description = Column(Text)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
@@ -120,11 +138,15 @@ class LongTermMemory:
         self.engine = self.db_manager.engine
         self.Session = self.db_manager.Session
 
+        # Determine if we're in multi-user mode
+        self.is_multi_user = self.db_manager.database_type == "postgresql"
+
         # Create tables if they don't exist
         self._create_tables()
 
-        # Create default collection if it doesn't exist
-        self._create_default_collection()
+        # Create default user and collection for single-user mode
+        if not self.is_multi_user:
+            self._ensure_default_user()
 
     def _create_tables(self) -> None:
         """
@@ -134,55 +156,106 @@ class LongTermMemory:
         extension is loaded and all required tables are created.
         """
         try:
+            # Note: In production, you'd use proper migrations to handle schema changes
+
             # Use unified database manager to create tables
             self.db_manager.create_tables(Base.metadata)
 
             # Create pgvector extension if using PostgreSQL
             if self.db_manager.database_type == "postgresql":
+                from sqlalchemy import text
+
                 with self.engine.connect() as conn:
-                    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
+                    conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
                     conn.commit()
 
             observability.observe(
-                event_type=observability.SystemEvents.MEMORY_DATABASE_INITIALIZED,
+                event_type=observability.SystemEvents.DATABASE_TABLES_CREATED,
                 level=observability.EventLevel.INFO,
-                data={"database_type": self.db_manager.database_type},
+                data={
+                    "database_type": self.db_manager.database_type,
+                    "component": "long_term_memory",
+                },
                 description="Long-term memory database initialized with unified manager",
             )
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.MEMORY_DATABASE_INITIALIZATION_FAILED,
+                event_type=observability.ErrorEvents.DATABASE_TABLE_CREATION_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={"error": str(e), "database_type": self.db_manager.database_type},
                 description=f"Failed to initialize long-term memory database: {e}",
             )
             raise
 
-    def _create_default_collection(self) -> None:
-        """
-        Create the default collection if it doesn't exist.
+    def _hash_external_id(self, external_id: str) -> str:
+        """Generate SHA256 hash of external user ID."""
+        import hashlib
 
-        This method ensures that the default collection is available for
-        storing memories even if no explicit collection is specified.
-        """
+        # Convert to string if not already (handles int, None, etc.)
+        if external_id is None:
+            external_id = "0"
+        elif not isinstance(external_id, str):
+            external_id = str(external_id)
+        return hashlib.sha256(external_id.encode("utf-8")).hexdigest()
+
+    def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
+        """Get existing user or create new one."""
+        # Handle single-user mode
+        if not self.is_multi_user:
+            external_user_id = "0"
+        elif external_user_id is None:
+            raise ValueError("external_user_id is required in multi-user mode")
+
+        # Calculate hash
+        user_hash = self._hash_external_id(external_user_id)
+
+        # Try to find existing user
+        user = session.query(User).filter_by(external_user_id_hash=user_hash).first()
+        if user:
+            return user
+
+        # Create new user
+        user = User(
+            external_user_id=external_user_id, external_user_id_hash=user_hash, created_at=utc_now()
+        )
+        session.add(user)
+        session.commit()
+
+        return user
+
+    def _ensure_default_user(self) -> None:
+        """Ensure default user exists for single-user mode."""
         with self.Session() as session:
-            # Check if default collection exists
-            collection = session.query(Collection).filter_by(name=self.default_collection).first()
+            user = self._get_or_create_user(session, "0")
+            # Also create default collection for this user
+            self._create_default_collection_for_user(session, user.id)
 
-            if not collection:
-                # Create default collection
-                collection = Collection(
-                    name=self.default_collection, description="Default collection for memories"
-                )
-                session.add(collection)
-                session.commit()
-                #  Default collection creation - TODO: add observability
+    def _create_default_collection_for_user(self, session: Session, user_id: int) -> None:
+        """Create default collection for a specific user."""
+        # Check if default collection exists for this user
+        collection = (
+            session.query(Collection)
+            .filter_by(user_id=user_id, name=self.default_collection)
+            .first()
+        )
+
+        if not collection:
+            # Create default collection
+            collection = Collection(
+                user_id=user_id,
+                name=self.default_collection,
+                description="Default collection for memories",
+            )
+            session.add(collection)
+            session.commit()
+            #  Default collection creation - TODO: add observability
 
     async def add(
         self,
         content: str,
         metadata: Dict[str, Any] = None,
         embedding: Optional[Union[List[float], np.ndarray]] = None,
+        external_user_id: Optional[str] = None,
     ) -> str:
         """
         Add content to long-term memory.
@@ -217,10 +290,12 @@ class LongTermMemory:
 
         # Generate embedding if not provided
         if embedding is None:
-            embedding = await self.embedding_model.get_embedding(content)
+            embedding = await self.embedding_model.embed(content)
 
         # Insert into database
-        memory_id = self._add_internal(content, embedding, metadata, self.default_collection)
+        memory_id = self._add_internal(
+            content, embedding, metadata, self.default_collection, external_user_id
+        )
 
         # Emit memory storage completed event
         observability.observe(
@@ -241,6 +316,7 @@ class LongTermMemory:
         embedding: Union[List[float], np.ndarray],
         metadata: Dict[str, Any] = None,
         collection: Optional[str] = None,
+        external_user_id: Optional[str] = None,
     ) -> str:
         """
         Internal method to add a memory to the database.
@@ -267,8 +343,11 @@ class LongTermMemory:
         metadata["timestamp"] = time.time()
 
         with self.Session() as session:
-            # Ensure collection exists
-            self._ensure_collection_exists(session, collection)
+            # Get or create user
+            user = self._get_or_create_user(session, external_user_id)
+
+            # Ensure collection exists for this user
+            self._ensure_collection_exists(session, collection, user.id)
 
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
@@ -276,6 +355,7 @@ class LongTermMemory:
 
             # Create memory
             memory = Memory(
+                user_id=user.id,
                 text=text,
                 embedding=embedding,
                 meta_data=metadata,
@@ -289,9 +369,11 @@ class LongTermMemory:
             # Return ID
             return memory.id
 
-    def _ensure_collection_exists(self, session: Session, collection_name: str) -> None:
+    def _ensure_collection_exists(
+        self, session: Session, collection_name: str, user_id: int
+    ) -> None:
         """
-        Ensure that a collection exists, creating it if necessary.
+        Ensure that a collection exists for a user, creating it if necessary.
 
         This method checks if a collection exists and creates it if it
         doesn't, ensuring that memories can always be stored properly.
@@ -299,12 +381,15 @@ class LongTermMemory:
         Args:
             session: The database session.
             collection_name: The name of the collection.
+            user_id: The internal user ID.
         """
-        collection = session.query(Collection).filter_by(name=collection_name).first()
+        collection = (
+            session.query(Collection).filter_by(user_id=user_id, name=collection_name).first()
+        )
 
         if not collection:
             collection = Collection(
-                name=collection_name, description=f"Collection: {collection_name}"
+                user_id=user_id, name=collection_name, description=f"Collection: {collection_name}"
             )
             session.add(collection)
             session.flush()
@@ -316,6 +401,7 @@ class LongTermMemory:
         query_embedding: Optional[Union[List[float], np.ndarray]] = None,
         collection: Optional[str] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        external_user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search for memories similar to the query.
@@ -350,14 +436,16 @@ class LongTermMemory:
 
         # Generate embedding if not provided
         if query_embedding is None:
-            query_embedding = await self.embedding_model.get_embedding(query)
+            query_embedding = await self.embedding_model.embed(query)
 
         # Use default collection if not specified
         if collection is None:
             collection = self.default_collection
 
         # Search in database
-        results = self._search_internal(query_embedding, limit, collection, filter_metadata)
+        results = self._search_internal(
+            query_embedding, limit, collection, filter_metadata, external_user_id
+        )
 
         # Format results
         formatted_results = []
@@ -392,6 +480,7 @@ class LongTermMemory:
         k: int = 5,
         collection: Optional[str] = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        external_user_id: Optional[str] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
         Internal method to search for similar embeddings in the database.
@@ -418,12 +507,25 @@ class LongTermMemory:
             collection = self.default_collection
 
         with self.Session() as session:
+            # Get user
+            user = self._get_or_create_user(session, external_user_id)
+
+            # For PostgreSQL with pgvector, we need to cast the query embedding
+            if self.db_manager.database_type == "postgresql":
+                from sqlalchemy import cast
+                from pgvector.sqlalchemy import Vector
+
+                query_embedding_vector = cast(query_embedding, Vector(self.dimension))
+            else:
+                query_embedding_vector = query_embedding
+
             # Build query
             query = (
                 select(
                     Memory,
-                    func.l2_distance(Memory.embedding, query_embedding).label("distance"),
+                    func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
                 )
+                .filter(Memory.user_id == user.id)
                 .filter(Memory.collection == collection)
                 .order_by("distance")
                 .limit(k)

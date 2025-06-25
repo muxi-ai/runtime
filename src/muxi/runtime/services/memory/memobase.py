@@ -83,6 +83,7 @@ class Memobase:
         metadata: Optional[Dict[str, Any]] = None,
         user_id: Optional[int] = None,
         collection: Optional[str] = None,
+        external_user_id: Optional[str] = None,
     ) -> int:
         """
         Add content to memory for a specific user.
@@ -99,6 +100,8 @@ class Memobase:
                 user.
             collection: Optional collection name to store the memory in.
                 If None, uses the default user collection.
+            external_user_id: The external user ID for multi-user support.
+                Required when using PostgreSQL with proper user isolation.
 
         Returns:
             The ID of the newly created memory entry.
@@ -145,20 +148,18 @@ class Memobase:
             collection = f"user_{user_id}"
 
         try:
-            # Ensure the collection exists
-            try:
-                self.long_term_memory._ensure_collection_exists(None, collection)
-            except Exception:
-                # If calling with None session fails, create collection properly
-                self.long_term_memory.create_collection(collection, f"Memory for user {user_id}")
+            # Add to long-term memory (it will handle collection creation internally)
+            # If external_user_id is not provided, try to get it from somewhere
+            if external_user_id is None and user_id != 0:
+                # For now, we'll use the user_id as external_user_id if not provided
+                # This is a temporary fix - ideally external_user_id should always be provided
+                external_user_id = str(user_id)
 
-            # Add to long-term memory
-            memory_id = await asyncio.to_thread(
-                self.long_term_memory.add,
-                text=content,
+            memory_id = await self.long_term_memory.add(
+                content=content,
                 embedding=embedding,
                 metadata=metadata,
-                collection=collection,
+                external_user_id=external_user_id,
             )
 
             # Log successful memory store

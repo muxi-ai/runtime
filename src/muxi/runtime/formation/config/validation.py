@@ -423,7 +423,7 @@ class FormationValidator:
 
     def _validate_mcp_config(self, mcp_config: Dict[str, Any], is_inline: bool = True) -> None:
         """Validate MCP configuration according to SCHEMA_GUIDE.md.
-        
+
         Args:
             mcp_config: MCP configuration dictionary
             is_inline: True if servers are inline in a flattened formation (no schema required),
@@ -452,7 +452,7 @@ class FormationValidator:
         self, server_config: Dict[str, Any], index: int, server_ids: set, is_inline: bool = True
     ) -> None:
         """Validate a single MCP server configuration according to SCHEMA_GUIDE.md.
-        
+
         Args:
             server_config: MCP server configuration
             index: Index of the server in the list
@@ -462,7 +462,9 @@ class FormationValidator:
         """
         # Check required fields
         # For inline MCP servers in flattened formations, schema is not required
-        required_fields = [field for field in self.REQUIRED_MCP_SERVER_FIELDS if field != "schema" or not is_inline]
+        required_fields = [
+            field for field in self.REQUIRED_MCP_SERVER_FIELDS if field != "schema" or not is_inline
+        ]
         for field in required_fields:
             if field not in server_config:
                 self.result.add_error(f"MCP server {index} missing required field: {field}")
@@ -1435,17 +1437,22 @@ class FormationValidator:
                     "Persistent memory connection_string must be a non-empty string"
                 )
             else:
-                # Basic format validation
-                valid_prefixes = ["postgresql://", "postgres://", "sqlite://"]
-                valid_suffix = connection_string.endswith(".db")
-                if (
-                    not any(connection_string.startswith(prefix) for prefix in valid_prefixes)
-                    and not valid_suffix
-                ):
-                    self.result.add_warning(
-                        "Persistent memory connection_string should start with "
-                        "postgresql://, postgres://, sqlite:// or end with .db"
-                    )
+                # Skip validation for secret placeholders
+                if "${{" in connection_string and "}}" in connection_string:
+                    # This is a secret placeholder, skip validation
+                    pass
+                else:
+                    # Basic format validation
+                    valid_prefixes = ["postgresql://", "postgres://", "sqlite://"]
+                    valid_suffix = connection_string.endswith(".db")
+                    if (
+                        not any(connection_string.startswith(prefix) for prefix in valid_prefixes)
+                        and not valid_suffix
+                    ):
+                        self.result.add_warning(
+                            "Persistent memory connection_string should start with "
+                            "postgresql://, postgres://, sqlite:// or end with .db"
+                        )
 
         # Validate embedding model
         if "embedding_model" in persistent_config:

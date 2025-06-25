@@ -361,7 +361,7 @@ class Overlord:
         self.admin_api_key = api_keys.get("admin")
 
         # Track whether keys were provided or need generation
-        self._user_key_auto_generated = self.user_api_key is None
+        self._client_key_auto_generated = self.user_api_key is None
         self._admin_key_auto_generated = self.admin_api_key is None
 
         # Generate keys if not provided by Formation
@@ -1609,27 +1609,69 @@ class Overlord:
                         metadata["enhanced"] = True
                         metadata["original_content"] = content
 
-                        await self.long_term_memory.add(
-                            content=enhanced_content, metadata=metadata, user_id=internal_user_id
-                        )
+                        # Check if we're using Memobase or LongTermMemory
+                        if isinstance(self.long_term_memory, Memobase):
+                            await self.long_term_memory.add(
+                                content=enhanced_content,
+                                metadata=metadata,
+                                user_id=internal_user_id,
+                                external_user_id=user_id,
+                            )
+                        else:
+                            # LongTermMemory expects external_user_id
+                            await self.long_term_memory.add(
+                                content=enhanced_content,
+                                metadata=metadata,
+                                external_user_id=user_id,
+                            )
                     else:
                         # Store the original content
-                        await self.long_term_memory.add(
-                            content=content, metadata=metadata, user_id=internal_user_id
-                        )
+                        # Check if we're using Memobase or LongTermMemory
+                        if isinstance(self.long_term_memory, Memobase):
+                            await self.long_term_memory.add(
+                                content=content,
+                                metadata=metadata,
+                                user_id=internal_user_id,
+                                external_user_id=user_id,
+                            )
+                        else:
+                            # LongTermMemory expects external_user_id
+                            await self.long_term_memory.add(
+                                content=content, metadata=metadata, external_user_id=user_id
+                            )
                 except Exception as e:
                     # Log error and fall back to original message
                     #  Error - TODO: add observability
                     # ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED
                     _ = e  # remove this after implementing observability
-                    await self.long_term_memory.add(
-                        content=content, metadata=metadata, user_id=internal_user_id
-                    )
+                    # Check if we're using Memobase or LongTermMemory
+                    if isinstance(self.long_term_memory, Memobase):
+                        await self.long_term_memory.add(
+                            content=content,
+                            metadata=metadata,
+                            user_id=internal_user_id,
+                            external_user_id=user_id,
+                        )
+                    else:
+                        # LongTermMemory expects external_user_id
+                        await self.long_term_memory.add(
+                            content=content, metadata=metadata, external_user_id=user_id
+                        )
             else:
                 # For non-user messages, just store directly
-                await self.long_term_memory.add(
-                    content=content, metadata=metadata, user_id=internal_user_id
-                )
+                # Check if we're using Memobase or LongTermMemory
+                if isinstance(self.long_term_memory, Memobase):
+                    await self.long_term_memory.add(
+                        content=content,
+                        metadata=metadata,
+                        user_id=internal_user_id,
+                        external_user_id=user_id,
+                    )
+                else:
+                    # LongTermMemory expects external_user_id
+                    await self.long_term_memory.add(
+                        content=content, metadata=metadata, external_user_id=user_id
+                    )
 
             #  Info - TODO: add observability
             # ConversationEvents.MEMORY_LONG_TERM_ENHANCED

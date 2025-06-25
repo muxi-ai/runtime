@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional
 from ...services.observability.utils import detect_stream_protocol
 from ...services.memory.short_term import ShortTermMemory
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
+from ...services import observability
 
 
 async def initialize_llm_config(overlord) -> None:
@@ -19,7 +20,12 @@ async def initialize_llm_config(overlord) -> None:
     This processes the new capability-based LLM schema and sets up model
     resolution for different capabilities like text, vision, transcription, etc.
     """
-    llm_config = overlord.formation_config.get("llm", {})
+    # Use the pre-configured LLM config from configured_services
+    # This already has secrets interpolated by the Formation
+    if hasattr(overlord, "_configured_services") and overlord._configured_services:
+        llm_config = overlord._configured_services.get("llm_config", {})
+    else:
+        llm_config = overlord.formation_config.get("llm", {})
 
     # Initialize model cache for capability-based resolution
     overlord._model_cache = {}
@@ -42,8 +48,15 @@ async def initialize_llm_config(overlord) -> None:
     overlord._global_llm_settings = llm_config.get("settings", {})
     overlord._global_api_keys = llm_config.get("api_keys", {})
 
+    from ...services import observability
+
     capabilities = list(overlord._capability_models.keys())
-    _ = capabilities  # remove this after implementing observability
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"capabilities": capabilities, "capability_count": len(capabilities)},
+        description=f"LLM configuration initialized with {len(capabilities)} capabilities",
+    )
 
 
 async def initialize_auth_config(overlord) -> None:
@@ -65,25 +78,31 @@ async def initialize_auth_config(overlord) -> None:
                 interpolated_config = await overlord.interpolate_secrets({"admin_key": admin_key})
                 admin_key = interpolated_config.get("admin_key", admin_key)
             except Exception as e:
-                #  Warning - TODO: add observability
-                # SystemEvents.FAILED_INITIALIZATION (admin_key)
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "config_type": "admin_key"},
+                    description=f"Failed to interpolate admin_key secret: {str(e)}",
+                )
 
         overlord.admin_api_key = admin_key
 
-    if "user_key" in auth_api_keys:
-        user_key = auth_api_keys["user_key"]
+    if "client_key" in auth_api_keys:
+        client_key = auth_api_keys["client_key"]
         # Interpolate secrets if needed
-        if user_key and "${{ secrets." in user_key:
+        if client_key and "${{ secrets." in client_key:
             try:
-                interpolated_config = await overlord.interpolate_secrets({"user_key": user_key})
-                user_key = interpolated_config.get("user_key", user_key)
+                interpolated_config = await overlord.interpolate_secrets({"client_key": client_key})
+                client_key = interpolated_config.get("client_key", client_key)
             except Exception as e:
-                #  Warning - TODO: add observability
-                # SystemEvents.FAILED_INITIALIZATION (user_key)
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "config_type": "client_key"},
+                    description=f"Failed to interpolate client_key secret: {str(e)}",
+                )
 
-        overlord.user_api_key = user_key
+        overlord.user_api_key = client_key
 
 
 async def initialize_memory_config(overlord) -> None:
@@ -94,7 +113,12 @@ async def initialize_memory_config(overlord) -> None:
     and initializes or updates the overlord's memory systems according
     to the new schema specifications.
     """
-    memory_config = overlord.formation_config.get("memory", {})
+    # Use the pre-configured memory config from configured_services
+    # This already has secrets interpolated by the Formation
+    if hasattr(overlord, "_configured_services") and overlord._configured_services:
+        memory_config = overlord._configured_services.get("memory_config", {})
+    else:
+        memory_config = overlord.formation_config.get("memory", {})
 
     if not memory_config:
         return
@@ -104,15 +128,23 @@ async def initialize_memory_config(overlord) -> None:
     buffer_config = memory_config.get("buffer", {})
     if buffer_config and not overlord.buffer_memory:
         await _initialize_buffer_memory(overlord, buffer_config)
-        #  Info - TODO: add observability
-        # SystemEvents.INITIALIZING (memory - with buffer memory)
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={"memory_type": "buffer", "buffer_config": buffer_config},
+            description="Initializing buffer memory from configuration",
+        )
 
     # Initialize persistent memory configuration
     persistent_config = memory_config.get("persistent", {})
     if persistent_config and not overlord.long_term_memory:
         await _initialize_persistent_memory(overlord, persistent_config)
-        #  Info - TODO: add observability
-        # SystemEvents.INITIALIZING (memory - with persistent memory)
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={"memory_type": "persistent", "persistent_config": persistent_config},
+            description="Initializing persistent memory from configuration",
+        )
 
 
 async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> None:
@@ -132,9 +164,12 @@ async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> 
             try:
                 embedding_model = await overlord.get_model_for_capability("embedding")
             except Exception as e:
-                #  Warning - TODO: add observability
-                # ErrorEvents.FAILED_INITIALIZATION
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "config_type": "embedding_model"},
+                    description=f"Failed to initialize embedding model for buffer memory: {str(e)}",
+                )
                 vector_search = False
 
         # Create buffer memory instance
@@ -148,9 +183,13 @@ async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> 
         )
 
     except Exception as e:
-        #  Warning - TODO: add observability
-        # ErrorEvents.FAILED_INITIALIZATION (buffer memory)
-        _ = e  # remove this after implementing observability
+        observability.observe(
+            event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "config_type": "buffer_memory"},
+            description=f"Failed to initialize buffer memory: {str(e)}",
+        )
+        raise
 
 
 async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, Any]) -> None:
@@ -170,9 +209,12 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
                 )
                 connection_string = interpolated.get("connection_string", connection_string)
             except Exception as e:
-                #  Warning - TODO: add observability
-                # ErrorEvents.FAILED_INITIALIZATION (persistent memory)
-                _ = e  # remove this after implementing observability
+                observability.observe(
+                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "config_type": "persistent_memory_secrets"},
+                    description=f"Failed to interpolate persistent memory secrets: {str(e)}",
+                )
                 return
 
         # Get embedding model
@@ -197,8 +239,12 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
         if connection_string.startswith("postgresql://") or connection_string.startswith(
             "postgres://"
         ):
-            #  Info - TODO: add observability
-            # SystemEvents.INITIALIZING (persistent memory - PostgreSQL)
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={"database_type": "postgresql", "memory_type": "persistent"},
+                description="Initializing persistent memory with PostgreSQL backend",
+            )
             from ...services.memory.memobase import Memobase
             from ...services.memory.long_term import LongTermMemory
             from ...services.db import get_database_manager
@@ -218,11 +264,16 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
             )
 
             # Create Memobase with the LongTermMemory instance
+            # Note: Memobase is still needed for user context management features
             overlord.long_term_memory = Memobase(long_term_memory=long_term_memory)
 
         elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
-            #  Info - TODO: add observability
-            # SystemEvents.INITIALIZING (persistent memory - SQLite)
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={"database_type": "sqlite", "memory_type": "persistent"},
+                description="Initializing persistent memory with SQLite backend",
+            )
             from ...services.memory.sqlite import SQLiteMemory
             from ...services.db import get_database_manager
 
@@ -248,9 +299,12 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
                     _ = e  # remove this after implementing observability
 
     except Exception as e:
-        #  Error - TODO: add observability
-        # ErrorEvents.INTERNAL_ERROR (persistent memory)
-        _ = e  # remove this after implementing observability
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "config_type": "persistent_memory"},
+            description=f"Critical error during persistent memory initialization: {str(e)}",
+        )
         raise
 
 
@@ -261,7 +315,12 @@ async def initialize_logging_config(overlord) -> None:
     This processes the multi-stream logging configuration and configures
     the logging system for the formation.
     """
-    logging_config = overlord.formation_config.get("logging", {})
+    # Use the pre-configured logging config from configured_services
+    # This already has secrets interpolated by the Formation
+    if hasattr(overlord, "_configured_services") and overlord._configured_services:
+        logging_config = overlord._configured_services.get("logging_config", {})
+    else:
+        logging_config = overlord.formation_config.get("logging", {})
 
     if not logging_config:
         return
@@ -284,9 +343,9 @@ async def initialize_logging_config(overlord) -> None:
 
         # Process each stream
         processed_streams = []
-        for i, stream in enumerate(streams):
+        for stream in streams:
             try:
-                processed_stream = await _process_logging_stream(overlord, stream, i)
+                processed_stream = await _process_logging_stream(overlord, stream)
                 if processed_stream:
                     processed_streams.append(processed_stream)
             except Exception as e:
@@ -305,16 +364,13 @@ async def initialize_logging_config(overlord) -> None:
         raise
 
 
-async def _process_logging_stream(
-    overlord, stream: Dict[str, Any], index: int
-) -> Optional[Dict[str, Any]]:
+async def _process_logging_stream(overlord, stream: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     """
     Process a single logging stream configuration.
 
     Args:
         overlord: The overlord instance
         stream: Stream configuration dictionary
-        index: Stream index for error reporting
 
     Returns:
         Processed stream configuration or None if invalid
@@ -404,8 +460,13 @@ async def initialize_clarification_config(overlord) -> None:
     parameter collection and applies privacy-by-default settings with
     industry-standard style preferences.
     """
-    overlord_config = overlord.formation_config.get("overlord", {})
-    clarification_config = overlord_config.get("clarification", {})
+    # Use the pre-configured clarification config from configured_services
+    # This already has secrets interpolated by the Formation
+    if hasattr(overlord, "_configured_services") and overlord._configured_services:
+        clarification_config = overlord._configured_services.get("clarification_config", {})
+    else:
+        overlord_config = overlord.formation_config.get("overlord", {})
+        clarification_config = overlord_config.get("clarification", {})
 
     if not clarification_config:
         return
@@ -458,7 +519,12 @@ async def initialize_document_processing_config(overlord) -> None:
         from ..config.document_processing import DocumentProcessingConfig
 
         # Extract LLM configuration from formation
-        llm_config = overlord.formation_config.get("llm", {})
+        # Use the pre-configured LLM config from configured_services
+        # This already has secrets interpolated by the Formation
+        if hasattr(overlord, "_configured_services") and overlord._configured_services:
+            llm_config = overlord._configured_services.get("llm_config", {})
+        else:
+            llm_config = overlord.formation_config.get("llm", {})
 
         # Create document processing configuration instance using unified schema
         overlord.document_processing_config = DocumentProcessingConfig(llm_config)
@@ -490,14 +556,22 @@ async def load_agents_from_configuration(overlord) -> None:
     """
     from ...services import observability
 
-    print(f"DEBUG: load_agents_from_configuration called")
-    print(
-        f"DEBUG: overlord._configured_services keys: {list(overlord._configured_services.keys())}"
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.DEBUG,
+        data={"configured_services_keys": list(overlord._configured_services.keys())},
+        description="Starting agent loading from configuration",
     )
 
     # Get agents configuration from configured services
     agents_config = overlord._configured_services.get("agents_config", [])
-    print(f"DEBUG: agents_config: {agents_config}")
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.DEBUG,
+        data={"agents_count": len(agents_config)},
+        description=f"Found {len(agents_config)} agents in configuration",
+    )
 
     if not agents_config:
         # No agents configured - this is valid for some formations
@@ -568,7 +642,7 @@ async def load_agents_from_configuration(overlord) -> None:
     )
 
 
-async def create_agent_from_config(overlord, agent_config: Dict[str, Any]) -> "Agent":
+async def create_agent_from_config(overlord, agent_config: Dict[str, Any]):
     """
     Create an Agent instance from configuration.
 

@@ -106,6 +106,13 @@ from .schema import (
     SchedulerServiceSchema,
     FormationSchema,
 )
+from .memory import (
+    BufferMemoryConfig,
+    RemoteBufferConfig,
+    WorkingMemoryConfig,
+    PersistentMemoryConfig,
+    MemorySystemConfig,
+)
 
 __all__ = [
     # Async operations
@@ -196,4 +203,10 @@ __all__ = [
     "A2AServiceSchema",
     "SchedulerServiceSchema",
     "FormationSchema",
+    # Memory
+    "BufferMemoryConfig",
+    "RemoteBufferConfig",
+    "WorkingMemoryConfig",
+    "PersistentMemoryConfig",
+    "MemorySystemConfig",
 ]

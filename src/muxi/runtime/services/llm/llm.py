@@ -1175,8 +1175,8 @@ Provide a helpful, conversational response that directly addresses what the user
         """
 
         async def _embed_request():
-            # Default to text-embedding-3-small if no embedding model is specified
-            embedding_model = kwargs.pop("model", "text-embedding-3-small")
+            # Default to openai/text-embedding-3-small if no embedding model is specified
+            embedding_model = kwargs.pop("model", "openai/text-embedding-3-small")
 
             # Prepare parameters
             params = {
@@ -1224,8 +1224,8 @@ Provide a helpful, conversational response that directly addresses what the user
         """
 
         async def _embed_batch_request():
-            # Default to text-embedding-3-small if no embedding model is specified
-            embedding_model = kwargs.pop("model", "text-embedding-3-small")
+            # Default to openai/text-embedding-3-small if no embedding model is specified
+            embedding_model = kwargs.pop("model", "openai/text-embedding-3-small")
 
             # Prepare parameters
             params = {

@@ -206,9 +206,11 @@ class SQLiteMemory(BaseMemory):
         Returns:
             The ID of the newly created memory entry
         """
-        # Convert numpy array to list if necessary
+        # Convert numpy array to bytes for SQLite storage
         if isinstance(embedding, np.ndarray):
-            embedding = embedding.astype(np.float32)
+            embedding = embedding.astype(np.float32).tobytes()
+        elif isinstance(embedding, list):
+            embedding = np.array(embedding, dtype=np.float32).tobytes()
 
         # Use default collection if none specified
         collection = collection or self.default_collection
@@ -285,9 +287,11 @@ class SQLiteMemory(BaseMemory):
         Returns:
             List of tuples containing (similarity_score, memory_dict)
         """
-        # Convert numpy array to float32 if necessary
+        # Convert numpy array to bytes for SQLite search
         if isinstance(query_embedding, np.ndarray):
-            query_embedding = query_embedding.astype(np.float32)
+            query_embedding = query_embedding.astype(np.float32).tobytes()
+        elif isinstance(query_embedding, list):
+            query_embedding = np.array(query_embedding, dtype=np.float32).tobytes()
 
         # Build query
         query = """
