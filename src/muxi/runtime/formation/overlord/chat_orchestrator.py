@@ -169,6 +169,8 @@ class ChatOrchestrator:
                         message=message,
                         agent_name=agent_name,
                         user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
                     )
 
     async def _determine_async_mode(
@@ -305,6 +307,8 @@ class ChatOrchestrator:
         message: str,
         agent_name: Optional[str],
         user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> str:
         """
         Process a chat request synchronously.
@@ -322,6 +326,8 @@ class ChatOrchestrator:
             message=message,
             agent_name=agent_name,
             user_id=user_id,
+            session_id=session_id,
+            request_id=request_id,
         )
 
     async def _process_streaming_chat(

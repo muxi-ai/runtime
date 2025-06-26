@@ -370,7 +370,11 @@ class KnowledgeHandler:
             )
 
     async def search(
-        self, query: str, top_k: int = 5, generate_embeddings_fn: Optional[Callable] = None
+        self,
+        query: str,
+        top_k: int = 5,
+        generate_embeddings_fn: Optional[Callable] = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Search across all knowledge sources with performance optimization."""
         search_start_time = time.time()
@@ -420,6 +424,7 @@ class KnowledgeHandler:
                 limit=search_k * 2,  # Get more results for filtering
                 recency_bias=0.05,  # Very low for documents - favor semantic similarity
                 namespace=DOCUMENT_NAMESPACE,
+                session_id=session_id,
             )
 
             # Convert to standard format
@@ -993,6 +998,9 @@ class KnowledgeHandler:
         generate_embeddings_fn: Optional[Callable] = None,
         include_memory: bool = True,
         memory_weight: float = 0.3,
+        session_id: Optional[str] = None,
+        knowledge_limit: Optional[int] = None,
+        memory_limit: Optional[int] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
         Unified search across both knowledge sources and short-term memory.
@@ -1016,7 +1024,10 @@ class KnowledgeHandler:
         try:
             # Search knowledge sources
             knowledge_results = await self.search(
-                query=query, top_k=top_k, generate_embeddings_fn=generate_embeddings_fn
+                query=query,
+                top_k=knowledge_limit or top_k,
+                generate_embeddings_fn=generate_embeddings_fn,
+                session_id=session_id,
             )
             results["knowledge"] = knowledge_results
 
@@ -1024,7 +1035,10 @@ class KnowledgeHandler:
             if include_memory and self.short_term_memory:
                 try:
                     memory_results = await self.short_term_memory.search(
-                        query=query, k=top_k, filter_metadata=None
+                        query=query,
+                        limit=memory_limit or top_k,
+                        filter_metadata=None,
+                        session_id=session_id,
                     )
 
                     # Convert memory results to standard format

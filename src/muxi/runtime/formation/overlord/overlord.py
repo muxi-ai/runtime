@@ -1617,6 +1617,8 @@ class Overlord:
         timestamp: float,
         agent_id: str,
         user_id: Any = None,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> None:
         """
         Add a message to appropriate memory stores based on configuration.
@@ -1638,7 +1640,14 @@ class Overlord:
         """
         # Always add to buffer memory regardless of user context
         if self.buffer_memory:
-            metadata = {"role": role, "timestamp": timestamp, "agent_id": agent_id}
+            metadata = {
+                "role": role,
+                "timestamp": timestamp,
+                "agent_id": agent_id,
+                "user_id": str(user_id) if user_id is not None else None,
+                "session_id": session_id,
+                "request_id": request_id,
+            }
 
             self.buffer_memory.add(content, metadata=metadata)
 
@@ -2276,7 +2285,12 @@ class Overlord:
                 _ = None  # remove this after implementing observability
 
     async def _process_sync_chat(
-        self, message: str, agent_name: Optional[str], user_id: Any
+        self,
+        message: str,
+        agent_name: Optional[str],
+        user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> MuxiResponse:
         """
         Process chat synchronously using existing infrastructure.
@@ -2328,7 +2342,12 @@ class Overlord:
                 user_id_int = await self._enhance_existing_user_id_conversion(user_id)
 
             # Process the message using the agent
-            result = await agent.process_message(message, user_id=user_id_int)
+            result = await agent.process_message(
+                message,
+                user_id=user_id_int,
+                session_id=session_id,
+                request_id=request_id,
+            )
 
             # Mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)

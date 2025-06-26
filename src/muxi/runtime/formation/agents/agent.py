@@ -245,6 +245,7 @@ class Agent:
         # Enhanced coordination features (always enabled)
         deduplicate: bool = True,
         context_budget: Optional[int] = None,
+        session_id: Optional[str] = None,
     ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
         """
         Search the agent's knowledge base and memory for relevant information.
@@ -290,6 +291,7 @@ class Agent:
                 knowledge_limit=knowledge_limit,
                 memory_limit=memory_limit if include_memory else 0,
                 include_memory=include_memory,
+                session_id=session_id,
             )
 
             # Content deduplication (always enabled)
@@ -726,7 +728,11 @@ class Agent:
             return 0.0
 
     async def process_message(
-        self, message: Union[str, MuxiResponse], user_id: Any = None
+        self,
+        message: Union[str, MuxiResponse],
+        user_id: Any = None,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> MuxiResponse:
         """
         Process a message from the overlord and generate a response.
@@ -780,6 +786,8 @@ class Agent:
                 timestamp=timestamp,
                 agent_id=self.agent_id,
                 user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
             )
 
         # Add message to conversation context
@@ -791,7 +799,7 @@ class Agent:
             try:
                 # Use unified search to get both knowledge and memory context
                 search_results = await self.search_knowledge(
-                    query=content, limit=5, include_memory=True, unified=True
+                    query=content, limit=5, include_memory=True, unified=True, session_id=session_id
                 )
 
                 # Build enhanced context from unified results
