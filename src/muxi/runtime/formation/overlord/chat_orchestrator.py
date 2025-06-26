@@ -6,8 +6,9 @@ streaming support, and workflow coordination.
 """
 
 import time
+import asyncio
 from typing import Optional, Any, Union, Dict, AsyncGenerator, List
-
+from ..background.request_tracker import RequestStatus, RequestState
 from ...utils.id_generator import generate_nanoid
 from ...services import observability
 
@@ -118,15 +119,17 @@ class ChatOrchestrator:
                 description=f"Request {request_id} validated",
             )
 
-            # Check if files are provided and we need to use document processing
+            # Process files if provided and incorporate into message
             if files:
-                # Use existing document processing functionality
-                return await self.overlord.process_document_upload(
+                # Process documents but don't return early - continue with normal flow
+                doc_result = await self.overlord.process_document_upload(
                     attachments=files,
                     user_request=message,
                     context={"agent_name": agent_name} if agent_name else None,
                     user_id=user_id,
                 )
+                # Update message to include file processing result for webhook/async handling
+                message = f"{message}\n\n[File Processing Result]: {doc_result}"
 
             # Use provided values or formation defaults
             webhook_url = webhook_url or getattr(self.overlord, "async_webhook_url", None)
@@ -260,9 +263,6 @@ class ChatOrchestrator:
         Returns:
             Dictionary with async request information
         """
-        import asyncio
-        from ..background.request_tracker import RequestStatus, RequestState
-
         # Create initial request state
         initial_state = RequestState(
             id=request_id,
