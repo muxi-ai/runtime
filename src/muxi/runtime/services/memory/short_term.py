@@ -410,6 +410,8 @@ class ShortTermMemory:
         query_vector: Optional[List[float]] = None,
         recency_bias: float = 0.3,
         namespace: str = None,
+        session_id: Optional[str] = None,
+        session_bias: float = 0.5,
     ) -> List[Dict[str, Any]]:
         """
         Search the buffer using vector similarity and recency.
@@ -447,6 +449,8 @@ class ShortTermMemory:
                 "has_filter": filter_metadata is not None,
                 "has_query_vector": query_vector is not None,
                 "recency_bias": recency_bias,
+                "session_id": session_id,
+                "session_bias": session_bias,
                 "buffer_size": len(self.buffer),
                 "has_vector_search": self.model is not None,
             },
@@ -565,10 +569,40 @@ class ShortTermMemory:
                 ):
                     continue
 
-                # Calculate combined score (semantic + recency)
+                # Calculate session match score
+                session_match_score = 0.0
+                if session_id and item.get("metadata", {}).get("session_id") == session_id:
+                    session_match_score = 1.0
+
+                # Calculate combined score with session weighting
+                # If session weighting is enabled, use the formula:
+                # final_score = (semantic * 0.3) + (recency * 0.2) + (session * 0.5)
                 semantic_score = 1.0 / (1.0 + float(distances[0][i]))
                 recency_score = 1.0 - (buffer_idx / len(self.buffer))
-                combined_score = (1 - recency_bias) * semantic_score + recency_bias * recency_score
+
+                if session_id and session_bias > 0 and session_match_score > 0:
+                    # Apply session-aware weighting only when we have a session match
+                    semantic_weight = 0.3
+                    recency_weight = 0.2
+                    session_weight = session_bias  # Default 0.5
+
+                    # Normalize weights to sum to 1.0
+                    total_weight = semantic_weight + recency_weight + session_weight
+                    semantic_weight /= total_weight
+                    recency_weight /= total_weight
+                    session_weight /= total_weight
+
+                    combined_score = (
+                        semantic_weight * semantic_score
+                        + recency_weight * recency_score
+                        + session_weight * session_match_score
+                    )
+                else:
+                    # Fall back to original recency bias formula
+                    # This preserves perfect scores for exact matches
+                    combined_score = (
+                        1 - recency_bias
+                    ) * semantic_score + recency_bias * recency_score
 
                 # Add score to the item
                 item["score"] = combined_score
@@ -597,6 +631,16 @@ class ShortTermMemory:
                     "search_type": "vector_hybrid",
                     "query_length": len(query),
                     "buffer_size": len(self.buffer),
+                    "session_id": session_id,
+                    "session_matches": (
+                        sum(
+                            1
+                            for r in final_results
+                            if r.get("metadata", {}).get("session_id") == session_id
+                        )
+                        if session_id
+                        else 0
+                    ),
                 },
                 description="Short-term memory search completed",
             )
