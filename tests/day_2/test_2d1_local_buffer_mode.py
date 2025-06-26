@@ -24,6 +24,20 @@ async def test_local_buffer_memory():
     print("\n=== Testing Local Buffer Memory ===")
 
     def run_test():
+        # Helper function to handle async generator responses
+        def get_response(coro):
+            result = asyncio.run(coro)
+            if hasattr(result, "__aiter__"):
+                # It's an async generator, collect all chunks
+                async def collect():
+                    chunks = []
+                    async for chunk in result:
+                        chunks.append(chunk)
+                    return "".join(chunks)
+
+                return asyncio.run(collect())
+            return result
+
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-local.yaml")
         overlord = formation.start_overlord()
@@ -33,13 +47,13 @@ async def test_local_buffer_memory():
             print("Testing local buffer memory context...")
 
             # Add context
-            response1 = asyncio.run(
+            response1 = get_response(
                 overlord.chat("My name is Alice and I work at TechCorp", user_id="user1")
             )
             print(f"Context set: {response1[:50]}...")
 
             # Test recall
-            response2 = asyncio.run(
+            response2 = get_response(
                 overlord.chat("What's my name and where do I work?", user_id="user1")
             )
             print(f"Context recall: {response2[:100]}...")
@@ -54,10 +68,10 @@ async def test_local_buffer_memory():
             # Test buffer overflow (add more messages than buffer size)
             print("\nTesting buffer overflow handling...")
             for i in range(15):  # Assuming buffer size is 10
-                asyncio.run(overlord.chat(f"Message number {i}", user_id="user1"))
+                get_response(overlord.chat(f"Message number {i}", user_id="user1"))
 
             # Check if old messages are forgotten
-            response3 = asyncio.run(overlord.chat("What was message number 0?", user_id="user1"))
+            response3 = get_response(overlord.chat("What was message number 0?", user_id="user1"))
             print(f"Old message recall: {response3[:100]}...")
 
             return {
@@ -84,6 +98,20 @@ async def test_remote_buffer_memory():
     print("\n=== Testing Remote Buffer Memory ===")
 
     def run_test():
+        # Helper function to handle async generator responses
+        def get_response(coro):
+            result = asyncio.run(coro)
+            if hasattr(result, "__aiter__"):
+                # It's an async generator, collect all chunks
+                async def collect():
+                    chunks = []
+                    async for chunk in result:
+                        chunks.append(chunk)
+                    return "".join(chunks)
+
+                return asyncio.run(collect())
+            return result
+
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-remote.yaml")
         overlord = formation.start_overlord()
@@ -92,13 +120,13 @@ async def test_remote_buffer_memory():
             print("Testing remote buffer memory context...")
 
             # Add context
-            response1 = asyncio.run(
+            response1 = get_response(
                 overlord.chat("My name is Bob and I prefer JavaScript", user_id="user2")
             )
             print(f"Context set: {response1[:50]}...")
 
             # Test recall
-            response2 = asyncio.run(
+            response2 = get_response(
                 overlord.chat("What's my name and what language do I prefer?", user_id="user2")
             )
             print(f"Context recall: {response2[:100]}...")
