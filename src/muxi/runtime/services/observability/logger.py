@@ -100,6 +100,7 @@ class EventLogger:
 
         # Add request context if available
         if request_context:
+            event["session_id"] = request_context.session_id or None
             event["request"] = {
                 "id": request_context.id,
                 "status": request_context.status,
