@@ -12,7 +12,7 @@
 # =============================================================================
 
 from typing import Optional, Dict, Any, Literal
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class RemoteBufferConfig(BaseModel):
@@ -26,7 +26,7 @@ class RemoteBufferConfig(BaseModel):
     timeout_seconds: int = Field(30, description="Timeout for remote operations in seconds")
     retry_attempts: int = Field(3, description="Number of retry attempts for failed operations")
 
-    @validator("url")
+    @field_validator("url")
     def validate_url(cls, v):
         """Validate the remote URL format."""
         if not v.startswith(("tcp://", "http://", "https://", "ws://", "wss://")):
@@ -51,32 +51,32 @@ class BufferMemoryConfig(BaseModel):
         None, description="Configuration for remote buffer server (required when mode='remote')"
     )
 
-    @validator("size")
+    @field_validator("size")
     def validate_size(cls, v):
         """Validate buffer size is positive."""
         if v <= 0:
             raise ValueError("Buffer size must be positive")
         return v
 
-    @validator("multiplier")
+    @field_validator("multiplier")
     def validate_multiplier(cls, v):
         """Validate multiplier is positive."""
         if v <= 0:
             raise ValueError("Buffer multiplier must be positive")
         return v
 
-    @validator("vector_dimension")
+    @field_validator("vector_dimension")
     def validate_dimension(cls, v):
         """Validate vector dimension is positive."""
         if v <= 0:
             raise ValueError("Vector dimension must be positive")
         return v
 
-    @validator("remote", always=True)
-    def validate_remote_config(cls, v, values):
+    @field_validator("remote")
+    @classmethod
+    def validate_remote_config(cls, v, info):
         """Validate remote config is provided when mode is remote."""
-        mode = values.get("mode")
-        if mode == "remote" and not v:
+        if info.data.get("mode") == "remote" and not v:
             raise ValueError("Remote configuration is required when mode='remote'")
         return v
 
@@ -94,10 +94,11 @@ class WorkingMemoryConfig(BaseModel):
     )
     remote: Optional[Dict[str, Any]] = Field(None, description="Remote server configuration")
 
-    @validator("max_memory_mb")
-    def validate_max_memory(cls, v, values):
+    @field_validator("max_memory_mb")
+    @classmethod
+    def validate_max_memory(cls, v, info):
         """Validate max memory configuration."""
-        mode = values.get("mode", "local")
+        mode = info.data.get("mode", "local")
         if mode == "remote" and v == "auto":
             raise ValueError(
                 "Working memory max_memory_mb cannot be 'auto' with remote mode. "
@@ -117,7 +118,7 @@ class PersistentMemoryConfig(BaseModel):
     )
     collection_name: str = Field("default", description="Default collection name for memories")
 
-    @validator("connection_string")
+    @field_validator("connection_string")
     def validate_connection_string(cls, v):
         """Validate connection string format."""
         # Allow secret placeholders

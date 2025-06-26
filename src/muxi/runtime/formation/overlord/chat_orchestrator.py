@@ -6,7 +6,7 @@ streaming support, and workflow coordination.
 """
 
 import time
-from typing import Optional, Any, Union, Dict, AsyncGenerator
+from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 
 from ...utils.id_generator import generate_nanoid
 from ...services import observability
@@ -40,9 +40,10 @@ class ChatOrchestrator:
         webhook_url: Optional[str] = None,
         threshold_seconds: Optional[float] = None,
         stream: Optional[bool] = None,
+        files: Optional[List[Dict[str, Any]]] = None,
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
-        Enhanced chat with async support for long-running agentic tasks.
+        Enhanced chat with async support for long-running agentic tasks and file attachments.
 
         This method provides the main chat interface for the overlord with intelligent
         async decision making. For requests that are expected to take a long time,
@@ -62,6 +63,11 @@ class ChatOrchestrator:
                 to formation config if not provided.
             stream: Optional streaming behavior. None=use formation config, True=force streaming,
                 False=disable streaming. Only applies to sync processing.
+            files: Optional list of file attachments. Each file should be a dict with:
+                - filename: Name of the file
+                - content: File content (text or bytes)
+                - content_type: MIME type of the file
+                - size: File size in bytes
 
         Returns:
             For sync processing without streaming: str with the agent's response content
@@ -95,6 +101,8 @@ class ChatOrchestrator:
                     "user_id": str(user_id) if user_id is not None else None,
                     "use_async": use_async,
                     "has_webhook": webhook_url is not None,
+                    "has_files": files is not None and len(files) > 0,
+                    "file_count": len(files) if files else 0,
                 },
                 description=f"Request {request_id} received",
             )
@@ -109,6 +117,16 @@ class ChatOrchestrator:
                 },
                 description=f"Request {request_id} validated",
             )
+
+            # Check if files are provided and we need to use document processing
+            if files:
+                # Use existing document processing functionality
+                return await self.overlord.process_document_upload(
+                    attachments=files,
+                    user_request=message,
+                    context={"agent_name": agent_name} if agent_name else None,
+                    user_id=user_id,
+                )
 
             # Use provided values or formation defaults
             webhook_url = webhook_url or getattr(self.overlord, "async_webhook_url", None)

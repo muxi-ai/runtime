@@ -1843,6 +1843,7 @@ class Overlord:
                     )
                 else:
                     # Fallback simple chunking
+                    print(f"Using fallback chunking for {filename}")
                     chunks = [{"content": content, "metadata": {"filename": filename}}]
 
                 # Store metadata
@@ -1881,9 +1882,10 @@ class Overlord:
                         "timestamp": time.time(),
                     }
 
-                    await self.add_to_buffer_memory(
-                        message=chunk.get("content", ""), metadata=chunk_metadata
-                    )
+                    chunk_content = chunk.get("content", "")
+                    print(f"Adding chunk {i} to buffer: {chunk_content[:100]}...")
+
+                    await self.add_to_buffer_memory(message=chunk_content, metadata=chunk_metadata)
 
                 # Add to processed docs list
                 processed_docs.append(
@@ -1966,16 +1968,28 @@ class Overlord:
                 return workflow_result
             else:
                 # Fallback: simple memory search and response
-                search_results = await self.search_memory(
+                print(f"Searching for: {user_request}")
+                search_results = await self.buffer_memory_manager.search_buffer_memory(
                     query=user_request,
                     k=5,
-                    use_long_term=False,  # Search only buffer memory with documents
+                    filter_metadata={"role": "document"},  # Search only document chunks
                 )
+                print(f"Search results: {len(search_results) if search_results else 0} found")
 
                 if search_results:
                     relevant_content = "\n".join([r["text"] for r in search_results[:3]])
                     return f"Based on the uploaded documents:\n\n{relevant_content}"
                 else:
+                    # Try without filter to see if documents are in memory at all
+                    all_results = await self.buffer_memory_manager.search_buffer_memory(
+                        query=user_request, k=5
+                    )
+                    print(
+                        f"All results (no filter): {len(all_results) if all_results else 0} found"
+                    )
+                    if all_results:
+                        print(f"First result metadata: {all_results[0].get('metadata', {})}")
+
                     return (
                         "I've processed your documents but couldn't find specific "
                         "information related to your request."
@@ -1984,7 +1998,10 @@ class Overlord:
         except Exception as e:
             #  Error - TODO: add observability
             # ConversationEvents.DOCUMENT_PROCESSING_FAILED
-            _ = e  # remove this after implementing observability
+            import traceback
+
+            print(f"Document workflow error: {e}")
+            print(f"Traceback: {traceback.format_exc()}")
             return (
                 "I processed your documents but encountered an issue generating "
                 "the workflow response."
@@ -2078,9 +2095,10 @@ class Overlord:
         webhook_url: Optional[str] = None,  # Optional webhook URL
         threshold_seconds: Optional[float] = None,  # Optional threshold override
         stream: Optional[bool] = None,  # None=use config, True=force stream, False=no stream
+        files: Optional[List[Dict[str, Any]]] = None,  # Optional file attachments
     ) -> Union[str, Dict[str, Any], AsyncGenerator[str, None]]:
         """
-        Enhanced chat with async support for long-running agentic tasks.
+        Enhanced chat with async support for long-running agentic tasks and file attachments.
 
         This method provides the main chat interface for the overlord with intelligent
         async decision making. For requests that are expected to take a long time,
@@ -2100,6 +2118,11 @@ class Overlord:
                 to formation config if not provided.
             stream: Optional streaming behavior. None=use formation config, True=force streaming,
                 False=disable streaming. Only applies to sync processing.
+            files: Optional list of file attachments. Each file should be a dict with:
+                - filename: Name of the file
+                - content: File content (text or bytes)
+                - content_type: MIME type of the file
+                - size: File size in bytes
 
         Returns:
             For sync processing: str with the agent's response content, or
@@ -2115,6 +2138,7 @@ class Overlord:
             webhook_url=webhook_url,
             threshold_seconds=threshold_seconds,
             stream=stream,
+            files=files,
         )
 
     async def _execute_async_request(

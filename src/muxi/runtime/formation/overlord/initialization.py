@@ -77,7 +77,7 @@ async def initialize_auth_config(overlord) -> None:
                 admin_key = interpolated_config.get("admin_key", admin_key)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "config_type": "admin_key"},
                     description=f"Failed to interpolate admin_key secret: {str(e)}",
@@ -94,7 +94,7 @@ async def initialize_auth_config(overlord) -> None:
                 client_key = interpolated_config.get("client_key", client_key)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "config_type": "client_key"},
                     description=f"Failed to interpolate client_key secret: {str(e)}",
@@ -118,22 +118,29 @@ async def initialize_memory_config(overlord) -> None:
     else:
         memory_config = overlord.formation_config.get("memory", {})
 
-    if not memory_config:
-        return
+    # Always initialize working memory with defaults if not configured
+    working_config = memory_config.get("working", {})
+    if not hasattr(overlord, "working_memory") or not overlord.working_memory:
+        await _initialize_working_memory(overlord, working_config)
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={"memory_type": "working", "working_config": working_config},
+            description="Initializing working memory with configuration (using defaults if not provided)",
+        )
 
-    # Initialize buffer memory configuration
-    # (moved from working.buffer to top-level)
+    # Always initialize buffer memory with defaults if not configured
     buffer_config = memory_config.get("buffer", {})
-    if buffer_config and not overlord.buffer_memory:
+    if not overlord.buffer_memory:
         await _initialize_buffer_memory(overlord, buffer_config)
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
             data={"memory_type": "buffer", "buffer_config": buffer_config},
-            description="Initializing buffer memory from configuration",
+            description="Initializing buffer memory with configuration (using defaults if not provided)",
         )
 
-    # Initialize persistent memory configuration
+    # Initialize persistent memory configuration (optional)
     persistent_config = memory_config.get("persistent", {})
     if persistent_config and not overlord.long_term_memory:
         await _initialize_persistent_memory(overlord, persistent_config)
@@ -145,16 +152,74 @@ async def initialize_memory_config(overlord) -> None:
         )
 
 
-async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> None:
-    """Initialize buffer memory from configuration."""
+async def _initialize_working_memory(overlord, working_config: Dict[str, Any]) -> None:
+    """Initialize working memory configuration with defaults.
+
+    Working memory provides the configuration for the underlying storage backend
+    that buffer memory uses. It doesn't create a separate memory system but rather
+    stores the configuration that will be used by buffer memory and other components.
+    """
+    from ...datatypes.memory import WorkingMemoryConfig
+
     try:
-        # Extract buffer configuration
-        size = buffer_config.get("size", 10)
-        multiplier = buffer_config.get("multiplier", 10)
-        vector_search = buffer_config.get("vector_search", True)
-        dimension = buffer_config.get("vector_dimension", 1536)
-        mode = buffer_config.get("mode", "local")
-        remote_config = buffer_config.get("remote", {})
+        # Create WorkingMemoryConfig with provided config, using defaults for missing values
+        config = WorkingMemoryConfig(**working_config)
+
+        # Store the working memory configuration on the overlord
+        # This will be used by buffer memory and other memory systems
+        overlord.working_memory_config = config
+
+        # For backward compatibility, also store a working_memory attribute
+        overlord.working_memory = {
+            "mode": config.mode,
+            "max_memory_mb": config.max_memory_mb,
+            "fifo_interval_min": config.fifo_interval_min,
+            "vector_dimension": config.vector_dimension,
+            "remote": (
+                config.remote.model_dump()
+                if hasattr(config.remote, "model_dump")
+                else config.remote
+            ),
+            "configured": True,
+        }
+
+        # Log the configuration
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.DEBUG,
+            data={
+                "mode": config.mode,
+                "max_memory_mb": str(config.max_memory_mb),
+                "vector_dimension": config.vector_dimension,
+            },
+            description=f"Working memory configured in {config.mode} mode",
+        )
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "config_type": "working_memory"},
+            description=f"Failed to initialize working memory: {str(e)}",
+        )
+        raise
+
+
+async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> None:
+    """Initialize buffer memory from configuration with defaults."""
+    from ...datatypes.memory import BufferMemoryConfig
+
+    try:
+        # Create BufferMemoryConfig with provided config, using defaults for missing values
+        config = BufferMemoryConfig(**buffer_config)
+
+        # Extract configuration values from the validated config
+        size = config.size
+        multiplier = config.multiplier
+        vector_search = config.vector_search
+        dimension = config.vector_dimension
+        mode = config.mode
+        remote_config = config.remote
 
         # Get embedding model for vector search if enabled
         embedding_model = None
@@ -163,7 +228,7 @@ async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> 
                 embedding_model = await overlord.get_model_for_capability("embedding")
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "config_type": "embedding_model"},
                     description=f"Failed to initialize embedding model for buffer memory: {str(e)}",
@@ -177,12 +242,12 @@ async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> 
             dimension=dimension,
             model=embedding_model,
             mode=mode,
-            remote=remote_config if mode == "remote" else None,
+            remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
         )
 
     except Exception as e:
         observability.observe(
-            event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             data={"error": str(e), "config_type": "buffer_memory"},
             description=f"Failed to initialize buffer memory: {str(e)}",
@@ -208,7 +273,7 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
                 connection_string = interpolated.get("connection_string", connection_string)
             except Exception as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e), "config_type": "persistent_memory_secrets"},
                     description=f"Failed to interpolate persistent memory secrets: {str(e)}",
@@ -679,7 +744,7 @@ async def create_agent_from_config(overlord, agent_config: Dict[str, Any]):
     except Exception as e:
         # Configuration error - text capability must be properly configured
         observability.observe(
-            event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
             level=observability.EventLevel.ERROR,
             data={
                 "error": str(e),
