@@ -67,7 +67,7 @@ class ChatOrchestrator:
             For sync processing without streaming: str with the agent's response content
             For sync processing with streaming: AsyncGenerator[str, None] yielding chunks
             For async processing: Dict with request_id, status, and processing info
-            
+
         Note:
             When streaming is enabled (stream=True) and sync processing is used,
             this method returns an AsyncGenerator that yields response chunks as they
@@ -81,6 +81,7 @@ class ChatOrchestrator:
         # Start request tracking with observability
         async with self.overlord.observability_manager.track_request(
             request_id=request_id,
+            session_id=session_id,
             formation_id=self.overlord.formation_id,
             user_id=str(user_id) if user_id is not None else None,
         ):
@@ -239,16 +240,47 @@ class ChatOrchestrator:
         Returns:
             Dictionary with async request information
         """
-        # Delegate to overlord's async execution method
-        return await self.overlord._execute_async_request(
-            message=message,
-            agent_name=agent_name,
+        import asyncio
+        from ..background.request_tracker import RequestStatus, RequestState
+
+        # Create initial request state
+        initial_state = RequestState(
+            id=request_id,
+            status=RequestStatus.PROCESSING,
+            start_time=timestamp,
+            original_message=message,
             user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
             webhook_url=webhook_url,
-            timestamp=timestamp,
+            session_id=session_id,
         )
+
+        # Track the request in RequestTracker
+        await self.overlord.request_tracker.track_request(request_id, initial_state)
+
+        # Create background task for async execution
+        asyncio.create_task(
+            self.overlord._execute_async_request(
+                request_id=request_id,
+                message=message,
+                agent_name=agent_name,
+                user_id=user_id,
+            )
+        )
+
+        # Return immediate response
+        response = {
+            "status": "processing",
+            "request_id": request_id,
+            "message": "Request is being processed asynchronously",
+        }
+
+        if webhook_url:
+            response["webhook_url"] = webhook_url
+            response["webhook_info"] = (
+                "Results will be delivered to the webhook URL upon completion"
+            )
+
+        return response
 
     async def _process_sync_chat(
         self,

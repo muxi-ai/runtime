@@ -118,12 +118,16 @@ class ObservabilityManager:
     async def track_request(
         self,
         request_id: Optional[str] = None,
+        session_id: Optional[str] = None,
         formation_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ):
         """Context manager for request tracking with automatic context propagation."""
         async with self.request_manager.track_request(
-            request_id=request_id, formation_id=formation_id, user_id=user_id
+            request_id=request_id,
+            session_id=session_id,
+            formation_id=formation_id,
+            user_id=user_id,
         ) as context:
             # Emit request received event - context automatically available!
             await self.emit_conversation_event(
