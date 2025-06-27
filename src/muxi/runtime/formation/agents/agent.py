@@ -818,16 +818,7 @@ class Agent:
 
                     # Add recent document uploads first (highest priority)
                     if recent_docs:
-                        context_parts.append("--- Recently Uploaded Documents ---")
-                        for doc in recent_docs:
-                            context_parts.append(f"Filename: {doc.get('filename', 'Unknown')}")
-                            # Join content list if it's a list
-                            doc_content = doc.get("content", "")
-                            if isinstance(doc_content, list):
-                                doc_content = "\n".join(doc_content)
-                            context_parts.append(f"{doc_content}")
-                            context_parts.append("")  # Empty line between docs
-                        context_parts.append("--- End Recently Uploaded Documents ---")
+                        context_parts.extend(self._format_recent_documents(recent_docs))
 
                     # Add domain knowledge context
                     if knowledge_results:
@@ -886,17 +877,7 @@ class Agent:
                 recent_docs = self.overlord.get_recent_documents(session_id=session_id)
 
             if recent_docs:
-                context_parts = []
-                context_parts.append("--- Recently Uploaded Documents ---")
-                for doc in recent_docs:
-                    context_parts.append(f"Filename: {doc.get('filename', 'Unknown')}")
-                    # Join content list if it's a list
-                    doc_content = doc.get("content", "")
-                    if isinstance(doc_content, list):
-                        doc_content = "\n".join(doc_content)
-                    context_parts.append(f"{doc_content}")
-                    context_parts.append("")  # Empty line between docs
-                context_parts.append("--- End Recently Uploaded Documents ---")
+                context_parts = self._format_recent_documents(recent_docs)
 
                 context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
 
@@ -993,6 +974,29 @@ class Agent:
                 )
 
         return response
+
+    def _format_recent_documents(self, recent_docs: List[Dict[str, Any]]) -> List[str]:
+        """
+        Format recent documents into context parts.
+
+        Args:
+            recent_docs: List of recent document dictionaries
+
+        Returns:
+            List of formatted context strings
+        """
+        context_parts = []
+        context_parts.append("--- Recently Uploaded Documents ---")
+        for doc in recent_docs:
+            context_parts.append(f"Filename: {doc.get('filename', 'Unknown')}")
+            # Join content list if it's a list
+            doc_content = doc.get("content", "")
+            if isinstance(doc_content, list):
+                doc_content = "\n".join(doc_content)
+            context_parts.append(f"{doc_content}")
+            context_parts.append("")  # Empty line between docs
+        context_parts.append("--- End Recently Uploaded Documents ---")
+        return context_parts
 
     async def _check_agent_clarification_needs(
         self, agent_response: str, user_message: str
