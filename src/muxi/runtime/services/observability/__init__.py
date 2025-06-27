@@ -79,7 +79,6 @@ except ValueError:
     pass
 
 
-@multitasking.task
 def observe(
     event_type: Union[SystemEvents, ConversationEvents, str],
     level: EventLevel = EventLevel.INFO,
@@ -89,8 +88,8 @@ def observe(
     """
     Emit an observability event (non-blocking).
 
-    This function runs in a background thread and will not block the caller.
-    It automatically includes the current request context if available.
+    This function captures the request context and configured logger before
+    spawning a background thread to ensure context is properly passed to the thread.
 
     Args:
         event_type: The event type enum or string
@@ -99,22 +98,34 @@ def observe(
         description: Human-readable description
     """
     try:
-        # Get request context from context.py
-        from .context import get_current_request_context
+        # Capture context BEFORE spawning thread
+        from .context import get_current_request_context, get_current_event_logger
 
         request_context = get_current_request_context()
+        configured_logger = get_current_event_logger()
 
-        # Create event logger
-        logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
+        # If no configured logger in context, create a fallback
+        if not configured_logger:
+            configured_logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
 
-        # Emit event (now sync)
-        logger.emit_event(
-            event_type=event_type,
-            level=level,
-            data=data or {},
-            description=description,
-            request_context=request_context,
-        )
+        @multitasking.task
+        def _emit_in_background():
+            try:
+                # Use the configured logger (captured before thread spawn)
+                configured_logger.emit_event(
+                    event_type=event_type,
+                    level=level,
+                    data=data or {},
+                    description=description,
+                    request_context=request_context,  # Use captured context
+                )
+            except Exception:
+                # Silently fail if observability unavailable
+                pass
+
+        # Start the background task
+        _emit_in_background()
+
     except Exception:
         # Silently fail if observability unavailable
         pass

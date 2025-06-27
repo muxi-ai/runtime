@@ -23,6 +23,12 @@ class ObservabilityManager:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
         self.event_logger = self._create_event_logger()
+
+        # Set the configured event logger in context for global access
+        from .context import set_event_logger
+
+        set_event_logger(self.event_logger)
+
         self.request_manager = RequestContextManager(
             cleanup_interval=self.config.get("cleanup_interval", 300)
         )
