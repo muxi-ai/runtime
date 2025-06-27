@@ -1228,6 +1228,17 @@ Provide a helpful, conversational response that directly addresses what the user
         """
 
         async def _transcribe_request():
+            # Validate audio file if it's a string path
+            if isinstance(audio_file, str):
+                # Validate file security
+                if not await FileProcessor.validate_file_security(audio_file):
+                    raise LLMError(
+                        f"Audio file security validation failed: {audio_file}",
+                        error_type=LLMErrorType.FILE_PROCESSING,
+                        provider=self._provider,
+                        retryable=False,
+                    )
+
             # Use the transcription model from init or default to whisper-1
             transcription_model = model or self.model
 

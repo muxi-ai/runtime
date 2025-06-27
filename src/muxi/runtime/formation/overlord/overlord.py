@@ -326,6 +326,7 @@ class Overlord:
         self._recent_documents_by_session: Dict[str, List[Dict[str, Any]]] = {}
         self._max_recent_documents_per_session = 10  # Default: keep last 10 documents per session
         self._default_session_id = "default"  # For requests without session_id
+        self._max_sessions = 100  # Maximum number of sessions to track before LRU eviction
 
         # Dynamic Agent Management - Ultra-simple "delete when done" tracking
         self.active_agent_tracker = ActiveAgentsTracker()
@@ -1909,6 +1910,27 @@ class Overlord:
 
             # Initialize session storage if needed
             if session_id not in self._recent_documents_by_session:
+                # Check if we need to evict old sessions (LRU)
+                if len(self._recent_documents_by_session) >= self._max_sessions:
+                    # Find and remove the least recently used session
+                    # (session with oldest document timestamp)
+                    oldest_session = None
+                    oldest_time = float("inf")
+
+                    for sid, docs in self._recent_documents_by_session.items():
+                        if docs:
+                            latest_doc_time = max(d.get("timestamp", 0) for d in docs)
+                            if latest_doc_time < oldest_time:
+                                oldest_time = latest_doc_time
+                                oldest_session = sid
+                        else:
+                            # Empty session, remove immediately
+                            oldest_session = sid
+                            break
+
+                    if oldest_session:
+                        del self._recent_documents_by_session[oldest_session]
+
                 self._recent_documents_by_session[session_id] = []
 
             current_request_docs = []
@@ -2294,6 +2316,16 @@ class Overlord:
             Processed image analysis as text
         """
         try:
+            # Validate content size (20MB limit)
+            content = attachment.get("content", "")
+            if isinstance(content, str):
+                content_size = len(content.encode("utf-8"))
+            else:
+                content_size = len(content) if isinstance(content, bytes) else 0
+
+            max_size = 20 * 1024 * 1024  # 20MB
+            if content_size > max_size:
+                return f"Image {attachment.get('filename')} exceeds the maximum file size limit of 20MB"
             # Get the vision model from capability models
             vision_model_config = None
             if hasattr(self, "_capability_models") and "vision" in self._capability_models:
@@ -2355,7 +2387,7 @@ class Overlord:
                     return str(response)
             else:
                 # No vision model available
-                return f"Image {attachment.get('filename')} uploaded but no vision model available for analysis"
+                return f"Image {attachment.get('filename')} uploaded but vision analysis is not currently available"
 
         except Exception as e:
             print(f"Error processing image with vision model: {e}")
@@ -2375,6 +2407,16 @@ class Overlord:
             Processed audio transcription/analysis as text
         """
         try:
+            # Validate content size (20MB limit)
+            content = attachment.get("content", "")
+            if isinstance(content, str):
+                content_size = len(content.encode("utf-8"))
+            else:
+                content_size = len(content) if isinstance(content, bytes) else 0
+
+            max_size = 20 * 1024 * 1024  # 20MB
+            if content_size > max_size:
+                return f"Audio {attachment.get('filename')} exceeds the maximum file size limit of 20MB"
             # Get the transcription model from capability models
             transcription_model_config = None
             if hasattr(self, "_capability_models") and "transcription" in self._capability_models:
@@ -2419,7 +2461,7 @@ class Overlord:
                 return f"Audio transcription of {attachment.get('filename')}: {transcribed_text}"
             else:
                 # No transcription model available
-                return f"Audio {attachment.get('filename')} uploaded but no transcription model available for analysis"
+                return f"Audio {attachment.get('filename')} uploaded but audio transcription is not currently available"
 
         except Exception as e:
             print(f"Error processing audio with transcription model: {e}")
@@ -2513,6 +2555,16 @@ class Overlord:
             Processed video analysis as text
         """
         try:
+            # Validate content size (20MB limit)
+            content = attachment.get("content", "")
+            if isinstance(content, str):
+                content_size = len(content.encode("utf-8"))
+            else:
+                content_size = len(content) if isinstance(content, bytes) else 0
+
+            max_size = 20 * 1024 * 1024  # 20MB
+            if content_size > max_size:
+                return f"Video {attachment.get('filename')} exceeds the maximum file size limit of 20MB"
             # Get the video model from capability models
             video_model_config = None
             if hasattr(self, "_capability_models") and "video" in self._capability_models:
@@ -2594,7 +2646,7 @@ class Overlord:
                     )
             else:
                 # No video model available
-                return f"Video {attachment.get('filename')} uploaded but no video model available for analysis"
+                return f"Video {attachment.get('filename')} uploaded but video analysis is not currently available"
 
         except Exception as e:
             print(f"Error processing video with video model: {e}")
@@ -2678,8 +2730,6 @@ class Overlord:
         updating the request tracker with progress and delivering webhook notifications
         upon completion or failure.
         """
-        print(f"\n🎯 _execute_async_request called for request {request_id}")
-
         observability.observe(
             event_type=observability.ConversationEvents.ASYNC_PROCESSING_STARTED,
             level=observability.EventLevel.INFO,
