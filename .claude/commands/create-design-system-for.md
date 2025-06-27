@@ -14,7 +14,7 @@ Your goal Your goal is to extract a generalized and reusable design system from 
    - UI components (buttons, inputs, tables, etc.)
    - Border radius, shadows, and other visual styling patterns
 2. Create a 'design-system.json' file that clearly defines these rules and can be used to replicate the visual language in a consistent way.
-3. Output the JSON to the 'prd' folder with the name: 'design-system. json"
+3. Output the JSON to the 'prd' folder with the name: 'design-system.json'
 
 ## Constraints
 
