@@ -335,7 +335,9 @@ class Overlord:
         self.agent_router = AgentRouter(self)
 
         # Initialize observability system early (needed by chat orchestrator)
-        self.observability_manager = observability.ObservabilityManager()
+        # Get logging config from configured services
+        logging_config = configured_services.get("logging_config", {}) if configured_services else {}
+        self.observability_manager = observability.ObservabilityManager(logging_config)
 
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
