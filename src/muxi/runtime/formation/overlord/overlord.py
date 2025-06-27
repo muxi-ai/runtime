@@ -78,10 +78,11 @@
 # =============================================================================
 
 import asyncio
+import base64
 import hashlib
 import json
 import time
-from typing import Any, Dict, List, Optional, Union, AsyncGenerator
+from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
 import os
 
 from ..agents import Agent
@@ -319,6 +320,13 @@ class Overlord:
         self._user_id_cache = {}  # User ID caching for routing
         self._agent_expertise: Dict[str, Dict[str, Any]] = {}  # Expertise registry
 
+        # Recent document tracking for immediate context
+        # Structure: {session_id: [documents]}
+        # Note: This is a fast-access cache. Cleanup is handled automatically by buffer memory FIFO
+        self._recent_documents_by_session: Dict[str, List[Dict[str, Any]]] = {}
+        self._max_recent_documents_per_session = 10  # Default: keep last 10 documents per session
+        self._default_session_id = "default"  # For requests without session_id
+
         # Dynamic Agent Management - Ultra-simple "delete when done" tracking
         self.active_agent_tracker = ActiveAgentsTracker()
 
@@ -499,6 +507,9 @@ class Overlord:
         self.async_enable_estimation = async_config.get("enable_estimation", True)
         self.async_webhook_url = async_config.get("webhook_url")
 
+        # Track background tasks to ensure they complete before shutdown
+        self._background_tasks: Set[asyncio.Task] = set()
+
         # ===================================================================
         # CLARIFICATION INTELLIGENCE - Intelligence concerns
         # ===================================================================
@@ -555,6 +566,70 @@ class Overlord:
 
         # NOTE: Service initialization will be handled by Formation
         # The overlord constructor now focuses purely on intelligence setup
+
+    def _create_tracked_task(self, coro, name: Optional[str] = None) -> asyncio.Task:
+        """Create a task and track it for proper cleanup during shutdown."""
+        print(f"\n🚀 Creating background task: {name or 'unnamed'}")
+        task = asyncio.create_task(coro)
+        if name:
+            task.set_name(name)
+
+        # Track the task
+        self._background_tasks.add(task)
+        print(f"📊 Total background tasks: {len(self._background_tasks)}")
+
+        # Log task creation without using undefined event type
+        # observability.observe(
+        #     event_type=observability.SystemEvents.BACKGROUND_TASK_STARTED,
+        #     level=observability.EventLevel.INFO,
+        #     data={
+        #         "task_name": name or "unnamed",
+        #         "total_tasks": len(self._background_tasks),
+        #     },
+        #     description=f"Created tracked background task: {name or 'unnamed'}",
+        # )
+
+        # Remove from set when done
+        def task_done_callback(task):
+            self._background_tasks.discard(task)
+            # Log task completion without using undefined event type
+            # observability.observe(
+            #     event_type=observability.SystemEvents.BACKGROUND_TASK_COMPLETED,
+            #     level=observability.EventLevel.INFO,
+            #     data={
+            #         "task_name": task.get_name() if hasattr(task, 'get_name') else "unnamed",
+            #         "remaining_tasks": len(self._background_tasks),
+            #         "exception": str(task.exception()) if task.exception() else None,
+            #     },
+            #     description=(
+            #         "Background task completed: "
+            #         f"{task.get_name() if hasattr(task, 'get_name') else 'unnamed'}"
+            #     ),
+            # )
+
+        task.add_done_callback(task_done_callback)
+
+        return task
+
+    async def _wait_for_background_tasks(self, timeout: float = 30.0):
+        """Wait for all background tasks to complete with timeout."""
+        if not self._background_tasks:
+            return
+
+        # Create a copy to avoid modification during iteration
+        tasks = list(self._background_tasks)
+
+        try:
+            # Wait for all tasks with timeout
+            await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=timeout)
+        except asyncio.TimeoutError:
+            # Cancel remaining tasks
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+
+            # Wait for cancellation to complete
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def start(self) -> None:
         """Start all overlord services including cache manager."""
@@ -1210,10 +1285,10 @@ class Overlord:
                             description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}",
                         )
 
-                # Create task with error handling
-                task = asyncio.create_task(_deregister_with_error_handling())
-                # Set task name for better debugging
-                task.set_name(f"deregister_agent_{agent_id}")
+                # Create tracked task with error handling
+                self._create_tracked_task(
+                    _deregister_with_error_handling(), name=f"deregister_agent_{agent_id}"
+                )
 
             # Invalidate all cached responses for this agent
             try:
@@ -1255,6 +1330,18 @@ class Overlord:
 
     async def _actually_shutdown_overlord(self):
         """Actually shutdown overlord (called by active_agent_tracker)."""
+
+        # Wait for background tasks to complete
+        if hasattr(self, "_background_tasks") and self._background_tasks:
+            observability.observe(
+                event_type=observability.SystemEvents.OVERLORD_SHUTDOWN,
+                level=observability.EventLevel.INFO,
+                data={"background_tasks_count": len(self._background_tasks)},
+                description=f"Waiting for {len(self._background_tasks)} background tasks to complete",
+            )
+
+            # Wait for tasks with a reasonable timeout
+            await self._wait_for_background_tasks(timeout=30.0)
 
         # Stop scheduler service if running
         if hasattr(self, "scheduler_service") and self.scheduler_service:
@@ -1812,6 +1899,47 @@ class Overlord:
             #  Info - TODO: add observability
             # ConversationEvents.DOCUMENT_PROCESSING_COMPLETED
 
+            # Store processed documents for immediate access by agents
+            # Get session_id from context or use default
+            session_id = (
+                context.get("session_id")
+                if context and context.get("session_id")
+                else self._default_session_id
+            )
+
+            # Initialize session storage if needed
+            if session_id not in self._recent_documents_by_session:
+                self._recent_documents_by_session[session_id] = []
+
+            current_request_docs = []
+            for doc in processed_docs:
+                if doc.get("content"):  # Only store if we have actual content
+                    doc_entry = {
+                        "doc_id": doc["doc_id"],
+                        "filename": doc["filename"],
+                        "content": doc["content"],
+                        "modality": doc.get("modality", "text"),
+                        "timestamp": time.time(),
+                        "user_request": user_request,
+                        "request_id": context.get("request_id") if context else None,
+                        "session_id": session_id,
+                    }
+                    current_request_docs.append(doc_entry)
+                    self._recent_documents_by_session[session_id].append(doc_entry)
+
+            # Ensure we keep at least all documents from current request
+            # If current request has more than max_recent_documents, increase the limit temporarily
+            min_docs_to_keep = max(
+                self._max_recent_documents_per_session, len(current_request_docs)
+            )
+
+            # Keep the most recent documents per session, ensuring all from current request are included
+            if len(self._recent_documents_by_session[session_id]) > min_docs_to_keep:
+                # Remove oldest documents, but keep at least min_docs_to_keep
+                self._recent_documents_by_session[session_id] = self._recent_documents_by_session[
+                    session_id
+                ][-min_docs_to_keep:]
+
             return to_return
 
         except Exception as e:
@@ -1835,6 +1963,7 @@ class Overlord:
         Document Storage Foundation
 
         Process and store documents with intelligent chunking and indexing.
+        Now supports multimodal content through content type detection.
         """
         processed_docs = []
 
@@ -1842,18 +1971,74 @@ class Overlord:
             try:
                 filename = attachment.get("filename", "unknown")
                 content = attachment.get("content", "")
+                content_type = attachment.get("content_type", "text/plain")
 
                 #  Info - TODO: add observability
 
-                # Chunk the document using adaptive strategies
-                if self.document_chunker:
-                    chunks = await self.document_chunker.chunk_document(
-                        content=content, filename=filename, strategy="adaptive"
+                # Determine content modality based on content_type
+                if content_type.startswith("image/"):
+                    # Process image using vision model
+                    image_analysis = await self._process_image_content(attachment)
+                    # Enhance content with searchable context
+                    enhanced_content = (
+                        f"Image Analysis of {filename}:\n{image_analysis}\n\n"
+                        "[This is an image file containing visual content that has been analyzed. "
+                        "The analysis above describes what is visible in the image including objects, "
+                        "people, colors, and scenes.]"
                     )
+                    chunks = [
+                        {
+                            "content": enhanced_content,
+                            "metadata": {
+                                "filename": filename,
+                                "modality": "image",
+                                "content_type": content_type,
+                                "size": len(content),
+                                "original_analysis": image_analysis,
+                            },
+                        }
+                    ]
+
+                elif content_type.startswith("audio/"):
+                    # Process audio using transcription model
+                    audio_analysis = await self._process_audio_content(attachment)
+                    chunks = [
+                        {
+                            "content": audio_analysis,
+                            "metadata": {
+                                "filename": filename,
+                                "modality": "audio",
+                                "content_type": content_type,
+                                "size": len(content),
+                            },
+                        }
+                    ]
+
+                elif content_type.startswith("video/"):
+                    # Process video using video model
+                    video_analysis = await self._process_video_content(attachment)
+                    chunks = [
+                        {
+                            "content": video_analysis,
+                            "metadata": {
+                                "filename": filename,
+                                "modality": "video",
+                                "content_type": content_type,
+                                "size": len(content),
+                            },
+                        }
+                    ]
+
                 else:
-                    # Fallback simple chunking
-                    print(f"Using fallback chunking for {filename}")
-                    chunks = [{"content": content, "metadata": {"filename": filename}}]
+                    # Process as text document using existing chunking
+                    if self.document_chunker:
+                        chunks = await self.document_chunker.chunk_document(
+                            content=content, filename=filename, strategy="adaptive"
+                        )
+                    else:
+                        # Fallback simple chunking
+                        print(f"Using fallback chunking for {filename}")
+                        chunks = [{"content": content, "metadata": {"filename": filename}}]
 
                 # Store metadata
                 internal_user_id = None
@@ -1883,12 +2068,16 @@ class Overlord:
 
                 # Store in buffer memory with enhanced metadata
                 for i, chunk in enumerate(chunks):
+                    # Merge chunk metadata with document metadata
+                    chunk_specific_metadata = chunk.get("metadata", {})
                     chunk_metadata = {
                         **doc_metadata,
+                        **chunk_specific_metadata,  # Include modality-specific metadata
                         "chunk_index": i,
                         "doc_id": doc_id,
                         "role": "document",
                         "timestamp": time.time(),
+                        "searchable": True,  # Mark as searchable content
                     }
 
                     chunk_content = chunk.get("content", "")
@@ -1896,13 +2085,17 @@ class Overlord:
 
                     await self.add_to_buffer_memory(message=chunk_content, metadata=chunk_metadata)
 
-                # Add to processed docs list
+                # Add to processed docs list with actual content
                 processed_docs.append(
                     {
                         "doc_id": doc_id,
                         "filename": filename,
                         "chunks": len(chunks),
                         "metadata": doc_metadata,
+                        "content": [
+                            chunk.get("content", "") for chunk in chunks
+                        ],  # Store actual content
+                        "modality": chunk_specific_metadata.get("modality", "text"),
                     }
                 )
 
@@ -2090,6 +2283,326 @@ class Overlord:
         user_request_lower = user_request.lower()
         return any(keyword in user_request_lower for keyword in WORKFLOW_KEYWORDS)
 
+    async def _process_image_content(self, attachment: Dict[str, Any]) -> str:
+        """
+        Process image content using vision-capable LLM.
+
+        Args:
+            attachment: File attachment with image content
+
+        Returns:
+            Processed image analysis as text
+        """
+        try:
+            # Get the vision model from capability models
+            vision_model_config = None
+            if hasattr(self, "_capability_models") and "vision" in self._capability_models:
+                vision_model_config = self._capability_models["vision"]
+                print(f"Found vision model config: {vision_model_config}")
+
+            if vision_model_config:
+                # Create LLM instance for vision
+                from ...services.llm import LLM
+
+                # Get the model name and API key
+                model_name = vision_model_config["model"]
+                api_key = vision_model_config.get("api_key")
+
+                # If no specific API key, try to get from global keys
+                if not api_key and hasattr(self, "_global_api_keys"):
+                    # Extract provider from model name (e.g., "openai/gpt-4o-mini" -> "openai")
+                    provider = model_name.split("/")[0] if "/" in model_name else "openai"
+                    print(f"Looking for API key for provider: {provider}")
+                    print(f"Available providers: {list(self._global_api_keys.keys())}")
+                    api_key = self._global_api_keys.get(provider)
+
+                if not api_key:
+                    return f"No API key found for vision model {model_name}"
+
+                # Create vision LLM instance
+                vision_llm = LLM(
+                    model=model_name, api_key=api_key, **vision_model_config.get("settings", {})
+                )
+                # Prepare the message with image
+                messages = [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": (
+                                    "Please analyze this image and describe what you see in detail. "
+                                    "Include objects, people, colors, scene description, "
+                                    "and any text visible in the image."
+                                ),
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:{attachment.get('content_type')};base64,{base64.b64encode(attachment.get('content')).decode() if isinstance(attachment.get('content'), bytes) else attachment.get('content')}"  # noqa: E501
+                                },
+                            },
+                        ],
+                    }
+                ]
+
+                # Call the vision model
+                response = await vision_llm.chat(messages)
+
+                if hasattr(response, "content"):
+                    return response.content
+                else:
+                    return str(response)
+            else:
+                # No vision model available
+                return f"Image {attachment.get('filename')} uploaded but no vision model available for analysis"
+
+        except Exception as e:
+            print(f"Error processing image with vision model: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return f"Failed to analyze image {attachment.get('filename')}: {str(e)}"
+
+    async def _process_audio_content(self, attachment: Dict[str, Any]) -> str:
+        """
+        Process audio content using transcription-capable LLM.
+
+        Args:
+            attachment: File attachment with audio content
+
+        Returns:
+            Processed audio transcription/analysis as text
+        """
+        try:
+            # Get the transcription model from capability models
+            transcription_model_config = None
+            if hasattr(self, "_capability_models") and "transcription" in self._capability_models:
+                transcription_model_config = self._capability_models["transcription"]
+                print(f"Found transcription model config: {transcription_model_config}")
+
+            if transcription_model_config:
+                # Create LLM instance for transcription
+                # Get the model name and API key
+                model_name = transcription_model_config["model"]
+                api_key = transcription_model_config.get("api_key")
+
+                # If no specific API key, try to get from global keys
+                if not api_key and hasattr(self, "_global_api_keys"):
+                    # Extract provider from model name (e.g., "openai/whisper-1" -> "openai")
+                    provider = model_name.split("/")[0] if "/" in model_name else "openai"
+                    api_key = self._global_api_keys.get(provider)
+
+                if not api_key:
+                    return f"No API key found for transcription model {model_name}"
+
+                # Create LLM instance for transcription
+                transcription_llm = LLM(
+                    model=model_name,
+                    api_key=api_key,
+                    **transcription_model_config.get("settings", {}),
+                )
+
+                # Get the audio content
+                audio_content = attachment.get("content")
+                if isinstance(audio_content, str):
+                    # If it's base64 encoded, decode it
+                    import base64
+
+                    audio_content = base64.b64decode(audio_content)
+
+                # Transcribe the audio
+                transcribed_text = await transcription_llm.transcribe(
+                    audio_file=audio_content, model=model_name
+                )
+
+                return f"Audio transcription of {attachment.get('filename')}: {transcribed_text}"
+            else:
+                # No transcription model available
+                return f"Audio {attachment.get('filename')} uploaded but no transcription model available for analysis"
+
+        except Exception as e:
+            print(f"Error processing audio with transcription model: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return f"Failed to transcribe audio {attachment.get('filename')}: {str(e)}"
+
+    def get_document_session_stats(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get statistics about document storage by session.
+
+        Returns:
+            Dictionary with session statistics
+        """
+        stats = {}
+        current_time = time.time()
+
+        for session_id, docs in self._recent_documents_by_session.items():
+            if docs:
+                oldest = min(docs, key=lambda x: x.get("timestamp", 0))
+                newest = max(docs, key=lambda x: x.get("timestamp", 0))
+
+                stats[session_id] = {
+                    "document_count": len(docs),
+                    "oldest_document_age": current_time - oldest.get("timestamp", 0),
+                    "newest_document_age": current_time - newest.get("timestamp", 0),
+                    "total_size": sum(len(str(doc.get("content", ""))) for doc in docs),
+                    "modalities": list(set(doc.get("modality", "text") for doc in docs)),
+                }
+
+        return stats
+
+    def get_recent_documents(
+        self,
+        session_id: Optional[str] = None,
+        max_age_seconds: int = 300,
+        request_id: Optional[str] = None,
+        include_all_sessions: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """
+        Get recently uploaded documents for agent context.
+
+        Args:
+            session_id: Session ID to get documents for (uses default if None)
+            max_age_seconds: Maximum age of documents to return (default 5 minutes)
+            request_id: Optional request ID to filter documents from a specific request
+            include_all_sessions: If True, returns documents from all sessions (for cross-session analysis)
+
+        Returns:
+            List of recent documents with their processed content
+        """
+        current_time = time.time()
+        recent_docs = []
+
+        # Determine which sessions to check
+        if include_all_sessions:
+            sessions_to_check = list(self._recent_documents_by_session.keys())
+        else:
+            session_id = session_id or self._default_session_id
+            sessions_to_check = (
+                [session_id] if session_id in self._recent_documents_by_session else []
+            )
+
+        # Collect documents from relevant sessions
+        for sid in sessions_to_check:
+            for doc in self._recent_documents_by_session.get(sid, []):
+                # Check age
+                if current_time - doc.get("timestamp", 0) > max_age_seconds:
+                    continue
+
+                # Check request_id if specified
+                if request_id and doc.get("request_id") != request_id:
+                    continue
+
+                recent_docs.append(doc)
+
+        # Sort by timestamp (most recent first)
+        recent_docs.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+
+        return recent_docs
+
+    async def _process_video_content(self, attachment: Dict[str, Any]) -> str:
+        """
+        Process video content using video-capable LLM.
+
+        Args:
+            attachment: File attachment with video content
+
+        Returns:
+            Processed video analysis as text
+        """
+        try:
+            # Get the video model from capability models
+            video_model_config = None
+            if hasattr(self, "_capability_models") and "video" in self._capability_models:
+                video_model_config = self._capability_models["video"]
+                print(f"Found video model config: {video_model_config}")
+
+            if video_model_config:
+                # Create LLM instance for video
+                # Get the model name and API key
+                model_name = video_model_config["model"]
+                api_key = video_model_config.get("api_key")
+
+                # If no specific API key, try to get from global keys
+                if not api_key and hasattr(self, "_global_api_keys"):
+                    # Extract provider from model name
+                    provider = model_name.split("/")[0] if "/" in model_name else "openai"
+                    api_key = self._global_api_keys.get(provider)
+
+                if not api_key:
+                    return f"No API key found for video model {model_name}"
+
+                # Create LLM instance for video processing
+                video_llm = LLM(
+                    model=model_name, api_key=api_key, **video_model_config.get("settings", {})
+                )
+
+                # Get the video content
+                video_content = attachment.get("content")
+                filename = attachment.get("filename", "video")
+
+                # Send video to the model - video-capable models (like Gemini) will
+                # analyze both visual content and audio tracks automatically
+
+                try:
+                    # Prepare the message with video content
+                    # Some models may accept video directly, others may need frames
+                    messages = [
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": (
+                                        "Please analyze this video comprehensively. "
+                                        "Include details about scenes, actions, people, objects, "
+                                        "any text visible, and the overall context of the video. "
+                                        "If the video contains audio, please also transcribe any speech "
+                                        "and describe important sounds or music."
+                                    ),
+                                },
+                                {
+                                    "type": "image_url",  # Some models accept video as image_url
+                                    "image_url": {
+                                        "url": f"data:{attachment.get('content_type')};base64,{base64.b64encode(video_content).decode() if isinstance(video_content, bytes) else video_content}"  # noqa: E501
+                                    },
+                                },
+                            ],
+                        }
+                    ]
+
+                    # Try to analyze as video/image
+                    response = await video_llm.chat(messages)
+
+                    if hasattr(response, "content"):
+                        video_analysis = response.content
+                    else:
+                        video_analysis = str(response)
+
+                    return f"Video analysis of {filename}:\n{video_analysis}"
+
+                except Exception as e:
+                    # If direct video analysis fails, return a more informative message
+                    return (
+                        f"Video analysis of {filename} failed: {str(e)}\n\n"
+                        f"The model {model_name} may not support video input. "
+                        f"For video analysis, please use a video-capable model such as "
+                        f"Google Gemini (google/gemini-pro-vision) which can analyze "
+                        f"both video content and audio tracks."
+                    )
+            else:
+                # No video model available
+                return f"Video {attachment.get('filename')} uploaded but no video model available for analysis"
+
+        except Exception as e:
+            print(f"Error processing video with video model: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return f"Failed to analyze video {attachment.get('filename')}: {str(e)}"
+
     # ===================================================================
     # ASYNC REQUEST-RESPONSE ORCHESTRATION)
     # ===================================================================
@@ -2151,7 +2664,12 @@ class Overlord:
         )
 
     async def _execute_async_request(
-        self, request_id: str, message: str, agent_name: Optional[str], user_id: Any
+        self,
+        request_id: str,
+        message: str,
+        agent_name: Optional[str],
+        user_id: Any,
+        session_id: Optional[str] = None,
     ) -> None:
         """
         Execute async request in background.
@@ -2160,13 +2678,31 @@ class Overlord:
         updating the request tracker with progress and delivering webhook notifications
         upon completion or failure.
         """
+        print(f"\n🎯 _execute_async_request called for request {request_id}")
+
+        observability.observe(
+            event_type=observability.ConversationEvents.ASYNC_PROCESSING_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "request_id": request_id,
+                "message_length": len(message),
+                "agent_name": agent_name,
+                "user_id": str(user_id) if user_id else None,
+            },
+            description=f"Starting async processing for request {request_id}",
+        )
+
         try:
             start_time = time.time()
 
             # Check if clarification is needed before processing
-            clarification_result = await self._check_clarification_needs_async(
-                message, user_id, agent_name
-            )
+            try:
+                clarification_result = await self._check_clarification_needs_async(
+                    message, user_id, agent_name
+                )
+            except Exception as e:
+                print(f"⚠️ Clarification check failed: {type(e).__name__}: {str(e)}")
+                clarification_result = None
 
             if clarification_result:
                 clarification_question, clarification_request_id = clarification_result
@@ -2218,15 +2754,23 @@ class Overlord:
                     await self.request_tracker.update_request(request_id, RequestStatus.PROCESSING)
 
             # Process using existing sync infrastructure
-            result = await self._process_sync_chat(message, agent_name, user_id)
+            print(f"📝 Processing message in background for {request_id}")
+            result = await self._process_sync_chat(
+                message, agent_name, user_id, session_id=session_id, request_id=request_id
+            )
             processing_time = time.time() - start_time
+            print(f"✅ Processing complete for {request_id} in {processing_time:.2f}s")
 
             # Extract result content
             result_content = result.content if hasattr(result, "content") else str(result)
+            print(f"📄 Result content length: {len(str(result_content))}")
 
             await self.request_tracker.update_request(
                 request_id, RequestStatus.COMPLETED, result=result_content
             )
+
+            # Auto-remove completed request to prevent memory buildup
+            await self.request_tracker.remove_request(request_id)
 
             #  Info - TODO: add observability
             # ConversationEvents.ASYNC_PROCESSING_COMPLETED
@@ -2234,7 +2778,20 @@ class Overlord:
 
             # Send webhook notification if URL is configured
             webhook_url = await self._get_webhook_url_for_request(request_id)
+            print(f"🔔 Webhook URL for {request_id}: {webhook_url}")
             if webhook_url:
+                observability.observe(
+                    event_type=observability.ConversationEvents.WEBHOOK_DELIVERY_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "request_id": request_id,
+                        "webhook_url": webhook_url,
+                        "result_size": len(str(result_content)),
+                        "processing_time": processing_time,
+                    },
+                    description=f"Starting webhook delivery for request {request_id}",
+                )
+
                 success = await self.webhook_manager.deliver_completion(
                     webhook_url=webhook_url,
                     request_id=request_id,
@@ -2243,22 +2800,37 @@ class Overlord:
                     processing_mode="async",  # indicate this was async processing
                     user_id=user_id,  # include user identifier
                 )
+
                 if success:
-                    #  Info - TODO: add observability
-                    # ConversationEvents.WEBHOOK_DELIVERED + ConversationEvents.RESPONSE_DELIVERED
-                    _ = None  # remove this after implementing observability
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WEBHOOK_DELIVERED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "request_id": request_id,
+                            "webhook_url": webhook_url,
+                        },
+                        description=f"Webhook delivered successfully for request {request_id}",
+                    )
                 else:
-                    #  Warning - TODO: add observability
-                    # ConversationEvents.WEBHOOK_FAILED
-                    _ = None  # remove this after implementing observability
+                    observability.observe(
+                        event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "request_id": request_id,
+                            "webhook_url": webhook_url,
+                        },
+                        description=f"Webhook delivery failed for request {request_id}",
+                    )
             else:
-                #  Error - TODO: add observability
-                # ConversationEvents.WEBHOOK_FAILED
-                _ = None  # remove this after implementing observability
-                #     f"Request {request_id}: No webhook URL configured, skipping notification"
-                # )
+                observability.observe(
+                    event_type=observability.ConversationEvents.WEBHOOK_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={"request_id": request_id},
+                    description=f"Request {request_id}: No webhook URL configured, skipping notification",
+                )
 
         except Exception as e:
+            print(f"❌ Error in async request {request_id}: {type(e).__name__}: {str(e)}")
             #  Warning - TODO: add observability
             # ErrorEvents.WARNING
             _ = e  # remove this after implementing observability
@@ -2266,6 +2838,9 @@ class Overlord:
             await self.request_tracker.update_request(
                 request_id, RequestStatus.FAILED, error=str(e)
             )
+
+            # Auto-remove failed request to prevent memory buildup
+            await self.request_tracker.remove_request(request_id)
 
             # Send failure webhook if URL is configured
             webhook_url = await self._get_webhook_url_for_request(request_id)
@@ -2660,8 +3235,9 @@ class Overlord:
 
             # After streaming completes, handle memory storage and observability
             # This happens asynchronously to not block the stream
-            asyncio.create_task(
-                self._handle_post_streaming_tasks(message, full_response, agent_name, user_id_int)
+            self._create_tracked_task(
+                self._handle_post_streaming_tasks(message, full_response, agent_name, user_id_int),
+                name=f"post_streaming_tasks_{agent_name}",
             )
 
         except Exception as e:
@@ -2801,28 +3377,6 @@ class Overlord:
             # ErrorEvents.RESOURCE_NOT_FOUND
             _ = e  # remove this after implementing observability
             return None
-
-    async def cleanup_async_requests(self, max_age_hours: float = 24) -> int:
-        """
-        Clean up old completed async requests.
-
-        This method removes completed async requests that are older than the
-        specified age to prevent memory buildup from request tracking.
-
-        Args:
-            max_age_hours: Maximum age in hours for keeping completed requests
-
-        Returns:
-            Number of requests cleaned up
-        """
-        try:
-            max_age_seconds = max_age_hours * 3600
-            return await self.request_tracker.cleanup_completed_requests(max_age_seconds)
-        except Exception as e:
-            #  Warning - TODO: add observability
-            # ErrorEvents.RESOURCE_UNAVAILABLE
-            _ = e  # remove this after implementing observability
-            return 0
 
     async def _check_clarification_needs_async(
         self, message: str, user_id: Any, agent_name: Optional[str]
@@ -2966,13 +3520,14 @@ class Overlord:
                     )
 
                     # Schedule background processing continuation
-                    asyncio.create_task(
+                    self._create_tracked_task(
                         self._execute_async_request(
                             request_id,
                             enhanced_message,
                             None,  # Agent already selected
                             request_state.user_id,
-                        )
+                        ),
+                        name=f"execute_async_request_{request_id}",
                     )
                     return True
 
@@ -3020,6 +3575,9 @@ class Overlord:
                         error=f"Clarification failed: {result.error_message}",
                     )
 
+                    # Auto-remove failed request to prevent memory buildup
+                    await self.request_tracker.remove_request(request_id)
+
                     return False
 
             return False
@@ -3035,6 +3593,9 @@ class Overlord:
                 await self.request_tracker.update_request(
                     request_id, RequestStatus.FAILED, error=f"Clarification processing error: {e}"
                 )
+
+                # Auto-remove failed request to prevent memory buildup
+                await self.request_tracker.remove_request(request_id)
             except Exception:
                 pass  # Avoid nested exceptions
 

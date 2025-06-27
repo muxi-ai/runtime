@@ -143,34 +143,6 @@ class RequestTracker:
         async with self._lock:
             return dict(self._requests)
 
-    async def cleanup_completed_requests(self, max_age_seconds: float = 3600) -> int:
-        """
-        Clean up completed requests older than max_age_seconds.
-
-        Args:
-            max_age_seconds: Maximum age in seconds for completed requests
-
-        Returns:
-            Number of requests cleaned up
-        """
-        current_time = time.time()
-        removed_count = 0
-
-        async with self._lock:
-            to_remove = []
-            for request_id, request_state in self._requests.items():
-                if (
-                    request_state.status in (RequestStatus.COMPLETED, RequestStatus.FAILED)
-                    and request_state.end_time
-                    and (current_time - request_state.end_time) > max_age_seconds
-                ):
-                    to_remove.append(request_id)
-
-            for request_id in to_remove:
-                del self._requests[request_id]
-                removed_count += 1
-
-        return removed_count
 
     async def get_request_count(self) -> int:
         """

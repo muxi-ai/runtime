@@ -6,7 +6,6 @@ streaming support, and workflow coordination.
 """
 
 import time
-import asyncio
 from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 from ..background.request_tracker import RequestStatus, RequestState
 from ...utils.id_generator import generate_nanoid
@@ -121,15 +120,32 @@ class ChatOrchestrator:
 
             # Process files if provided and incorporate into message
             if files:
-                # Process documents but don't return early - continue with normal flow
-                doc_result = await self.overlord.process_document_upload(
-                    attachments=files,
-                    user_request=message,
-                    context={"agent_name": agent_name} if agent_name else None,
-                    user_id=user_id,
-                )
-                # Update message to include file processing result for webhook/async handling
-                message = f"{message}\n\n[File Processing Result]: {doc_result}"
+                try:
+                    # Process documents but don't return early - continue with normal flow
+                    context = {"agent_name": agent_name} if agent_name else {}
+                    context["session_id"] = session_id
+                    context["request_id"] = request_id
+
+                    doc_result = await self.overlord.process_document_upload(
+                        attachments=files,
+                        user_request=message,
+                        context=context,
+                        user_id=user_id,
+                    )
+                    # Update message to include file processing result for webhook/async handling
+                    message = f"{message}\n\n[File Processing Result]: {doc_result}"
+                except Exception as e:
+                    # Log error and continue with original message
+                    observability.observe(
+                        event_type=observability.ConversationEvents.REQUEST_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={"error": str(e), "file_count": len(files)},
+                        description=f"File processing failed for request {request_id}",
+                    )
+                    # Optionally, you might want to include a failure notice in the message
+                    message = (
+                        f"{message}\n\n[File Processing]: Failed to process {len(files)} file(s)"
+                    )
 
             # Use provided values or formation defaults
             webhook_url = webhook_url or getattr(self.overlord, "async_webhook_url", None)
@@ -277,14 +293,27 @@ class ChatOrchestrator:
         # Track the request in RequestTracker
         await self.overlord.request_tracker.track_request(request_id, initial_state)
 
-        # Create background task for async execution
-        asyncio.create_task(
+        # Create tracked background task for async execution
+        observability.observe(
+            event_type=observability.ConversationEvents.ASYNC_PROCESSING_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "request_id": request_id,
+                "has_execute_method": hasattr(self.overlord, "_execute_async_request"),
+                "has_create_method": hasattr(self.overlord, "_create_tracked_task"),
+            },
+            description=f"Creating async task for request {request_id}",
+        )
+
+        self.overlord._create_tracked_task(
             self.overlord._execute_async_request(
                 request_id=request_id,
                 message=message,
                 agent_name=agent_name,
                 user_id=user_id,
-            )
+                session_id=session_id,
+            ),
+            name=f"async_request_{request_id}",
         )
 
         # Return immediate response

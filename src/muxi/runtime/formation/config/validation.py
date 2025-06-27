@@ -1155,8 +1155,8 @@ class FormationValidator:
                 self.result.add_error(f"LLM model {i} must be a dictionary")
                 continue
 
-            # Find the capability (text, vision, audio, documents, embedding)
-            known_capabilities = {"text", "vision", "audio", "documents", "embedding"}
+            # Find the capability (text, vision, audio, video, documents, embedding)
+            known_capabilities = {"text", "vision", "audio", "video", "documents", "embedding"}
             capability_fields = set(model_config.keys()) & known_capabilities
 
             if not capability_fields:

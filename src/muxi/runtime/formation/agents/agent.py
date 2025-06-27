@@ -795,6 +795,13 @@ class Agent:
 
         # Search knowledge and memory if handler is available
         context_enhancement = ""
+
+        # First, check for recent document uploads
+        recent_docs = []
+        if self.overlord and hasattr(self.overlord, "get_recent_documents"):
+            # Pass session_id to get documents from the current session
+            recent_docs = self.overlord.get_recent_documents(session_id=session_id)
+
         if self._knowledge_config:  # Check if knowledge config exists
             try:
                 # Use unified search to get both knowledge and memory context
@@ -806,8 +813,21 @@ class Agent:
                 knowledge_results = search_results.get("knowledge", [])
                 memory_results = search_results.get("memory", [])
 
-                if knowledge_results or memory_results:
+                if knowledge_results or memory_results or recent_docs:
                     context_parts = []
+
+                    # Add recent document uploads first (highest priority)
+                    if recent_docs:
+                        context_parts.append("--- Recently Uploaded Documents ---")
+                        for doc in recent_docs:
+                            context_parts.append(f"Filename: {doc.get('filename', 'Unknown')}")
+                            # Join content list if it's a list
+                            doc_content = doc.get("content", "")
+                            if isinstance(doc_content, list):
+                                doc_content = "\n".join(doc_content)
+                            context_parts.append(f"{doc_content}")
+                            context_parts.append("")  # Empty line between docs
+                        context_parts.append("--- End Recently Uploaded Documents ---")
 
                     # Add domain knowledge context
                     if knowledge_results:
@@ -837,12 +857,14 @@ class Agent:
                             "agent_id": self.agent_id,
                             "knowledge_results_count": len(knowledge_results),
                             "memory_results_count": len(memory_results),
+                            "recent_docs_count": len(recent_docs),
                             "query": content[:100],
                             "unified_search": True,
                         },
                         description=(
-                            f"Unified knowledge and memory search completed "
-                            f"for agent {self.agent_id}"
+                            f"Context search completed for agent {self.agent_id}: "
+                            f"{len(recent_docs)} recent docs, {len(knowledge_results)} knowledge, "
+                            f"{len(memory_results)} memory results"
                         ),
                     )
             except Exception as e:
@@ -857,6 +879,30 @@ class Agent:
                     },
                     description=f"Knowledge search failed for agent {self.agent_id}: {str(e)}",
                 )
+        else:
+            # No knowledge config, but still check for recent documents
+            # Get recent docs again if we didn't already
+            if not recent_docs and self.overlord and hasattr(self.overlord, "get_recent_documents"):
+                recent_docs = self.overlord.get_recent_documents(session_id=session_id)
+
+            if recent_docs:
+                context_parts = []
+                context_parts.append("--- Recently Uploaded Documents ---")
+                for doc in recent_docs:
+                    context_parts.append(f"Filename: {doc.get('filename', 'Unknown')}")
+                    # Join content list if it's a list
+                    doc_content = doc.get("content", "")
+                    if isinstance(doc_content, list):
+                        doc_content = "\n".join(doc_content)
+                    context_parts.append(f"{doc_content}")
+                    context_parts.append("")  # Empty line between docs
+                context_parts.append("--- End Recently Uploaded Documents ---")
+
+                context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
+
+                # Add enhanced context to the conversation
+                enhanced_message = f"{content}{context_enhancement}"
+                self._messages[-1]["content"] = enhanced_message
 
         # Process the message with the model directly
         raw_response = await self.model.chat(self._messages)

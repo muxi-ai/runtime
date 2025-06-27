@@ -80,6 +80,7 @@ import magic
 
 # Import OneLLM components
 from onellm import ChatCompletion, Embedding
+from onellm.audio import AudioTranscription
 from onellm.config import set_api_key
 from onellm.errors import AuthenticationError, RateLimitError, InvalidRequestError
 
@@ -1207,6 +1208,52 @@ Provide a helpful, conversational response that directly addresses what the user
             return embedding
 
         return await self._execute_with_resilience(_embed_request)
+
+    async def transcribe(
+        self, audio_file: Union[str, bytes], model: Optional[str] = None, **kwargs: Any
+    ) -> str:
+        """
+        Transcribe audio to text using OneLLM's audio transcription API.
+
+        Args:
+            audio_file: The audio file to transcribe (path or bytes).
+            model: The transcription model to use (default: uses provider default).
+            **kwargs: Additional parameters like language, prompt, response_format.
+
+        Returns:
+            The transcribed text.
+
+        Raises:
+            LLMError: For various error conditions with appropriate classification.
+        """
+
+        async def _transcribe_request():
+            # Use the transcription model from init or default to whisper-1
+            transcription_model = model or self.model
+
+            # For transcription models, we might need to adjust the model name
+            # e.g., "openai/gpt-4" -> "openai/whisper-1"
+            if "/" in transcription_model and not transcription_model.endswith("whisper-1"):
+                provider = transcription_model.split("/")[0]
+                transcription_model = f"{provider}/whisper-1"
+
+            # Prepare parameters
+            params = {
+                "model": transcription_model,
+                "file": audio_file,
+            }
+            params.update(kwargs)
+
+            # Call OneLLM AudioTranscription using async method
+            response = await AudioTranscription.create(**params)
+
+            # Extract text from response
+            if isinstance(response, dict) and "text" in response:
+                return response["text"]
+            else:
+                return str(response)
+
+        return await self._execute_with_resilience(_transcribe_request)
 
     async def generate_embeddings(self, texts: List[str], **kwargs: Any) -> List[List[float]]:
         """
