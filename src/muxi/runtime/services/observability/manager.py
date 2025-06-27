@@ -6,7 +6,7 @@ the central coordination for the observability system.
 """
 
 import socket
-from contextlib import asynccontextmanager
+from contextlib import contextmanager
 from typing import Any, Dict, Optional, List
 import time
 from .logger import EventLogger
@@ -114,50 +114,73 @@ class ObservabilityManager:
         if self._health_monitoring_started:
             await self.health_monitor.stop()
 
-    @asynccontextmanager
-    async def track_request(
+    @contextmanager
+    def track_request(
         self,
         request_id: Optional[str] = None,
         session_id: Optional[str] = None,
         formation_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ):
-        """Context manager for request tracking with automatic context propagation."""
-        async with self.request_manager.track_request(
-            request_id=request_id,
-            session_id=session_id,
-            formation_id=formation_id,
-            user_id=user_id,
-        ) as context:
-            # Emit request received event - context automatically available!
-            await self.emit_conversation_event(
-                ConversationEvents.REQUEST_RECEIVED,
+        """Context manager for request tracking with automatic context propagation (sync version)."""
+        # Since request_manager.track_request is async, we need to handle this differently
+        # We'll use the context directly
+        from ...utils.id_generator import generate_nanoid
+
+        # Generate request ID if not provided
+        if request_id is None:
+            request_id = f"req_{generate_nanoid()}"
+
+        # Create request context
+        context = RequestContext(
+            id=request_id, formation_id=formation_id, user_id=user_id, session_id=session_id
+        )
+
+        # Set context for current thread (using context.py)
+        from .context import set_request_context
+
+        set_request_context(context)
+
+        # Emit request received event - now sync!
+        self.event_logger.emit_event(
+            event_type=ConversationEvents.REQUEST_RECEIVED,
+            level=EventLevel.INFO,
+            request_context=context,
+            description=f"Request {context.id} received",
+        )
+
+        try:
+            yield context
+
+            # Mark as completed
+            context.complete()
+
+            # Emit request completed event - now sync!
+            self.event_logger.emit_event(
+                event_type=ConversationEvents.REQUEST_COMPLETED,
                 level=EventLevel.INFO,
                 request_context=context,
-                description=f"Request {context.id} received",
+                description=f"Request {context.id} completed in {context.duration_ms}ms",
             )
 
-            try:
-                yield context
+        except Exception as e:
+            # Mark as failed
+            context.fail()
 
-                # Emit request completed event - context automatically available!
-                await self.emit_conversation_event(
-                    ConversationEvents.REQUEST_COMPLETED,
-                    level=EventLevel.INFO,
-                    request_context=context,
-                    description=f"Request {context.id} completed in {context.duration_ms}ms",
-                )
+            # Emit request failed event - now sync!
+            self.event_logger.emit_event(
+                event_type=ConversationEvents.REQUEST_FAILED,
+                level=EventLevel.ERROR,
+                request_context=context,
+                data={"error": str(e)},
+                description=f"Request {context.id} failed: {str(e)}",
+            )
+            raise
+        finally:
+            # Clear context
+            from .context import _current_request_context
 
-            except Exception as e:
-                # Emit request failed event - context automatically available!
-                await self.emit_conversation_event(
-                    ConversationEvents.REQUEST_FAILED,
-                    level=EventLevel.ERROR,
-                    request_context=context,
-                    data={"error": str(e)},
-                    description=f"Request {context.id} failed: {str(e)}",
-                )
-                raise
+            _current_request_context.set(None)
 
     async def emit_conversation_event(
         self,

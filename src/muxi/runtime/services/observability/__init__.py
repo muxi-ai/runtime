@@ -62,10 +62,24 @@ __all__ = [
 # CLEAN MODULE INTERFACE WITH EXPLICIT HELPER FUNCTION
 # ===================================================================
 
-import asyncio
 from typing import Any, Dict, Optional, Union
+import multitasking
+import signal
+
+# Set multitasking to thread mode for shared memory access
+multitasking.set_engine("thread")
+
+# Kill all tasks on ctrl-c for clean shutdown
+# Only register signal handlers in main thread to avoid errors in tests
+try:
+    signal.signal(signal.SIGINT, multitasking.killall)
+except ValueError:
+    # Signal handlers can only be registered in main thread
+    # This is expected in tests or when imported from threads
+    pass
 
 
+@multitasking.task
 def observe(
     event_type: Union[SystemEvents, ConversationEvents, str],
     level: EventLevel = EventLevel.INFO,
@@ -73,10 +87,10 @@ def observe(
     description: str = "",
 ) -> None:
     """
-    Emit an observability event.
+    Emit an observability event (non-blocking).
 
-    This is a clean helper function that creates a minimal event logger
-    instance for immediate use. For advanced usage, use ObservabilityManager directly.
+    This function runs in a background thread and will not block the caller.
+    It automatically includes the current request context if available.
 
     Args:
         event_type: The event type enum or string
@@ -85,32 +99,22 @@ def observe(
         description: Human-readable description
     """
     try:
-        # Create a minimal event logger for immediate use
-        from .logger import EventLogger
+        # Get request context from context.py
+        from .context import get_current_request_context
+
+        request_context = get_current_request_context()
+
+        # Create event logger
         logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
 
-        # Run the async emission in a sync context
-        loop = None
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop, create new one
-            asyncio.run(logger.emit_event(
-                event_type=event_type,
-                level=level,
-                data=data or {},
-                description=description,
-                request_context=None
-            ))
-        else:
-            # Running loop exists, create task
-            loop.create_task(logger.emit_event(
-                event_type=event_type,
-                level=level,
-                data=data or {},
-                description=description,
-                request_context=None
-            ))
+        # Emit event (now sync)
+        logger.emit_event(
+            event_type=event_type,
+            level=level,
+            data=data or {},
+            description=description,
+            request_context=request_context,
+        )
     except Exception:
         # Silently fail if observability unavailable
         pass

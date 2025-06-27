@@ -10,8 +10,7 @@ import socket
 import time
 from typing import Any, Dict, List, Optional, Union
 
-import aiofiles
-import aiohttp
+import requests
 
 from ...datatypes.observability import ConversationEvents, SystemEvents, EventLevel, RequestContext
 from ...utils.user_dirs import get_observability_dir
@@ -62,7 +61,7 @@ class EventLogger:
 
         return True
 
-    async def emit_event(
+    def emit_event(
         self,
         event_type: Union[ConversationEvents, SystemEvents, str],
         level: EventLevel = EventLevel.INFO,
@@ -124,11 +123,11 @@ class EventLogger:
                 event["data"]["description"] = description
 
         # Emit to configured output
-        await self._emit_to_output(event, event_type)
+        self._emit_to_output(event, event_type)
 
         return event_id
 
-    async def _emit_to_output(
+    def _emit_to_output(
         self, event: Dict[str, Any], event_type: Union[ConversationEvents, SystemEvents, str]
     ) -> None:
         """Emit event to the configured output destination."""
@@ -145,41 +144,40 @@ class EventLogger:
             if self.output == "stdout":
                 print(event_line, flush=True)
             elif self.output == "file":
-                await self._emit_to_file(event_line)
+                self._emit_to_file(event_line)
             elif self.output == "stream":
-                await self._emit_to_stream(event_line)
+                self._emit_to_stream(event_line)
             elif self.output == "trail":
-                await self._emit_to_trail(event_line)
+                self._emit_to_trail(event_line)
 
         except Exception:
             # Silent failures to avoid disrupting main application flow
             pass
 
-    async def _emit_to_file(self, event_line: str) -> None:
+    def _emit_to_file(self, event_line: str) -> None:
         """Emit event to file output."""
         file_path = self.output_config.get("path", f"{get_observability_dir()}/muxi.jsonl")
-        async with aiofiles.open(file_path, "a") as f:
-            await f.write(event_line + "\n")
+        with open(file_path, "a") as f:
+            f.write(event_line + "\n")
 
-    async def _emit_to_stream(self, event_line: str) -> None:
+    def _emit_to_stream(self, event_line: str) -> None:
         """Emit event to stream output."""
         stream_url = self.output_config.get("url")
         if not stream_url:
             return
 
         try:
-            async with aiohttp.ClientSession() as session:
-                await session.post(
-                    stream_url,
-                    data=event_line + "\n",
-                    headers={"Content-Type": "application/x-ndjson"},
-                    timeout=aiohttp.ClientTimeout(total=5),
-                )
+            requests.post(
+                stream_url,
+                data=event_line + "\n",
+                headers={"Content-Type": "application/x-ndjson"},
+                timeout=5,
+            )
         except Exception:
             # Silent failure for external stream connectivity issues
             pass
 
-    async def _emit_to_trail(self, event_line: str) -> None:
+    def _emit_to_trail(self, event_line: str) -> None:
         """Emit event to MUXI trail output."""
         trail_config = self.output_config.get("trail", {})
         trail_url = trail_config.get("url")
@@ -194,13 +192,12 @@ class EventLogger:
             if api_key := trail_config.get("api_key"):
                 headers["Authorization"] = f"Bearer {api_key}"
 
-            async with aiohttp.ClientSession() as session:
-                await session.post(
-                    trail_url,
-                    data=event_line + "\n",
-                    headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                )
+            requests.post(
+                trail_url,
+                data=event_line + "\n",
+                headers=headers,
+                timeout=10,
+            )
         except Exception:
             # Silent failure for external trail connectivity issues
             pass
