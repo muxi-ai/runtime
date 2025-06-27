@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 
 from ...config.document_processing import DocumentProcessingConfig
+from ....services import observability
 
 import nltk
 from nltk.tokenize import sent_tokenize
@@ -86,12 +87,29 @@ class DocumentChunkManager:
             model_name = (
                 self.document_config.get_spacy_model() if self.document_config else "en_core_web_sm"
             )
-            self._nlp_model = spacy.load(model_name)
-        except OSError:
-            #  Warning - TODO: add observability
-            _ = None  # remove this after implementing observability
-            #     "spaCy model not found - falling back to basic processing"
-            # )
+            # Try to load spacy model with a timeout
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(spacy.load, model_name)
+                try:
+                    self._nlp_model = future.result(timeout=2.0)
+                except concurrent.futures.TimeoutError:
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_WARNING,
+                        level=observability.EventLevel.WARNING,
+                        data={"model": model_name, "reason": "timeout"},
+                        description=f"Timeout loading spacy model '{model_name}' - using basic processing",
+                    )
+                    self._nlp_model = None
+        except (OSError, ImportError) as e:
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_WARNING,
+                level=observability.EventLevel.WARNING,
+                data={"model": model_name, "error": str(e)},
+                description=f"spaCy model '{model_name}' not found - falling back to basic processing",
+            )
+            self._nlp_model = None
 
         # Ensure NLTK data is available
         try:
@@ -146,13 +164,29 @@ class DocumentChunkManager:
 
         # Convert to DocumentChunk objects
         document_chunks = []
+        current_pos = 0
+
         for i, chunk_content in enumerate(chunks):
+            # For chunking methods that return modified content, we need to estimate positions
+            # If we can't find the exact chunk in the original content, use sequential positions
+            start_pos = content.find(chunk_content, current_pos)
+
+            if start_pos == -1:
+                # Chunk not found in original content (likely modified by chunking process)
+                # Use estimated sequential positions instead
+                start_pos = current_pos
+                end_pos = min(start_pos + len(chunk_content), len(content))
+            else:
+                # Chunk found, use actual positions
+                end_pos = start_pos + len(chunk_content)
+                current_pos = end_pos
+
             chunk = DocumentChunk(
                 content=chunk_content,
                 chunk_id=f"{document_id}_chunk_{i:04d}",
                 document_id=document_id,
-                start_pos=content.find(chunk_content),
-                end_pos=content.find(chunk_content) + len(chunk_content),
+                start_pos=start_pos,
+                end_pos=end_pos,
                 metadata={
                     "filename": filename,
                     "strategy": strategy,
@@ -369,8 +403,12 @@ class DocumentChunkManager:
             if chunk:
                 chunks.append(chunk)
 
+            # If we've processed a chunk, move to next position
+            if end >= content_length:
+                break
+
             start = end - self.chunk_overlap
-            if start <= 0:
+            if start <= 0 or start >= end:
                 start = end
 
         return chunks if chunks else [content]

@@ -73,7 +73,7 @@ class RequestAnalyzer:
                 requires_approval=requires_approval,
                 implicit_subtasks=[],
                 required_capabilities=["general"],
-                acceptance_criteria=[],
+                acceptance_criteria=["Request completed successfully"],
                 confidence_score=0.3,
             )
 
@@ -270,6 +270,10 @@ class RequestAnalyzer:
             acceptance_criteria.append("Analysis includes actionable insights")
         if any(word in message_lower for word in ["implement", "build"]):
             acceptance_criteria.append("Implementation meets requirements")
+
+        # Ensure at least one acceptance criterion
+        if not acceptance_criteria:
+            acceptance_criteria.append("Request completed successfully")
 
         # Clamp complexity score
         complexity_score = min(10.0, max(1.0, complexity_score))

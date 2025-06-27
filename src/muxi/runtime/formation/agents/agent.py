@@ -992,7 +992,47 @@ class Agent:
             # Join content list if it's a list
             doc_content = doc.get("content", "")
             if isinstance(doc_content, list):
-                doc_content = "\n".join(doc_content)
+                # Check if list contains bytes
+                if doc_content and isinstance(doc_content[0], bytes):
+                    # List of bytes - try to decode each
+                    decoded_parts = []
+                    for part in doc_content:
+                        try:
+                            decoded_parts.append(
+                                part.decode("utf-8") if isinstance(part, bytes) else str(part)
+                            )
+                        except (UnicodeDecodeError, AttributeError) as e:
+                            observability.observe(
+                                event_type=observability.SystemEvents.SERVICE_WARNING,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "agent_id": self.agent_id,
+                                    "error": str(e),
+                                    "content_type": "binary_list_item",
+                                },
+                                description=f"Failed to decode binary content in document list: {type(e).__name__}",
+                            )
+                            decoded_parts.append("[Binary content]")
+                    doc_content = "\n".join(decoded_parts)
+                else:
+                    # List of strings
+                    doc_content = "\n".join(str(item) for item in doc_content)
+            elif isinstance(doc_content, bytes):
+                # Handle binary content - decode if possible or show placeholder
+                try:
+                    doc_content = doc_content.decode("utf-8")
+                except (UnicodeDecodeError, AttributeError) as e:
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_WARNING,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": self.agent_id,
+                            "error": str(e),
+                            "content_type": "binary_file",
+                        },
+                        description=f"Failed to decode binary file content: {type(e).__name__}",
+                    )
+                    doc_content = "[Binary file content - unable to display as text]"
             context_parts.append(f"{doc_content}")
             context_parts.append("")  # Empty line between docs
         context_parts.append("--- End Recently Uploaded Documents ---")

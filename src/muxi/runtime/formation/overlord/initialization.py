@@ -7,6 +7,7 @@ to improve maintainability and separation of concerns.
 
 from typing import Any, Dict, Optional
 
+from ..documents.storage.chunk_manager import DocumentChunkManager
 from ...services.observability.utils import detect_stream_protocol
 from ...services.memory.short_term import ShortTermMemory
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
@@ -617,6 +618,9 @@ async def initialize_document_processing_config(overlord) -> None:
             # SystemEvents.INITIALIZING (document processing config + settings)
             pass
 
+        # Initialize DocumentChunkManager with the configuration
+        overlord.document_chunker = DocumentChunkManager(overlord.document_processing_config)
+
     except Exception as e:
         #  Warning - TODO: add observability
         # ErrorEvents.FAILED_INITIALIZATION
@@ -635,8 +639,6 @@ async def load_agents_from_configuration(overlord) -> None:
     This method reads the agents_config from configured_services and creates
     Agent instances for each configured agent, adding them to overlord.agents.
     """
-    from ...services import observability
-
     observability.observe(
         event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
         level=observability.EventLevel.DEBUG,

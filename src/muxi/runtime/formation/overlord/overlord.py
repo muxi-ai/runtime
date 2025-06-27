@@ -212,6 +212,11 @@ from .initialization import (
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
 from ...utils.user_dirs import set_formation_id
 
+# Import MarkItDown - required dependency
+from markitdown import MarkItDown
+
+_MARKITDOWN_INSTANCE = None
+
 
 class Overlord:
     """
@@ -336,7 +341,9 @@ class Overlord:
 
         # Initialize observability system early (needed by chat orchestrator)
         # Get logging config from configured services
-        logging_config = configured_services.get("logging_config", {}) if configured_services else {}
+        logging_config = (
+            configured_services.get("logging_config", {}) if configured_services else {}
+        )
         self.observability_manager = observability.ObservabilityManager(logging_config)
 
         # Chat orchestration system
@@ -482,7 +489,9 @@ class Overlord:
 
         # Initialize document processing components (intelligence concerns)
         # These will be properly configured from Formation services
+        # Initialize document chunker - will be configured by Formation if needed
         self.document_chunker: Optional[DocumentChunkManager] = None
+
         self.document_metadata_store: Optional[DocumentMetadataStore] = None
         self.document_reference_system: Optional[DocumentReferenceSystem] = None
         self.document_acknowledger: Optional[DocumentAcknowledgmentGenerator] = None
@@ -655,8 +664,7 @@ class Overlord:
                 # Start cache manager
                 await self.cache_manager.start()
 
-                # Start observability system (already initialized in __init__)
-                await self.observability_manager.start()
+                # Observability system is already initialized and ready (no async start needed)
 
                 # Load agents from formation configuration
                 observability.observe(
@@ -2054,15 +2062,84 @@ class Overlord:
                     ]
 
                 else:
-                    # Process as text document using existing chunking
-                    if self.document_chunker:
-                        chunks = await self.document_chunker.chunk_document(
-                            content=content, filename=filename, strategy="adaptive"
-                        )
+                    # Check if we should use MarkItDown for conversion
+                    should_use_markitdown = False
+                    markitdown_extensions = [".pdf", ".docx", ".pptx", ".xlsx", ".html"]
+                    file_ext = os.path.splitext(filename)[1].lower()
+
+                    if file_ext in markitdown_extensions:
+                        global _MARKITDOWN_INSTANCE
+
+                        # Create singleton instance if needed
+                        if _MARKITDOWN_INSTANCE is None:
+                            _MARKITDOWN_INSTANCE = MarkItDown()
+
+                        markitdown = _MARKITDOWN_INSTANCE
+                        should_use_markitdown = True
+
+                    if should_use_markitdown:
+                        try:
+                            # Convert document to markdown using MarkItDown
+                            # Create a temporary file for binary content
+                            import tempfile
+
+                            with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+                                tmp.write(
+                                    content if isinstance(content, bytes) else content.encode()
+                                )
+                                tmp_path = tmp.name
+
+                            # Convert with MarkItDown
+                            result = markitdown.convert(tmp_path)
+                            extracted_content = result.text_content
+
+                            # Clean up temp file
+                            os.unlink(tmp_path)
+
+                            # Now chunk the extracted text
+                            if self.document_chunker:
+                                doc_chunks = await self.document_chunker.chunk_document(
+                                    content=extracted_content,
+                                    filename=filename,
+                                    strategy="adaptive",
+                                )
+                                # Convert DocumentChunk objects to expected format
+                                chunks = [
+                                    {"content": chunk.content, "metadata": chunk.metadata}
+                                    for chunk in doc_chunks
+                                ]
+                            else:
+                                # Simple chunking of extracted text
+                                chunks = [
+                                    {
+                                        "content": extracted_content,
+                                        "metadata": {"filename": filename, "converted": True},
+                                    }
+                                ]
+
+                            print(
+                                f"Successfully extracted {len(extracted_content)} chars from {filename}"
+                            )
+
+                        except Exception as e:
+                            print(f"MarkItDown conversion failed for {filename}: {e}")
+                            # Fall back to binary chunking
+                            chunks = [{"content": content, "metadata": {"filename": filename}}]
                     else:
-                        # Fallback simple chunking
-                        print(f"Using fallback chunking for {filename}")
-                        chunks = [{"content": content, "metadata": {"filename": filename}}]
+                        # Process as text document using existing chunking
+                        if self.document_chunker:
+                            doc_chunks = await self.document_chunker.chunk_document(
+                                content=content, filename=filename, strategy="adaptive"
+                            )
+                            # Convert DocumentChunk objects to expected format
+                            chunks = [
+                                {"content": chunk.content, "metadata": chunk.metadata}
+                                for chunk in doc_chunks
+                            ]
+                        else:
+                            # Fallback simple chunking
+                            print(f"Using fallback chunking for {filename}")
+                            chunks = [{"content": content, "metadata": {"filename": filename}}]
 
                 # Store metadata
                 internal_user_id = None
@@ -2105,9 +2182,10 @@ class Overlord:
                     }
 
                     chunk_content = chunk.get("content", "")
-                    print(f"Adding chunk {i} to buffer: {chunk_content[:100]}...")
 
-                    await self.add_to_buffer_memory(message=chunk_content, metadata=chunk_metadata)
+                    result = await self.add_to_buffer_memory(
+                        message=chunk_content, metadata=chunk_metadata
+                    )
 
                 # Add to processed docs list with actual content
                 processed_docs.append(

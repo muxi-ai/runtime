@@ -85,27 +85,14 @@ class ChatOrchestrator:
         timestamp = time.time()
 
         # Start request tracking with observability
-        async with self.overlord.observability_manager.track_request(
+        with self.overlord.observability_manager.track_request(
             request_id=request_id,
             session_id=session_id,
             formation_id=self.overlord.formation_id,
             user_id=str(user_id) if user_id is not None else None,
-        ):
-            # Emit request received event
-            observability.observe(
-                event_type=observability.ConversationEvents.REQUEST_RECEIVED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "message_length": len(message),
-                    "agent_name": agent_name,
-                    "user_id": str(user_id) if user_id is not None else None,
-                    "use_async": use_async,
-                    "has_webhook": webhook_url is not None,
-                    "has_files": files is not None and len(files) > 0,
-                    "file_count": len(files) if files else 0,
-                },
-                description=f"Request {request_id} received",
-            )
+        ) as context:
+            # Note: REQUEST_RECEIVED is already emitted by observability_manager.track_request
+            # So we don't need to emit it again here
 
             # Emit request validation event (basic validation)
             observability.observe(
@@ -114,6 +101,8 @@ class ChatOrchestrator:
                 data={
                     "message_valid": len(message.strip()) > 0,
                     "agent_exists": agent_name is None or agent_name in self.overlord.agents,
+                    "has_files": files is not None,
+                    "file_count": len(files) if files else 0,
                 },
                 description=f"Request {request_id} validated",
             )
@@ -221,26 +210,37 @@ class ChatOrchestrator:
 
         try:
             # Estimate processing time
+            context = {
+                "agent_name": agent_name,
+                "formation_config": self.overlord.formation_config,
+            }
             estimated_time = await self.overlord.time_estimator.estimate_processing_time(
-                message=message,
-                agent_name=agent_name,
-                formation_config=self.overlord.formation_config,
+                request=message,
+                context=context,
             )
 
             # Use async if estimated time exceeds threshold
+            # If estimation returns None, default to sync
+            if estimated_time is None:
+                raise ValueError("Time estimation returned None")
+
             should_async = estimated_time > threshold_seconds
 
             # Emit decision event
-            observability.observe(
-                event_type=observability.ConversationEvents.ASYNC_DECISION_MADE,
-                level=observability.EventLevel.INFO,
-                data={
-                    "estimated_time": estimated_time,
-                    "threshold_seconds": threshold_seconds,
-                    "decision": "async" if should_async else "sync",
-                },
-                description=f"Async decision: {estimated_time}s estimated, using {'async' if should_async else 'sync'}",
-            )
+            if should_async:
+                observability.observe(
+                    event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "estimated_time": estimated_time,
+                        "threshold_seconds": threshold_seconds,
+                        "decision": "async",
+                    },
+                    description=(
+                        f"Async threshold detected: {estimated_time}s estimated "
+                        f"> {threshold_seconds}s threshold"
+                    ),
+                )
 
             return should_async
 
