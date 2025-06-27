@@ -125,7 +125,7 @@ observability.observe(
 The overlord automatically tracks requests with context:
 
 ```python
-# This happens automatically in overlord.chat()
+# This happens automatically in overlord.chat() - now synchronous
 with observability_manager.track_request(
     request_id="req_123",
     session_id="session_456",
