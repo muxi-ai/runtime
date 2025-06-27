@@ -7,8 +7,9 @@ request lifecycles and automatic cleanup.
 
 import asyncio
 import time
+import threading
 from contextlib import asynccontextmanager
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 from ...utils.id_generator import generate_nanoid as generate_id
 from .context import _current_request_context
@@ -23,6 +24,8 @@ class RequestContextManager:
         self._cleanup_interval = cleanup_interval
         self._cleanup_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
+        self._pending_contexts: List[RequestContext] = []
+        self._pending_lock = threading.Lock()  # Thread-safe lock for sync operations
 
     async def start_cleanup(self) -> None:
         """Start the automatic cleanup task."""
@@ -40,10 +43,19 @@ class RequestContextManager:
 
     async def _cleanup_loop(self) -> None:
         """Periodic cleanup of old request contexts."""
+        cleanup_counter = 0
         while True:
             try:
-                await asyncio.sleep(self._cleanup_interval)
-                await self._cleanup_old_contexts()
+                # Process pending contexts every second for responsiveness
+                await asyncio.sleep(1)
+                await self._process_pending_contexts()
+
+                # Run full cleanup every cleanup_interval seconds
+                cleanup_counter += 1
+                if cleanup_counter >= self._cleanup_interval:
+                    await self._cleanup_old_contexts()
+                    cleanup_counter = 0
+
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -93,6 +105,29 @@ class RequestContextManager:
             # Reset the context variable when exiting
             _current_request_context.reset(token)
             # Don't remove immediately - let cleanup handle it
+
+    def register_context_sync(self, context: RequestContext) -> None:
+        """
+        Register a context synchronously (for use in sync track_request).
+
+        This is a thread-safe method that adds the context to be tracked
+        and cleaned up by the automatic cleanup task.
+        """
+        with self._pending_lock:
+            self._pending_contexts.append(context)
+
+    async def _process_pending_contexts(self) -> None:
+        """Process any pending sync context registrations."""
+        if self._pending_contexts:
+            # Get pending contexts in a thread-safe way
+            with self._pending_lock:
+                pending = self._pending_contexts[:]
+                self._pending_contexts.clear()
+
+            # Add to main context storage
+            async with self._lock:
+                for context in pending:
+                    self._contexts[context.id] = context
 
     async def get_context(self, request_id: str) -> Optional[RequestContext]:
         """Get request context by ID."""

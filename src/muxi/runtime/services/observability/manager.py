@@ -142,6 +142,9 @@ class ObservabilityManager:
             id=request_id, formation_id=formation_id, user_id=user_id, session_id=session_id
         )
 
+        # Register context with request manager for cleanup
+        self.request_manager.register_context_sync(context)
+
         # Set context for current thread (using context.py)
         from .context import set_request_context
 
