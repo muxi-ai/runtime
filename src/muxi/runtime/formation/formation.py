@@ -74,6 +74,16 @@ from .utils import generate_api_key
 from ..utils.user_dirs import set_formation_id
 import shlex
 
+# Formation initialization imports
+from .initialization import (
+    initialize_observability,
+    initialize_llm_config,
+    initialize_memory_systems,
+    initialize_document_processing,
+    initialize_background_services,
+    initialize_clarification_config,
+)
+
 
 class Formation:
     """
@@ -308,6 +318,9 @@ class Formation:
 
             # Prepare services (but don't start them yet)
             self._prepare_services()
+
+            # Initialize all services (observability first!)
+            asyncio.run(self._initialize_services())
 
         except (
             ConfigurationNotFoundError,
@@ -693,6 +706,68 @@ class Formation:
             "runtime_config": self._runtime_config,
             "agents_config": self._agents_config,
         }
+
+    async def _initialize_services(self) -> None:
+        """
+        Initialize all services after configuration is loaded.
+
+        This is called after _prepare_services() and initializes actual service
+        instances. Observability MUST be initialized first to ensure all events
+        go to the configured destination.
+
+        Order is critical:
+        1. Observability (FIRST!)
+        2. LLM configuration
+        3. Memory systems
+        4. Document processing
+        5. Background services
+        6. Other services
+        """
+        # 1. Initialize observability FIRST
+        # This ensures all subsequent events go to the configured file
+        await initialize_observability(self)
+
+        # 2. Initialize LLM configuration
+        await initialize_llm_config(self)
+
+        # 3. Initialize memory systems
+        await initialize_memory_systems(self)
+
+        # 4. Initialize document processing
+        await initialize_document_processing(self)
+
+        # 5. Initialize background services
+        await initialize_background_services(self)
+
+        # 6. Initialize clarification configuration
+        await initialize_clarification_config(self)
+
+        # Update configured services with initialized instances
+        self._configured_services.update(
+            {
+                "observability_manager": getattr(self, "_observability_manager", None),
+                "buffer_memory": getattr(self, "_buffer_memory", None),
+                "long_term_memory": getattr(self, "_long_term_memory", None),
+                "working_memory_config": getattr(self, "_working_memory_config", None),
+                "document_chunk_manager": getattr(self, "_document_chunk_manager", None),
+                "cache_manager": getattr(self, "_cache_manager", None),
+                "request_tracker": getattr(self, "_request_tracker", None),
+                "webhook_manager": getattr(self, "_webhook_manager", None),
+                "clarification_config": getattr(self, "_clarification_config_obj", None),
+                "db_manager": getattr(self, "_db_manager", None),
+                "is_multi_user": getattr(self, "_is_multi_user", False),
+            }
+        )
+
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={
+                "formation_id": self.formation_id,
+                "services_initialized": list(self._configured_services.keys()),
+            },
+            description="All Formation services initialized successfully",
+        )
 
     def _setup_auth(self) -> None:
         """

@@ -198,15 +198,7 @@ from ..background import (
 )
 
 # Initialize configuration from formation before starting services
-from .initialization import (
-    initialize_llm_config,
-    initialize_auth_config,
-    initialize_memory_config,
-    initialize_logging_config,
-    initialize_clarification_config,
-    initialize_document_processing_config,
-    load_agents_from_configuration,
-)
+from .initialization import load_agents_from_configuration
 
 # Unified Response Components
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
@@ -339,12 +331,17 @@ class Overlord:
         # Agent routing system
         self.agent_router = AgentRouter(self)
 
-        # Initialize observability system early (needed by chat orchestrator)
-        # Get logging config from configured services
-        logging_config = (
-            configured_services.get("logging_config", {}) if configured_services else {}
+        # Use pre-initialized observability manager from Formation
+        # This ensures all events go to the configured destination
+        self.observability_manager = (
+            configured_services.get("observability_manager") if configured_services else None
         )
-        self.observability_manager = observability.ObservabilityManager(logging_config)
+        if not self.observability_manager:
+            # Fallback if not provided (shouldn't happen in normal flow)
+            logging_config = (
+                configured_services.get("logging_config", {}) if configured_services else {}
+            )
+            self.observability_manager = observability.ObservabilityManager(logging_config)
 
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
@@ -393,18 +390,23 @@ class Overlord:
         # MEMORY COORDINATION - Intelligence concerns
         # ===================================================================
 
-        # Store centralized memory systems for intelligence coordination
-        self.buffer_memory = buffer_memory
-        self.long_term_memory = long_term_memory
+        # Use pre-initialized memory systems from Formation or provided parameters
+        self.buffer_memory = (
+            configured_services.get("buffer_memory") if configured_services else buffer_memory
+        )
+        self.long_term_memory = (
+            configured_services.get("long_term_memory") if configured_services else long_term_memory
+        )
 
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
         self.extraction_model = extraction_model
         self.memory_extractor = None  # Will be initialized later
 
-        # Multi-user mode configuration (intelligence concerns)
-        # Will be set during memory initialization based on PostgreSQL detection
-        self.is_multi_user = False
+        # Multi-user mode configuration from Formation
+        self.is_multi_user = (
+            configured_services.get("is_multi_user", False) if configured_services else False
+        )
 
         # Track message counts per user for extraction (intelligence)
         self.message_counts = {}  # Maps user_id to message count for throttling extraction
@@ -461,12 +463,17 @@ class Overlord:
         # CACHING AND OPTIMIZATION - Intelligence concerns
         # ===================================================================
 
-        # Initialize intelligent caching system (intelligence concerns)
-        self.cache_manager = IntelligentCacheManager(
-            enable_analytics=True,
-            enable_memory_optimization=True,
-            embedding_service=self.extraction_model,  # Use extraction model for embeddings
+        # Use pre-initialized cache manager from Formation
+        self.cache_manager = (
+            configured_services.get("cache_manager") if configured_services else None
         )
+        if not self.cache_manager:
+            # Fallback initialization if not provided
+            self.cache_manager = IntelligentCacheManager(
+                enable_analytics=True,
+                enable_memory_optimization=True,
+                embedding_service=self.extraction_model,  # Use extraction model for embeddings
+            )
 
         # Initialize parallel workflow optimizer (intelligence concerns)
         self.parallel_optimizer = ParallelWorkflowOptimizer(sensitivity_threshold=0.5)
@@ -488,9 +495,10 @@ class Overlord:
         # ===================================================================
 
         # Initialize document processing components (intelligence concerns)
-        # These will be properly configured from Formation services
-        # Initialize document chunker - will be configured by Formation if needed
-        self.document_chunker: Optional[DocumentChunkManager] = None
+        # Use pre-initialized document chunk manager from Formation
+        self.document_chunker: Optional[DocumentChunkManager] = (
+            configured_services.get("document_chunk_manager") if configured_services else None
+        )
 
         self.document_metadata_store: Optional[DocumentMetadataStore] = None
         self.document_reference_system: Optional[DocumentReferenceSystem] = None
@@ -505,16 +513,28 @@ class Overlord:
         # ASYNC REQUEST HANDLING - Intelligence concerns
         # ===================================================================
 
-        # Initialize async request-response components (intelligence concerns)
-        self.request_tracker = RequestTracker()
-        async_config = self.formation_config.get("async", {})
-        self.webhook_manager = WebhookManager(
-            default_retries=async_config.get("webhook_retries", 3),
-            default_timeout=async_config.get("webhook_timeout", 10),
+        # Use pre-initialized async components from Formation
+        self.request_tracker = (
+            configured_services.get("request_tracker") if configured_services else None
         )
+        if not self.request_tracker:
+            self.request_tracker = RequestTracker()
+
+        self.webhook_manager = (
+            configured_services.get("webhook_manager") if configured_services else None
+        )
+        if not self.webhook_manager:
+            async_config = self.formation_config.get("async", {})
+            self.webhook_manager = WebhookManager(
+                default_retries=async_config.get("webhook_retries", 3),
+                default_timeout=async_config.get("webhook_timeout", 10),
+            )
+
+        # Time estimator is intelligence-specific, keep local initialization
         self.time_estimator = TimeEstimator(self.request_analyzer)
 
         # Async configuration (intelligence concerns)
+        async_config = self.formation_config.get("async", {})
         self.async_threshold_seconds = async_config.get("threshold_seconds", 30)
         self.async_enable_estimation = async_config.get("enable_estimation", True)
         self.async_webhook_url = async_config.get("webhook_url")
@@ -522,14 +542,22 @@ class Overlord:
         # Track background tasks to ensure they complete before shutdown
         self._background_tasks: Set[asyncio.Task] = set()
 
+        # Get database manager from Formation if available
+        self.db_manager = configured_services.get("db_manager") if configured_services else None
+
         # ===================================================================
         # CLARIFICATION INTELLIGENCE - Intelligence concerns
         # ===================================================================
 
-        # Initialize clarification configuration with defaults (intelligence concerns)
-        self.clarification_config = ClarificationConfig(
-            max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
+        # Use pre-initialized clarification config from Formation
+        self.clarification_config = (
+            configured_services.get("clarification_config") if configured_services else None
         )
+        if not self.clarification_config:
+            # Fallback to defaults
+            self.clarification_config = ClarificationConfig(
+                max_questions=5, style=QuestionStyle.CONVERSATIONAL, persist_learned_info=False
+            )
 
         # ===================================================================
         # SERVICE REFERENCES - References to pre-configured services
@@ -668,21 +696,36 @@ class Overlord:
         try:
             # Run all async initialization in a new event loop
             async def _async_startup():
-                # Initialize LLM configuration first (needed for routing model)
-                await initialize_llm_config(self)
+                # Services are now initialized by Formation before Overlord creation
+                # Only handle intelligence-specific initialization here
 
-                # Initialize other configurations
-                await initialize_auth_config(self)
-                await initialize_memory_config(self)
-                await initialize_logging_config(self)
-                await initialize_clarification_config(self)
-                await initialize_document_processing_config(self)
+                # LLM configuration is already initialized by Formation
+                # Just copy the configuration for local use
+                if hasattr(self, "_configured_services") and self._configured_services:
+                    llm_config = self._configured_services.get("llm_config", {})
+                    self._model_cache = {}
+                    self._capability_models = {}
+
+                    # Process models by capability
+                    models_config = llm_config.get("models", [])
+                    for model_config in models_config:
+                        for capability, model_name in model_config.items():
+                            if capability in ["api_key", "settings"]:
+                                continue
+                            self._capability_models[capability] = {
+                                "model": model_name,
+                                "api_key": model_config.get("api_key"),
+                                "settings": model_config.get("settings", {}),
+                            }
+
+                    self._global_llm_settings = llm_config.get("settings", {})
+                    self._global_api_keys = llm_config.get("api_keys", {})
 
                 # Initialize the routing model (async) - now that LLM config is ready
                 await self._initialize_routing_model()
 
-                # Start cache manager
-                await self.cache_manager.start()
+                # Cache manager is already started by Formation
+                # No need to start it again
 
                 # Observability system is already initialized and ready (no async start needed)
 
