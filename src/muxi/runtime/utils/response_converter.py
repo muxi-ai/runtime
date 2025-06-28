@@ -31,9 +31,9 @@ def convert_onellm_to_muxi_content(
     try:
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
-            observability.EventLevel.DEBUG,
-            "Starting OneLLM to MUXI content conversion",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description="Starting OneLLM to MUXI content conversion",
             data={"input_items_count": len(onellm_content), "conversion_type": "onellm_to_muxi"},
         )
     except Exception:
@@ -56,9 +56,9 @@ def convert_onellm_to_muxi_content(
                 )
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-            observability.EventLevel.DEBUG,
-            "OneLLM to MUXI content conversion completed",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            description="OneLLM to MUXI content conversion completed",
             data={
                 "input_items_count": len(onellm_content),
                 "output_items_count": len(muxi_content),
@@ -102,9 +102,9 @@ def extract_user_content(
         )
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
-            observability.EventLevel.DEBUG,
-            "Starting MCP message content extraction",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description="Starting MCP message content extraction",
             data={
                 "content_type": content_type,
                 "content_length": content_length,
@@ -122,9 +122,9 @@ def extract_user_content(
             user_content.append({"type": "text", "text": mcp_message_content, "file": None})
 
             observability.observe(
-                observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-                observability.EventLevel.DEBUG,
-                "MCP string content extraction completed",
+                event_type=observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+                level=observability.EventLevel.DEBUG,
+                description="MCP string content extraction completed",
                 data={
                     "content_type": "string",
                     "output_items_count": 1,
@@ -163,9 +163,9 @@ def extract_user_content(
                 )
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-            observability.EventLevel.DEBUG,
-            "MCP list content extraction completed",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            description="MCP list content extraction completed",
             data={
                 "content_type": "list",
                 "input_items_count": len(mcp_message_content),
@@ -222,9 +222,9 @@ def create_unified_response(
     try:
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
-            observability.EventLevel.DEBUG,
-            "Creating unified response object",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description="Creating unified response object",
             data={
                 "request_id": request_id,
                 "status": status,
@@ -254,9 +254,9 @@ def create_unified_response(
         }
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-            observability.EventLevel.DEBUG,
-            "Unified response object created successfully",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            description="Unified response object created successfully",
             data={
                 "request_id": request_id,
                 "status": status,
@@ -272,9 +272,9 @@ def create_unified_response(
 
     except Exception as e:
         observability.observe(
-            observability.ErrorEvents.RETRY_ATTEMPTED,
-            observability.EventLevel.ERROR,
-            f"Unified response creation failed: {str(e)}",
+            event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
+            level=observability.EventLevel.ERROR,
+            description=f"Unified response creation failed: {str(e)}",
             data={
                 "error_type": type(e).__name__,
                 "request_id": request_id,
@@ -299,9 +299,9 @@ def create_error_response(exception: Exception, include_trace: bool = False) -> 
     try:
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
-            observability.EventLevel.DEBUG,
-            "Creating error response details",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_STARTED,
+            level=observability.EventLevel.DEBUG,
+            description="Creating error response details",
             data={
                 "exception_type": type(exception).__name__,
                 "include_trace": include_trace,
@@ -322,9 +322,9 @@ def create_error_response(exception: Exception, include_trace: bool = False) -> 
         }
 
         observability.observe(
-            observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
-            observability.EventLevel.DEBUG,
-            "Error response details created successfully",
+            event_type=observability.ConversationEvents.RESPONSE_CONVERSION_COMPLETED,
+            level=observability.EventLevel.DEBUG,
+            description="Error response details created successfully",
             data={
                 "exception_type": type(exception).__name__,
                 "error_code": error_code,

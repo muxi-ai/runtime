@@ -7,11 +7,17 @@ to improve maintainability and separation of concerns.
 
 from typing import Any, Dict, Optional
 
+from ..agents.agent import Agent
+from ..config.document_processing import DocumentProcessingConfig
 from ..documents.storage.chunk_manager import DocumentChunkManager
-from ...services.observability.utils import detect_stream_protocol
-from ...services.memory.short_term import ShortTermMemory
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle
+from ...datatypes.memory import BufferMemoryConfig, WorkingMemoryConfig
+from ...datatypes.observability import EventLevel
 from ...services import observability
+from ...services.memory.short_term import ShortTermMemory
+from ...services.observability.context import set_event_logger
+from ...services.observability.logger import EventLogger
+from ...services.observability.utils import detect_stream_protocol
 
 
 async def initialize_llm_config(overlord) -> None:
@@ -160,7 +166,6 @@ async def _initialize_working_memory(overlord, working_config: Dict[str, Any]) -
     that buffer memory uses. It doesn't create a separate memory system but rather
     stores the configuration that will be used by buffer memory and other components.
     """
-    from ...datatypes.memory import WorkingMemoryConfig
 
     try:
         # Create WorkingMemoryConfig with provided config, using defaults for missing values
@@ -208,7 +213,6 @@ async def _initialize_working_memory(overlord, working_config: Dict[str, Any]) -
 
 async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> None:
     """Initialize buffer memory from configuration with defaults."""
-    from ...datatypes.memory import BufferMemoryConfig
 
     try:
         # Create BufferMemoryConfig with provided config, using defaults for missing values
@@ -439,6 +443,36 @@ async def initialize_logging_config(overlord) -> None:
         # Store processed logging configuration
         overlord._logging_config = {"enabled": enabled, "streams": processed_streams}
 
+        # Update ObservabilityManager with the first file stream configuration
+        # Convert formation streams format to ObservabilityManager format
+        file_stream = None
+        for stream in processed_streams:
+            if stream.get("transport") == "file" and stream.get("destination"):
+                file_stream = stream
+                break
+
+        if file_stream:
+            # Parse level
+            level_str = file_stream.get("level", "info").lower()
+            valid_levels = [level.value for level in EventLevel]
+            level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
+
+            # Create new logger with file output
+            new_logger = EventLogger(
+                level=level,
+                output="file",
+                output_config={"path": file_stream.get("destination")},
+                events=(
+                    file_stream.get("events", ["*"]) if file_stream.get("events") != ["*"] else None
+                ),
+            )
+
+            # Update the observability manager
+            overlord.observability_manager.event_logger = new_logger
+
+            # Set the updated logger in context
+            set_event_logger(new_logger)
+
     except Exception as e:
         #  Warning - TODO: add observability
         # ErrorEvents.INTERNAL_ERROR (logging)
@@ -597,9 +631,6 @@ async def initialize_document_processing_config(overlord) -> None:
     for use by document-related components.
     """
     try:
-        # Import the document processing config module
-        from ..config.document_processing import DocumentProcessingConfig
-
         # Extract LLM configuration from formation
         # Use the pre-configured LLM config from configured_services
         # This already has secrets interpolated by the Formation
@@ -627,8 +658,6 @@ async def initialize_document_processing_config(overlord) -> None:
         _ = e  # remove this after implementing observability
 
         # Fall back to default configuration
-        from ..config.document_processing import DocumentProcessingConfig
-
         overlord.document_processing_config = DocumentProcessingConfig({})
 
 
@@ -736,8 +765,6 @@ async def create_agent_from_config(overlord, agent_config: Dict[str, Any]):
     Returns:
         Agent: Configured agent instance
     """
-    from ..agents.agent import Agent
-
     # Get or create LLM model for the agent
     # Use overlord's model creation capability
     try:

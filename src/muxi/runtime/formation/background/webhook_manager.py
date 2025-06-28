@@ -153,12 +153,14 @@ class WebhookManager:
                         #     f"✅ Webhook delivered successfully for request "
                         #     f"{request_id} (succeeded on attempt {attempt + 1})"
                         # )
+                        pass
                     else:
                         #  Webhook info - TODO: add observability
                         _ = None  # remove this after implementing observability
                         #     f"✅ Webhook delivered successfully for request "
                         #     f"{request_id}"
                         # )
+                        pass
                     return True
                 else:
                     if attempt < max_retries:
@@ -298,33 +300,20 @@ class WebhookManager:
             True if delivery was successful, False otherwise
         """
         try:
-            print(f"\n🔔 Webhook Manager: Attempting delivery to {webhook_url}")
             session = await self._get_session()
 
             # Convert unified response to dict for JSON serialization, excluding null fields
             payload_dict = self._clean_payload_for_serialization(payload)
-            print(
-                f"📦 Webhook payload: request_id={payload_dict.get('request_id')}, status={payload_dict.get('status')}"
-            )
 
             async with session.post(
                 webhook_url, json=payload_dict, timeout=aiohttp.ClientTimeout(total=timeout)
             ) as response:
                 # Consider 2xx status codes as successful
                 if 200 <= response.status < 300:
-                    print(f"✅ Webhook delivered successfully (HTTP {response.status})")
                     return True
                 else:
-                    print(f"❌ Webhook delivery failed with HTTP {response.status}")
-                    try:
-                        error_body = await response.text()
-                        print(f"   Error response: {error_body[:200]}")
-                    except Exception:
-                        pass
                     return False
-
-        except Exception as e:
-            print(f"❌ Webhook delivery exception: {type(e).__name__}: {str(e)}")
+        except Exception:
             return False
 
     async def close(self):

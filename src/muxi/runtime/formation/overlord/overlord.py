@@ -581,43 +581,63 @@ class Overlord:
 
     def _create_tracked_task(self, coro, name: Optional[str] = None) -> asyncio.Task:
         """Create a task and track it for proper cleanup during shutdown."""
-        print(f"\n🚀 Creating background task: {name or 'unnamed'}")
+        print(f"DEBUG: Creating tracked task: {name}")
+
         task = asyncio.create_task(coro)
         if name:
             task.set_name(name)
 
         # Track the task
         self._background_tasks.add(task)
-        print(f"📊 Total background tasks: {len(self._background_tasks)}")
 
-        # Log task creation without using undefined event type
-        # observability.observe(
-        #     event_type=observability.SystemEvents.BACKGROUND_TASK_STARTED,
-        #     level=observability.EventLevel.INFO,
-        #     data={
-        #         "task_name": name or "unnamed",
-        #         "total_tasks": len(self._background_tasks),
-        #     },
-        #     description=f"Created tracked background task: {name or 'unnamed'}",
-        # )
+        print(f"DEBUG: Task created. Total background tasks: {len(self._background_tasks)}")
+
+        # Log task creation
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,  # Use existing event type
+            level=observability.EventLevel.INFO,
+            data={
+                "task_name": name or "unnamed",
+                "total_tasks": len(self._background_tasks),
+            },
+            description=f"Created tracked background task: {name or 'unnamed'}",
+        )
 
         # Remove from set when done
         def task_done_callback(task):
             self._background_tasks.discard(task)
-            # Log task completion without using undefined event type
-            # observability.observe(
-            #     event_type=observability.SystemEvents.BACKGROUND_TASK_COMPLETED,
-            #     level=observability.EventLevel.INFO,
-            #     data={
-            #         "task_name": task.get_name() if hasattr(task, 'get_name') else "unnamed",
-            #         "remaining_tasks": len(self._background_tasks),
-            #         "exception": str(task.exception()) if task.exception() else None,
-            #     },
-            #     description=(
-            #         "Background task completed: "
-            #         f"{task.get_name() if hasattr(task, 'get_name') else 'unnamed'}"
-            #     ),
-            # )
+
+            # Check if task had an exception
+            exception_str = None
+            try:
+                if task.exception():
+                    exception_str = str(task.exception())
+                    print(f"DEBUG: Task {task.get_name()} failed with exception: {exception_str}")
+            except asyncio.CancelledError:
+                print(f"DEBUG: Task {task.get_name()} was cancelled")
+                exception_str = "CancelledError"
+            except Exception as e:
+                exception_str = str(e)
+
+            # Log task completion
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,  # Reuse existing event type
+                level=(
+                    observability.EventLevel.INFO
+                    if not exception_str
+                    else observability.EventLevel.ERROR
+                ),
+                data={
+                    "task_name": task.get_name() if hasattr(task, "get_name") else "unnamed",
+                    "remaining_tasks": len(self._background_tasks),
+                    "exception": exception_str,
+                    "completed": True,  # Indicate this is a completion event
+                },
+                description=(
+                    "Background task completed: "
+                    f"{task.get_name() if hasattr(task, 'get_name') else 'unnamed'}"
+                ),
+            )
 
         task.add_done_callback(task_done_callback)
 
@@ -2810,6 +2830,7 @@ class Overlord:
         updating the request tracker with progress and delivering webhook notifications
         upon completion or failure.
         """
+
         observability.observe(
             event_type=observability.ConversationEvents.ASYNC_PROCESSING_STARTED,
             level=observability.EventLevel.INFO,
@@ -2818,6 +2839,7 @@ class Overlord:
                 "message_length": len(message),
                 "agent_name": agent_name,
                 "user_id": str(user_id) if user_id else None,
+                "session_id": session_id,
             },
             description=f"Starting async processing for request {request_id}",
         )
@@ -2884,17 +2906,13 @@ class Overlord:
                     await self.request_tracker.update_request(request_id, RequestStatus.PROCESSING)
 
             # Process using existing sync infrastructure
-            print(f"📝 Processing message in background for {request_id}")
             result = await self._process_sync_chat(
                 message, agent_name, user_id, session_id=session_id, request_id=request_id
             )
             processing_time = time.time() - start_time
-            print(f"✅ Processing complete for {request_id} in {processing_time:.2f}s")
 
             # Extract result content
             result_content = result.content if hasattr(result, "content") else str(result)
-            print(f"📄 Result content length: {len(str(result_content))}")
-
             await self.request_tracker.update_request(
                 request_id, RequestStatus.COMPLETED, result=result_content
             )
@@ -2902,16 +2920,37 @@ class Overlord:
             # Auto-remove completed request to prevent memory buildup
             await self.request_tracker.remove_request(request_id)
 
-            #  Info - TODO: add observability
-            # ConversationEvents.ASYNC_PROCESSING_COMPLETED
-            #  f"Request {request_id}: Completed async processing in {processing_time:.2f}s"
+            # Emit async processing completed event
+            observability.observe(
+                event_type=observability.ConversationEvents.ASYNC_PROCESSING_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "request_id": request_id,
+                    "processing_time": processing_time,
+                    "result_size": len(str(result_content)),
+                },
+                description=f"Request {request_id}: Completed async processing in {processing_time:.2f}s",
+            )
+
+            # Emit REQUEST_COMPLETED event for async requests
+            # This is needed because the track_request context manager doesn't emit it for async
+            observability.observe(
+                event_type=observability.ConversationEvents.REQUEST_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "request_id": request_id,
+                    "duration_ms": int(processing_time * 1000),
+                    "session_id": session_id,
+                    "user_id": str(user_id) if user_id else None,
+                },
+                description=f"Request {request_id} completed in {int(processing_time * 1000)}ms",
+            )
 
             # Send webhook notification if URL is configured
             webhook_url = await self._get_webhook_url_for_request(request_id)
-            print(f"🔔 Webhook URL for {request_id}: {webhook_url}")
             if webhook_url:
                 observability.observe(
-                    event_type=observability.ConversationEvents.WEBHOOK_DELIVERY_STARTED,
+                    event_type=observability.ConversationEvents.WEBHOOK_SENT,
                     level=observability.EventLevel.INFO,
                     data={
                         "request_id": request_id,
@@ -2933,11 +2972,12 @@ class Overlord:
 
                 if success:
                     observability.observe(
-                        event_type=observability.ConversationEvents.WEBHOOK_DELIVERED,
+                        event_type=observability.ConversationEvents.WEBHOOK_SENT,
                         level=observability.EventLevel.INFO,
                         data={
                             "request_id": request_id,
                             "webhook_url": webhook_url,
+                            "delivered": True,
                         },
                         description=f"Webhook delivered successfully for request {request_id}",
                     )
@@ -2960,10 +3000,25 @@ class Overlord:
                 )
 
         except Exception as e:
-            print(f"❌ Error in async request {request_id}: {type(e).__name__}: {str(e)}")
-            #  Warning - TODO: add observability
-            # ErrorEvents.WARNING
-            _ = e  # remove this after implementing observability
+            import traceback
+
+            tb = traceback.extract_tb(e.__traceback__)
+            last_frame = tb[-1] if tb else None
+
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "request_id": request_id,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "traceback": traceback.format_exc(),
+                    "error_line": last_frame.lineno if last_frame else None,
+                    "error_file": last_frame.filename if last_frame else None,
+                    "processing_mode": "async",
+                },
+                description=f"Error in async request {request_id}: {type(e).__name__}: {str(e)}",
+            )
 
             await self.request_tracker.update_request(
                 request_id, RequestStatus.FAILED, error=str(e)
@@ -3457,14 +3512,17 @@ class Overlord:
         try:
             request_state = await self.request_tracker.get_request(request_id)
             if request_state and request_state.webhook_url:
+                print(f"DEBUG: Found webhook URL in request state: {request_state.webhook_url}")
                 return request_state.webhook_url
 
             # Fall back to formation default
+            print(f"DEBUG: Using formation default webhook URL: {self.async_webhook_url}")
             return self.async_webhook_url
         except Exception as e:
             #  Error - TODO: add observability
             # ErrorEvents.RESOURCE_UNAVAILABLE
             _ = e  # remove this after implementing observability
+            print(f"DEBUG: Error getting webhook URL, using default: {self.async_webhook_url}")
             return self.async_webhook_url
 
     async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:
