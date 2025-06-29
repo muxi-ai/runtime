@@ -542,7 +542,7 @@ def set_llm_api_key(api_key: str, provider: str) -> None:
         api_key: The API key to set
         provider: The provider to set the key for (e.g., "openai", "anthropic")
     """
-    set_api_key(provider, api_key)
+    set_api_key(api_key, provider)
     observability.observe(
         event_type=observability.ErrorEvents.INTERNAL_ERROR,
         level=observability.EventLevel.DEBUG,
