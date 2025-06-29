@@ -81,6 +81,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import threading
 import time
 from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
 import os
@@ -208,6 +209,7 @@ from ...utils.user_dirs import set_formation_id
 from markitdown import MarkItDown
 
 _MARKITDOWN_INSTANCE = None
+_MARKITDOWN_LOCK = threading.Lock()
 
 
 class Overlord:
@@ -691,104 +693,117 @@ class Overlord:
     def start(self) -> None:
         """Start all overlord services including cache manager."""
         try:
-            # Run all async initialization in a new event loop
-            async def _async_startup():
-                # Services are now initialized by Formation before Overlord creation
-                # Only handle intelligence-specific initialization here
-
-                # LLM configuration is already initialized by Formation
-                # Just copy the configuration for local use
-                if hasattr(self, "_configured_services") and self._configured_services:
-                    llm_config = self._configured_services.get("llm_config", {})
-                    self._model_cache = {}
-                    self._capability_models = {}
-
-                    # Process models by capability
-                    models_config = llm_config.get("models", [])
-                    for model_config in models_config:
-                        for capability, model_name in model_config.items():
-                            if capability in ["api_key", "settings"]:
-                                continue
-                            self._capability_models[capability] = {
-                                "model": model_name,
-                                "api_key": model_config.get("api_key"),
-                                "settings": model_config.get("settings", {}),
-                            }
-
-                    self._global_llm_settings = llm_config.get("settings", {})
-                    self._global_api_keys = llm_config.get("api_keys", {})
-
-                # Initialize the routing model (async) - now that LLM config is ready
-                await self._initialize_routing_model()
-
-                # Cache manager is already started by Formation
-                # No need to start it again
-
-                # Observability system is already initialized and ready (no async start needed)
-
-                # Load agents from formation configuration
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
-                    level=observability.EventLevel.DEBUG,
-                    data={},
-                    description="Starting agent loading from formation configuration",
-                )
-                await load_agents_from_configuration(self)
-                observability.observe(
-                    event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
-                    level=observability.EventLevel.INFO,
-                    data={"agent_count": len(self.agents)},
-                    description=f"Agent loading completed. Loaded {len(self.agents)} agents.",
-                )
-
-                # Initialize document processing configuration
-                from .initialization import initialize_document_processing_config
-
-                await initialize_document_processing_config(self)
-
-                # A2A services are now initialized by Formation
-                # Start A2A formation server if initialized by Formation
-                if hasattr(self, "a2a_server") and self.a2a_server:
-                    await self.a2a_coordinator._start_a2a_server()
-
-                # Process pending external agent registrations if available
-                if (
-                    hasattr(self, "inbound_registry_client")
-                    and self.inbound_registry_client
-                    and hasattr(self, "pending_external_registrations")
-                ):
-                    await self.a2a_coordinator._process_pending_agent_registrations()
-
-                # Start scheduler service if enabled
-                if hasattr(self, "formation_config") and self.formation_config.get(
-                    "scheduler", {}
-                ).get("enabled", False):
-                    # Validate that database connection is available for scheduler
-                    if not hasattr(self, "db_manager") or not self.db_manager:
-                        raise ValueError(
-                            "Scheduler is enabled but no database connection is configured. "
-                            "Please configure 'memory.persistent.connection_string' in formation.yaml "
-                            "or disable scheduler with 'scheduler.enabled: false'"
-                        )
-
-                    self.scheduler_service = await SchedulerService.get_instance(self)
-                    await self.scheduler_service.start()
-
-                #  Info - TODO: add observability
-                #  SystemEvents.STARTED (overlord)
-
-            # Execute the async startup
-            import nest_asyncio
-
-            nest_asyncio.apply()
-
-            # Now we can safely use asyncio.run even from within an event loop
-            asyncio.run(_async_startup())
+            # Check if we're already in an event loop
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an event loop, schedule the async startup as a task
+                startup_task = loop.create_task(self._async_startup())
+                # Store the task so we can wait for it if needed
+                self._startup_task = startup_task
+            except RuntimeError:
+                # No event loop running, we can use asyncio.run()
+                asyncio.run(self._async_startup())
+                self._startup_task = None
 
         except Exception:
             #  Error - TODO: add observability
             #  ErrorEvents.INTERNAL_ERROR (overlord)
             raise
+
+    async def _async_startup(self) -> None:
+        """Async startup logic extracted to a separate method."""
+        # Services are now initialized by Formation before Overlord creation
+        # Only handle intelligence-specific initialization here
+
+        # LLM configuration is already initialized by Formation
+        # Just copy the configuration for local use
+        if hasattr(self, "_configured_services") and self._configured_services:
+            llm_config = self._configured_services.get("llm_config", {})
+            self._model_cache = {}
+            self._capability_models = {}
+
+            # Process models by capability
+            models_config = llm_config.get("models", [])
+            for model_config in models_config:
+                for capability, model_name in model_config.items():
+                    if capability in ["api_key", "settings"]:
+                        continue
+                    self._capability_models[capability] = {
+                        "model": model_name,
+                        "api_key": model_config.get("api_key"),
+                        "settings": model_config.get("settings", {}),
+                    }
+
+            self._global_llm_settings = llm_config.get("settings", {})
+            self._global_api_keys = llm_config.get("api_keys", {})
+
+        # Initialize the routing model (async) - now that LLM config is ready
+        await self._initialize_routing_model()
+
+        # Cache manager is already started by Formation
+        # No need to start it again
+
+        # Observability system is already initialized and ready (no async start needed)
+
+        # Load agents from formation configuration
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.DEBUG,
+            data={},
+            description="Starting agent loading from formation configuration",
+        )
+        await load_agents_from_configuration(self)
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.INFO,
+            data={"agent_count": len(self.agents)},
+            description=f"Agent loading completed. Loaded {len(self.agents)} agents.",
+        )
+
+        # Initialize document processing configuration
+        from .initialization import initialize_document_processing_config
+
+        await initialize_document_processing_config(self)
+
+        # A2A services are now initialized by Formation
+        # Start A2A formation server if initialized by Formation
+        if hasattr(self, "a2a_server") and self.a2a_server:
+            await self.a2a_coordinator._start_a2a_server()
+
+        # Process pending external agent registrations if available
+        if (
+            hasattr(self, "inbound_registry_client")
+            and self.inbound_registry_client
+            and hasattr(self, "pending_external_registrations")
+        ):
+            await self.a2a_coordinator._process_pending_agent_registrations()
+
+        # Start scheduler service if enabled
+        if hasattr(self, "formation_config") and self.formation_config.get("scheduler", {}).get(
+            "enabled", False
+        ):
+            # Validate that database connection is available for scheduler
+            if not hasattr(self, "db_manager") or not self.db_manager:
+                raise ValueError(
+                    "Scheduler is enabled but no database connection is configured. "
+                    "Please configure 'memory.persistent.connection_string' in formation.yaml "
+                    "or disable scheduler with 'scheduler.enabled: false'"
+                )
+
+            self.scheduler_service = await SchedulerService.get_instance(self)
+            await self.scheduler_service.start()
+
+        #  Info - TODO: add observability
+        #  SystemEvents.STARTED (overlord)
+
+    async def ensure_started(self) -> None:
+        """Ensure that the overlord startup is complete.
+
+        This method can be called to wait for async startup to complete
+        when the overlord was started from within an existing event loop.
+        """
+        if hasattr(self, "_startup_task") and self._startup_task:
+            await self._startup_task
 
     def _load_default_persona(self) -> None:
         """Load the default persona from the system_persona.md file."""
@@ -2140,9 +2155,12 @@ class Overlord:
                     if file_ext in markitdown_extensions:
                         global _MARKITDOWN_INSTANCE
 
-                        # Create singleton instance if needed
+                        # Thread-safe singleton initialization
                         if _MARKITDOWN_INSTANCE is None:
-                            _MARKITDOWN_INSTANCE = MarkItDown()
+                            with _MARKITDOWN_LOCK:
+                                # Double-check pattern: check again inside the lock
+                                if _MARKITDOWN_INSTANCE is None:
+                                    _MARKITDOWN_INSTANCE = MarkItDown()
 
                         markitdown = _MARKITDOWN_INSTANCE
                         should_use_markitdown = True
@@ -2153,19 +2171,23 @@ class Overlord:
                             # Create a temporary file for binary content
                             import tempfile
 
-                            with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
-                                tmp.write(
-                                    content if isinstance(content, bytes) else content.encode()
-                                )
-                                tmp_path = tmp.name
+                            tmp_path = None
+                            try:
+                                with tempfile.NamedTemporaryFile(
+                                    suffix=file_ext, delete=False
+                                ) as tmp:
+                                    tmp.write(
+                                        content if isinstance(content, bytes) else content.encode()
+                                    )
+                                    tmp_path = tmp.name
 
-                            # Convert with MarkItDown
-                            result = markitdown.convert(tmp_path)
-                            extracted_content = result.text_content
-
-                            # Clean up temp file
-                            os.unlink(tmp_path)
-
+                                # Convert with MarkItDown
+                                result = markitdown.convert(tmp_path)
+                                extracted_content = result.text_content
+                            finally:
+                                # Always clean up temp file
+                                if tmp_path and os.path.exists(tmp_path):
+                                    os.unlink(tmp_path)
                             # Now chunk the extracted text
                             if self.document_chunker:
                                 doc_chunks = await self.document_chunker.chunk_document(
@@ -2187,12 +2209,31 @@ class Overlord:
                                     }
                                 ]
 
-                            print(
-                                f"Successfully extracted {len(extracted_content)} chars from {filename}"
+                            observability.observe(
+                                event_type=observability.SystemEvents.INITIALIZING,
+                                level=observability.EventLevel.INFO,
+                                data={
+                                    "service": "document_processing",
+                                    "filename": filename,
+                                    "extracted_chars": len(extracted_content),
+                                    "file_extension": file_ext,
+                                },
+                                description=f"Successfully extracted {len(extracted_content)} chars from {filename}",
                             )
 
                         except Exception as e:
-                            print(f"MarkItDown conversion failed for {filename}: {e}")
+                            observability.observe(
+                                event_type=observability.ErrorEvents.GENERIC_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "service": "document_processing",
+                                    "filename": filename,
+                                    "file_extension": file_ext,
+                                    "error": str(e),
+                                    "fallback": "binary_chunking",
+                                },
+                                description=f"MarkItDown conversion failed for {filename}: {e}",
+                            )
                             # Fall back to binary chunking
                             chunks = [{"content": content, "metadata": {"filename": filename}}]
                     else:
@@ -2208,7 +2249,17 @@ class Overlord:
                             ]
                         else:
                             # Fallback simple chunking
-                            print(f"Using fallback chunking for {filename}")
+                            observability.observe(
+                                event_type=observability.SystemEvents.INITIALIZING,
+                                level=observability.EventLevel.DEBUG,
+                                data={
+                                    "service": "document_processing",
+                                    "filename": filename,
+                                    "reason": "document_chunker_not_available",
+                                    "fallback": "simple_chunking",
+                                },
+                                description=f"Using fallback chunking for {filename}",
+                            )
                             chunks = [{"content": content, "metadata": {"filename": filename}}]
 
                 # Store metadata
@@ -2256,7 +2307,6 @@ class Overlord:
                     result = await self.add_to_buffer_memory(
                         message=chunk_content, metadata=chunk_metadata
                     )
-                    # Debug: chunk added to buffer memory
 
                 # Add to processed docs list with actual content
                 processed_docs.append(
@@ -3456,7 +3506,7 @@ class Overlord:
             # Stream the response in chunks
             chunk_size = 50  # Characters per chunk
             for i in range(0, len(content), chunk_size):
-                chunk = content[i : i + chunk_size]
+                chunk = content[i:(i + chunk_size)]
                 yield chunk
                 # Small delay for streaming effect
                 await asyncio.sleep(0.01)

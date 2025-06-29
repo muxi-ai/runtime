@@ -539,10 +539,13 @@ class Formation:
                         config["agents"].append(agent_config)
 
                 except Exception as e:
-                    print(f"Warning: Failed to load agent file {agent_file}: {e}")
+                    observability.observe(
+                        event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                        level=observability.EventLevel.WARNING,
+                        data={"agent_file": str(agent_file), "error": str(e)},
+                        description=f"Failed to load agent file {agent_file}: {e}",
+                    )
                     continue
-
-        # TODO: Also discover MCP servers and A2A services if needed
 
         return config
 
@@ -567,11 +570,20 @@ class Formation:
                 for secret_name in matches:
                     try:
                         secret_value = self.secrets_manager.get_secret_sync(secret_name)
-                        if secret_value:
-                            value = value.replace(f"${{{{ secrets.{secret_name} }}}}", secret_value)
-                    except Exception:
-                        # If secret not found, leave the placeholder
-                        pass
+                        if secret_value is None:
+                            raise ValueError(
+                                f"Secret '{secret_name}' not found in secrets manager. "
+                                f"Please add it using: python -m muxi.runtime.utils.secrets add {secret_name}"
+                            )
+                        value = value.replace(f"${{{{ secrets.{secret_name} }}}}", secret_value)
+                    except ValueError:
+                        # Re-raise ValueError for missing secrets
+                        raise
+                    except Exception as e:
+                        # Fail fast on any other error
+                        raise RuntimeError(
+                            f"Failed to retrieve secret '{secret_name}': {type(e).__name__}: {str(e)}"
+                        )
 
                 return value
             elif isinstance(value, dict):
@@ -1080,6 +1092,86 @@ class Formation:
         # Validate MCP structure
         if not isinstance(self._mcp_config, dict):
             raise ValueError("MCP configuration must be a dictionary")
+
+        # Add built-in MCP servers to the regular MCP servers list
+        self._add_builtin_mcps_to_config()
+
+    def _add_builtin_mcps_to_config(self) -> None:
+        """
+        Add built-in MCP servers to the regular MCP servers configuration.
+
+        This method checks the runtime configuration for enabled built-in MCPs
+        and adds them to the regular MCP servers list, allowing them to be
+        registered through the normal MCP registration process.
+        """
+        # Get runtime config for built-in MCPs
+        runtime_config = self.config.get("runtime", {})
+        builtin_mcps_config = runtime_config.get("built_in_mcps", True)
+
+        # Skip if built-in MCPs are disabled
+        if builtin_mcps_config is False:
+            return
+
+        # Import built-in MCP registry
+        from ..services.mcp.built_in import list_builtin_mcps
+
+        # Get all available built-in MCPs
+        available_mcps = list_builtin_mcps()
+
+        # Determine which MCPs to add
+        mcps_to_add = []
+
+        if isinstance(builtin_mcps_config, bool) and builtin_mcps_config:
+            # Simple mode - all built-in MCPs enabled
+            mcps_to_add = list(available_mcps.keys())
+        elif isinstance(builtin_mcps_config, list):
+            # Granular mode - only specified MCPs
+            mcps_to_add = [
+                mcp_name for mcp_name in builtin_mcps_config if mcp_name in available_mcps
+            ]
+
+        # Initialize MCP servers list if not present
+        if "servers" not in self._mcp_config:
+            self._mcp_config["servers"] = []
+
+        # Add each enabled built-in MCP to the servers list
+        for mcp_name in mcps_to_add:
+            mcp_path = available_mcps[mcp_name]
+
+            # Check if the script exists
+            if not mcp_path.exists():
+                observability.observe(
+                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "mcp_name": mcp_name,
+                        "mcp_path": str(mcp_path),
+                        "error": "Script file not found",
+                    },
+                    description=f"Built-in MCP script not found: {mcp_path}",
+                )
+                continue
+
+            # Create MCP server configuration
+            mcp_server_config = {
+                "id": f"builtin-{mcp_name}",
+                "command": f"python {mcp_path}",
+                "description": f"Built-in MCP server: {mcp_name}",
+            }
+
+            # Add to servers list
+            self._mcp_config["servers"].append(mcp_server_config)
+
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "mcp_name": mcp_name,
+                    "server_id": f"builtin-{mcp_name}",
+                    "mcp_path": str(mcp_path),
+                },
+                description=f"Built-in MCP server added to configuration: {mcp_name}",
+            )
 
     def _setup_a2a_config(self) -> None:
         """Setup and validate Agent-to-Agent configuration."""
@@ -2497,67 +2589,13 @@ class Formation:
 
     def _register_builtin_mcps(self) -> None:
         """
-        Register built-in MCP servers based on runtime configuration.
+        DEPRECATED: Built-in MCP servers are now added to the configuration during
+        _setup_mcp_config() and registered through the normal MCP registration process.
 
-        This method checks the runtime configuration and registers any enabled
-        built-in MCP servers with the overlord's MCP service.
+        This method is kept for backward compatibility but does nothing.
         """
-        if not self._overlord or not self._overlord.mcp_service:
-            return
-
-        # Get built-in MCP configuration
-        builtin_mcps_config = self._runtime_config.get("built_in_mcps", True)
-
-        # Import built-in MCP registry
-        from ..services.mcp.built_in import list_builtin_mcps
-
-        # Get all available built-in MCPs
-        available_mcps = list_builtin_mcps()
-
-        # Determine which MCPs to register
-        mcps_to_register = []
-
-        if isinstance(builtin_mcps_config, bool):
-            # Simple mode - all on or all off
-            if builtin_mcps_config:
-                mcps_to_register = list(available_mcps.keys())
-        elif isinstance(builtin_mcps_config, list):
-            # Granular mode - only specified MCPs
-            mcps_to_register = [
-                mcp_name for mcp_name in builtin_mcps_config if mcp_name in available_mcps
-            ]
-
-        # Register each enabled MCP
-        for mcp_name in mcps_to_register:
-            mcp_path = available_mcps[mcp_name]
-
-            # Check if the script exists
-            if not mcp_path.exists():
-                observability.observe(
-                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    data={
-                        "mcp_name": mcp_name,
-                        "mcp_path": str(mcp_path),
-                        "error": "Script file not found",
-                    },
-                    description=f"Built-in MCP script not found: {mcp_path}",
-                )
-                continue
-
-            # For now, just log that we would register it
-            # The actual registration needs to be handled differently without async
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "mcp_name": mcp_name,
-                    "server_id": f"builtin-{mcp_name}",
-                    "mcp_path": str(mcp_path),
-                    "note": "Registration deferred - requires async handling",
-                },
-                description=f"Built-in MCP server identified: {mcp_name}",
-            )
+        # Built-in MCPs are now handled in _add_builtin_mcps_to_config()
+        pass
 
     async def wait_for_mcp_readiness(self, timeout: float = 30.0) -> bool:
         """

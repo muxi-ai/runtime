@@ -193,9 +193,16 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         # Get embedding model for vector search if enabled
         embedding_model = None
         if vector_search and hasattr(formation, "_capability_models"):
-            # TODO: Create embedding model from capability
-            # For now, disable vector search if no model available
-            vector_search = False
+            embedding_config = formation._capability_models.get("embedding", {})
+            embedding_model_name = embedding_config.get("model")
+            if embedding_model_name:
+                # For buffer memory, we need to pass the actual model object
+                # Since we can't create it here (async), we'll pass the model name
+                # and let ShortTermMemory handle it
+                embedding_model = embedding_model_name
+            else:
+                # Disable vector search if no embedding model configured
+                vector_search = False
 
         # Create buffer memory instance
         formation._buffer_memory = ShortTermMemory(
@@ -235,11 +242,25 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
     try:
         connection_string = persistent_config.get("connection_string")
 
-        # Interpolate secrets if needed
+        # Check if connection string still contains uninterpolated secrets
+        # This should not happen as secrets are interpolated during formation loading
         if "${{ secrets." in connection_string:
-            # For now, skip interpolation in sync context
-            # TODO: Make interpolate_secrets synchronous
-            pass
+            raise ValueError(
+                f"Connection string contains uninterpolated secrets: {connection_string}. "
+                "Secrets should be interpolated during formation loading."
+            )
+
+        # Get embedding model configuration
+        # First check if persistent memory has explicit embedding_model config
+        embedding_model_name = persistent_config.get("embedding_model")
+
+        # If not specified, use the default from llm.models.embedding
+        if not embedding_model_name and hasattr(formation, "_capability_models"):
+            embedding_config = formation._capability_models.get("embedding", {})
+            embedding_model_name = embedding_config.get("model")
+
+        # For now, we'll pass the model name and let the memory systems handle model creation
+        # This avoids the async initialization issue
 
         # Determine the type of persistent memory based on connection string
         if connection_string.startswith("postgresql://"):
@@ -248,7 +269,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = LongTermMemory(
                 connection_string=connection_string,
-                embedding_model=None,  # TODO: Add embedding model
+                embedding_model=embedding_model_name,
             )
             formation._is_multi_user = True
             memory_type = "PostgreSQL"
@@ -258,7 +279,8 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             from ..services.memory.sqlite import SQLiteMemory
 
             formation._long_term_memory = SQLiteMemory(
-                db_path=connection_string, embedding_model=None  # TODO: Add embedding model
+                db_path=connection_string,
+                embedding_model=embedding_model_name,
             )
             memory_type = "SQLite"
 
@@ -268,7 +290,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = Memobase(
                 connection_string=connection_string,
-                embedding_model=None,  # TODO: Add embedding model
+                embedding_model=embedding_model_name,
             )
             memory_type = "Memobase"
 
@@ -304,10 +326,6 @@ def initialize_document_processing(formation) -> None:
         if hasattr(formation, "_document_processing_config")
         else {}
     )
-
-    # Document processing is enabled by default unless explicitly disabled
-    if doc_config.get("enabled", True) is False:
-        return
 
     try:
         # Create document processing configuration
