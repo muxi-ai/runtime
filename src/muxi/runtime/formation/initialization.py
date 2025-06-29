@@ -23,6 +23,29 @@ from .config.document_processing import DocumentProcessingConfig
 from .documents.storage.chunk_manager import DocumentChunkManager
 
 
+def _resolve_embedding_model_name(explicit_model: str = None, formation: Any = None) -> str:
+    """
+    Resolve the embedding model name from configuration.
+
+    Args:
+        explicit_model: Explicitly configured embedding model name
+        formation: Formation instance to check for capability models
+
+    Returns:
+        The resolved embedding model name or None if not configured
+    """
+    # First check if an explicit model is provided
+    if explicit_model:
+        return explicit_model
+
+    # Otherwise, check formation capability models
+    if formation and hasattr(formation, "_capability_models"):
+        embedding_config = formation._capability_models.get("embedding", {})
+        return embedding_config.get("model")
+
+    return None
+
+
 def initialize_observability(formation) -> None:
     """
     Initialize observability/logging configuration FIRST.
@@ -192,9 +215,8 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
 
         # Get embedding model for vector search if enabled
         embedding_model = None
-        if vector_search and hasattr(formation, "_capability_models"):
-            embedding_config = formation._capability_models.get("embedding", {})
-            embedding_model_name = embedding_config.get("model")
+        if vector_search:
+            embedding_model_name = _resolve_embedding_model_name(formation=formation)
             if embedding_model_name:
                 # For buffer memory, we need to pass the actual model object
                 # Since we can't create it here (async), we'll pass the model name
@@ -251,13 +273,9 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             )
 
         # Get embedding model configuration
-        # First check if persistent memory has explicit embedding_model config
-        embedding_model_name = persistent_config.get("embedding_model")
-
-        # If not specified, use the default from llm.models.embedding
-        if not embedding_model_name and hasattr(formation, "_capability_models"):
-            embedding_config = formation._capability_models.get("embedding", {})
-            embedding_model_name = embedding_config.get("model")
+        embedding_model_name = _resolve_embedding_model_name(
+            explicit_model=persistent_config.get("embedding_model"), formation=formation
+        )
 
         # For now, we'll pass the model name and let the memory systems handle model creation
         # This avoids the async initialization issue

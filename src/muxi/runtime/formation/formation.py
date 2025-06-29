@@ -1655,6 +1655,19 @@ class Formation:
 
             # Start the overlord (loads agents, initializes services)
             self._overlord.start()
+            
+            # Ensure startup is complete if we're in an async context
+            # This is critical for tests and async environments where agents
+            # need to be loaded before continuing
+            try:
+                loop = asyncio.get_running_loop()
+                # We're in an event loop, ensure startup is complete
+                asyncio.run_coroutine_threadsafe(
+                    self._overlord.ensure_started(), loop
+                ).result()
+            except RuntimeError:
+                # No event loop running, startup was already synchronous
+                pass
 
             # Register built-in MCP servers if enabled
             try:

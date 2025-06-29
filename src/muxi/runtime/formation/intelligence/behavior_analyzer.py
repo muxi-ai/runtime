@@ -11,6 +11,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict, Counter
 import re
 import numpy as np
+import logging
 
 from ...datatypes.intelligence import (
     Message,
@@ -23,6 +24,9 @@ from ...datatypes.intelligence import (
 from ...datatypes.intent import IntentType
 from ...services.intent import IntentDetectionService
 from ...services.llm import LLM
+
+
+logger = logging.getLogger(__name__)
 
 
 class UserBehaviorAnalyzer:
@@ -245,9 +249,9 @@ class UserBehaviorAnalyzer:
 
             return category_engagement
 
-        except Exception as e:
+        except Exception:
             # Fall back to keyword-based detection
-            print(f"Intent detection failed for content engagement: {e}")
+            logger.exception("Intent detection failed for content engagement")
             return await self._fallback_analyze_content_engagement(messages, feedback)
 
     async def _fallback_analyze_content_engagement(

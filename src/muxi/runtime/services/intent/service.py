@@ -91,10 +91,11 @@ class IntentDetectionService:
             cached = self.cache.get(cache_key)
             if cached:
                 observability.observe(
-                    event_type=observability.SystemEvents.CACHE_HIT,
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "service": "intent_detection",
+                        "action": "cache_hit",
                         "intent_type": intent_type.value,
                         "cache_key": cache_key[:16] + "...",
                     },
@@ -111,9 +112,10 @@ class IntentDetectionService:
                 self.cache.set(cache_key, result)
 
             observability.observe(
-                event_type=observability.ConversationEvents.INTENT_DETECTED,
+                event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
+                    "service": "intent_detection",
                     "intent_type": intent_type.value,
                     "intent": result.intent,
                     "confidence": result.confidence,
@@ -126,12 +128,13 @@ class IntentDetectionService:
 
         except Exception as e:
             observability.observe(
-                event_type=observability.ErrorEvents.INTENT_DETECTION_ERROR,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
                 data={
                     "intent_type": intent_type.value,
                     "error": str(e),
                     "error_type": type(e).__name__,
+                    "component": "intent_detection",
                 },
                 description=f"Intent detection failed: {str(e)}",
             )

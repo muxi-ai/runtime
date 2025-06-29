@@ -14,6 +14,7 @@ from pathlib import Path
 from ....services.intent import IntentDetectionService
 from ....services.llm import LLM
 from ....datatypes.intent import IntentType
+from ....services.observability import EventLogger, ErrorEvents, EventLevel
 
 
 class DocumentErrorType(Enum):
@@ -100,6 +101,7 @@ class DocumentErrorHandler:
             persona_config: Overlord persona configuration for error messaging
         """
         self.persona_config = persona_config or {}
+        self.logger = EventLogger()
 
         # Circuit breakers for different operations
         self.circuit_breakers: Dict[str, CircuitBreakerState] = {}
@@ -132,7 +134,15 @@ class DocumentErrorHandler:
         # Recovery suggestion templates
         self._recovery_templates = self._initialize_recovery_templates()
 
-        #  Info - TODO: add observability
+        # Initialize intent detection service eagerly
+        self._initialize_intent_detector()
+
+        self.logger.emit(
+            ErrorEvents.SERVICE_INITIALIZED,
+            EventLevel.INFO,
+            "Document error handler initialized",
+            {"persona_config": self.persona_config}
+        )
 
     def _initialize_error_classifications(self) -> Dict[str, Dict[str, Any]]:
         """Initialize error type classifications"""
@@ -231,11 +241,50 @@ class DocumentErrorHandler:
             self.simplified_pdf_processor = self._create_simplified_pdf_processor()
             self.simplified_docx_processor = self._create_simplified_docx_processor()
 
-            #  Info - TODO: add observability
+            self.logger.emit(
+                ErrorEvents.SERVICE_INITIALIZED,
+                EventLevel.INFO,
+                "Fallback processors initialized successfully",
+                {}
+            )
 
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                "Failed to initialize fallback processors",
+                {"error": str(e)}
+            )
+
+    def _initialize_intent_detector(self) -> None:
+        """Initialize the intent detection service eagerly."""
+        try:
+            # Get LLM model from persona config or use default
+            llm_model = self.persona_config.get("error_classification_llm", "openai/gpt-4")
+
+            # Create LLM instance
+            llm_service = LLM(model=llm_model, api_key=None)  # Will use env or config
+
+            # Create intent detection service
+            self._intent_detector = IntentDetectionService(
+                llm_service=llm_service, enable_cache=True
+            )
+
+            self.logger.emit(
+                ErrorEvents.SERVICE_INITIALIZED,
+                EventLevel.INFO,
+                "Intent detection service initialized",
+                {"llm_model": llm_model}
+            )
+        except Exception as e:
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                "Failed to initialize intent detection service",
+                {"error": str(e)}
+            )
+            # Create a fallback detector that will be initialized on first use
+            self._intent_detector = None
 
     async def handle_document_error(
         self, error: Exception, filename: str, file_size_mb: float, operation: str = "parsing"
@@ -263,10 +312,17 @@ class DocumentErrorHandler:
             error_type, FallbackStrategy.SKIP_WITH_WARNING
         )
 
-        #  Warning - TODO: add observability
-        #     f"Document error for {filename}: {error_type.value}, "
-        #     f"attempting fallback: {fallback_strategy.value}"
-        # )
+        self.logger.emit(
+            ErrorEvents.FALLBACK_TRIGGERED,
+            EventLevel.WARNING,
+            f"Document error for {filename}: {error_type.value}, attempting fallback: {fallback_strategy.value}",
+            {
+                "filename": filename,
+                "error_type": error_type.value,
+                "fallback_strategy": fallback_strategy.value,
+                "operation": operation
+            }
+        )
 
         return await self._execute_fallback_strategy(fallback_strategy, filename, error_type, error)
 
@@ -312,8 +368,17 @@ class DocumentErrorHandler:
                 )
 
         except Exception as fallback_error:
-            #  Error - TODO: add observability
-            _ = fallback_error  # remove this after implementing observability
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                f"Fallback strategy {strategy.value} failed for {filename}",
+                {
+                    "filename": filename,
+                    "strategy": strategy.value,
+                    "error": str(fallback_error),
+                    "original_error_type": error_type.value
+                }
+            )
             return (
                 None,
                 f"❌ All processing methods failed. Original: {error_type.value}, Fallback: {str(fallback_error)}",  # noqa: E501
@@ -331,8 +396,12 @@ class DocumentErrorHandler:
             else:
                 return f"Unable to extract text from {Path(filename).suffix} files"
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                f"Failed text extraction fallback for {filename}",
+                {"error": str(e), "filename": filename}
+            )
             return None
 
     async def _fallback_simplified_processing(self, filename: str) -> Optional[str]:
@@ -346,19 +415,32 @@ class DocumentErrorHandler:
             else:
                 return await self._fallback_text_extraction(filename)
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                f"Failed processing for {filename}",
+                {"error": str(e), "filename": filename}
+            )
             return await self._fallback_text_extraction(filename)
 
     async def _fallback_external_service(self, filename: str) -> Optional[str]:
         """Use external service for processing"""
         try:
             # This could integrate with cloud services like AWS Textract, Google Document AI, etc.
-            #  Info - TODO: add observability
+            self.logger.emit(
+                ErrorEvents.SERVICE_CALLED,
+                EventLevel.INFO,
+                f"Using external service fallback for {filename}",
+                {"filename": filename}
+            )
             return await self._fallback_text_extraction(filename)
         except Exception as e:
-            #  Error - TODO: add observability
-            _ = e  # remove this after implementing observability
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                f"Failed processing for {filename}",
+                {"error": str(e), "filename": filename}
+            )
             return await self._fallback_text_extraction(filename)
 
     async def _classify_error(self, error: Exception, file_size_mb: float) -> DocumentErrorType:
@@ -375,15 +457,13 @@ class DocumentErrorHandler:
 
         # Try to use intent detection service
         try:
-            # Get or create intent detection service
-            if not hasattr(self, "_intent_detector"):
-                # Create LLM instance if needed
-                # This would ideally get the LLM config from the formation
-                llm_service = LLM(model="openai/gpt-4", api_key=None)  # Will use env or config
-
-                self._intent_detector = IntentDetectionService(
-                    llm_service=llm_service, enable_cache=True
-                )
+            # Check if intent detector is available
+            if self._intent_detector is None:
+                # Try to initialize it again if it failed during init
+                self._initialize_intent_detector()
+                if self._intent_detector is None:
+                    # Still not available, use fallback
+                    return self._fallback_classify_error(error)
 
             # Use intent detection for error classification
             result = await self._intent_detector.detect_intent(
@@ -391,7 +471,8 @@ class DocumentErrorHandler:
             )
 
             # Map intent to DocumentErrorType
-            if result.confidence > 0.6:
+            confidence_threshold = self.persona_config.get("error_classification_confidence", 0.6)
+            if result.confidence > confidence_threshold:
                 error_mapping = {
                     "memory": DocumentErrorType.MEMORY_ERROR,
                     "timeout": DocumentErrorType.TIMEOUT_ERROR,
@@ -411,7 +492,12 @@ class DocumentErrorHandler:
 
         except Exception as e:
             # Log error and fall back to keyword-based classification
-            _ = e  # TODO: add observability
+            self.logger.emit(
+                ErrorEvents.UNEXPECTED_ERROR,
+                EventLevel.ERROR,
+                "Intent detection failed for error classification",
+                {"error": str(e), "original_error": error_str}
+            )
             return self._fallback_classify_error(error)
 
     def _fallback_classify_error(self, error: Exception) -> DocumentErrorType:

@@ -68,6 +68,7 @@ __all__ = [
 from typing import Any, Dict, Optional, Union
 import multitasking
 import signal
+import threading
 
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
@@ -88,17 +89,20 @@ except ValueError:
 
 # Global runtime variable to store the configured EventLogger
 _runtime_event_logger: Optional["EventLogger"] = None
+_runtime_event_logger_lock = threading.Lock()
 
 
 def set_runtime_event_logger(logger: "EventLogger") -> None:
     """Set the runtime event logger for global access."""
     global _runtime_event_logger
-    _runtime_event_logger = logger
+    with _runtime_event_logger_lock:
+        _runtime_event_logger = logger
 
 
 def get_runtime_event_logger() -> Optional["EventLogger"]:
     """Get the runtime event logger."""
-    return _runtime_event_logger
+    with _runtime_event_logger_lock:
+        return _runtime_event_logger
 
 
 def observe(
