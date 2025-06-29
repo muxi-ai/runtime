@@ -17,6 +17,7 @@ mcp>=1.9.0
 aiofiles>=23.2.0
 python-magic>=0.4.27
 kafka-python-ng>=2.2.0
+multitasking>=0.0.11  # Non-blocking task execution for observability
 
 # LLM Package
 onellm>=0.0.1
@@ -31,6 +32,7 @@ python-docx>=1.1.0  # Word document processing
 markdownify>=0.11.6  # HTML to Markdown conversion
 nltk>=3.8.0  # Natural language processing for chunking
 spacy>=3.8.0  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
+# TODO: After installing, run: python -m spacy download en_core_web_sm
 sentence-transformers>=2.2.0  # Embedding generation for semantic search
 
 # Development tools
@@ -62,6 +64,7 @@ requests>=2.28.0  # HTTP client for health monitoring
 
 # Utility libraries
 nanoid>=2.0.0  # Unique ID generation for memory service
+multitasking>=0.0.11  # Non-blocking task execution for observability
 
 # For development with all dependencies:
 # pip install -e packages/core[all]
