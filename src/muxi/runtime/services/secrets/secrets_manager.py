@@ -151,6 +151,45 @@ class SecretsManager:
         # Set restrictive permissions
         os.chmod(self.secrets_file_path, 0o600)
 
+    def get_secret_sync(self, name: str) -> Optional[Any]:
+        """
+        Synchronously retrieve secret by name (case-insensitive).
+
+        This is a simple sync version for use in sync contexts like config loading.
+        It doesn't use locks since file reads are atomic enough for our use case.
+
+        Args:
+            name: Secret name (will be normalized for lookup)
+
+        Returns:
+            Secret value or None if not found
+        """
+        try:
+            # Initialize encryption if needed
+            if not self._fernet:
+                if self.master_key_path.exists():
+                    key_data = self.master_key_path.read_bytes()
+                    self._fernet = Fernet(key_data)
+                else:
+                    # No master key means no secrets
+                    return None
+
+            normalized_name = self._normalize_secret_name(name)
+
+            # Load secrets from file
+            if not self.secrets_file_path.exists():
+                return None
+
+            encrypted_data = self.secrets_file_path.read_bytes()
+            decrypted_data = self._fernet.decrypt(encrypted_data)
+            secrets = json.loads(decrypted_data.decode("utf-8"))
+
+            return secrets.get(normalized_name)
+
+        except Exception:
+            # If anything goes wrong, return None
+            return None
+
     async def _get_secrets_cache(self) -> Dict[str, Any]:
         """Get secrets cache, loading from file if needed."""
         if self._secrets_cache is None:

@@ -37,6 +37,7 @@ from pathlib import Path
 import os
 import re
 import copy
+import shlex
 import threading
 
 
@@ -1153,9 +1154,11 @@ class Formation:
                 continue
 
             # Create MCP server configuration
+            # Quote the path to handle spaces properly
+            quoted_path = shlex.quote(str(mcp_path))
             mcp_server_config = {
                 "id": f"builtin-{mcp_name}",
-                "command": f"python {mcp_path}",
+                "command": f"python {quoted_path}",
                 "description": f"Built-in MCP server: {mcp_name}",
             }
 
