@@ -45,7 +45,7 @@ dependencies = [
     "sentence-transformers>=2.2.0",  # Embedding generation for semantic search
 
     # LLM Package
-    "onellm>=0.0.7",
+    "onellm>=0.1.0",
 
     # A2A (Agent-to-Agent) Communication
     "a2a-sdk>=0.2.8",  # Google's Agent-to-Agent SDK for inter-agent communication

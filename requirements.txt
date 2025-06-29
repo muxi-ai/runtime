@@ -20,7 +20,7 @@ kafka-python-ng>=2.2.0
 multitasking>=0.0.11  # Non-blocking task execution for observability
 
 # LLM Package
-onellm>=0.0.1
+onellm>=0.1.0
 
 # A2A (Agent-to-Agent) Communication
 a2a-sdk>=0.0.1  # Google's Agent-to-Agent SDK for inter-agent communication
