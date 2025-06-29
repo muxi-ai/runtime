@@ -337,11 +337,11 @@ class Overlord:
             configured_services.get("observability_manager") if configured_services else None
         )
         if not self.observability_manager:
-            # Fallback if not provided (shouldn't happen in normal flow)
-            logging_config = (
-                configured_services.get("logging_config", {}) if configured_services else {}
+            # This should never happen in normal flow - Formation always provides observability_manager
+            raise RuntimeError(
+                "ObservabilityManager not provided by Formation. "
+                "This indicates a critical initialization error."
             )
-            self.observability_manager = observability.ObservabilityManager(logging_config)
 
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
@@ -609,7 +609,6 @@ class Overlord:
 
     def _create_tracked_task(self, coro, name: Optional[str] = None) -> asyncio.Task:
         """Create a task and track it for proper cleanup during shutdown."""
-        print(f"DEBUG: Creating tracked task: {name}")
 
         task = asyncio.create_task(coro)
         if name:
@@ -617,8 +616,6 @@ class Overlord:
 
         # Track the task
         self._background_tasks.add(task)
-
-        print(f"DEBUG: Task created. Total background tasks: {len(self._background_tasks)}")
 
         # Log task creation
         observability.observe(
@@ -640,9 +637,9 @@ class Overlord:
             try:
                 if task.exception():
                     exception_str = str(task.exception())
-                    print(f"DEBUG: Task {task.get_name()} failed with exception: {exception_str}")
             except asyncio.CancelledError:
-                print(f"DEBUG: Task {task.get_name()} was cancelled")
+                #  Warning - TODO: add observability
+                # SystemEvents.CANCELLED (task)
                 exception_str = "CancelledError"
             except Exception as e:
                 exception_str = str(e)
@@ -775,7 +772,12 @@ class Overlord:
                 #  Info - TODO: add observability
                 #  SystemEvents.STARTED (overlord)
 
-            # Execute the async startup synchronously
+            # Execute the async startup
+            import nest_asyncio
+
+            nest_asyncio.apply()
+
+            # Now we can safely use asyncio.run even from within an event loop
             asyncio.run(_async_startup())
 
         except Exception:
@@ -2960,9 +2962,6 @@ class Overlord:
                 request_id, RequestStatus.COMPLETED, result=result_content
             )
 
-            # Auto-remove completed request to prevent memory buildup
-            await self.request_tracker.remove_request(request_id)
-
             # Emit async processing completed event
             observability.observe(
                 event_type=observability.ConversationEvents.ASYNC_PROCESSING_COMPLETED,
@@ -3042,6 +3041,9 @@ class Overlord:
                     description=f"Request {request_id}: No webhook URL configured, skipping notification",
                 )
 
+            # Auto-remove completed request AFTER webhook delivery
+            await self.request_tracker.remove_request(request_id)
+
         except Exception as e:
             import traceback
 
@@ -3067,10 +3069,8 @@ class Overlord:
                 request_id, RequestStatus.FAILED, error=str(e)
             )
 
-            # Auto-remove failed request to prevent memory buildup
-            await self.request_tracker.remove_request(request_id)
-
             # Send failure webhook if URL is configured
+            # NOTE: Must get webhook URL BEFORE removing request from tracker
             webhook_url = await self._get_webhook_url_for_request(request_id)
             if webhook_url:
                 await self.webhook_manager.deliver_completion(
@@ -3086,6 +3086,9 @@ class Overlord:
                 #  Error - TODO: add observability
                 # ConversationEvents.WEBHOOK_FAILED
                 _ = None  # remove this after implementing observability
+
+            # Auto-remove failed request AFTER webhook delivery
+            await self.request_tracker.remove_request(request_id)
 
     async def _process_sync_chat(
         self,
@@ -3555,17 +3558,14 @@ class Overlord:
         try:
             request_state = await self.request_tracker.get_request(request_id)
             if request_state and request_state.webhook_url:
-                print(f"DEBUG: Found webhook URL in request state: {request_state.webhook_url}")
                 return request_state.webhook_url
 
             # Fall back to formation default
-            print(f"DEBUG: Using formation default webhook URL: {self.async_webhook_url}")
             return self.async_webhook_url
         except Exception as e:
             #  Error - TODO: add observability
             # ErrorEvents.RESOURCE_UNAVAILABLE
             _ = e  # remove this after implementing observability
-            print(f"DEBUG: Error getting webhook URL, using default: {self.async_webhook_url}")
             return self.async_webhook_url
 
     async def get_async_request_status(self, request_id: str) -> Optional[Dict[str, Any]]:

@@ -23,7 +23,7 @@ from .config.document_processing import DocumentProcessingConfig
 from .documents.storage.chunk_manager import DocumentChunkManager
 
 
-async def initialize_observability(formation) -> None:
+def initialize_observability(formation) -> None:
     """
     Initialize observability/logging configuration FIRST.
 
@@ -33,81 +33,56 @@ async def initialize_observability(formation) -> None:
     # Use the pre-configured logging config
     logging_config = formation._logging_config if hasattr(formation, "_logging_config") else {}
 
-    if not logging_config:
-        # Create default observability manager with stdout
-        formation._observability_manager = observability.ObservabilityManager({})
-        print("DEBUG: No logging config, using default observability manager")
-        return
+    # Determine event logger configuration
+    event_logger = None
 
-    try:
-        # Extract global logging settings
-        enabled = logging_config.get("enabled", True)
+    # Only create custom logger if logging is enabled and has file output
+    if logging_config.get("enabled", True):
         streams = logging_config.get("streams", [])
 
-        if not enabled:
-            formation._observability_manager = observability.ObservabilityManager({})
-            return
-
-        # Process streams to find file output
-        file_stream = None
+        # Find file stream configuration
         for stream in streams:
             if stream.get("transport") == "file" and stream.get("destination"):
-                file_stream = stream
+                # Parse level
+                level_str = stream.get("level", "info").lower()
+                valid_levels = [level.value for level in EventLevel]
+                level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
+
+                # Create EventLogger with file output
+                event_logger = EventLogger(
+                    level=level,
+                    output="file",
+                    output_config={"path": stream.get("destination")},
+                    events=(stream.get("events", ["*"]) if stream.get("events") != ["*"] else None),
+                )
+
                 break
 
-        if file_stream:
-            # Parse level
-            level_str = file_stream.get("level", "info").lower()
-            valid_levels = [level.value for level in EventLevel]
-            level = EventLevel(level_str) if level_str in valid_levels else EventLevel.INFO
-
-            # Create EventLogger with file output
-            event_logger = EventLogger(
-                level=level,
-                output="file",
-                output_config={"path": file_stream.get("destination")},
-                events=(
-                    file_stream.get("events", ["*"]) if file_stream.get("events") != ["*"] else None
-                ),
-            )
-
-            # Create ObservabilityManager with the configured logger
-            formation._observability_manager = observability.ObservabilityManager(
-                {"enabled": True, "event_logger": event_logger}
-            )
-
-            # CRITICAL: Set the logger in context so observe() uses it
-            set_event_logger(event_logger)
-
-            print(f"DEBUG: Set event logger with file output: {file_stream.get('destination')}")
-
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "observability",
-                    "output": "file",
-                    "path": file_stream.get("destination"),
-                },
-                description=f"Observability initialized with file output: {file_stream.get('destination')}",
-            )
-        else:
-            # No file stream configured, use default
-            formation._observability_manager = observability.ObservabilityManager({})
-
-    except Exception as e:
-        # Fallback to default observability
-        formation._observability_manager = observability.ObservabilityManager({})
-        # Log error after creating manager
-        observability.observe(
-            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-            level=observability.EventLevel.ERROR,
-            data={"error": str(e), "service": "observability"},
-            description=f"Failed to initialize observability: {str(e)}",
+    # Create ObservabilityManager with appropriate configuration
+    if event_logger:
+        # Use custom event logger
+        formation._observability_manager = observability.ObservabilityManager(
+            {"enabled": True, "event_logger": event_logger}
         )
+        # CRITICAL: Set the logger in context so observe() uses it
+        set_event_logger(event_logger)
+
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "observability",
+                "output": "file",
+                "path": event_logger.output_config.get("path"),
+            },
+            description=f"Observability initialized with file output: {event_logger.output_config.get('path')}",
+        )
+    else:
+        # Use default stdout logger
+        formation._observability_manager = observability.ObservabilityManager({})
 
 
-async def initialize_llm_config(formation) -> None:
+def initialize_llm_config(formation) -> None:
     """
     Initialize LLM configuration from formation config.
 
@@ -150,7 +125,7 @@ async def initialize_llm_config(formation) -> None:
     )
 
 
-async def initialize_memory_systems(formation) -> None:
+def initialize_memory_systems(formation) -> None:
     """
     Initialize all memory systems including buffer, working, and persistent memory.
     """
@@ -158,19 +133,19 @@ async def initialize_memory_systems(formation) -> None:
 
     # Initialize working memory configuration
     working_config = memory_config.get("working", {})
-    await _initialize_working_memory(formation, working_config)
+    _initialize_working_memory(formation, working_config)
 
     # Initialize buffer memory
     buffer_config = memory_config.get("buffer", {})
-    await _initialize_buffer_memory(formation, buffer_config)
+    _initialize_buffer_memory(formation, buffer_config)
 
     # Initialize persistent memory if configured
     persistent_config = memory_config.get("persistent", {})
     if persistent_config and persistent_config.get("connection_string"):
-        await _initialize_persistent_memory(formation, persistent_config)
+        _initialize_persistent_memory(formation, persistent_config)
 
 
-async def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:
+def _initialize_working_memory(formation, working_config: Dict[str, Any]) -> None:
     """Initialize working memory configuration with defaults."""
     try:
         # Create WorkingMemoryConfig with provided config
@@ -201,7 +176,7 @@ async def _initialize_working_memory(formation, working_config: Dict[str, Any]) 
         raise
 
 
-async def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
+def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
     """Initialize buffer memory from configuration with defaults."""
     try:
         # Create BufferMemoryConfig with provided config
@@ -255,17 +230,16 @@ async def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) ->
         raise
 
 
-async def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) -> None:
+def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) -> None:
     """Initialize persistent memory from configuration."""
     try:
         connection_string = persistent_config.get("connection_string")
 
         # Interpolate secrets if needed
         if "${{ secrets." in connection_string:
-            interpolated = await formation.interpolate_secrets(
-                {"connection_string": connection_string}
-            )
-            connection_string = interpolated.get("connection_string", connection_string)
+            # For now, skip interpolation in sync context
+            # TODO: Make interpolate_secrets synchronous
+            pass
 
         # Determine the type of persistent memory based on connection string
         if connection_string.startswith("postgresql://"):
@@ -323,7 +297,7 @@ async def _initialize_persistent_memory(formation, persistent_config: Dict[str, 
         # Don't raise - persistent memory is optional
 
 
-async def initialize_document_processing(formation) -> None:
+def initialize_document_processing(formation) -> None:
     """Initialize document processing components."""
     doc_config = (
         formation._document_processing_config
@@ -367,7 +341,7 @@ async def initialize_document_processing(formation) -> None:
         )
 
 
-async def initialize_background_services(formation) -> None:
+def initialize_background_services(formation) -> None:
     """Initialize background services like cache, request tracking, webhooks."""
     try:
         # Initialize cache manager
@@ -380,7 +354,7 @@ async def initialize_background_services(formation) -> None:
             eviction_policy="lru",
             formation_id=formation.formation_id,
         )
-        await formation._cache_manager.start()
+        # Cache manager will be started later if needed
 
         # Initialize request tracker
         from .background import RequestTracker
@@ -412,7 +386,7 @@ async def initialize_background_services(formation) -> None:
         )
 
 
-async def initialize_clarification_config(formation) -> None:
+def initialize_clarification_config(formation) -> None:
     """Initialize clarification configuration."""
     clarification_config = (
         formation._clarification_config if hasattr(formation, "_clarification_config") else {}

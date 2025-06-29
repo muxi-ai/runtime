@@ -305,14 +305,34 @@ class ChatOrchestrator:
             description=f"Creating async task for request {request_id}",
         )
 
-        self.overlord._create_tracked_task(
-            self.overlord._execute_async_request(
+        # Capture the current context to propagate to the async task
+        from ...services.observability.context import (
+            get_current_event_logger,
+            get_current_request_context,
+        )
+
+        current_logger = get_current_event_logger()
+        current_context = get_current_request_context()
+
+        # Create a wrapper that sets the context before executing
+        async def _execute_with_context():
+            from ...services.observability.context import set_event_logger, set_request_context
+
+            if current_logger:
+                set_event_logger(current_logger)
+            if current_context:
+                set_request_context(current_context)
+
+            await self.overlord._execute_async_request(
                 request_id=request_id,
                 message=message,
                 agent_name=agent_name,
                 user_id=user_id,
                 session_id=session_id,
-            ),
+            )
+
+        self.overlord._create_tracked_task(
+            _execute_with_context(),
             name=f"async_request_{request_id}",
         )
 
