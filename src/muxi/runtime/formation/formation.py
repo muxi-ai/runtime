@@ -1655,16 +1655,27 @@ class Formation:
 
             # Start the overlord (loads agents, initializes services)
             self._overlord.start()
-            
             # Ensure startup is complete if we're in an async context
             # This is critical for tests and async environments where agents
             # need to be loaded before continuing
             try:
                 loop = asyncio.get_running_loop()
-                # We're in an event loop, ensure startup is complete
-                asyncio.run_coroutine_threadsafe(
-                    self._overlord.ensure_started(), loop
-                ).result()
+                # Check if we're in the event loop thread to avoid deadlock
+                # by attempting to run a simple coroutine
+                try:
+                    # This will work if we're in a different thread
+                    future = asyncio.run_coroutine_threadsafe(asyncio.sleep(0), loop)
+                    future.result(timeout=0.1)
+
+                    # If we got here, we're in a different thread - safe to wait
+                    asyncio.run_coroutine_threadsafe(self._overlord.ensure_started(), loop).result()
+                except RuntimeError:
+                    # We're likely in the event loop thread
+                    print("⚠️  Warning: start_overlord() called from event loop thread.")
+                    print("   Startup completion cannot be guaranteed synchronously.")
+                    print("   Consider using an async context or ensuring startup separately.")
+                    # Schedule the startup but don't wait for it
+                    asyncio.create_task(self._overlord.ensure_started())
             except RuntimeError:
                 # No event loop running, startup was already synchronous
                 pass
