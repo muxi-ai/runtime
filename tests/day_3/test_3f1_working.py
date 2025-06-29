@@ -48,7 +48,7 @@ async def run_async_test():
             "content_type": "application/pdf",
             "size": len(pdf_content),
         }],
-        use_async=True,
+        # use_async=True,
         # stream=False,
     )
 
