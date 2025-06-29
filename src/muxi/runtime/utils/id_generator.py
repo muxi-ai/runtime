@@ -21,7 +21,7 @@ def generate_nanoid(size: int = 21) -> str:
     Raises:
         Exception: If nanoid generation fails.
     """
-    alphabet = "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+    alphabet = "_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
     return generate(alphabet, size)
 
 
