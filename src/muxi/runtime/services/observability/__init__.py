@@ -55,6 +55,9 @@ __all__ = [
     # Helper functions
     "emit_event",
     "observe",
+    # Runtime logger management
+    "set_runtime_event_logger",
+    "get_runtime_event_logger",
 ]
 
 
@@ -79,6 +82,25 @@ except ValueError:
     pass
 
 
+# ===================================================================
+# RUNTIME EVENT LOGGER STORAGE
+# ===================================================================
+
+# Global runtime variable to store the configured EventLogger
+_runtime_event_logger: Optional["EventLogger"] = None
+
+
+def set_runtime_event_logger(logger: "EventLogger") -> None:
+    """Set the runtime event logger for global access."""
+    global _runtime_event_logger
+    _runtime_event_logger = logger
+
+
+def get_runtime_event_logger() -> Optional["EventLogger"]:
+    """Get the runtime event logger."""
+    return _runtime_event_logger
+
+
 def observe(
     event_type: Union[SystemEvents, ConversationEvents, str],
     level: EventLevel = EventLevel.INFO,
@@ -98,15 +120,16 @@ def observe(
         description: Human-readable description
     """
     try:
-        # Capture context BEFORE spawning thread
-        from .context import get_current_request_context, get_current_event_logger
+        # Get the runtime event logger
+        configured_logger = get_runtime_event_logger()
 
-        request_context = get_current_request_context()
-        configured_logger = get_current_event_logger()
-
-        # If no configured logger in context, create a fallback
+        # If no runtime logger configured, silently return
         if not configured_logger:
-            configured_logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
+            return
+
+        # Get request context
+        from .context import get_current_request_context
+        request_context = get_current_request_context()
 
         @multitasking.task
         def _emit_in_background(logger, context, evt_type, evt_level, evt_data, evt_desc):
@@ -119,9 +142,8 @@ def observe(
                     description=evt_desc,
                     request_context=context,
                 )
-            except Exception as e:
+            except Exception:
                 # Silently fail if observability unavailable
-                print(f"DEBUG: Error emitting event: {e}")
                 pass
 
         # Start the background task with all parameters explicit

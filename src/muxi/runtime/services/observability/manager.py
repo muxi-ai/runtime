@@ -31,8 +31,11 @@ class ObservabilityManager:
 
         # Set the configured event logger in context for global access
         from .context import set_event_logger
+        from . import set_runtime_event_logger
 
         set_event_logger(self.event_logger)
+        # Also set as runtime logger for cross-context access
+        set_runtime_event_logger(self.event_logger)
 
         self.request_manager = RequestContextManager(
             cleanup_interval=self.config.get("cleanup_interval", 300)
@@ -156,6 +159,7 @@ class ObservabilityManager:
 
         # Emit request received event using observe() to respect context
         from . import observe
+
         observe(
             event_type=ConversationEvents.REQUEST_RECEIVED,
             level=EventLevel.INFO,
