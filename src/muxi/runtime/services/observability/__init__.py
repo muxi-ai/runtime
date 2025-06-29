@@ -108,7 +108,7 @@ def observe(
         if not configured_logger:
             configured_logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
 
-        # @multitasking.task - only bring back once everything else is working
+        @multitasking.task
         def _emit_in_background(logger, context, evt_type, evt_level, evt_data, evt_desc):
             try:
                 # Use all parameters passed explicitly - no closure dependencies
@@ -119,8 +119,9 @@ def observe(
                     description=evt_desc,
                     request_context=context,
                 )
-            except Exception:
+            except Exception as e:
                 # Silently fail if observability unavailable
+                print(f"DEBUG: Error emitting event: {e}")
                 pass
 
         # Start the background task with all parameters explicit

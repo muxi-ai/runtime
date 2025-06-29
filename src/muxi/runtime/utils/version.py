@@ -18,8 +18,8 @@ def get_version() -> str:
     default_version = "unknown"
     version = default_version  # Initialize version variable
 
-    # Try to read from package.json if it exists
-    version_file = os.path.join(os.path.dirname(__file__), "..", "..", ".version")
+    # Try to read from .version file in runtime directory
+    version_file = os.path.join(os.path.dirname(__file__), "..", ".version")
     if os.path.exists(version_file):
         with open(version_file, "r", encoding="utf-8") as f:
             version = f.read().strip()

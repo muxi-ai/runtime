@@ -305,7 +305,8 @@ def initialize_document_processing(formation) -> None:
         else {}
     )
 
-    if not doc_config or not doc_config.get("enabled", True):
+    # Document processing is enabled by default unless explicitly disabled
+    if doc_config.get("enabled", True) is False:
         return
 
     try:

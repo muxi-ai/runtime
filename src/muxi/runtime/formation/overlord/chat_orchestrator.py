@@ -142,11 +142,6 @@ class ChatOrchestrator:
                 self.overlord, "async_threshold_seconds", 30
             )
 
-            # Determine streaming behavior
-            use_streaming = (
-                stream if stream is not None else getattr(self.overlord, "streaming", False)
-            )
-
             # Smart async/sync decision making
             should_use_async = await self._determine_async_mode(
                 message, agent_name, use_async, threshold_seconds
@@ -163,23 +158,30 @@ class ChatOrchestrator:
                     webhook_url=webhook_url,
                     timestamp=timestamp,
                 )
+
+            # Determine streaming behavior
+            use_streaming = (
+                stream if stream is not None else getattr(self.overlord, "streaming", False)
+            )
+
+            # Execute sync request
+            if use_streaming:
+                # Return async generator directly for streaming behavior
+                return self._process_streaming_chat(
+                    message=message,
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
             else:
-                # Execute sync request
-                if use_streaming:
-                    # Return async generator directly for streaming behavior
-                    return self._process_streaming_chat(
-                        message=message,
-                        agent_name=agent_name,
-                        user_id=user_id,
-                    )
-                else:
-                    return await self._process_sync_chat(
-                        message=message,
-                        agent_name=agent_name,
-                        user_id=user_id,
-                        session_id=session_id,
-                        request_id=request_id,
-                    )
+                return await self._process_sync_chat(
+                    message=message,
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
 
     async def _determine_async_mode(
         self,
@@ -384,6 +386,8 @@ class ChatOrchestrator:
         message: str,
         agent_name: Optional[str],
         user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Process a chat request with streaming.
@@ -392,6 +396,8 @@ class ChatOrchestrator:
             message: The user's message
             agent_name: Optional specific agent
             user_id: Optional user ID
+            session_id: Optional session ID
+            request_id: Optional request ID
 
         Yields:
             Stream of response chunks
@@ -401,5 +407,7 @@ class ChatOrchestrator:
             message=message,
             agent_name=agent_name,
             user_id=user_id,
+            session_id=session_id,
+            request_id=request_id,
         ):
             yield chunk
