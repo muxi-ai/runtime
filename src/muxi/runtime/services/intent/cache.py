@@ -4,7 +4,7 @@ Intent Detection Cache
 LRU cache for intent detection results to avoid redundant LLM calls.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 from datetime import datetime, timedelta
 from collections import OrderedDict
 import threading
@@ -25,7 +25,7 @@ class IntentCache:
         """
         self.ttl = timedelta(seconds=ttl)
         self.max_size = max_size
-        self._cache: OrderedDict[str, tuple[IntentResult, datetime]] = OrderedDict()
+        self._cache: OrderedDict[str, Tuple[IntentResult, datetime]] = OrderedDict()
         self._lock = threading.Lock()
 
         # Statistics

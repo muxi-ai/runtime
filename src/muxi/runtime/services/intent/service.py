@@ -7,6 +7,7 @@ Replaces keyword-based detection with language-agnostic LLM-based approach.
 
 import json
 import hashlib
+import inspect
 from typing import Optional
 
 from ...datatypes.intent import (
@@ -14,8 +15,6 @@ from ...datatypes.intent import (
     IntentResult,
     IntentDetectionContext,
     QueryType,
-    ClarificationCategory,
-    ScheduleType,
 )
 from ..llm import LLM
 from .. import observability
@@ -30,6 +29,7 @@ class IntentDetectionService:
         llm_service: Optional[LLM] = None,
         cache_ttl: int = 3600,
         enable_cache: bool = True,
+        llm_timeout: float = 30.0,
     ):
         """
         Initialize intent detection service.
@@ -38,9 +38,22 @@ class IntentDetectionService:
             llm_service: LLM service for intent detection
             cache_ttl: Cache TTL in seconds (default: 1 hour)
             enable_cache: Whether to enable caching
+            llm_timeout: Timeout for LLM calls in seconds (default: 30s)
         """
+        # Validate LLM service if provided
+        if llm_service is not None:
+            # Check if the LLM service has the required async method
+            if not hasattr(llm_service, "generate_text"):
+                raise ValueError("Provided llm_service must have a 'generate_text' method")
+            # Check if generate_text is a coroutine function (async)
+            if not inspect.iscoroutinefunction(llm_service.generate_text):
+                raise ValueError(
+                    "The 'generate_text' method of llm_service must be an async method"
+                )
+
         self.llm = llm_service
         self.cache = IntentCache(ttl=cache_ttl) if enable_cache else None
+        self.llm_timeout = llm_timeout
 
         # Prompt templates for different intent types
         self.prompts = {
@@ -141,6 +154,7 @@ class IntentDetectionService:
             prompt=prompt,
             temperature=0.1,  # Low temperature for consistent classification
             max_tokens=200,
+            timeout=self.llm_timeout,
         )
 
         # Parse response
@@ -418,7 +432,7 @@ Respond with JSON only:
         value = value.lower().strip()
         if value in ["knowledge", "memory", "mixed", "unclear"]:
             return value
-        return QueryType.UNCLEAR
+        return "unclear"
 
     def _normalize_clarification_category(self, value: str) -> str:
         """Normalize clarification category values."""
@@ -435,11 +449,11 @@ Respond with JSON only:
         ]
         if value in valid:
             return value
-        return ClarificationCategory.OTHER
+        return "other"
 
     def _normalize_schedule_type(self, value: str) -> str:
         """Normalize schedule type values."""
         value = value.lower().strip()
         if value in ["one_time", "recurring", "unclear"]:
             return value
-        return ScheduleType.UNCLEAR
+        return "unclear"

@@ -156,7 +156,7 @@ class SecretsManager:
         Synchronously retrieve secret by name (case-insensitive).
 
         This is a simple sync version for use in sync contexts like config loading.
-        It doesn't use locks since file reads are atomic enough for our use case.
+        Note: This method doesn't use async locks and may not be thread-safe.
 
         Args:
             name: Secret name (will be normalized for lookup)
@@ -165,29 +165,80 @@ class SecretsManager:
             Secret value or None if not found
         """
         try:
+            # Log the operation start
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
+                level=observability.EventLevel.DEBUG,
+                description=f"Starting synchronous secret retrieval for: {name}",
+                data={
+                    "operation_type": "sync_retrieval",
+                    "secret_name": name,
+                },
+            )
+
             # Initialize encryption if needed
             if not self._fernet:
                 if self.master_key_path.exists():
                     key_data = self.master_key_path.read_bytes()
                     self._fernet = Fernet(key_data)
                 else:
-                    # No master key means no secrets
+                    observability.observe(
+                        event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        description=f"Master key not found for sync secret retrieval: {name}",
+                        data={"operation_type": "sync_retrieval", "secret_name": name},
+                    )
                     return None
 
             normalized_name = self._normalize_secret_name(name)
 
             # Load secrets from file
             if not self.secrets_file_path.exists():
+                observability.observe(
+                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
+                    level=observability.EventLevel.DEBUG,
+                    description=f"Secrets file not found for: {name}",
+                    data={"operation_type": "sync_retrieval", "secret_name": name, "found": False},
+                )
                 return None
 
             encrypted_data = self.secrets_file_path.read_bytes()
             decrypted_data = self._fernet.decrypt(encrypted_data)
             secrets = json.loads(decrypted_data.decode("utf-8"))
 
-            return secrets.get(normalized_name)
+            secret_value = secrets.get(normalized_name)
+            found = secret_value is not None
 
-        except Exception:
-            # If anything goes wrong, return None
+            # Log the operation completion
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
+                level=observability.EventLevel.DEBUG,
+                description=f"Sync secret retrieval completed for {name}, found: {found}",
+                data={
+                    "operation_type": "sync_retrieval",
+                    "secret_name": name,
+                    "normalized_name": normalized_name,
+                    "found": found,
+                    "value_type": type(secret_value).__name__ if found else None,
+                    "success": True,
+                },
+            )
+
+            return secret_value
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Sync secret retrieval failed for {name}: {str(e)}",
+                data={
+                    "operation_type": "sync_retrieval",
+                    "secret_name": name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "success": False,
+                },
+            )
             return None
 
     async def _get_secrets_cache(self) -> Dict[str, Any]:
