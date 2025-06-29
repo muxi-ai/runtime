@@ -22,7 +22,12 @@ class ObservabilityManager:
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
-        self.event_logger = self._create_event_logger()
+
+        # Check if an event_logger was passed in config
+        if "event_logger" in self.config:
+            self.event_logger = self.config["event_logger"]
+        else:
+            self.event_logger = self._create_event_logger()
 
         # Set the configured event logger in context for global access
         from .context import set_event_logger
@@ -75,7 +80,6 @@ class ObservabilityManager:
             output=output,
             output_config=output_config,
             events=events,
-            muxi_version=self.config.get("muxi_version", "1.0.0"),
         )
 
     async def _initialize_streams(self) -> None:
@@ -150,11 +154,12 @@ class ObservabilityManager:
 
         set_request_context(context)
 
-        # Emit request received event - now sync!
-        self.event_logger.emit_event(
+        # Emit request received event using observe() to respect context
+        from . import observe
+        observe(
             event_type=ConversationEvents.REQUEST_RECEIVED,
             level=EventLevel.INFO,
-            request_context=context,
+            data={},
             description=f"Request {context.id} received",
         )
 
@@ -164,11 +169,11 @@ class ObservabilityManager:
             # Mark as completed
             context.complete()
 
-            # Emit request completed event - now sync!
-            self.event_logger.emit_event(
+            # Emit request completed event using observe() to respect context
+            observe(
                 event_type=ConversationEvents.REQUEST_COMPLETED,
                 level=EventLevel.INFO,
-                request_context=context,
+                data={},
                 description=f"Request {context.id} completed in {context.duration_ms}ms",
             )
 
@@ -176,11 +181,10 @@ class ObservabilityManager:
             # Mark as failed
             context.fail()
 
-            # Emit request failed event - now sync!
-            self.event_logger.emit_event(
+            # Emit request failed event using observe() to respect context
+            observe(
                 event_type=ConversationEvents.REQUEST_FAILED,
                 level=EventLevel.ERROR,
-                request_context=context,
                 data={"error": str(e)},
                 description=f"Request {context.id} failed: {str(e)}",
             )

@@ -12,9 +12,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 
-from ...datatypes.observability import ConversationEvents, SystemEvents, EventLevel, RequestContext
+from ...datatypes.observability import ConversationEvents, SystemEvents, ErrorEvents, EventLevel, RequestContext
 from ...utils.user_dirs import get_observability_dir
-from ...utils.id_generator import generate_nanoid
+from ...utils.id_generator import generate_nanoid, get_version
 
 
 class EventLogger:
@@ -26,13 +26,12 @@ class EventLogger:
         output: str = "stdout",
         output_config: Optional[Dict[str, Any]] = None,
         events: Optional[List[str]] = None,
-        muxi_version: str = "1.0.0",
     ):
         self.level = level
         self.output = output
         self.output_config = output_config or {}
         self.events = set(events) if events else None
-        self.muxi_version = muxi_version
+        self.muxi_version = get_version()
         self._server_id = self._get_server_id()
 
     def _get_server_id(self) -> str:
@@ -63,7 +62,7 @@ class EventLogger:
 
     def emit_event(
         self,
-        event_type: Union[ConversationEvents, SystemEvents, str],
+        event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, str],
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
@@ -72,7 +71,7 @@ class EventLogger:
     ) -> str:
         """Emit an observability event with structured data."""
         # Handle different event types
-        if isinstance(event_type, (ConversationEvents, SystemEvents)):
+        if isinstance(event_type, (ConversationEvents, SystemEvents, ErrorEvents)):
             event_type_str = event_type.value
         else:
             event_type_str = event_type
@@ -128,15 +127,15 @@ class EventLogger:
         return event_id
 
     def _emit_to_output(
-        self, event: Dict[str, Any], event_type: Union[ConversationEvents, SystemEvents, str]
+        self, event: Dict[str, Any], event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, str]
     ) -> None:
         """Emit event to the configured output destination."""
         try:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(",", ":"))
 
-            # Route SystemEvents to stdout only, regardless of configuration
-            if isinstance(event_type, SystemEvents):
+            # Route SystemEvents and ErrorEvents to stdout only, regardless of configuration
+            if isinstance(event_type, (SystemEvents, ErrorEvents)):
                 print(event_line, flush=True)
                 return
 
@@ -159,6 +158,7 @@ class EventLogger:
         file_path = self.output_config.get("path", f"{get_observability_dir()}/muxi.jsonl")
         with open(file_path, "a") as f:
             f.write(event_line + "\n")
+            f.flush()  # Ensure immediate write
 
     def _emit_to_stream(self, event_line: str) -> None:
         """Emit event to stream output."""

@@ -108,23 +108,25 @@ def observe(
         if not configured_logger:
             configured_logger = EventLogger(level=EventLevel.DEBUG, output="stdout")
 
-        @multitasking.task
-        def _emit_in_background():
+        # @multitasking.task - only bring back once everything else is working
+        def _emit_in_background(logger, context, evt_type, evt_level, evt_data, evt_desc):
             try:
-                # Use the configured logger (captured before thread spawn)
-                configured_logger.emit_event(
-                    event_type=event_type,
-                    level=level,
-                    data=data or {},
-                    description=description,
-                    request_context=request_context,  # Use captured context
+                # Use all parameters passed explicitly - no closure dependencies
+                logger.emit_event(
+                    event_type=evt_type,
+                    level=evt_level,
+                    data=evt_data,
+                    description=evt_desc,
+                    request_context=context,
                 )
             except Exception:
                 # Silently fail if observability unavailable
                 pass
 
-        # Start the background task
-        _emit_in_background()
+        # Start the background task with all parameters explicit
+        _emit_in_background(
+            configured_logger, request_context, event_type, level, data or {}, description
+        )
 
     except Exception:
         # Silently fail if observability unavailable
