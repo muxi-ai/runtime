@@ -141,7 +141,7 @@ class DocumentErrorHandler:
             ErrorEvents.SERVICE_INITIALIZED,
             EventLevel.INFO,
             "Document error handler initialized",
-            {"persona_config": self.persona_config}
+            {"persona_config": self._sanitize_config_for_logging(self.persona_config)},
         )
 
     def _initialize_error_classifications(self) -> Dict[str, Dict[str, Any]]:
@@ -245,7 +245,7 @@ class DocumentErrorHandler:
                 ErrorEvents.SERVICE_INITIALIZED,
                 EventLevel.INFO,
                 "Fallback processors initialized successfully",
-                {}
+                {},
             )
 
         except Exception as e:
@@ -253,7 +253,7 @@ class DocumentErrorHandler:
                 ErrorEvents.UNEXPECTED_ERROR,
                 EventLevel.ERROR,
                 "Failed to initialize fallback processors",
-                {"error": str(e)}
+                {"error": str(e)},
             )
 
     def _initialize_intent_detector(self) -> None:
@@ -274,17 +274,74 @@ class DocumentErrorHandler:
                 ErrorEvents.SERVICE_INITIALIZED,
                 EventLevel.INFO,
                 "Intent detection service initialized",
-                {"llm_model": llm_model}
+                {"llm_model": llm_model},
             )
         except Exception as e:
             self.logger.emit(
                 ErrorEvents.UNEXPECTED_ERROR,
                 EventLevel.ERROR,
                 "Failed to initialize intent detection service",
-                {"error": str(e)}
+                {"error": str(e)},
             )
             # Create a fallback detector that will be initialized on first use
             self._intent_detector = None
+
+    def _sanitize_config_for_logging(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Sanitize configuration for safe logging.
+
+        Removes or masks sensitive fields while preserving structure for debugging.
+
+        Args:
+            config: Configuration dictionary to sanitize
+
+        Returns:
+            Sanitized configuration safe for logging
+        """
+        if not config:
+            return {}
+
+        # Define sensitive field patterns
+        sensitive_patterns = [
+            "key",
+            "token",
+            "secret",
+            "password",
+            "credential",
+            "auth",
+            "api_key",
+            "access_token",
+            "private",
+            "cert",
+            "connection_string",
+        ]
+
+        sanitized = {}
+        for key, value in config.items():
+            # Check if key contains sensitive patterns
+            is_sensitive = any(pattern in key.lower() for pattern in sensitive_patterns)
+
+            if is_sensitive:
+                # Mask sensitive values
+                if isinstance(value, str):
+                    sanitized[key] = "***" if value else None
+                elif isinstance(value, (int, float)):
+                    sanitized[key] = "<numeric_value>"
+                elif isinstance(value, dict):
+                    sanitized[key] = "<dict_value>"
+                else:
+                    sanitized[key] = f"<{type(value).__name__}_value>"
+            elif isinstance(value, dict):
+                # Recursively sanitize nested dictionaries
+                sanitized[key] = self._sanitize_config_for_logging(value)
+            elif isinstance(value, list):
+                # For lists, just indicate type and length
+                sanitized[key] = f"<list[{len(value)}]>"
+            else:
+                # Non-sensitive values can be logged as-is
+                sanitized[key] = value
+
+        return sanitized
 
     async def handle_document_error(
         self, error: Exception, filename: str, file_size_mb: float, operation: str = "parsing"
@@ -320,8 +377,8 @@ class DocumentErrorHandler:
                 "filename": filename,
                 "error_type": error_type.value,
                 "fallback_strategy": fallback_strategy.value,
-                "operation": operation
-            }
+                "operation": operation,
+            },
         )
 
         return await self._execute_fallback_strategy(fallback_strategy, filename, error_type, error)
@@ -376,8 +433,8 @@ class DocumentErrorHandler:
                     "filename": filename,
                     "strategy": strategy.value,
                     "error": str(fallback_error),
-                    "original_error_type": error_type.value
-                }
+                    "original_error_type": error_type.value,
+                },
             )
             return (
                 None,
@@ -400,7 +457,7 @@ class DocumentErrorHandler:
                 ErrorEvents.UNEXPECTED_ERROR,
                 EventLevel.ERROR,
                 f"Failed text extraction fallback for {filename}",
-                {"error": str(e), "filename": filename}
+                {"error": str(e), "filename": filename},
             )
             return None
 
@@ -419,7 +476,7 @@ class DocumentErrorHandler:
                 ErrorEvents.UNEXPECTED_ERROR,
                 EventLevel.ERROR,
                 f"Failed processing for {filename}",
-                {"error": str(e), "filename": filename}
+                {"error": str(e), "filename": filename},
             )
             return await self._fallback_text_extraction(filename)
 
@@ -431,7 +488,7 @@ class DocumentErrorHandler:
                 ErrorEvents.SERVICE_CALLED,
                 EventLevel.INFO,
                 f"Using external service fallback for {filename}",
-                {"filename": filename}
+                {"filename": filename},
             )
             return await self._fallback_text_extraction(filename)
         except Exception as e:
@@ -439,7 +496,7 @@ class DocumentErrorHandler:
                 ErrorEvents.UNEXPECTED_ERROR,
                 EventLevel.ERROR,
                 f"Failed processing for {filename}",
-                {"error": str(e), "filename": filename}
+                {"error": str(e), "filename": filename},
             )
             return await self._fallback_text_extraction(filename)
 
@@ -496,7 +553,7 @@ class DocumentErrorHandler:
                 ErrorEvents.UNEXPECTED_ERROR,
                 EventLevel.ERROR,
                 "Intent detection failed for error classification",
-                {"error": str(e), "original_error": error_str}
+                {"error": str(e), "original_error": error_str},
             )
             return self._fallback_classify_error(error)
 
