@@ -2620,9 +2620,9 @@ class Overlord:
                 return f"Audio {attachment.get('filename')} exceeds the maximum file size limit of 20MB"
             # Get the transcription model from capability models
             transcription_model_config = None
-            if hasattr(self, "_capability_models") and "transcription" in self._capability_models:
-                transcription_model_config = self._capability_models["transcription"]
-                print(f"Found transcription model config: {transcription_model_config}")
+            if hasattr(self, "_capability_models") and "audio" in self._capability_models:
+                transcription_model_config = self._capability_models["audio"]
+                print(f"Found audio/transcription model config: {transcription_model_config}")
 
             if transcription_model_config:
                 # Create LLM instance for transcription
