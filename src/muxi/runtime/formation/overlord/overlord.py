@@ -3514,9 +3514,9 @@ class Overlord:
         except Exception as e:
             # Handle streaming errors gracefully
             observability.observe(
-                event_type=observability.ConversationEvents.OVERLORD_PROCESSING_ERROR,
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.ERROR,
-                data={"error": str(e), "agent": agent_name},
+                data={"error": str(e), "agent": agent_name, "context": "streaming"},
                 description=f"Streaming error: {str(e)}",
             )
 
