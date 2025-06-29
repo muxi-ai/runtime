@@ -21,18 +21,21 @@ class TestBasicCommunication:
             overlord = formation.start_overlord()
             
             # Test basic helpfulness query
-            response = asyncio.run(overlord.chat("What can you help me with?"))
+            response = asyncio.run(overlord.chat("What can you help me with?", stream=False))
             assert response is not None
-            assert len(response) > 0
+            # Response is MuxiResponse object, extract content
+            response_text = response.content if hasattr(response, 'content') else str(response)
+            assert len(response_text) > 0
             
             # Verify response mentions helping (case-insensitive)
-            response_lower = response.lower()
+            response_lower = response_text.lower()
             assert any(word in response_lower for word in ["help", "assist", "support", "can"])
             
             # Test another simple interaction
-            response2 = asyncio.run(overlord.chat("Tell me a fun fact"))
+            response2 = asyncio.run(overlord.chat("Tell me a fun fact", stream=False))
             assert response2 is not None
-            assert len(response2) > 0
+            response2_text = response2.content if hasattr(response2, 'content') else str(response2)
+            assert len(response2_text) > 0
             
             formation.stop_overlord()
         
@@ -49,18 +52,20 @@ class TestBasicCommunication:
             overlord = formation.start_overlord()
             
             # Test 1: Math query should route to appropriate agent
-            response = asyncio.run(overlord.chat("Calculate 2+2"))
+            response = asyncio.run(overlord.chat("Calculate 2+2", stream=False))
             assert response is not None
-            assert "4" in response
+            response_text = response.content if hasattr(response, 'content') else str(response)
+            assert "4" in response_text
             
             # Test 2: Different types of queries for routing
             # Research query
-            research_response = asyncio.run(overlord.chat("What are the latest trends in renewable energy?"))
+            research_response = asyncio.run(overlord.chat("What are the latest trends in renewable energy?", stream=False))
             assert research_response is not None
-            assert len(research_response) > 50  # Should be substantive
+            research_text = research_response.content if hasattr(research_response, 'content') else str(research_response)
+            assert len(research_text) > 50  # Should be substantive
             
             # General query
-            general_response = asyncio.run(overlord.chat("How are you today?"))
+            general_response = asyncio.run(overlord.chat("How are you today?", stream=False))
             assert general_response is not None
             
             formation.stop_overlord()
@@ -87,11 +92,12 @@ class TestBasicCommunication:
             
             responses = []
             for query in queries:
-                response = asyncio.run(overlord.chat(query))
+                response = asyncio.run(overlord.chat(query, stream=False))
                 assert response is not None
-                assert len(response) > 0
-                assert not response.isspace()  # Not just whitespace
-                responses.append(response)
+                response_text = response.content if hasattr(response, 'content') else str(response)
+                assert len(response_text) > 0
+                assert not response_text.isspace()  # Not just whitespace
+                responses.append(response_text)
             
             # All responses should be unique (not canned responses)
             assert len(set(responses)) == len(responses)
