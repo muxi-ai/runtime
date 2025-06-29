@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Test 3F1: Process PDF with async mode - working version with persistent event loop."""
 
+import os
 import asyncio
 import sys
 from pathlib import Path
@@ -82,8 +83,10 @@ async def run_async_test():
                     break
 
             # Check log file for completion
+            # Use relative path or environment variable
+            log_path = os.getenv("MULTIMODAL_LOG_PATH", "logs/multimodal.log")
             try:
-                with open("/Users/ran/Desktop/multimodal.log", "r") as f:
+                with open(log_path, "r") as f:
                     content = f.read()
                     if "webhook.delivered" in content or "WEBHOOK_DELIVERED" in content:
                         print("✅ Webhook delivered successfully!")
