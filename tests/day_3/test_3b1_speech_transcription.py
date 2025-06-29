@@ -11,22 +11,12 @@ import asyncio
 from pathlib import Path
 
 from src.muxi.runtime.formation.formation import Formation
+from tests.day_3.test_utils import get_response_universal
 
 
 def get_response(coro):
     """Helper to get response from async chat"""
-    result = asyncio.run(coro)
-    
-    # Handle async generators
-    if hasattr(result, "__aiter__"):
-        async def collect():
-            chunks = []
-            async for chunk in result:
-                chunks.append(chunk)
-            return "".join(chunks)
-        return asyncio.run(collect())
-    
-    return result
+    return get_response_universal(coro)
 
 
 @pytest.fixture

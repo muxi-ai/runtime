@@ -12,6 +12,7 @@ from pathlib import Path  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
 from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from tests.day_3.test_utils import get_response_universal
 
 
 def get_response(coro):

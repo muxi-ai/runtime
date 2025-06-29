@@ -20,6 +20,7 @@ from tests.day_3.test_utils import (  # noqa: E402
     capture_observability_events,
     restore_observability,
 )
+from tests.day_3.test_utils import get_response_universal
 
 
 def get_response(coro):

@@ -12,6 +12,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 from src.muxi.runtime.formation.formation import Formation
+from tests.day_3.test_utils import get_response_universal
 
 
 def get_response(coro):

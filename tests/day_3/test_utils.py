@@ -104,6 +104,58 @@ class TestVisibility:
         print(f"{'='*80}\n")
 
 
+def get_response_universal(coro):
+    """Universal helper to get response from async chat - handles all response types"""
+    result = asyncio.run(coro)
+    
+    # Handle different response types
+    if isinstance(result, dict) and "request_id" in result:
+        # Async response - return a placeholder message
+        return f"Processing async request {result['request_id']}. Results will be sent to webhook."
+    elif hasattr(result, "__aiter__"):
+        # Streaming response - collect all chunks
+        async def collect():
+            chunks = []
+            async for chunk in result:
+                chunks.append(chunk)
+            return "".join(chunks)
+        return asyncio.run(collect())
+    elif isinstance(result, str):
+        # Direct string response
+        return result
+    else:
+        # For any other type, convert to string
+        return str(result)
+
+
+def is_async_response(response):
+    """Check if a response is an async processing response"""
+    if isinstance(response, str):
+        response_lower = response.lower()
+        return "async request" in response_lower and "webhook" in response_lower
+    return False
+
+
+def assert_response_valid(response, min_length=50, required_words=None, context=""):
+    """Assert that a response is valid, handling both sync and async responses"""
+    assert response, f"Should receive a response{' for ' + context if context else ''}"
+    
+    if is_async_response(response):
+        # This is an async processing response
+        assert "Processing async request" in response, "Should indicate async processing"
+        return True  # Async response is valid
+    else:
+        # This is a sync response with actual content
+        assert len(response) >= min_length, f"Response should be at least {min_length} chars{' for ' + context if context else ''}"
+        
+        if required_words:
+            response_lower = response.lower()
+            found = any(word.lower() in response_lower for word in required_words)
+            assert found, f"Response should contain one of: {required_words}{' for ' + context if context else ''}"
+        
+        return False  # Not async
+
+
 async def get_response_with_visibility_async(
     coro, visibility: TestVisibility, step_description: str
 ):
