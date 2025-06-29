@@ -1240,7 +1240,7 @@ Provide a helpful, conversational response that directly addresses what the user
                     )
 
             # Use the transcription model from init or default to whisper-1
-            transcription_model = model or self.model
+            transcription_model = model or self.model_name
 
             # For transcription models, we might need to adjust the model name
             # e.g., "openai/gpt-4" -> "openai/whisper-1"
