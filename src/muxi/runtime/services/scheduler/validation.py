@@ -14,6 +14,8 @@ import re
 from typing import Optional
 from datetime import datetime
 
+from ...utils.datetime_utils import utc_now
+
 
 class SchedulerInputValidator:
     """Input validator for scheduler operations."""
@@ -279,7 +281,5 @@ class SchedulerInputValidator:
                 raise ValueError("One-time jobs should not have cron_expression")
 
             # Validate scheduled_for is in the future
-            from ...utils.datetime_utils import utc_now
-
             if scheduled_for <= utc_now():
                 raise ValueError("scheduled_for must be in the future")

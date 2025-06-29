@@ -10,6 +10,12 @@ from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 from ..background.request_tracker import RequestStatus, RequestState
 from ...utils.id_generator import generate_nanoid
 from ...services import observability
+from ...services.observability.context import (
+    get_current_event_logger,
+    get_current_request_context,
+    set_event_logger,
+    set_request_context,
+)
 
 
 class ChatOrchestrator:
@@ -308,18 +314,11 @@ class ChatOrchestrator:
         )
 
         # Capture the current context to propagate to the async task
-        from ...services.observability.context import (
-            get_current_event_logger,
-            get_current_request_context,
-        )
-
         current_logger = get_current_event_logger()
         current_context = get_current_request_context()
 
         # Create a wrapper that sets the context before executing
         async def _execute_with_context():
-            from ...services.observability.context import set_event_logger, set_request_context
-
             if current_logger:
                 set_event_logger(current_logger)
             if current_context:

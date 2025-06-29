@@ -15,6 +15,7 @@ from .stream_processor import StreamProcessor
 from .health import HealthManager, HealthMonitor, HealthStatusAPI
 from ...datatypes.observability import ConversationEvents, SystemEvents, EventLevel, RequestContext
 from ...utils.user_dirs import get_observability_dir
+from ...utils.id_generator import generate_nanoid
 
 
 class ObservabilityManager:
@@ -138,7 +139,6 @@ class ObservabilityManager:
         """Context manager for request tracking with automatic context propagation (sync version)."""
         # Since request_manager.track_request is async, we need to handle this differently
         # We'll use the context directly
-        from ...utils.id_generator import generate_nanoid
 
         # Generate request ID if not provided
         if request_id is None:

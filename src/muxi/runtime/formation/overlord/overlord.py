@@ -202,7 +202,7 @@ from ..background import (
 from .initialization import load_agents_from_configuration
 
 # Unified Response Components
-from ...datatypes.clarification import ClarificationConfig, QuestionStyle
+from ...datatypes.clarification import ClarificationConfig, QuestionStyle, ClarificationResultStatus
 from ...utils.user_dirs import set_formation_id
 
 # Import MarkItDown - required dependency
@@ -3767,7 +3767,6 @@ class Overlord:
             # Process the clarification response
             if request_state.clarification_request_id:
                 from ..clarification import ClarificationManager
-                from ...datatypes.clarification import ClarificationResultStatus
 
                 manager = ClarificationManager(overlord=self)
                 result = await manager.process_user_response(
