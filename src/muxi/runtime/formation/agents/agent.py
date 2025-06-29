@@ -48,8 +48,10 @@ import uuid
 from typing import Any, Dict, List, Optional, Union
 
 from ...datatypes.response import MuxiResponse
+from ...datatypes.intent import IntentType, IntentDetectionContext
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
+from ...services.intent import IntentDetectionService
 from ...services import observability
 
 
@@ -269,7 +271,7 @@ class Agent:
 
         try:
             # Smart query routing (always enabled)
-            strategy = self._analyze_query_for_routing(query)
+            strategy = await self._analyze_query_for_routing(query)
 
             # Dynamic context budget management (always enabled)
             if context_budget:
@@ -320,13 +322,12 @@ class Agent:
             self.logger.error(f"Error in enhanced knowledge search: {e}")
             return {"knowledge": [], "memory": [], "unified": []} if unified else []
 
-    def _analyze_query_for_routing(self, query: str) -> str:
+    async def _analyze_query_for_routing(self, query: str) -> str:
         """
         Analyze query to determine optimal search strategy.
 
-        Analyzes query to determine optimal search strategy by analyzing
-        the query content to determine whether it needs knowledge sources,
-        memory sources, or both.
+        Uses the IntentDetectionService for language-agnostic intent detection
+        to determine whether to search knowledge bases, memory, or both.
 
         Args:
             query: The search query to analyze
@@ -334,134 +335,78 @@ class Agent:
         Returns:
             Search strategy: "knowledge_only", "memory_only", or "both"
         """
+        # Try to use intent detection service if available
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Use existing model instance
+                llm_service = self.model
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Detect query type using LLM
+            # Add recent conversation context if available
+            context = IntentDetectionContext(
+                recent_messages=(
+                    [
+                        {"role": msg.role, "content": msg.content[:200]}
+                        for msg in self._messages[-5:]  # Last 5 messages
+                    ]
+                    if hasattr(self, "_messages") and self._messages
+                    else None
+                )
+            )
+
+            result = await self._intent_detector.detect_intent(
+                text=query, intent_type=IntentType.QUERY_TYPE, context=context
+            )
+
+            # Map intent to strategy
+            if result.confidence > 0.7:  # High confidence
+                if result.intent == "knowledge":
+                    return "knowledge_only"
+                elif result.intent == "memory":
+                    return "memory_only"
+                elif result.intent == "mixed":
+                    return "both"
+
+            # Low confidence or unclear - use both
+            return "both"
+
+        except Exception as e:
+            # Fall back to simple keyword-based detection
+            if hasattr(self, "logger"):
+                self.logger.warning(f"Intent detection failed, using fallback: {str(e)}")
+            return self._fallback_query_routing(query)
+
+    def _fallback_query_routing(self, query: str) -> str:
+        """
+        Fallback keyword-based query routing.
+
+        Used when intent detection service is not available.
+        """
         query_lower = query.lower()
 
-        # Factual/domain knowledge indicators
-        knowledge_indicators = [
-            # Question words that typically need factual answers
-            "what is",
-            "what are",
-            "how does",
-            "how do",
-            "how to",
-            "explain",
-            "define",
-            "definition",
-            "describe",
-            "documentation",
-            "specification",
-            # Technical/domain-specific terms
-            "api",
-            "function",
-            "method",
-            "class",
-            "algorithm",
-            "process",
-            "procedure",
-            "protocol",
-            "standard",
-            "requirement",
-            "feature",
-            # Instructional queries
-            "tutorial",
-            "guide",
-            "example",
-            "sample",
-            "instruction",
-            "step",
-            "configure",
-            "setup",
-            "install",
-            "implement",
-            "deploy",
-            # Reference queries
-            "reference",
-            "manual",
-            "documentation",
-            "spec",
-            "format",
-            "syntax",
-            "parameter",
-            "option",
-            "setting",
-            "configuration",
-        ]
-
-        # Conversational/personal context indicators
-        memory_indicators = [
-            # Personal references
-            "we discussed",
-            "you mentioned",
-            "i told you",
-            "earlier",
-            "before",
-            "previously",
+        # Simple heuristics for fallback
+        memory_keywords = [
+            "remember",
             "last time",
-            "remember when",
-            "as we talked",
-            # Conversational continuity
-            "continue",
-            "follow up",
-            "regarding our",
-            "about our conversation",
-            "back to",
-            "returning to",
-            "as i was saying",
-            "to clarify",
-            # Personal preferences/history
-            "my preference",
-            "i prefer",
-            "i like",
-            "i want",
-            "my project",
-            "our project",
-            "my situation",
-            "my case",
-            "for me",
-            "in my context",
-            # Recent context references
-            "just now",
-            "recently",
-            "today",
-            "this session",
-            "current",
-            "ongoing",
-            "in progress",
-            "working on",
+            "previously",
+            "you said",
+            "we discussed",
+            "earlier",
         ]
+        knowledge_keywords = ["what is", "how to", "explain", "define", "why", "tutorial"]
 
-        # Count indicators
-        knowledge_score = sum(1 for indicator in knowledge_indicators if indicator in query_lower)
-        memory_score = sum(1 for indicator in memory_indicators if indicator in query_lower)
+        has_memory = any(keyword in query_lower for keyword in memory_keywords)
+        has_knowledge = any(keyword in query_lower for keyword in knowledge_keywords)
 
-        # Additional scoring based on query characteristics
-
-        # Questions starting with factual question words lean toward knowledge
-        if any(query_lower.startswith(q) for q in ["what", "how", "why", "when", "where"]):
-            knowledge_score += 1
-
-        # Personal pronouns lean toward memory
-        personal_pronouns = ["my", "our", "i ", "we ", "me ", "us "]
-        if any(pronoun in query_lower for pronoun in personal_pronouns):
-            memory_score += 1
-
-        # Past tense verbs lean toward memory
-        past_indicators = ["was", "were", "did", "had", "said", "told", "mentioned"]
-        if any(past in query_lower for past in past_indicators):
-            memory_score += 1
-
-        # Technical terms lean toward knowledge
-        if (
-            any(char in query for char in ["()", "{}", "[]", ".", "/"])
-            or len([word for word in query.split() if word.isupper()]) > 0
-        ):
-            knowledge_score += 1
-
-        # Determine strategy based on scores
-        if knowledge_score > memory_score + 1:
-            return "knowledge_only"
-        elif memory_score > knowledge_score + 1:
+        if has_memory and not has_knowledge:
             return "memory_only"
+        elif has_knowledge and not has_memory:
+            return "knowledge_only"
         else:
             return "both"
 
@@ -1128,12 +1073,79 @@ class Agent:
         """
         Extract specific information requests from agent response.
 
+        Uses the IntentDetectionService for language-agnostic clarification detection.
+
         Args:
             agent_response: The agent's response text
             user_message: The original user message
 
         Returns:
             Dictionary mapping information categories to specific questions
+        """
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Use existing model instance
+                llm_service = self.model
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Use intent detection for clarification categories
+            context = IntentDetectionContext(
+                recent_messages=[
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": agent_response},
+                ]
+            )
+
+            result = await self._intent_detector.detect_intent(
+                text=agent_response, intent_type=IntentType.CLARIFICATION_CATEGORY, context=context
+            )
+
+            required_info = {}
+
+            # If we detected a clarification category with good confidence
+            if result.confidence > 0.6 and result.intent != "none":
+                # Extract the actual question
+                question = result.extracted_question
+                if not question:
+                    # Fall back to extracting question from response
+                    question = await self._extract_question_for_category(
+                        agent_response, result.intent
+                    )
+
+                if question:
+                    required_info[result.intent] = question
+
+            # Check alternatives for additional categories
+            if result.alternatives:
+                for alt in result.alternatives:
+                    if alt["confidence"] > 0.5 and alt["intent"] not in required_info:
+                        question = await self._extract_question_for_category(
+                            agent_response, alt["intent"]
+                        )
+                        if question:
+                            required_info[alt["intent"]] = question
+
+            return required_info
+
+        except Exception as e:
+            # Fall back to keyword-based detection
+            if hasattr(self, "logger"):
+                self.logger.warning(
+                    f"Intent detection for clarification failed, using fallback: {str(e)}"
+                )
+            return await self._fallback_extract_information_requests(agent_response, user_message)
+
+    async def _fallback_extract_information_requests(
+        self, agent_response: str, user_message: str
+    ) -> Dict[str, str]:
+        """
+        Fallback keyword-based information request extraction.
+
+        Used when intent detection service is not available.
         """
         # Common information categories and their question patterns
         info_categories = {
@@ -1170,14 +1182,14 @@ class Agent:
             for pattern in patterns:
                 if re.search(pattern, agent_response):
                     # Extract the actual question from the response
-                    question = self._extract_question_for_category(agent_response, category)
+                    question = await self._extract_question_for_category(agent_response, category)
                     if question:
                         required_info[category] = question
                         break
 
         return required_info
 
-    def _extract_question_for_category(self, response: str, category: str) -> Optional[str]:
+    async def _extract_question_for_category(self, response: str, category: str) -> Optional[str]:
         """
         Extract the specific question for a given information category.
 

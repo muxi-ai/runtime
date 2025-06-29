@@ -31,6 +31,8 @@ import json
 
 from .. import observability
 from ...services.llm import LLM
+from ...services.intent import IntentDetectionService
+from ...datatypes.intent import IntentType, IntentDetectionContext
 from ...utils.datetime_utils import utc_now
 from .validation import SchedulerInputValidator
 
@@ -207,7 +209,8 @@ class ScheduleParser:
         """
         Detect whether this is a one-time or recurring job request.
 
-        Uses caching to avoid redundant LLM calls for similar requests.
+        Uses IntentDetectionService for language-agnostic detection,
+        with caching to avoid redundant LLM calls for similar requests.
 
         Args:
             schedule_text: Natural language schedule description
@@ -221,6 +224,64 @@ class ScheduleParser:
             if cached_type:
                 return cached_type
 
+        # Try to use intent detection service
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Use existing LLM instance if available
+                llm_service = self.llm
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Use intent detection for schedule type
+            result = await self._intent_detector.detect_intent(
+                text=schedule_text,
+                intent_type=IntentType.SCHEDULE_TYPE,
+                context=IntentDetectionContext(),
+            )
+
+            # Map intent to job type
+            if result.confidence > 0.7:  # High confidence
+                if result.intent == "one_time":
+                    job_type = "one_time"
+                elif result.intent == "recurring":
+                    job_type = "recurring"
+                else:
+                    # Unclear, use LLM fallback
+                    job_type = await self._llm_detect_job_type(schedule_text)
+            else:
+                # Low confidence, use LLM fallback
+                job_type = await self._llm_detect_job_type(schedule_text)
+
+            # Cache the result
+            if self.cache:
+                self.cache.cache_job_type(schedule_text, job_type)
+
+            return job_type
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTENT_DETECTION_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "schedule_text": schedule_text[:100],
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=f"Intent detection failed for schedule type: {str(e)}",
+            )
+
+            # Fall back to keyword-based detection
+            return await self._fallback_detect_job_type(schedule_text)
+
+    async def _fallback_detect_job_type(self, schedule_text: str) -> str:
+        """
+        Fallback keyword-based job type detection.
+
+        Used when intent detection service is not available.
+        """
         schedule_lower = schedule_text.lower().strip()
 
         # Common one-time indicators
@@ -590,8 +651,10 @@ Return only valid JSON, no explanation.
                 return base_cron
 
         # Check for specific day + time patterns
-        day_time_pattern = (r"every\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekdays?|weekends?)"
-                            r"\s+(?:at\s+)?(.+)")
+        day_time_pattern = (
+            r"every\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday|weekdays?|weekends?)"
+            r"\s+(?:at\s+)?(.+)"
+        )
         match = re.search(day_time_pattern, schedule_text)
         if match:
             day_text = match.group(1)

@@ -9,6 +9,9 @@ import time
 import statistics
 from typing import List, Dict, Any, Optional, Tuple
 from collections import defaultdict, Counter
+import re
+import numpy as np
+
 from ...datatypes.intelligence import (
     Message,
     FeedbackEvent,
@@ -17,8 +20,9 @@ from ...datatypes.intelligence import (
     ConfidenceScore,
     BehaviorAnalysisResult,
 )
-import re
-import numpy as np
+from ...datatypes.intent import IntentType
+from ...services.intent import IntentDetectionService
+from ...services.llm import LLM
 
 
 class UserBehaviorAnalyzer:
@@ -194,6 +198,62 @@ class UserBehaviorAnalyzer:
         self, messages: List[Message], feedback: List[FeedbackEvent]
     ) -> Dict[str, Any]:
         """Analyze engagement with different content types"""
+        if not messages:
+            return {}
+
+        # Try to use intent detection service
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Create LLM instance if needed
+                llm_service = LLM(model="openai/gpt-4", api_key=None)  # Will use env or config
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Use intent detection for content categorization
+            category_engagement = {}
+
+            for msg in messages:
+                if msg.role == "assistant":
+                    # Detect content category using LLM
+                    result = await self._intent_detector.detect_intent(
+                        text=msg.content, intent_type=IntentType.CONTENT_CATEGORY, context=None
+                    )
+
+                    if result.confidence > 0.6:
+                        category = result.intent
+                        if category not in category_engagement:
+                            category_engagement[category] = {"messages": [], "total_count": 0}
+                        category_engagement[category]["messages"].append(msg)
+                        category_engagement[category]["total_count"] += 1
+
+            # Calculate engagement scores for each category
+            for category, data in category_engagement.items():
+                if data["messages"]:
+                    engagement_score = self._calculate_category_engagement(
+                        data["messages"], feedback
+                    )
+                    category_engagement[category] = {
+                        "message_count": len(data["messages"]),
+                        "engagement_score": engagement_score,
+                        "average_length": statistics.mean(
+                            [len(msg.content) for msg in data["messages"]]
+                        ),
+                    }
+
+            return category_engagement
+
+        except Exception as e:
+            # Fall back to keyword-based detection
+            print(f"Intent detection failed for content engagement: {e}")
+            return await self._fallback_analyze_content_engagement(messages, feedback)
+
+    async def _fallback_analyze_content_engagement(
+        self, messages: List[Message], feedback: List[FeedbackEvent]
+    ) -> Dict[str, Any]:
+        """Fallback keyword-based content engagement analysis"""
         if not messages:
             return {}
 

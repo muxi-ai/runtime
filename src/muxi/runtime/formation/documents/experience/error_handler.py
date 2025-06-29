@@ -11,6 +11,10 @@ from enum import Enum
 from dataclasses import dataclass
 from pathlib import Path
 
+from ....services.intent import IntentDetectionService
+from ....services.llm import LLM
+from ....datatypes.intent import IntentType
+
 
 class DocumentErrorType(Enum):
     """Types of document processing errors"""
@@ -242,7 +246,7 @@ class DocumentErrorHandler:
         Returns:
             Tuple[content, status_message]
         """
-        error_type = self._classify_error(error, file_size_mb)
+        error_type = await self._classify_error(error, file_size_mb)
 
         # Update circuit breaker
         self._update_circuit_breaker(operation, success=False)
@@ -357,12 +361,66 @@ class DocumentErrorHandler:
             _ = e  # remove this after implementing observability
             return await self._fallback_text_extraction(filename)
 
-    def _classify_error(self, error: Exception, file_size_mb: float) -> DocumentErrorType:
-        """Classify error type for appropriate fallback strategy"""
-        error_str = str(error).lower()
+    async def _classify_error(self, error: Exception, file_size_mb: float) -> DocumentErrorType:
+        """
+        Classify error type for appropriate fallback strategy.
 
+        Uses IntentDetectionService for language-agnostic error classification.
+        """
+        # Check file size first
         if file_size_mb > self.persona_config.get("max_file_size_mb", 50):
             return DocumentErrorType.SIZE_LIMIT_EXCEEDED
+
+        error_str = str(error)
+
+        # Try to use intent detection service
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Create LLM instance if needed
+                # This would ideally get the LLM config from the formation
+                llm_service = LLM(model="openai/gpt-4", api_key=None)  # Will use env or config
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Use intent detection for error classification
+            result = await self._intent_detector.detect_intent(
+                text=error_str, intent_type=IntentType.ERROR_TYPE, context=None
+            )
+
+            # Map intent to DocumentErrorType
+            if result.confidence > 0.6:
+                error_mapping = {
+                    "memory": DocumentErrorType.MEMORY_ERROR,
+                    "timeout": DocumentErrorType.TIMEOUT_ERROR,
+                    "network": DocumentErrorType.NETWORK_ERROR,
+                    "format": DocumentErrorType.CORRUPTION_ERROR,
+                    "permission": DocumentErrorType.DEPENDENCY_ERROR,
+                    "parsing": DocumentErrorType.PARSING_ERROR,
+                    "size": DocumentErrorType.SIZE_LIMIT_EXCEEDED,
+                    "api": DocumentErrorType.NETWORK_ERROR,
+                    "unknown": DocumentErrorType.PARSING_ERROR,
+                }
+
+                return error_mapping.get(result.intent, DocumentErrorType.PARSING_ERROR)
+
+            # Low confidence, use fallback
+            return self._fallback_classify_error(error)
+
+        except Exception as e:
+            # Log error and fall back to keyword-based classification
+            _ = e  # TODO: add observability
+            return self._fallback_classify_error(error)
+
+    def _fallback_classify_error(self, error: Exception) -> DocumentErrorType:
+        """
+        Fallback keyword-based error classification.
+
+        Used when intent detection service is not available.
+        """
+        error_str = str(error).lower()
 
         if any(keyword in error_str for keyword in ["memory", "ram", "out of memory"]):
             return DocumentErrorType.MEMORY_ERROR
