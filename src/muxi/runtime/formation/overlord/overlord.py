@@ -2648,15 +2648,24 @@ class Overlord:
 
                 # Get the audio content
                 audio_content = attachment.get("content")
+                filename = attachment.get("filename", "")
+
                 if isinstance(audio_content, str):
                     # If it's base64 encoded, decode it
                     import base64
 
                     audio_content = base64.b64decode(audio_content)
 
+                # Create a file-like object with proper extension for format detection
+                import io
+
+                # Create a BytesIO object and give it a name attribute for format detection
+                audio_file = io.BytesIO(audio_content)
+                audio_file.name = filename  # This helps onellm detect the format
+
                 # Transcribe the audio
                 transcribed_text = await transcription_llm.transcribe(
-                    audio_file=audio_content, model=model_name
+                    audio_file
                 )
 
                 return f"Audio transcription of {attachment.get('filename')}: {transcribed_text}"
