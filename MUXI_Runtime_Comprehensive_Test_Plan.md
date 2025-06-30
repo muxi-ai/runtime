@@ -1,15 +1,15 @@
 # MUXI Runtime Comprehensive Test Plan
 
-**Date:** June 18, 2025
+**Date:** June 30, 2025
 **Status:** Implementation Ready
-**Based on:** Formation Refactoring + Agent Cleanup Architecture + Production Scheduler
+**Based on:** Formation Refactoring + Agent Cleanup Architecture + Production Scheduler + Credentials & Domain Knowledge
 
 ## Executive Summary
 
 This document outlines a comprehensive testing strategy for the MUXI Runtime that validates all implemented features through incremental complexity. All tests use `overlord.chat()` as the primary interface, mirroring real developer usage patterns.
 
-**Total Test Scope:** 1,078 strategic test combinations covering 17 feature dimensions
-**Implementation Timeline:** 9 days (June 25 - July 3, 2025)
+**Total Test Scope:** 1,200+ strategic test combinations covering 19 feature dimensions
+**Implementation Timeline:** 11 days
 **Automation Level:** 85% automated execution, 15% manual validation
 
 ---
@@ -19,7 +19,7 @@ This document outlines a comprehensive testing strategy for the MUXI Runtime tha
 
 ## Prerequisites
 
-Before implementing the comprehensive 9-day test plan, the following prerequisites must be completed:
+Before implementing the comprehensive 10-day test plan, the following prerequisites must be completed:
 
 ### ✅ **Step 1: Code Quality Validation (COMPLETED)**
 - Run `flake8 src/` for linting validation
@@ -92,7 +92,7 @@ All prerequisites have been successfully completed:
 - ✅ All dependencies verified
 - ✅ Secrets management configured
 
-The MUXI Runtime is now ready for the comprehensive 9-day test plan implementation!
+The MUXI Runtime is now ready for the comprehensive 10-day test plan implementation!
 </details>
 
 ---
@@ -231,7 +231,7 @@ memory:
 
 ---
 
-## 9-Day Implementation Schedule
+## 10-Day Implementation Schedule
 
 ### **Phase 1: Foundation & Core Systems (Days 1-3)**
 
@@ -355,202 +355,6 @@ memory:
 14. ✅ Vector search enables semantic memory retrieval
 15. ✅ Stored context automatically improves response quality
 
-**Test Infrastructure:**
-- Created standardized test directory structure
-- Implemented TEST_MAPPING.md for traceability
-- Added FINAL_SUMMARY.md for accomplishment tracking
-- Established naming convention: test_[day][group][number]_descriptive_name.py
-
-### Test Group 2A: Buffer Memory
-```python
-# Test 2A1: Conversation Context
-formation = Formation.load("test-formations/formation-memory/formation-basic.yaml")
-overlord = await formation.start()
-
-# Set context
-await overlord.chat("My name is John and I prefer concise answers")
-# Test recall
-response = await overlord.chat("What's my name?")
-assert "john" in response.lower()
-
-# Test 2A2: Buffer Overflow
-# Send more messages than buffer size, verify oldest forgotten
-for i in range(15):  # Buffer size = 10
-    await overlord.chat(f"Message {i}")
-response = await overlord.chat("What was message 0?")
-# Should not remember message 0
-
-# Test 2A3: Memory Size Limits (max_memory_mb)
-formation = Formation.load("test-formations/formation-memory/formation-memory-limits.yaml")
-overlord = await formation.start()
-
-# Fill memory to approach limit
-large_text = "x" * 1000  # 1KB chunks
-for i in range(100):  # Try to exceed memory limit
-    await overlord.chat(f"Store this data: {large_text}")
-
-# Verify FIFO cleanup occurred
-response = await overlord.chat("What was the first message?")
-# Should have been cleaned up via FIFO
-```
-
-### Test Group 2B: Long-term Memory - SQLite
-```python
-# Test 2B1: SQLite Persistence
-formation = Formation.load("test-formations/formation-memory/formation-sqlite.yaml")
-overlord = await formation.start()
-
-# Add knowledge
-await overlord.chat("Remember that I'm working on project Apollo")
-await overlord.stop()
-
-# Restart and test persistence
-overlord = await formation.start()
-response = await overlord.chat("What project am I working on?")
-assert "apollo" in response.lower()
-
-# Test 2B2: SQLite Vector Search
-await overlord.chat("Python is great for machine learning")
-await overlord.chat("JavaScript is good for web development")
-response = await overlord.chat("What language is good for AI?")
-# Should retrieve Python-related memory via similarity
-assert "python" in response.lower()
-```
-
-### Test Group 2C: Multi-User PostgreSQL Memory
-```python
-# Test 2C1: PostgreSQL with User Isolation
-formation = Formation.load("test-formations/formation-memory/formation-postgres.yaml")
-overlord = await formation.start()
-
-# User 1 stores information
-await overlord.chat("My name is Alice and I like Python", user_id="user1")
-await overlord.chat("I work at TechCorp as a developer", user_id="user1")
-
-# User 2 stores different information
-await overlord.chat("My name is Bob and I like JavaScript", user_id="user2")
-await overlord.chat("I work at WebCo as a designer", user_id="user2")
-
-# User 3 stores different information
-await overlord.chat("My name is Charlie and I like Rust", user_id="user3")
-await overlord.chat("I work at SystemsInc as an architect", user_id="user3")
-
-# Verify user isolation
-response1 = await overlord.chat("What's my name?", user_id="user1")
-assert "alice" in response1.lower() and "bob" not in response1.lower()
-
-response2 = await overlord.chat("What language do I like?", user_id="user2")
-assert "javascript" in response2.lower() and "python" not in response2.lower()
-
-response3 = await overlord.chat("Where do I work?", user_id="user3")
-assert "systemsinc" in response3.lower() and "techcorp" not in response3.lower()
-
-# Test 2C2: Concurrent Multi-User Access
-async def user_chat(user_id, message):
-    return await overlord.chat(message, user_id=user_id)
-
-# Simulate concurrent conversations
-tasks = [
-    user_chat("user1", "Remember: I'm building a Python API"),
-    user_chat("user2", "Remember: I'm designing a React app"),
-    user_chat("user3", "Remember: I'm optimizing Rust code")
-]
-await asyncio.gather(*tasks)
-
-# Verify no cross-contamination
-response1 = await overlord.chat("What am I building?", user_id="user1")
-assert "python" in response1.lower() and "react" not in response1.lower()
-```
-
-### Test Group 2D: Remote Faiss Vector Store
-```python
-# Test 2D1: PostgreSQL + Remote Faiss (No Auth)
-formation = Formation.load("test-formations/formation-memory/formation-postgres-and-faissx.yaml")
-overlord = await formation.start()
-
-# Store embeddings in remote Faiss
-await overlord.chat("Machine learning requires understanding of linear algebra")
-await overlord.chat("Deep learning builds on machine learning concepts")
-await overlord.chat("Web development requires HTML, CSS, and JavaScript")
-
-# Test vector similarity search via Faiss
-response = await overlord.chat("What do I need to know for AI?")
-# Should retrieve ML/DL memories via Faiss similarity
-assert any(term in response.lower() for term in ["machine learning", "linear algebra", "deep learning"])
-
-# Test 2D2: PostgreSQL + Remote Faiss with Authentication
-formation = Formation.load("test-formations/formation-memory/formation-postgres-and-faissx-with-auth.yaml")
-overlord = await formation.start()
-
-# Verify auth token is used (Faiss servers are configured to require it)
-await overlord.chat("Quantum computing uses qubits")
-response = await overlord.chat("Tell me about quantum computers")
-assert "qubit" in response.lower()
-
-# Test 2D3: Multi-User with Remote Faiss
-# User-specific vector searches
-await overlord.chat("I love Italian cuisine, especially pasta", user_id="user1")
-await overlord.chat("I prefer Japanese food like sushi", user_id="user2")
-
-response1 = await overlord.chat("What food do I like?", user_id="user1")
-assert "italian" in response1.lower() and "japanese" not in response1.lower()
-
-response2 = await overlord.chat("What's my favorite cuisine?", user_id="user2")
-assert "japanese" in response2.lower() and "italian" not in response2.lower()
-```
-
-### Test Group 2E: Memory Cleanup & Management
-```python
-# Test 2E1: Auto-extraction
-formation = Formation.load("test-formations/formation-memory/formation-auto-extract.yaml")
-overlord = await formation.start()
-
-await overlord.chat("I'm Sarah and I work in marketing at Acme Corp")
-# Check UserInfo was extracted
-user_info = await overlord.get_user_info()
-assert user_info.get("name") == "Sarah"
-assert "marketing" in user_info.get("context", "").lower()
-
-# Test 2E2: FIFO Memory Cleanup
-formation = Formation.load("test-formations/formation-memory/formation-memory-limits.yaml")
-overlord = await formation.start()
-
-# Track message order
-messages = []
-for i in range(20):
-    msg = f"Important fact #{i}: Data point {i}"
-    messages.append(msg)
-    await overlord.chat(msg)
-
-# Verify FIFO cleanup (oldest messages removed first)
-response = await overlord.chat("What was important fact #0?")
-# Should not remember due to FIFO cleanup
-assert "fact #0" not in response
-
-response = await overlord.chat("What was important fact #19?")
-# Should remember recent messages
-assert "19" in response or "recent" in response.lower()
-
-# Test 2E3: Memory Size Validation
-# Verify memory.working.max_memory_mb is enforced
-memory_stats = await overlord.get_memory_stats()
-assert memory_stats["current_size_mb"] <= memory_stats["max_size_mb"]
-```
-
-**Formations Required:**
-- `test-formations/formation-memory/formation-basic.yaml` - Basic buffer memory
-- `test-formations/formation-memory/formation-sqlite.yaml` - SQLite persistence
-- `test-formations/formation-memory/formation-postgres.yaml` - PostgreSQL multi-user
-- `test-formations/formation-memory/formation-postgres-and-faissx.yaml` - PostgreSQL + Faiss
-- `test-formations/formation-memory/formation-postgres-and-faissx-with-auth.yaml` - With auth
-- `test-formations/formation-memory/formation-memory-limits.yaml` - Memory size limits
-- `test-formations/formation-memory/formation-auto-extract.yaml` - Auto-extraction
-
-**External Services Required:**
-- PostgreSQL database (for multi-user tests)
-- Faiss servers on configured ports (with and without auth)
-
-**Automation:** Memory inspection utilities, persistence verification, multi-user simulation
 **Success Criteria:**
 - 25+ memory tests pass (expanded from original 12)
 - Persistence verified across all storage backends
@@ -567,21 +371,21 @@ assert memory_stats["current_size_mb"] <= memory_stats["max_size_mb"]
 #### Goal: Validate ALL multimodal capabilities - Documents, Images, Audio, Video, Cross-Modal Analysis
 
 **Implementation Status: COMPLETED ✅**
-- Total Tests Implemented: 36 tests across 8 test groups  
+- Total Tests Implemented: 36 tests across 8 test groups
 - Tests Passing: 34/36 (94% success rate)
 - Core Multimodal Processing: All working ✅
 - Production-Ready Features: All implemented and tested ✅
 
 **Test Results by Group:**
 - ✅ **3A**: Document Processing (3/3) - PDF, OCR, multi-document comparison
-- ✅ **3B**: Audio Processing (4/4) - Speech transcription, meeting analysis, metadata  
+- ✅ **3B**: Audio Processing (4/4) - Speech transcription, meeting analysis, metadata
 - ✅ **3C**: Video Processing (4/4) - Frame analysis, audio-visual fusion, summarization
 - ✅ **3D**: Cross-Modal Analysis (3/3) - Multi-format content fusion
 - ✅ **3E**: Processing Modes (2/2) - Sync/async processing optimization
 - ✅ **3F**: Real File Processing (5/5) - Actual file processing with webhook delivery
 - ✅ **3G**: Content Extraction Accuracy (4/4) - Validation of extraction quality
 - ✅ **3H**: Large File Handling (2/3) - Audio hits OpenAI 25MB API limit, video working
-- ✅ **3I**: Cross-Format Validation (2/4) - PowerPoint/video timeout, others working  
+- ✅ **3I**: Cross-Format Validation (2/4) - PowerPoint/video timeout, others working
 - ✅ **3J**: Error Handling (3/4) - Graceful degradation and timeout management
 
 **Key Achievements:**
@@ -594,455 +398,20 @@ assert memory_stats["current_size_mb"] <= memory_stats["max_size_mb"]
 7. ✅ **Large File Management**: 2GB limits with 300s timeouts for video processing
 8. ✅ **Cross-Format Content Validation**: Slide matching, document extraction, etc.
 
-**Provider Performance Insights:**
-- **OpenAI**: Excellent for audio transcription (Whisper), good for general text/vision
-- **Google Gemini**: Outstanding for video processing and complex visual analysis  
-- **Anthropic Claude**: Strong for document analysis and cross-modal reasoning
-- **Provider Limits**: OpenAI 25MB audio limit identified, chunking strategy planned
-
-**Technical Breakthroughs:**
-- Fixed audio file size limits (20MB → 2GB) with timeout management
-- Resolved provider compatibility issues with dynamic model selection
-- Implemented async webhook delivery for large file processing
-- Created comprehensive error handling for corrupted files and edge cases
-
-### Test Group 3A: Document Processing (3 tests)
-```python
-# Test 3A1: PDF Processing - PRODUCTION READY ✅
-formation = Formation.load("test-formations/formation-multimodal")
-overlord = formation.start_overlord()
-
-# Real file processing with async webhook delivery
-pdf_path = Path("test-docs/sample.pdf")
-with open(pdf_path, "rb") as f:
-    pdf_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_pdf",
-    message="Please analyze this PDF document and provide a comprehensive summary",
-    files=[{
-        "filename": pdf_path.name,
-        "content": pdf_content,
-        "content_type": "application/pdf",
-        "size": len(pdf_content),
-    }],
-)
-
-# Handles both sync and async responses
-if isinstance(response, dict) and "request_id" in response:
-    print("✅ Async processing triggered for large PDF")
-    # Wait for webhook delivery
-elif hasattr(response, '__aiter__'):
-    # Streaming response for real-time processing
-    full_response = ""
-    async for chunk in response:
-        full_response += chunk
-    assert len(full_response) > 100
-
-# Test 3A2: Advanced OCR with Provider Selection ✅
-# Uses Google Gemini 2.0 Flash for superior OCR capabilities
-chart_path = Path("test-docs/chart.png")
-with open(chart_path, "rb") as f:
-    chart_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_ocr",
-    message="Extract all text and analyze the data visualization in this chart",
-    files=[{
-        "filename": chart_path.name,
-        "content": chart_content,
-        "content_type": "image/png",
-        "size": len(chart_content),
-    }],
-)
-
-# Validates detailed OCR extraction and visual analysis
-assert any(term in response.lower() for term in ["chart", "data", "text", "analysis"])
-
-# Test 3A3: Cross-Format Content Fusion ✅
-# Intelligent multi-document analysis with content correlation
-response = await overlord.chat(
-    user_id="test_user_multi",
-    message="Analyze these documents together and identify relationships between the data",
-    files=[
-        {"filename": "report.pdf", "content": pdf_content, "content_type": "application/pdf"},
-        {"filename": "chart.png", "content": chart_content, "content_type": "image/png"}
-    ],
-)
-assert len(response) > 200  # Comprehensive cross-document analysis
-```
-
-### Test Group 3B: Audio Processing (4 tests)
-```python
-# Test 3B1: High-Quality Speech Transcription ✅
-# Uses OpenAI Whisper-1 for superior transcription accuracy
-audio_path = Path("test-docs/speech.m4a")
-with open(audio_path, "rb") as f:
-    audio_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_speech",
-    message="Please transcribe this speech recording with high accuracy",
-    files=[{
-        "filename": audio_path.name,
-        "content": audio_content,
-        "content_type": "audio/m4a",
-        "size": len(audio_content),
-    }],
-)
-
-# Validates accurate transcription with speaker detection when available
-assert len(response) > 50 and "transcrib" in response.lower()
-
-# Test 3B2: Meeting Analysis with Speaker Detection ✅
-meeting_path = Path("test-docs/meeting.mp3")
-with open(meeting_path, "rb") as f:
-    meeting_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_meeting", 
-    message="Transcribe this meeting and identify key discussion points",
-    files=[{
-        "filename": meeting_path.name,
-        "content": meeting_content,
-        "content_type": "audio/mp3",
-        "size": len(meeting_content),
-    }],
-)
-
-# Advanced meeting analysis with speaker detection and topic identification
-assert any(term in response.lower() for term in ["meeting", "discussion", "speaker", "transcript"])
-
-# Test 3B3: Audio Metadata and Quality Analysis ✅
-short_audio_path = Path("test-docs/short.m4a")
-with open(short_audio_path, "rb") as f:
-    short_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_metadata",
-    message="Analyze the audio characteristics and extract metadata from this file",
-    files=[{
-        "filename": short_audio_path.name,
-        "content": short_content,
-        "content_type": "audio/m4a", 
-        "size": len(short_content),
-    }],
-)
-
-assert any(term in response.lower() for term in ["audio", "duration", "quality", "format"])
-
-# Test 3B4: Large Audio File Handling ⚠️
-# KNOWN LIMITATION: OpenAI has 25MB limit for Whisper API
-# Solution: Chunking strategy available in implementation plan
-podcast_path = Path("test-docs/podcast.wav")
-if podcast_path.exists():
-    with open(podcast_path, "rb") as f:
-        podcast_content = f.read()
-    
-    file_size_mb = len(podcast_content) / (1024 * 1024)
-    print(f"Testing audio file: {file_size_mb:.2f} MB")
-    
-    if file_size_mb > 25:
-        # Expect chunking behavior or appropriate error message
-        response = await overlord.chat(
-            user_id="test_user_large_audio",
-            message="Transcribe this long podcast episode",
-            files=[{
-                "filename": podcast_path.name,
-                "content": podcast_content,
-                "content_type": "audio/wav",
-                "size": len(podcast_content),
-            }],
-        )
-        # Should either chunk or provide informative error message
-        assert "transcrib" in response.lower() or "limit" in response.lower()
-```
-
-### Test Group 3C: Video Processing (4 tests)  
-```python
-# Test 3C1: Advanced Video Frame Analysis ✅
-# Uses Google Gemini 2.5 Flash for superior video understanding
-video_path = Path("test-docs/demo.mov")
-with open(video_path, "rb") as f:
-    video_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_video",
-    message="Analyze this video and describe the visual content in detail",
-    files=[{
-        "filename": video_path.name,
-        "content": video_content,
-        "content_type": "video/quicktime",  # Important: Use correct MIME type for .mov
-        "size": len(video_content),
-    }],
-)
-
-# Validates comprehensive visual analysis with frame-by-frame understanding
-assert len(response) > 100 and any(term in response.lower() for term in ["video", "visual", "frame", "scene"])
-
-# Test 3C2: Multimodal Video + Audio Analysis ✅
-# Demonstrates cross-modal fusion of visual and audio content
-demo_path = Path("test-docs/presentation.mp4")
-with open(demo_path, "rb") as f:
-    demo_content = f.read()
-
-response = await overlord.chat(
-    user_id="test_user_demo",
-    message="Analyze both the visual scenes and audio content of this video presentation",
-    files=[{
-        "filename": demo_path.name,
-        "content": demo_content,
-        "content_type": "video/mp4",
-        "size": len(demo_content),
-    }],
-)
-
-# Advanced audio-visual fusion analysis
-assert any(term in response.lower() for term in ["visual", "audio", "presentation", "scene", "content"])
-
-# Test 3C3: Intelligent Video Summarization ✅
-# Scene-by-scene analysis with timeline and key moment identification
-response = await overlord.chat(
-    user_id="test_user_summary",
-    message="Create a detailed summary of this video with scene breakdown and key moments",
-    files=[{
-        "filename": "presentation.mp4",
-        "content": demo_content,
-        "content_type": "video/mp4",
-        "size": len(demo_content),
-    }],
-)
-
-assert any(term in response.lower() for term in ["summary", "scene", "timeline", "key", "moment"])
-
-# Test 3C4: Large Video Processing with Timeout Management ✅
-# Handles large files with appropriate async processing and timeouts
-large_video_path = Path("test-docs/long-video.mp4")
-if large_video_path.exists():
-    with open(large_video_path, "rb") as f:
-        large_content = f.read()
-    
-    file_size_mb = len(large_content) / (1024 * 1024)
-    print(f"Testing large video: {file_size_mb:.2f} MB")
-    
-    response = await overlord.chat(
-        user_id="test_user_large_video",
-        message="Provide comprehensive analysis of this long video",
-        files=[{
-            "filename": large_video_path.name,
-            "content": large_content,
-            "content_type": "video/mp4",
-            "size": len(large_content),
-        }],
-    )
-    
-    # Should handle via async processing or intelligent sampling
-    if isinstance(response, dict) and "request_id" in response:
-        print("✅ Async processing triggered for large video")
-    else:
-        assert len(response) > 100  # Should provide meaningful analysis
-```
-
-### Test Group 3D: Cross-Modal Analysis (3 tests)
-```python
-# Test 3D1: Document + Image Cross-Analysis
-with open("test-docs/report.pdf", "rb") as pdf, \
-     open("test-docs/chart.png", "rb") as img:
-    response = await overlord.chat(
-        "Compare the data in this document with this chart. Do they align?",
-        attachments=[pdf, img]
-    )
-assert len(response) > 150  # Should reference both sources meaningfully
-
-# Test 3D2: Audio + Image Fusion Analysis
-with open("test-audio/presentation.wav", "rb") as audio, \
-     open("test-docs/slide.png", "rb") as slide:
-    response = await overlord.chat(
-        "Analyze this presentation audio along with this slide image",
-        attachments=[audio, slide]
-    )
-assert any(word in response.lower() for word in ["audio", "slide", "presentation", "visual"])
-
-# Test 3D3: Full Multimodal Processing
-with open("test-docs/sample.pdf", "rb") as pdf, \
-     open("test-docs/chart.png", "rb") as img, \
-     open("test-audio/speech.wav", "rb") as audio:
-    response = await overlord.chat(
-        "Analyze all these files together - document, image, and audio. What story do they tell?",
-        attachments=[pdf, img, audio]
-    )
-assert len(response) > 200  # Comprehensive cross-modal analysis
-```
-
-### Test Group 3E: Processing Modes (2 tests)
-```python
-# Test 3E1: Sync Multimodal Processing
-formation = Formation.load("formations/sync-multimodal.yaml")
-overlord = await formation.start()
-
-start_time = time.time()
-with open("test-docs/small.pdf", "rb") as f:
-    response = await overlord.chat("Quick analysis", attachments=[f])
-duration = time.time() - start_time
-assert duration < 10  # Should be synchronous for small files
-
-# Test 3E2: Async Multimodal Processing  
-formation = Formation.load("formations/async-multimodal.yaml")
-overlord = await formation.start()
-
-with open("test-video/long-meeting.mp4", "rb") as f:
-    response = await overlord.chat("Full analysis of this long video", attachments=[f])
-# Should handle large files appropriately (async or longer processing)
-```
-
-### Required Test Files
-
-#### Documents
-- `test-docs/sample.pdf` - Standard PDF (1-2 pages)
-- `test-docs/report.pdf` - Multi-page report with data
-- `test-docs/small.pdf` - Small PDF (<1MB) for sync testing
-- `test-docs/large.pdf` - Large PDF (>5MB) for async testing
-- `test-docs/chart.png` - Chart/graph image for OCR
-- `test-docs/photo.jpg` - Natural photo for vision analysis
-- `test-docs/slide.png` - Presentation slide image
-
-#### Audio Files
-- `test-audio/speech.wav` - Clear speech (~30 seconds)
-- `test-audio/meeting.mp3` - Meeting recording (~2 minutes) 
-- `test-audio/short.m4a` - Short voice note (~10 seconds)
-- `test-audio/long.wav` - Long audio (>5 minutes)
-- `test-audio/presentation.wav` - Presentation audio for cross-modal testing
-
-#### Video Files  
-- `test-video/presentation.mp4` - Short presentation (~1 minute)
-- `test-video/demo.mov` - Product demo (~30 seconds)
-- `test-video/long-meeting.mp4` - Long video (>10 minutes)
-
-### Required Formations
-
-```yaml
-# formations/multimodal-complete.yaml
-name: "complete-multimodal-test"
-agents:
-  - id: "multimodal-agent"
-    specialty: "multimodal-processing"
-    system_message: "You analyze documents, images, audio, and video content with cross-modal reasoning"
-llm:
-  models:
-    - text: "openai/gpt-4o"
-    - vision: "openai/gpt-4o"  
-    - transcription: "openai/whisper-1"
-services:
-  multimodal:
-    enabled: true
-    audio_processor:
-      enabled: true
-      transcription_model: "whisper-1"
-    video_processor:
-      enabled: true
-      frame_extraction: true
-memory:
-  buffer:
-    enabled: true
-    size: 20  # Larger buffer for multimodal context
-```
-
-**Test Infrastructure Required:**
-- Multimodal file upload simulation
-- Audio/video processing services (Whisper API, vision models)
-- Cross-modal analysis capabilities
-- Real API keys for transcription and vision services
-
 **Success Criteria: 34/36 multimodal tests pass (94% success rate) ✅**
-- 3 Document processing tests ✅
-- 4 Audio processing tests ✅ (1 limitation: OpenAI 25MB limit) 
-- 4 Video processing tests ✅
-- 3 Cross-modal analysis tests ✅
-- 2 Processing mode tests ✅
-- 5 Real file processing tests ✅
-- 4 Content extraction accuracy tests ✅
-- 3 Large file handling tests ✅ (1 limitation: audio chunking needed)
-- 4 Cross-format validation tests ✅ (2 with timeout handling)
-- 4 Error handling tests ✅ (1 test framework improvement needed)
-
-**Production-Ready Achievements:**
-- All file formats processed correctly across multiple providers
-- Cross-modal reasoning demonstrates intelligent content fusion
-- Async processing and webhook delivery working for large files  
-- Provider-agnostic architecture supports OpenAI, Google, Anthropic
-- Comprehensive error handling with graceful degradation
-- Real-world file size limits (2GB) with timeout management (300s)
-
-**Key Technical Insights:**
-- **Provider Selection**: Google Gemini excels at video, OpenAI Whisper for audio
-- **File Size Management**: Dynamic routing based on provider capabilities
-- **Content Type Importance**: Correct MIME types essential (video/quicktime vs video/mp4)
-- **Async Processing**: Webhook delivery scales for enterprise workflows
-- **Error Handling**: Graceful degradation maintains user experience
-- **Cross-Modal Fusion**: Intelligent content correlation across formats
 
 </details>
 
-<details>
-<summary>Day 4 (June 28): Multi-Agent Coordination</summary>
-
-#### Goal: Validate agent orchestration and task decomposition
-
-### Test Group 4A: Task Decomposition
-```python
-# Test 4A1: Research and Write Task
-formation = Formation.load("formations/multi-specialist.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat(
-    "Research renewable energy trends and write a brief report with recommendations"
-)
-# Should involve researcher → analyst → writer coordination
-assert len(response) > 500
-assert "recommendation" in response.lower()
-assert "research" in response.lower()
-
-# Test 4A2: Complex Multi-Step Task
-response = await overlord.chat(
-    "Find the latest Tesla stock price, analyze the trend, and create a trading recommendation"
-)
-# Should coordinate data agent → analysis agent → recommendation agent
-```
-
-### Test Group 4B: A2A Communication Patterns
-```python
-# Test 4B1: Internal A2A (within formation)
-formation = Formation.load("formations/internal-a2a.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat("I need help with Python and also database design")
-# Should trigger agent consultation patterns internally
-
-# Test 4B2: External A2A (cross-formation)
-# Start second formation on different port
-formation2 = Formation.load("formations/external-specialist.yaml")
-overlord2 = await formation2.start()
-
-# Main formation requests help from external specialist
-response = await overlord.chat("I need specialized legal advice about contracts")
-# Should communicate with external legal formation
-```
-
-**Formations Required:** 6 multi-agent configurations
-**Automation:** Multi-process testing, A2A server management
-**Success Criteria:** 18 coordination tests pass, A2A communication verified
-
-</details>
-
+### **Phase 2: Tool Integration & Knowledge Systems (Days 4-6)**
 
 <details>
-<summary>Day 5 (June 29): MCP Integration & Tools</summary>
+<summary>Day 4 (June 28): MCP Integration & User Credentials</summary>
 
-#### Goal: Validate tool discovery, invocation, and multi-server management
+#### Goal: Validate tool discovery, invocation, multi-server management, and user credential system
 
-### Test Group 5A: Single MCP Server
+### Test Group 4A: Single MCP Server
 ```python
-# Test 5A1: Filesystem Tools
+# Test 4A1: Filesystem Tools
 formation = Formation.load("formations/mcp-filesystem.yaml")
 overlord = await formation.start()
 
@@ -1054,7 +423,7 @@ response = await overlord.chat("Create a file called 'test.txt' with content 'He
 # Should create file using MCP
 assert os.path.exists("test.txt")
 
-# Test 5A2: Web Search Tools
+# Test 4A2: Web Search Tools
 formation = Formation.load("formations/mcp-websearch.yaml")
 overlord = await formation.start()
 
@@ -1062,9 +431,9 @@ response = await overlord.chat("What's the current weather in New York?")
 # Should use web search MCP tools
 ```
 
-### Test Group 5B: Multi-MCP Integration
+### Test Group 4B: Multi-MCP Integration
 ```python
-# Test 5B1: Multiple Tool Types
+# Test 4B1: Multiple Tool Types
 formation = Formation.load("formations/multi-mcp.yaml")
 overlord = await formation.start()
 
@@ -1073,15 +442,138 @@ response = await overlord.chat(
 )
 # Should use web search + filesystem tools in sequence
 
-# Test 5B2: MCP Failure Handling
+# Test 4B2: MCP Failure Handling
 # Simulate MCP server failure
 response = await overlord.chat("Search for information about AI")
 # Should handle gracefully, perhaps use fallback or inform user
 ```
 
-### Test Group 5C: Built-in File Generation MCP
+### Test Group 4C: User Credentials Management ✨ **NEW**
 ```python
-# Test 5C1: Chart Generation
+# Test 4C1: Store User Credentials
+formation = Formation.load("formations/credentials.yaml")
+overlord = await formation.start()
+
+# Store OAuth token for user
+await overlord.store_user_credential(
+    user_id="user1",
+    service="gmail",
+    credential_type="oauth_token",
+    credentials={
+        "access_token": "ya29.sample_token",
+        "refresh_token": "1//sample_refresh",
+        "expires_at": "2025-12-31T23:59:59Z"
+    }
+)
+
+# Store API key for different user
+await overlord.store_user_credential(
+    user_id="user2",
+    service="weather_api",
+    credential_type="api_key",
+    credentials={"api_key": "abc123def456"}
+)
+
+# Test 4C2: Retrieve User Credentials
+creds = await overlord.get_user_credential(user_id="user1", service="gmail")
+assert creds["access_token"] == "ya29.sample_token"
+
+# Test 4C3: User Isolation - User 1 cannot access User 2's credentials
+creds = await overlord.get_user_credential(user_id="user1", service="weather_api")
+assert creds is None  # Should not have access
+
+# Test 4C4: Credential Encryption & Security
+# Verify credentials are encrypted in database
+db_record = await overlord._get_raw_credential_from_db("user1", "gmail")
+assert db_record["credentials"] != '{"access_token": "ya29.sample_token"}'  # Should be encrypted
+```
+
+### Test Group 4D: MCP with User Credentials ✨ **NEW**
+```python
+# Test 4D1: Gmail MCP with User OAuth
+formation = Formation.load("formations/mcp-gmail.yaml")
+overlord = await formation.start()
+
+# User stores their Gmail OAuth token
+await overlord.store_user_credential(
+    user_id="user1",
+    service="gmail",
+    credential_type="oauth_token",
+    credentials={"access_token": "user1_gmail_token"}
+)
+
+# Request Gmail access - should use user's token
+response = await overlord.chat("Check my latest emails", user_id="user1")
+# MCP should automatically retrieve and use user1's Gmail token
+assert "email" in response.lower()
+
+# Test 4D2: Database MCP with User Connection String
+await overlord.store_user_credential(
+    user_id="user2",
+    service="database",
+    credential_type="connection_string",
+    credentials={"connection_string": "postgresql://user2:pass@localhost/user2_db"}
+)
+
+response = await overlord.chat("Show me my customer data", user_id="user2")
+# Should use user2's specific database connection
+
+# Test 4D3: Multi-User API Access
+await overlord.store_user_credential(
+    user_id="user1",
+    service="stock_api",
+    credential_type="api_key",
+    credentials={"api_key": "user1_stock_key"}
+)
+
+await overlord.store_user_credential(
+    user_id="user2",
+    service="stock_api",
+    credential_type="api_key",
+    credentials={"api_key": "user2_stock_key"}
+)
+
+# Both users access stock API with their own keys
+response1 = await overlord.chat("Get AAPL stock price", user_id="user1")
+response2 = await overlord.chat("Get TSLA stock price", user_id="user2")
+# Each should use their respective API keys
+
+# Test 4D4: Credential Auto-Discovery by MCP
+# When MCP needs credentials, system should automatically find and provide them
+response = await overlord.chat("Send an email to john@example.com", user_id="user1")
+# Should automatically discover user1's Gmail token and provide to Gmail MCP
+```
+
+**Formations Required:**
+```yaml
+# formations/credentials.yaml
+name: "credentials-test"
+agents:
+  - id: "assistant"
+    specialty: "general"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a helpful assistant with access to user services"
+memory:
+  buffer: {enabled: true, size: 10}
+database:
+  url: "postgresql://localhost/muxi_test"  # For credentials table
+```
+
+**MCP Servers Required:** Filesystem, web search, Gmail, database, stock API
+**Database Required:** PostgreSQL with credentials table
+**Automation:** MCP server startup/shutdown, credential encryption/decryption, user isolation testing
+**Success Criteria:** 15 MCP tests pass + 8 credential tests pass, user isolation verified
+
+</details>
+
+<details>
+<summary>Day 5 (June 29): File Generation MCP (Built-in)</summary>
+
+#### Goal: Comprehensive testing of the built-in file generation MCP server
+
+### Test Group 5A: Chart Generation
+```python
+# Test 5A1: Basic Chart Creation
 formation = Formation.load("formations/file-generation.yaml")
 overlord = await formation.start()
 
@@ -1090,33 +582,88 @@ response = await overlord.chat("Create a bar chart showing Q1 sales: Jan $100k, 
 assert "file_path" in response.lower() or "chart" in response.lower()
 assert "generated" in response.lower() or "created" in response.lower()
 
-# Test 5C2: Document Generation
+# Test 5A2: Advanced Data Visualization
+response = await overlord.chat("Create a line chart with trend analysis for monthly revenue growth")
+assert any(ext in response.lower() for ext in [".png", ".jpg", "chart", "visualization"])
+
+# Test 5A3: Multiple Chart Types
+response = await overlord.chat("Create both a pie chart and bar chart showing market share data")
+# Should generate multiple files
+assert "chart" in response.lower()
+```
+
+### Test Group 5B: Document Generation
+```python
+# Test 5B1: Word Document Creation
 response = await overlord.chat("Create a Word document with a project status report including sections for overview, progress, and next steps")
 # Should generate python-docx code and execute it
 assert any(ext in response.lower() for ext in [".docx", ".doc", "document"])
 
-# Test 5C3: Spreadsheet Generation
+# Test 5B2: PDF Report Generation
+response = await overlord.chat("Generate a PDF report with executive summary and financial data")
+assert ".pdf" in response.lower() or "pdf" in response.lower()
+
+# Test 5B3: Multi-Section Documents
+response = await overlord.chat("Create a comprehensive business proposal with cover page, executive summary, and appendices")
+assert "document" in response.lower() and "section" in response.lower()
+```
+
+### Test Group 5C: Spreadsheet Generation
+```python
+# Test 5C1: Excel File Creation
 response = await overlord.chat("Create an Excel file with sales data: Product A: 100 units, Product B: 150 units, Product C: 75 units")
 # Should generate openpyxl/pandas code and execute it
 assert any(ext in response.lower() for ext in [".xlsx", ".csv", "spreadsheet"])
 
-# Test 5C4: Multi-format Generation
-response = await overlord.chat("Create a data visualization chart and also export the data as a CSV file")
-# Should generate both chart and CSV file
-assert "chart" in response.lower() and "csv" in response.lower()
+# Test 5C2: Complex Data Analysis
+response = await overlord.chat("Generate a spreadsheet with pivot tables and charts for quarterly sales analysis")
+assert "spreadsheet" in response.lower() or "excel" in response.lower()
 
-# Test 5C5: Code Validation (Security)
+# Test 5C3: Financial Models
+response = await overlord.chat("Create a financial model spreadsheet with revenue projections and cost analysis")
+assert any(term in response.lower() for term in ["financial", "model", "spreadsheet"])
+```
+
+### Test Group 5D: Security & Code Validation ✨ **CRITICAL**
+```python
+# Test 5D1: Dangerous Code Rejection
 response = await overlord.chat("Create a chart and also access my system files")
 # Should reject or filter out system access attempts
 # Should create the chart but ignore dangerous operations
 
-# Test 5C6: Error Handling
+# Test 5D2: Import Whitelist Enforcement
+response = await overlord.chat("Create a chart using os.system to execute commands")
+# Should block os.system and other dangerous imports
+assert "error" in response.lower() or "not allowed" in response.lower()
+
+# Test 5D3: Sandbox Validation
+response = await overlord.chat("Generate a file and try to write outside the outputs directory")
+# Should be restricted to outputs/ directory only
+
+# Test 5D4: Resource Limits
+response = await overlord.chat("Create an infinite loop while generating a chart")
+# Should have execution timeout and resource limits
+```
+
+### Test Group 5E: Complex Multi-Format Generation
+```python
+# Test 5E1: Integrated Report Generation
+response = await overlord.chat("Create a complete quarterly report with Excel data analysis, PowerPoint presentation, and PDF executive summary")
+# Should generate multiple file types working together
+
+# Test 5E2: Data Pipeline Creation
+response = await overlord.chat("Process CSV data, create visualization charts, and generate a Word report with findings")
+# Should demonstrate full data processing pipeline
+
+# Test 5E3: Interactive Dashboard Creation
+response = await overlord.chat("Create an interactive dashboard with multiple chart types and data filters")
+# Should use plotly or similar for interactive elements
+
+# Test 5E4: Error Handling & Recovery
 response = await overlord.chat("Create a chart with invalid syntax in the code")
 # Should handle code execution errors gracefully
 assert "error" in response.lower() or "failed" in response.lower()
 ```
-
-**MCP Servers Required:** Filesystem, web search, calculator, built-in file generation
 
 **Formations Required:**
 ```yaml
@@ -1134,21 +681,230 @@ memory:
   buffer: {enabled: true, size: 10}
 ```
 
-**Automation:** MCP server startup/shutdown, tool mocking, file generation validation, output file verification
-**Success Criteria:** 12 MCP tests pass, all built-in file generation scenarios validated
+**Security Validation Required:** AST-based code validation, import whitelist, sandbox restrictions
+**Automation:** File generation validation, output file verification, security testing
+**Success Criteria:** 15 file generation tests pass, all security validations confirmed
 
 </details>
 
-### **Phase 2: Advanced Behaviors & Integration (Days 6-8)**
+<details>
+<summary>Day 6 (June 30): Domain Knowledge System</summary>
+
+#### Goal: Validate agent-level domain knowledge loading, search, and enhancement
+
+### Test Group 6A: Knowledge Source Loading ✨ **NEW**
+```python
+# Test 6A1: File-based Knowledge Loading
+formation = Formation.load("formations/knowledge-basic.yaml")
+overlord = await formation.start()
+
+# Verify knowledge sources loaded from formation config
+agent = overlord.agents["knowledge_agent"]
+knowledge_sources = agent.get_knowledge_sources()
+assert len(knowledge_sources) > 0
+assert any("faq" in source.path for source in knowledge_sources)
+
+# Test 6A2: Directory-based Knowledge Loading
+formation = Formation.load("formations/knowledge-directory.yaml")
+overlord = await formation.start()
+
+# Should load all files from knowledge directory
+agent = overlord.agents["knowledge_agent"]
+sources = agent.get_knowledge_sources()
+assert any("recursive" in source.description for source in sources)
+
+# Test 6A3: Knowledge Caching Validation
+# Second load should use cached embeddings
+formation2 = Formation.load("formations/knowledge-basic.yaml")
+overlord2 = await formation2.start()
+# Should load faster due to caching
+```
+
+### Test Group 6B: Knowledge Search & Retrieval ✨ **NEW**
+```python
+# Test 6B1: Semantic Knowledge Search
+formation = Formation.load("formations/knowledge-complete.yaml")
+overlord = await formation.start()
+
+# Agent should have product knowledge loaded
+response = await overlord.chat("What is our return policy?")
+# Should retrieve relevant knowledge from FAQ files
+assert any(term in response.lower() for term in ["return", "policy", "days"])
+
+# Test 6B2: Multi-source Knowledge Retrieval
+response = await overlord.chat("Tell me about pricing and technical specifications")
+# Should pull from multiple knowledge sources
+assert len(response) > 200  # Rich, knowledge-enhanced response
+
+# Test 6B3: Knowledge Relevance Scoring
+response = await overlord.chat("How do I contact support?")
+# Should prioritize most relevant knowledge chunks
+assert "support" in response.lower() or "contact" in response.lower()
+
+# Test 6B4: Knowledge Source Attribution
+response = await overlord.chat("What are the product features?", include_sources=True)
+# Should indicate which knowledge sources were used
+assert "source" in response.lower() or "according to" in response.lower()
+```
+
+### Test Group 6C: Knowledge-Enhanced Responses ✨ **NEW**
+```python
+# Test 6C1: Context-Aware Enhancement
+formation = Formation.load("formations/knowledge-enhanced.yaml")
+overlord = await formation.start()
+
+# Without knowledge
+basic_response = await overlord.chat("Tell me about machine learning")
+basic_length = len(basic_response)
+
+# With domain knowledge loaded
+response = await overlord.chat("Tell me about our machine learning solutions")
+# Should be more detailed and specific due to knowledge enhancement
+assert len(response) > basic_length * 1.5
+
+# Test 6C2: Knowledge-Guided Problem Solving
+response = await overlord.chat("I'm having trouble with installation")
+# Should provide specific steps from knowledge base
+assert any(term in response.lower() for term in ["install", "setup", "steps"])
+
+# Test 6C3: Knowledge Update Integration
+# Add new knowledge at runtime
+new_knowledge = FileKnowledge(
+    path="test-docs/new-policy.txt",
+    description="Updated company policy"
+)
+await agent.add_knowledge(new_knowledge)
+
+response = await overlord.chat("What's the latest policy on remote work?")
+# Should include newly added knowledge
+```
+
+### Test Group 6D: Multi-Agent Knowledge Sharing ✨ **NEW**
+```python
+# Test 6D1: Agent-Specific Knowledge Domains
+formation = Formation.load("formations/multi-agent-knowledge.yaml")
+overlord = await formation.start()
+
+# Technical agent has technical knowledge
+response = await overlord.chat("How do I optimize database performance?")
+# Should route to technical agent with database knowledge
+assert "database" in response.lower() and len(response) > 100
+
+# Sales agent has product knowledge
+response = await overlord.chat("What are our competitive advantages?")
+# Should route to sales agent with competitive knowledge
+assert "advantage" in response.lower() or "competitive" in response.lower()
+
+# Test 6D2: Knowledge Cross-Pollination
+response = await overlord.chat("I need both technical specs and pricing information")
+# Should coordinate between agents with different knowledge domains
+assert any(term in response.lower() for term in ["technical", "spec", "price"])
+
+# Test 6D3: Knowledge Conflict Resolution
+# When agents have conflicting information
+response = await overlord.chat("What's the latest version number?")
+# Should handle conflicts gracefully or indicate uncertainty
+```
+
+**Formations Required:**
+```yaml
+# formations/knowledge-complete.yaml
+name: "knowledge-test"
+agents:
+  - id: "knowledge_agent"
+    specialty: "customer_support"
+    model: "openai/gpt-4o-mini"
+    system_message: "You are a customer support agent with access to company knowledge"
+    knowledge:
+      enabled: true
+      sources:
+        - path: "knowledge/faq/"
+          description: "FAQ documents"
+          recursive: true
+          max_files: 50
+        - path: "knowledge/policies.txt"
+          description: "Company policies"
+        - path: "knowledge/products/"
+          description: "Product documentation"
+          recursive: false
+          max_files: 20
+memory:
+  buffer: {enabled: true, size: 15}
+  long_term: "sqlite:///knowledge_test.db"
+```
+
+**Knowledge Files Required:**
+- `knowledge/faq/` - Directory with FAQ files
+- `knowledge/policies.txt` - Company policy document
+- `knowledge/products/` - Product documentation files
+- `test-docs/new-policy.txt` - For runtime knowledge addition
+
+**Automation:** Knowledge loading verification, search accuracy testing, embedding caching validation
+**Success Criteria:** 12 knowledge tests pass, all knowledge enhancement scenarios validated
+
+</details>
+
+### **Phase 3: Advanced Coordination & Enterprise Features (Days 7-10)**
 
 <details>
-<summary>Day 6 (June 30): Clarification & Information Flow</summary>
+<summary>Day 7 (July 1): Multi-Agent Coordination</summary>
+
+#### Goal: Validate agent orchestration and task decomposition (moved from original Day 4)
+
+### Test Group 7A: Task Decomposition
+```python
+# Test 7A1: Research and Write Task
+formation = Formation.load("formations/multi-specialist.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat(
+    "Research renewable energy trends and write a brief report with recommendations"
+)
+# Should involve researcher → analyst → writer coordination
+assert len(response) > 500
+assert "recommendation" in response.lower()
+assert "research" in response.lower()
+
+# Test 7A2: Complex Multi-Step Task
+response = await overlord.chat(
+    "Find the latest Tesla stock price, analyze the trend, and create a trading recommendation"
+)
+# Should coordinate data agent → analysis agent → recommendation agent
+```
+
+### Test Group 7B: A2A Communication Patterns
+```python
+# Test 7B1: Internal A2A (within formation)
+formation = Formation.load("formations/internal-a2a.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("I need help with Python and also database design")
+# Should trigger agent consultation patterns internally
+
+# Test 7B2: External A2A (cross-formation)
+# Start second formation on different port
+formation2 = Formation.load("formations/external-specialist.yaml")
+overlord2 = await formation2.start()
+
+# Main formation requests help from external specialist
+response = await overlord.chat("I need specialized legal advice about contracts")
+# Should communicate with external legal formation
+```
+
+**Formations Required:** 6 multi-agent configurations
+**Automation:** Multi-process testing, A2A server management
+**Success Criteria:** 18 coordination tests pass, A2A communication verified
+
+</details>
+
+<details>
+<summary>Day 8 (July 2): Clarification & Information Flow</summary>
 
 #### Goal: Validate clarification patterns and context management
 
-### Test Group 6A: Clarification Patterns
+### Test Group 8A: Clarification Patterns
 ```python
-# Test 6A1: Ambiguous Request
+# Test 8A1: Ambiguous Request
 formation = Formation.load("formations/clarification.yaml")
 overlord = await formation.start()
 
@@ -1161,7 +917,7 @@ response = await overlord.chat("A Python web scraper")
 # Should now provide specific help
 assert "python" in response.lower()
 
-# Test 6A2: Multi-agent Clarification
+# Test 8A2: Multi-agent Clarification
 formation = Formation.load("formations/multi-clarification.yaml")
 overlord = await formation.start()
 
@@ -1169,15 +925,15 @@ response = await overlord.chat("I need help with the bug")
 # Should coordinate to identify which type of bug (code, process, etc.)
 ```
 
-### Test Group 6B: Information Flow
+### Test Group 8B: Information Flow
 ```python
-# Test 6B1: Context Propagation
+# Test 8B1: Context Propagation
 response = await overlord.chat("I'm working on an e-commerce platform using React")
 response = await overlord.chat("What database should I use?")
 # Should consider e-commerce context in recommendation
 assert any(db in response.lower() for db in ["postgres", "mysql", "mongo"])
 
-# Test 6B2: Information Extraction
+# Test 8B2: Information Extraction
 response = await overlord.chat(
     "My budget is $5000 and timeline is 2 weeks for the MVP"
 )
@@ -1193,13 +949,338 @@ response = await overlord.chat("What features should I prioritize?")
 </details>
 
 <details>
-<summary>Day 7 (July 1): Async Operations & Real-time Features</summary>
+<summary>Day 9 (July 3): Large File Multimodal Processing</summary>
+
+#### Goal: Implement and validate intelligent chunking, splitting, and optimization for large multimodal files (>100MB)
+
+### Test Group 9A: File Size Detection & Routing
+```python
+# Test 9A1: Size-based Processing Strategy Selection
+formation = Formation.load("formations/large-file-multimodal.yaml")
+overlord = await formation.start()
+
+# Small file - direct processing
+small_video = load_test_file("test-files/small_video_5mb.mp4")
+response = await overlord.chat(
+    "Analyze this video",
+    files=[{"filename": "small.mp4", "content": small_video, "content_type": "video/mp4"}]
+)
+assert isinstance(response, str)  # Direct response
+
+# Medium file - chunked processing
+medium_video = load_test_file("test-files/presentation_127mb.mp4")
+response = await overlord.chat(
+    "Analyze this presentation video",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+assert "processing" in response.lower() or "chunks" in response.lower()
+
+# Test 9A2: Content Type Routing
+large_audio = load_test_file("test-files/podcast_150mb.mp3")
+response = await overlord.chat(
+    "Transcribe this podcast",
+    files=[{"filename": "podcast.mp3", "content": large_audio, "content_type": "audio/mp3"}]
+)
+# Should use audio-specific chunking strategy
+
+# Test 9A3: Very Large File Handling (>2GB)
+# Note: May use mock file metadata for testing
+response = await overlord.chat(
+    "Process this movie file",
+    files=[{"filename": "movie.mp4", "size": 3_000_000_000, "content_type": "video/mp4"}]
+)
+assert "sampling" in response.lower() or "key frames" in response.lower()
+```
+
+### Test Group 9B: Video Chunking Implementation
+```python
+# Test 9B1: Video Segment Chunking
+formation = Formation.load("formations/video-chunking.yaml")
+overlord = await formation.start()
+
+# 86MB iPhone video that currently times out
+iphone_video = load_test_file("test-files/iphone_launch_86mb.mov")
+response = await overlord.chat(
+    "Analyze this iPhone launch event video in detail",
+    files=[{"filename": "launch.mov", "content": iphone_video, "content_type": "video/quicktime"}]
+)
+# Should successfully process via chunking
+assert "launch" in response.lower() or "iphone" in response.lower()
+assert len(response) > 500  # Detailed analysis
+
+# Test 9B2: Chunk Overlap & Continuity
+response = await overlord.chat(
+    "Create a timeline of events in this video",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+# Should maintain temporal coherence across chunks
+assert "timeline" in response.lower() or any(time_word in response.lower() for time_word in ["0:00", "minute", "second"])
+
+# Test 9B3: Audio Track Separation
+response = await overlord.chat(
+    "Transcribe all speech in this video presentation",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+# Should extract and process audio separately for better quality
+assert len(response) > 1000  # Full transcription
+
+# Test 9B4: Key Frame Extraction
+response = await overlord.chat(
+    "Show me the key visual moments in this video",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+# Should identify and analyze key frames
+assert any(visual_word in response.lower() for visual_word in ["scene", "slide", "visual", "shows"])
+```
+
+### Test Group 9C: Audio Chunking & Processing
+```python
+# Test 9C1: Large Audio File Chunking
+formation = Formation.load("formations/audio-chunking.yaml")
+overlord = await formation.start()
+
+# Audio file >25MB (OpenAI Whisper limit)
+large_audio = load_test_file("test-files/conference_call_45mb.m4a")
+response = await overlord.chat(
+    "Transcribe this conference call with speaker identification",
+    files=[{"filename": "call.m4a", "content": large_audio, "content_type": "audio/m4a"}]
+)
+# Should chunk and process successfully
+assert "speaker" in response.lower() or len(response) > 2000
+
+# Test 9C2: Audio Overlap Processing
+podcast = load_test_file("test-files/podcast_2hour.mp3")
+response = await overlord.chat(
+    "Summarize the key topics discussed in this podcast",
+    files=[{"filename": "podcast.mp3", "content": podcast, "content_type": "audio/mp3"}]
+)
+# Should maintain context across chunks
+assert "topic" in response.lower() and len(response) > 500
+
+# Test 9C3: Music vs Speech Detection
+mixed_audio = load_test_file("test-files/presentation_with_music.mp3")
+response = await overlord.chat(
+    "Transcribe only the speech portions, ignoring background music",
+    files=[{"filename": "mixed.mp3", "content": mixed_audio, "content_type": "audio/mp3"}]
+)
+# Should intelligently process speech segments
+```
+
+### Test Group 9D: Document Chunking
+```python
+# Test 9D1: Large PDF Processing
+formation = Formation.load("formations/document-chunking.yaml")
+overlord = await formation.start()
+
+# 500-page PDF document
+large_pdf = load_test_file("test-files/annual_report_500pages.pdf")
+response = await overlord.chat(
+    "Extract all financial data from this annual report",
+    files=[{"filename": "report.pdf", "content": large_pdf, "content_type": "application/pdf"}]
+)
+# Should chunk by sections/pages
+assert any(fin_word in response.lower() for fin_word in ["revenue", "financial", "profit"])
+
+# Test 9D2: Smart Section Detection
+technical_manual = load_test_file("test-files/technical_manual_300pages.pdf")
+response = await overlord.chat(
+    "Find the troubleshooting section and summarize common issues",
+    files=[{"filename": "manual.pdf", "content": technical_manual, "content_type": "application/pdf"}]
+)
+# Should intelligently identify relevant sections
+assert "troubleshoot" in response.lower() or "issue" in response.lower()
+
+# Test 9D3: Multi-Document Processing
+docs = [
+    {"filename": "doc1.pdf", "content": load_test_file("test-files/doc1_100pages.pdf"), "content_type": "application/pdf"},
+    {"filename": "doc2.pdf", "content": load_test_file("test-files/doc2_150pages.pdf"), "content_type": "application/pdf"},
+    {"filename": "doc3.pdf", "content": load_test_file("test-files/doc3_200pages.pdf"), "content_type": "application/pdf"}
+]
+response = await overlord.chat("Compare these three documents and find common themes", files=docs)
+# Should process multiple large documents efficiently
+```
+
+### Test Group 9E: Result Fusion & Quality
+```python
+# Test 9E1: Chunk Result Merging
+formation = Formation.load("formations/result-fusion.yaml")
+overlord = await formation.start()
+
+# Process video with multiple analysis types
+response = await overlord.chat(
+    "Provide a complete analysis: transcription, visual description, and key moments",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+# Should merge chunk analyses coherently
+assert all(element in response.lower() for element in ["transcript", "visual", "moment"])
+
+# Test 9E2: Temporal Coherence
+response = await overlord.chat(
+    "Create a minute-by-minute breakdown of this presentation",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+# Should maintain time sequence across chunks
+assert response.count(":") > 10  # Multiple timestamp references
+
+# Test 9E3: Quality vs Speed Tradeoff
+# Fast mode - sampling
+response_fast = await overlord.chat(
+    "Quick summary of this video",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}],
+    processing_mode="fast"
+)
+time_fast = measure_processing_time()
+
+# Comprehensive mode - full chunking
+response_full = await overlord.chat(
+    "Detailed analysis of this video",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}],
+    processing_mode="comprehensive"
+)
+time_full = measure_processing_time()
+
+assert len(response_full) > len(response_fast) * 1.5
+assert time_full < time_fast * 3  # Not more than 3x slower
+```
+
+### Test Group 9F: Performance & Optimization
+```python
+# Test 9F1: Memory Efficiency
+formation = Formation.load("formations/memory-efficient.yaml")
+overlord = await formation.start()
+
+initial_memory = get_memory_usage()
+# Process 500MB video
+large_video = load_test_file("test-files/training_video_500mb.mp4")
+response = await overlord.chat(
+    "Analyze this training video",
+    files=[{"filename": "training.mp4", "content": large_video, "content_type": "video/mp4"}]
+)
+peak_memory = get_peak_memory_usage()
+# Should not load entire file into memory at once
+assert peak_memory - initial_memory < 1000_000_000  # Less than 1GB increase
+
+# Test 9F2: Parallel Chunk Processing
+start_time = time.time()
+response = await overlord.chat(
+    "Analyze video and transcribe all speech",
+    files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
+)
+processing_time = time.time() - start_time
+# Should process chunks in parallel
+assert processing_time < video_duration * 0.5  # Faster than real-time
+
+# Test 9F3: Caching & Reprocessing
+# First processing
+response1 = await overlord.chat(
+    "Analyze this video",
+    files=[{"filename": "video.mp4", "content": test_video, "content_type": "video/mp4"}]
+)
+time1 = measure_processing_time()
+
+# Second processing (should use cached chunks)
+response2 = await overlord.chat(
+    "What happens at minute 5 in this video?",
+    files=[{"filename": "video.mp4", "content": test_video, "content_type": "video/mp4"}]
+)
+time2 = measure_processing_time()
+assert time2 < time1 * 0.3  # Much faster due to caching
+```
+
+### Test Group 9G: Error Handling & Edge Cases
+```python
+# Test 9G1: Corrupted File Handling
+formation = Formation.load("formations/error-handling.yaml")
+overlord = await formation.start()
+
+corrupted_video = load_test_file("test-files/corrupted_video.mp4")
+response = await overlord.chat(
+    "Analyze this video",
+    files=[{"filename": "corrupted.mp4", "content": corrupted_video, "content_type": "video/mp4"}]
+)
+# Should handle gracefully
+assert "error" in response.lower() or "unable" in response.lower()
+assert "corrupted" in response.lower() or "damaged" in response.lower()
+
+# Test 9G2: Processing Timeout Recovery
+extremely_large = create_mock_file(size=5_000_000_000)  # 5GB
+response = await overlord.chat(
+    "Process this entire file in detail",
+    files=[{"filename": "huge.mp4", "content": extremely_large, "content_type": "video/mp4"}],
+    timeout=60  # 1 minute timeout
+)
+# Should gracefully handle timeout with partial results
+assert "partial" in response.lower() or "timeout" in response.lower()
+
+# Test 9G3: Format Mismatch Handling
+response = await overlord.chat(
+    "Analyze this video",
+    files=[{"filename": "image.mp4", "content": jpeg_image, "content_type": "video/mp4"}]
+)
+# Should detect and handle format mismatch
+assert "format" in response.lower() or "not a video" in response.lower()
+```
+
+**Formations Required:**
+```yaml
+# formations/large-file-multimodal.yaml
+name: "large-file-processing"
+agents:
+  - id: "multimodal_agent"
+    specialty: "multimodal_analysis"
+    model: "google/gemini-2.0-flash"  # Best for video
+    system_message: "You are an expert at analyzing large multimedia files"
+llm:
+  capability_models:
+    vision:
+      model: "google/gemini-2.0-flash"
+    audio:
+      model: "openai/whisper-1"
+    video:
+      model: "google/gemini-2.0-flash"
+multimodal:
+  processing:
+    chunk_strategies:
+      video:
+        chunk_duration: 30  # seconds
+        overlap: 5  # seconds
+      audio:
+        chunk_duration: 120  # seconds
+        overlap: 15  # seconds
+      document:
+        chunk_size: 50  # pages
+        overlap: 5  # pages
+    size_thresholds:
+      direct: 20_000_000  # 20MB
+      chunked: 2_000_000_000  # 2GB
+      streaming: 2_000_000_001  # >2GB
+    timeouts:
+      default: 300  # 5 minutes
+      large_file: 600  # 10 minutes
+memory:
+  buffer: {enabled: true, size: 20}
+```
+
+**Test Files Required:**
+- Various sizes: 5MB, 86MB, 127MB, 500MB test videos
+- Large audio files: 45MB, 150MB, 2-hour podcasts
+- Large PDFs: 300-500 page documents
+- Corrupted/invalid files for error testing
+
+**Dependencies:** ffmpeg for video/audio manipulation
+**Automation:** Chunk processing validation, memory monitoring, performance profiling
+**Success Criteria:** 25+ large file tests pass, <3x performance overhead, memory efficient
+
+</details>
+
+<details>
+<summary>Day 10 (July 4): Async Operations & Real-time Features</summary>
 
 #### Goal: Validate async workflows and webhook integration
 
-### Test Group 7A: Async Processing
+### Test Group 10A: Async Processing
 ```python
-# Test 7A1: Long-running Task
+# Test 10A1: Long-running Task
 formation = Formation.load("formations/async.yaml")
 overlord = await formation.start()
 
@@ -1209,7 +1290,7 @@ response = await overlord.chat(
 # Should return immediately with job ID
 assert "job_id" in response or "processing" in response.lower()
 
-# Test 7A2: Webhook Delivery
+# Test 10A2: Webhook Delivery
 webhook_url = "http://localhost:8080/webhook"
 response = await overlord.chat(
     "Generate a comprehensive market analysis report",
@@ -1218,14 +1299,14 @@ response = await overlord.chat(
 # Should deliver to webhook when complete
 ```
 
-### Test Group 7B: Operation Management
+### Test Group 10B: Operation Management
 ```python
-# Test 7B1: Operation Status
+# Test 10B1: Operation Status
 job_id = extract_job_id(response)
 status = await overlord.get_operation_status(job_id)
 assert status["state"] in ["pending", "processing", "completed"]
 
-# Test 7B2: Operation Cancellation
+# Test 10B2: Operation Cancellation
 response = await overlord.chat("Process this large dataset")
 job_id = extract_job_id(response)
 success = await overlord.cancel_operation(job_id)
@@ -1239,63 +1320,13 @@ assert success == True
 </details>
 
 <details>
-<summary>Day 8 (July 2): Performance & Integration Testing</summary>
-
-#### Goal: Validate system performance and complex integrations
-
-### Test Group 8A: Performance Benchmarks
-```python
-# Test 8A1: Response Time
-formation = Formation.load("formations/optimized.yaml")
-overlord = await formation.start()
-
-# Simple query benchmark
-times = []
-for _ in range(10):
-    start = time.time()
-    await overlord.chat("What's 2+2?")
-    times.append(time.time() - start)
-assert statistics.mean(times) < 2.0  # Average under 2 seconds
-
-# Test 8A2: Concurrent Requests
-async def concurrent_chat(i):
-    return await overlord.chat(f"Calculate {i} * {i}")
-
-# Send 20 concurrent requests
-tasks = [concurrent_chat(i) for i in range(20)]
-responses = await asyncio.gather(*tasks)
-assert len(responses) == 20
-```
-
-### Test Group 8B: Complex Integration Scenarios
-```python
-# Test 8B1: Full Stack Operation
-response = await overlord.chat(
-    "Search for recent AI news, analyze trends, create a summary document, "
-    "and generate a visualization chart"
-)
-# Should coordinate: web search → analysis → document generation → chart creation
-
-# Test 8B2: Multi-Formation Orchestration
-# Complex scenario with multiple formations working together
-```
-
-**Performance Targets:** <2s simple, <30s complex operations
-**Automation:** Load testing, performance profiling
-**Success Criteria:** All performance targets met, integrations stable
-
-</details>
-
-### **Phase 3: Enterprise Features & Validation (Day 9)**
-
-<details>
-<summary>Day 9 (July 3): Production Readiness & Scheduler</summary>
+<summary>Day 11 (July 5): Production Readiness & Scheduler</summary>
 
 #### Goal: Validate enterprise features and production readiness
 
-### Test Group 9A: Scheduler Operations
+### Test Group 11A: Scheduler Operations
 ```python
-# Test 9A1: One-time Job
+# Test 11A1: One-time Job
 formation = Formation.load("formations/scheduler.yaml")
 overlord = await formation.start()
 
@@ -1307,7 +1338,7 @@ response = await overlord.chat(
 )
 assert "scheduled" in response.lower()
 
-# Test 9A2: Recurring Job
+# Test 11A2: Recurring Job
 response = await overlord.chat(
     "Generate daily sales report",
     schedule={"cron": "0 9 * * *"}  # Daily at 9 AM
@@ -1315,56 +1346,52 @@ response = await overlord.chat(
 job_id = extract_job_id(response)
 ```
 
-### Test Group 9B: Job Management
+### Test Group 11B: Job Management
 ```python
-# Test 9B1: List Active Jobs
+# Test 11B1: List Active Jobs
 jobs = await overlord.scheduler.get_active_jobs()
 assert len(jobs) > 0
 assert any(job["id"] == job_id for job in jobs)
 
-# Test 9B2: Update Job
+# Test 11B2: Update Job
 success = await overlord.scheduler.update_job(
     job_id,
     cron="0 10 * * *"  # Change to 10 AM
 )
 assert success == True
 
-# Test 9B3: Job Execution History
+# Test 11B3: Job Execution History
 history = await overlord.scheduler.get_job_history(job_id)
 # After job runs
 assert len(history) > 0
 assert history[0]["status"] in ["success", "failure"]
 ```
 
-### Test Group 9C: Enterprise Integration
+### Test Group 11C: Performance & Integration
 ```python
-# Test 9C1: Multi-user Context
-formation = Formation.load("formations/multi-user.yaml")
+# Test 11C1: Response Time
+formation = Formation.load("formations/optimized.yaml")
 overlord = await formation.start()
 
-# User 1 schedules job
-response1 = await overlord.chat(
-    "Daily standup reminder",
-    user_id="user1",
-    schedule={"cron": "0 9 * * 1-5"}
-)
+# Simple query benchmark
+times = []
+for _ in range(10):
+    start = time.time()
+    await overlord.chat("What's 2+2?")
+    times.append(time.time() - start)
+assert statistics.mean(times) < 2.0  # Average under 2 seconds
 
-# User 2 schedules different job
-response2 = await overlord.chat(
-    "Weekly report generation",
-    user_id="user2",
-    schedule={"cron": "0 17 * * 5"}
+# Test 11C2: Full Stack Integration
+response = await overlord.chat(
+    "Search for recent AI news, analyze trends, create a summary document, "
+    "and generate a visualization chart"
 )
-
-# Verify isolation
-user1_jobs = await overlord.scheduler.get_user_jobs("user1")
-assert len(user1_jobs) == 1
-assert "standup" in user1_jobs[0]["description"].lower()
+# Should coordinate: web search → analysis → document generation → chart creation
 ```
 
 **Database Required:** PostgreSQL or SQLite for job persistence
-**Automation:** Scheduler testing framework, time simulation
-**Success Criteria:** 18 scheduler tests pass, all CRUD operations verified
+**Automation:** Scheduler testing framework, time simulation, performance profiling
+**Success Criteria:** 18 scheduler tests pass + performance targets met
 
 </details>
 
@@ -1376,25 +1403,41 @@ assert "standup" in user1_jobs[0]["description"].lower()
 - **Day 1:** 23/23 foundation tests pass ✅ (exceeded goal with additional tests)
 - **Day 2:** 20+/22+ memory tests pass ✅ (exceeded goal with advanced features)
 - **Day 3:** 34/36 multimodal tests pass ✅ (94% success rate, exceeded 15 test goal)
-- **Day 4:** 18/18 coordination tests pass + A2A verified
-- **Day 5:** 12/12 MCP tests pass + tool integration verified
-- **Day 6:** 10/10 clarification tests pass + information flow validated
-- **Day 7:** 8/8 async tests pass + webhook delivery verified
-- **Day 8:** All integration tests pass + performance targets met
-- **Day 9:** 18/18 scheduler tests pass + all enterprise features validated
+- **Day 4:** 15 MCP tests + 8 credential tests pass (23 total) + user isolation verified
+- **Day 5:** 15 file generation tests pass + security validation confirmed
+- **Day 6:** 12 knowledge tests pass + all enhancement scenarios validated
+- **Day 7:** 18 coordination tests pass + A2A communication verified
+- **Day 8:** 10 clarification tests pass + information flow validated
+- **Day 9:** 25+ large file tests pass + <3x performance overhead + memory efficient
+- **Day 10:** 8 async tests pass + webhook delivery verified
+- **Day 11:** 18 scheduler tests pass + performance targets met
 
 ### **Final Validation Checklist**
-- [ ] All 17 feature dimensions tested in combination
-- [ ] File generation tested across all major formats (charts, documents, spreadsheets)
+- [ ] All 19 feature dimensions tested in combination
+- [ ] User credentials system fully validated with encryption & isolation
+- [ ] File generation tested across all major formats with security validation
+- [ ] Domain knowledge system tested with multiple agents and sources
 - [ ] Built-in MCP security validation (code filtering, safe execution)
+- [ ] Large file multimodal processing (>100MB files handled efficiently)
+- [ ] Intelligent chunking strategies for video, audio, and documents
 - [ ] Performance targets met (< 2s simple, < 30s complex)
 - [ ] Memory usage stable (< 100MB growth per 100 interactions)
 - [ ] Error handling graceful (no crashes, clear error messages)
 - [ ] Formation-first architecture validated
-- [ ] Agent cleanup confirmed (no agent-user interaction)
 - [ ] Real developer API (`overlord.chat()`) works consistently
+
+### **New Features Validated**
+- ✨ **User Credentials Management**: Secure storage, encryption, user isolation
+- ✨ **MCP with User Credentials**: Automatic credential discovery and injection
+- ✨ **Domain Knowledge System**: Agent-level knowledge loading and enhancement
+- ✨ **Knowledge Search & Retrieval**: Semantic search with relevance scoring
+- ✨ **Multi-Agent Knowledge Sharing**: Cross-agent knowledge coordination
+- ✨ **Large File Multimodal Processing**: Intelligent chunking for >100MB files
+- ✨ **Video/Audio Chunking**: Overlapping segments with temporal coherence
+- ✨ **Result Fusion Engine**: Merges chunk analyses into coherent narratives
 
 ### **Automation Coverage**
 - **85% Automated:** Functional tests, performance benchmarks, CI/CD
 - **15% Manual:** Complex integration validation, user experience testing
 
+**Total Test Coverage:** 1,200+ test combinations across 19 feature dimensions
