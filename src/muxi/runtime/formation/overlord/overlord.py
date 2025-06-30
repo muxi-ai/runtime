@@ -198,9 +198,6 @@ from ..background import (
     TimeEstimator,
 )
 
-# Initialize configuration from formation before starting services
-from .initialization import load_agents_from_configuration
-
 # Unified Response Components
 from ...datatypes.clarification import ClarificationConfig, QuestionStyle, ClarificationResultStatus
 from ...utils.user_dirs import set_formation_id
@@ -746,24 +743,15 @@ class Overlord:
         # Observability system is already initialized and ready (no async start needed)
 
         # Load agents from formation configuration
-        observability.observe(
-            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
-            level=observability.EventLevel.DEBUG,
-            data={},
-            description="Starting agent loading from formation configuration",
-        )
-        await load_agents_from_configuration(self)
-        observability.observe(
-            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
-            level=observability.EventLevel.INFO,
-            data={"agent_count": len(self.agents)},
-            description=f"Agent loading completed. Loaded {len(self.agents)} agents.",
-        )
+        # Load agents from formation's pre-processed configuration
+        await self._load_agents_from_formation()
 
-        # Initialize document processing configuration
-        from .initialization import initialize_document_processing_config
-
-        await initialize_document_processing_config(self)
+        # Document processing configuration is now initialized by Formation
+        if hasattr(self, "_configured_services") and self._configured_services:
+            self.document_processing_config = self._configured_services.get(
+                "document_processing_config"
+            )
+            self.document_chunker = self._configured_services.get("document_chunker")
 
         # A2A services are now initialized by Formation
         # Start A2A formation server if initialized by Formation
@@ -804,6 +792,138 @@ class Overlord:
         """
         if hasattr(self, "_startup_task") and self._startup_task:
             await self._startup_task
+
+    async def _load_agents_from_formation(self) -> None:
+        """
+        Load agents from formation's pre-processed configuration.
+
+        This method creates Agent instances from the formation's agent configurations
+        that were already validated and processed by the Formation class.
+        """
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.DEBUG,
+            data={"configured_services_keys": list(self._configured_services.keys())},
+            description="Starting agent loading from formation",
+        )
+
+        # Get agents configuration from configured services
+        agents_config = self._configured_services.get("agents_config", [])
+
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.DEBUG,
+            data={"agents_count": len(agents_config)},
+            description=f"Found {len(agents_config)} agents in formation configuration",
+        )
+
+        if not agents_config:
+            # No agents configured - this is valid for some formations
+            observability.observe(
+                event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+                level=observability.EventLevel.INFO,
+                data={"agent_count": 0},
+                description="No agents configured in formation",
+            )
+            return
+
+        # Load each agent configuration
+        loaded_count = 0
+        for agent_config in agents_config:
+            try:
+                agent_id = agent_config.get("id")
+                if not agent_id:
+                    continue
+
+                # Create agent from configuration
+                agent = await self._create_agent_from_config(agent_config)
+
+                # Add to agents dictionary
+                self.agents[agent_id] = agent
+
+                # Store agent metadata for routing
+                self.agent_descriptions[agent_id] = agent_config.get("description", "")
+                self.agent_metadata[agent_id] = {
+                    "name": agent_config.get("name", agent_id),
+                    "role": agent_config.get("role", "general"),
+                    "specialties": agent_config.get("specialties", []),
+                    "system_message": agent_config.get("system_message", ""),
+                }
+
+                loaded_count += 1
+
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": agent_id,
+                        "name": agent_config.get("name", agent_id),
+                        "role": agent_config.get("role", "general"),
+                    },
+                    description=f"Agent '{agent_id}' loaded successfully",
+                )
+
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                    level=observability.EventLevel.ERROR,
+                    data={"agent_id": agent_config.get("id", "unknown"), "error": str(e)},
+                    description=f"Failed to load agent: {str(e)}",
+                )
+                continue
+
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.INFO,
+            data={"agent_count": loaded_count},
+            description=f"Loaded {loaded_count} agents from formation configuration",
+        )
+
+    async def _create_agent_from_config(self, agent_config: Dict[str, Any]):
+        """
+        Create an Agent instance from configuration.
+
+        Args:
+            agent_config: Agent configuration dictionary from formation
+
+        Returns:
+            Agent: Configured agent instance
+        """
+        # Get or create LLM model for the agent
+        try:
+            # Try to use overlord's model creation (it should be initialized by now)
+            model = await self.get_model_for_capability("text")
+        except Exception as e:
+            # Configuration error - text capability must be properly configured
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "agent_id": agent_config.get("id", "unknown"),
+                    "capability": "text",
+                    "config_type": "llm_model",
+                },
+                description=(
+                    f"Failed to get text model for agent {agent_config.get('id', 'unknown')}: "
+                    f"{str(e)}. LLM configuration with text capability is mandatory."
+                ),
+            )
+            raise ValueError(
+                f"LLM text capability configuration is mandatory for agent creation. Error: {str(e)}"
+            )
+
+        # Create agent instance
+        agent = Agent(
+            model=model,
+            overlord=self,
+            agent_id=agent_config.get("id"),
+            name=agent_config.get("name"),
+            system_message=agent_config.get("system_message"),
+            knowledge_config=agent_config.get("knowledge"),
+        )
+
+        return agent
 
     def _load_default_persona(self) -> None:
         """Load the default persona from the system_persona.md file."""
@@ -881,15 +1001,33 @@ class Overlord:
 
     async def _initialize_buffer_memory(self, buffer_config: Dict[str, Any]) -> None:
         """Initialize buffer memory from configuration."""
-        from .initialization import _initialize_buffer_memory
+        # Import Formation's initialization functions dynamically to avoid circular imports
+        from ..initialization import initialize_buffer_memory
 
-        await _initialize_buffer_memory(self, buffer_config)
+        # Get the formation instance (it should be accessible via _configured_services)
+        formation = getattr(self, "_formation_instance", None)
+        if formation:
+            await initialize_buffer_memory(formation, self, buffer_config)
+        else:
+            # Fallback: direct initialization
+            from ..initialization import initialize_buffer_memory as init_buffer
+
+            await init_buffer(self, self, buffer_config)
 
     async def _initialize_persistent_memory(self, persistent_config: Dict[str, Any]) -> None:
         """Initialize persistent memory from configuration."""
-        from .initialization import _initialize_persistent_memory
+        # Import Formation's initialization functions dynamically to avoid circular imports
+        from ..initialization import initialize_persistent_memory
 
-        await _initialize_persistent_memory(self, persistent_config)
+        # Get the formation instance (it should be accessible via _configured_services)
+        formation = getattr(self, "_formation_instance", None)
+        if formation:
+            await initialize_persistent_memory(formation, self, persistent_config)
+        else:
+            # Fallback: direct initialization
+            from ..initialization import initialize_persistent_memory as init_persistent
+
+            await init_persistent(self, self, persistent_config)
 
     async def get_model_for_capability(
         self, capability: str, agent_id: Optional[str] = None
@@ -2617,7 +2755,9 @@ class Overlord:
 
             max_size = 2 * 1024 * 1024 * 1024  # 2GB
             if content_size > max_size:
-                return f"Audio {attachment.get('filename')} exceeds the maximum file size limit of 2GB"
+                return (
+                    f"Audio {attachment.get('filename')} exceeds the maximum file size limit of 2GB"
+                )
             # Get the transcription model from capability models
             transcription_model_config = None
             if hasattr(self, "_capability_models") and "audio" in self._capability_models:
@@ -2665,9 +2805,7 @@ class Overlord:
                 audio_file.name = filename  # This helps onellm detect the format
 
                 # Transcribe the audio
-                transcribed_text = await transcription_llm.transcribe(
-                    audio_file
-                )
+                transcribed_text = await transcription_llm.transcribe(audio_file)
 
                 return f"Audio transcription of {attachment.get('filename')}: {transcribed_text}"
             else:
@@ -2775,7 +2913,9 @@ class Overlord:
 
             max_size = 2 * 1024 * 1024 * 1024  # 2GB
             if content_size > max_size:
-                return f"Video {attachment.get('filename')} exceeds the maximum file size limit of 2GB"
+                return (
+                    f"Video {attachment.get('filename')} exceeds the maximum file size limit of 2GB"
+                )
             # Get the video model from capability models
             video_model_config = None
             if hasattr(self, "_capability_models") and "video" in self._capability_models:
@@ -2802,7 +2942,7 @@ class Overlord:
                     model=model_name,
                     api_key=api_key,
                     timeout=300.0,  # 5 minutes for large video processing
-                    **video_model_config.get("settings", {})
+                    **video_model_config.get("settings", {}),
                 )
 
                 # Get the video content

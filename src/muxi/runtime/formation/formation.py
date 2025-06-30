@@ -89,6 +89,8 @@ from .initialization import (
     initialize_document_processing,
     initialize_background_services,
     initialize_clarification_config,
+    initialize_document_processing_config,
+    load_agents_from_configuration,
 )
 
 
@@ -894,6 +896,12 @@ class Formation:
         # 6. Initialize clarification configuration
         initialize_clarification_config(self)
 
+        # 7. Initialize document processing configuration
+        initialize_document_processing_config(self)
+
+        # 8. Load agents configuration
+        load_agents_from_configuration(self)
+
         # Update configured services with initialized instances
         self._configured_services.update(
             {
@@ -906,6 +914,8 @@ class Formation:
                 "request_tracker": getattr(self, "_request_tracker", None),
                 "webhook_manager": getattr(self, "_webhook_manager", None),
                 "clarification_config": getattr(self, "_clarification_config_obj", None),
+                "document_processing_config": getattr(self, "_document_processing_config", None),
+                "document_chunker": getattr(self, "_document_chunker", None),
                 "db_manager": getattr(self, "_db_manager", None),
                 "is_multi_user": getattr(self, "_is_multi_user", False),
             }

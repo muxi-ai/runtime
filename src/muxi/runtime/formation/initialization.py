@@ -226,8 +226,12 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
                 # Disable vector search if no embedding model configured
                 vector_search = False
 
+        # Get formation_id from formation instance
+        formation_id = getattr(formation, "formation_id", "default-formation")
+
         # Create buffer memory instance
         formation._buffer_memory = ShortTermMemory(
+            formation_id=formation_id,
             max_size=size,
             buffer_multiplier=multiplier,
             dimension=dimension,
@@ -465,3 +469,326 @@ def initialize_clarification_config(formation) -> None:
             data={"error": str(e), "service": "clarification"},
             description=f"Failed to initialize clarification config, using defaults: {str(e)}",
         )
+
+
+def initialize_document_processing_config(formation) -> None:
+    """
+    Initialize document processing configuration from LLM models in formation config.
+
+    This processes the unified document configuration from llm.models.documents.settings
+    for use by document-related components.
+    """
+    try:
+        # Use the pre-configured LLM config
+        llm_config = formation._llm_config if hasattr(formation, "_llm_config") else {}
+
+        # Create document processing configuration instance using unified schema
+        formation._document_processing_config = DocumentProcessingConfig(llm_config)
+
+        # Log the configuration details
+        enabled = formation._document_processing_config.is_enabled()
+        if enabled:
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "document_processing",
+                    "enabled": enabled,
+                    "settings": formation._document_processing_config.get_settings(),
+                },
+                description="Document processing configuration initialized",
+            )
+
+        # Initialize DocumentChunkManager with the configuration
+        formation._document_chunker = DocumentChunkManager(formation._document_processing_config)
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.WARNING,
+            data={"error": str(e), "service": "document_processing"},
+            description=f"Failed to initialize document processing config: {str(e)}",
+        )
+
+        # Fall back to default configuration
+        formation._document_processing_config = DocumentProcessingConfig({})
+
+
+def load_agents_from_configuration(formation) -> None:
+    """
+    Load agents from formation configuration.
+
+    This method reads the agents_config and creates pre-configured
+    agent definitions that the Overlord will instantiate when needed.
+    """
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.DEBUG,
+        data={"agents_count": len(formation._agents_config)},
+        description=f"Processing {len(formation._agents_config)} agents from configuration",
+    )
+
+    if not formation._agents_config:
+        # No agents configured - this is valid for some formations
+        observability.observe(
+            event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+            level=observability.EventLevel.INFO,
+            data={"agent_count": 0},
+            description="No agents configured in formation",
+        )
+        return
+
+    # Process each agent configuration
+    processed_count = 0
+    for agent_config in formation._agents_config:
+        try:
+            agent_id = agent_config.get("id")
+            if not agent_id:
+                observability.observe(
+                    event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": "Agent missing ID"},
+                    description="Skipping agent without ID",
+                )
+                continue
+
+            # Validate agent configuration has required fields
+            if not agent_config.get("name"):
+                agent_config["name"] = agent_id
+
+            processed_count += 1
+
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "agent_id": agent_id,
+                    "name": agent_config.get("name", agent_id),
+                    "role": agent_config.get("role", "general"),
+                },
+                description=f"Agent '{agent_id}' configuration processed",
+            )
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                level=observability.EventLevel.ERROR,
+                data={"agent_id": agent_config.get("id", "unknown"), "error": str(e)},
+                description=f"Failed to process agent configuration: {str(e)}",
+            )
+            continue
+
+    observability.observe(
+        event_type=observability.SystemEvents.CONFIG_FORMATION_LOADED,
+        level=observability.EventLevel.INFO,
+        data={"agent_count": processed_count},
+        description=f"Processed {processed_count} agent configurations",
+    )
+
+
+async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str, Any]) -> None:
+    """Initialize buffer memory from configuration with defaults."""
+
+    try:
+        # Create BufferMemoryConfig with provided config, using defaults for missing values
+        config = BufferMemoryConfig(**buffer_config)
+
+        # Extract configuration values from the validated config
+        size = config.size
+        multiplier = config.multiplier
+        vector_search = config.vector_search
+        dimension = config.vector_dimension
+        mode = config.mode
+        remote_config = config.remote
+
+        # Get embedding model for vector search if enabled
+        embedding_model = None
+        if vector_search:
+            try:
+                embedding_model = await overlord.get_model_for_capability("embedding")
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "config_type": "embedding_model"},
+                    description=f"Failed to initialize embedding model for buffer memory: {str(e)}",
+                )
+                vector_search = False
+
+        # Create buffer memory instance
+        buffer_memory = ShortTermMemory(
+            formation_id=overlord.formation_id,
+            max_size=size,
+            buffer_multiplier=multiplier,
+            dimension=dimension,
+            model=embedding_model,
+            mode=mode,
+            remote=remote_config.model_dump() if remote_config and mode == "remote" else None,
+        )
+
+        # Store on both formation and overlord for now (during transition)
+        formation._buffer_memory = buffer_memory
+        overlord.buffer_memory = buffer_memory
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "config_type": "buffer_memory"},
+            description=f"Failed to initialize buffer memory: {str(e)}",
+        )
+        raise
+
+
+async def initialize_persistent_memory(
+    formation, overlord, persistent_config: Dict[str, Any]
+) -> None:
+    """Initialize persistent memory from configuration."""
+    try:
+        connection_string = persistent_config.get("connection_string")
+        embedding_model_name = persistent_config.get("embedding_model")
+
+        if not connection_string:
+            return
+
+        # Interpolate secrets in connection string if needed
+        if "${{ secrets." in connection_string:
+            try:
+                interpolated = await overlord.interpolate_secrets(
+                    {"connection_string": connection_string}
+                )
+                connection_string = interpolated.get("connection_string", connection_string)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "config_type": "persistent_memory_secrets"},
+                    description=f"Failed to interpolate persistent memory secrets: {str(e)}",
+                )
+                return
+
+        # Get embedding model
+        embedding_model = None
+        if embedding_model_name:
+            try:
+                # Create model from specific name override
+                embedding_model = await overlord.create_model(model=embedding_model_name)
+            except Exception:
+                # Fall back to default embedding capability
+                try:
+                    embedding_model = await overlord.get_model_for_capability("embedding")
+                except Exception as e2:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e2), "config_type": "embedding_model"},
+                        description=f"Failed to initialize embedding model: {str(e2)}",
+                    )
+
+        # Determine multi-user mode - check explicit config first, then infer from database type
+        explicit_multi_user = persistent_config.get("multi_user")
+        if explicit_multi_user is not None:
+            is_multi_user = bool(explicit_multi_user)
+        else:
+            # Fall back to inferring from database type
+            is_multi_user = connection_string.startswith(
+                "postgresql://"
+            ) or connection_string.startswith("postgres://")
+
+        # Store multi-user mode on overlord
+        overlord.is_multi_user = is_multi_user
+
+        # Determine memory type based on connection string
+        if connection_string.startswith("postgresql://") or connection_string.startswith(
+            "postgres://"
+        ):
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "database_type": "postgresql",
+                    "memory_type": "persistent",
+                    "multi_user": is_multi_user,
+                },
+                description=(
+                    "Initializing persistent memory with PostgreSQL backend "
+                    f"(multi-user: {is_multi_user})"
+                ),
+            )
+            from ..services.memory.memobase import Memobase
+            from ..services.memory.long_term import LongTermMemory
+            from ..services.db import get_database_manager
+
+            # Create ONE DatabaseManager for the Formation
+            db_manager = get_database_manager(connection_string)
+
+            # Store db_manager on both formation and overlord
+            formation._db_manager = db_manager
+            overlord.db_manager = db_manager
+
+            # Create LongTermMemory using the shared DatabaseManager
+            long_term_memory = LongTermMemory(
+                db_manager=db_manager,
+                formation_id=overlord.formation_id,
+                embedding_model=embedding_model,
+            )
+
+            # Create Memobase with the LongTermMemory instance
+            # Note: Memobase is still needed for user context management features
+            memobase = Memobase(long_term_memory=long_term_memory)
+
+            # Store on both formation and overlord
+            formation._long_term_memory = memobase
+            overlord.long_term_memory = memobase
+
+        elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "database_type": "sqlite",
+                    "memory_type": "persistent",
+                    "multi_user": is_multi_user,
+                },
+                description=(
+                    "Initializing persistent memory with SQLite backend "
+                    f"(multi-user: {is_multi_user})"
+                ),
+            )
+            from ..services.memory.sqlite import SQLiteMemory
+            from ..services.db import get_database_manager
+
+            # Remove sqlite:// prefix if present
+            db_path = connection_string.replace("sqlite://", "")
+            sqlite_memory = SQLiteMemory(db_path=db_path, formation_id=overlord.formation_id)
+
+            # Store on both formation and overlord
+            formation._long_term_memory = sqlite_memory
+            overlord.long_term_memory = sqlite_memory
+
+            # Create DatabaseManager for scheduler access (SQLite)
+            db_manager = get_database_manager(connection_string)
+            formation._db_manager = db_manager
+            overlord.db_manager = db_manager
+
+            # Set the embedding provider after initialization
+            if embedding_model:
+                try:
+                    embedding_llm = await overlord.get_model_for_capability("embedding")
+                    sqlite_memory.embedding_provider = embedding_llm
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e), "config_type": "embedding_provider"},
+                        description=f"Failed to set embedding provider: {str(e)}",
+                    )
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "config_type": "persistent_memory"},
+            description=f"Critical error during persistent memory initialization: {str(e)}",
+        )
+        raise
