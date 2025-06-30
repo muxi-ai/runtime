@@ -83,7 +83,6 @@ class RecoveryStrategy(Enum):
 
     # Fallback strategies
     FALLBACK_AGENT = "fallback_agent"
-    FALLBACK_MODEL = "fallback_model"
     FALLBACK_WORKFLOW = "fallback_workflow"
     CACHED_RESPONSE = "cached_response"
 

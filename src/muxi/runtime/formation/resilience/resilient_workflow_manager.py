@@ -260,9 +260,6 @@ class ResilientWorkflowManager:
             elif strategy == RecoveryStrategy.FALLBACK_AGENT:
                 return await self._execute_fallback_agent_strategy(workflow, error_context)
 
-            elif strategy == RecoveryStrategy.FALLBACK_MODEL:
-                return await self._execute_fallback_model_strategy(workflow, error_context)
-
             elif strategy == RecoveryStrategy.CACHED_RESPONSE:
                 return await self._execute_cached_response_strategy(workflow, error_context)
 
@@ -340,15 +337,6 @@ class ResilientWorkflowManager:
             success=False,
             strategy_used=RecoveryStrategy.FALLBACK_AGENT,
             error=WorkflowException("Fallback agent strategy not implemented"),
-        )
-
-    async def _execute_fallback_model_strategy(self, workflow: Any, error_context):
-        """Execute fallback model strategy."""
-
-        return RecoveryResult(
-            success=False,
-            strategy_used=RecoveryStrategy.FALLBACK_MODEL,
-            error=WorkflowException("Fallback model strategy not implemented"),
         )
 
     async def _execute_cached_response_strategy(self, workflow: Any, error_context):

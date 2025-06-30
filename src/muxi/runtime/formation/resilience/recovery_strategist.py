@@ -72,24 +72,20 @@ class RecoveryStrategist:
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
                 RecoveryStrategy.ABORT_WORKFLOW,
             ],
-            # LLM errors - model fallback and retry
+            # LLM errors - retry and cached responses
             ErrorType.LLM_RATE_LIMITED: [
                 RecoveryStrategy.EXPONENTIAL_BACKOFF,
-                RecoveryStrategy.FALLBACK_MODEL,
                 RecoveryStrategy.CACHED_RESPONSE,
             ],
             ErrorType.LLM_CONTEXT_OVERFLOW: [
                 RecoveryStrategy.SIMPLIFIED_WORKFLOW,
-                RecoveryStrategy.FALLBACK_MODEL,
                 RecoveryStrategy.PARTIAL_RESPONSE,
             ],
             ErrorType.LLM_API_ERROR: [
                 RecoveryStrategy.IMMEDIATE_RETRY,
-                RecoveryStrategy.FALLBACK_MODEL,
                 RecoveryStrategy.CACHED_RESPONSE,
             ],
             ErrorType.LLM_QUOTA_EXCEEDED: [
-                RecoveryStrategy.FALLBACK_MODEL,
                 RecoveryStrategy.CACHED_RESPONSE,
                 RecoveryStrategy.ESCALATE_TO_ADMIN,
             ],
@@ -275,7 +271,6 @@ class RecoveryStrategist:
 
             elif strategy in [
                 RecoveryStrategy.FALLBACK_AGENT,
-                RecoveryStrategy.FALLBACK_MODEL,
                 RecoveryStrategy.FALLBACK_WORKFLOW,
                 RecoveryStrategy.CACHED_RESPONSE,
             ]:
@@ -330,7 +325,6 @@ class RecoveryStrategist:
             RecoveryStrategy.CACHED_RESPONSE: 0.9,
             RecoveryStrategy.IMMEDIATE_RETRY: 0.8,
             RecoveryStrategy.FALLBACK_AGENT: 0.7,
-            RecoveryStrategy.FALLBACK_MODEL: 0.7,
             RecoveryStrategy.EXPONENTIAL_BACKOFF: 0.6,
             RecoveryStrategy.JITTERED_RETRY: 0.6,
             RecoveryStrategy.LINEAR_BACKOFF: 0.5,
