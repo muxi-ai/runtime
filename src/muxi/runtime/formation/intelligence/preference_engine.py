@@ -558,6 +558,9 @@ class UserPreferenceEngine:
                         "recency": pref.confidence.recency,
                         "consistency": pref.confidence.consistency,
                     },
+                    "source_message": getattr(pref, "source_message", ""),
+                    "timestamp": getattr(pref, "timestamp", time.time()),
+                    "context": getattr(pref, "context", {}),
                 }
                 for pref in preferences.explicit
             ],
@@ -571,7 +574,9 @@ class UserPreferenceEngine:
                         "recency": pref.confidence.recency,
                         "consistency": pref.confidence.consistency,
                     },
-                    "inferred_from": pref.inferred_from,
+                    "inference_method": pref.inference_method,
+                    "supporting_evidence": pref.supporting_evidence,
+                    "timestamp": pref.timestamp,
                 }
                 for pref in preferences.implicit
             ],
@@ -586,6 +591,8 @@ class UserPreferenceEngine:
                         "consistency": pref.confidence.consistency,
                     },
                     "context_conditions": pref.context_conditions,
+                    "prediction_method": getattr(pref, "prediction_method", "unknown"),
+                    "timestamp": getattr(pref, "timestamp", time.time()),
                 }
                 for pref in preferences.contextual
             ],
@@ -610,6 +617,9 @@ class UserPreferenceEngine:
                     preference_type=PreferenceType(pref_data["preference_type"]),
                     value=pref_data["value"],
                     confidence=ConfidenceScore(**pref_data["confidence"]),
+                    source_message=pref_data.get("source_message", ""),
+                    timestamp=pref_data.get("timestamp", time.time()),
+                    context=pref_data.get("context", {}),
                 )
             )
 
@@ -621,7 +631,9 @@ class UserPreferenceEngine:
                     preference_type=PreferenceType(pref_data["preference_type"]),
                     value=pref_data["value"],
                     confidence=ConfidenceScore(**pref_data["confidence"]),
-                    inferred_from=pref_data.get("inferred_from", "unknown"),
+                    inference_method=pref_data.get("inference_method", "unknown"),
+                    supporting_evidence=pref_data.get("supporting_evidence", []),
+                    timestamp=pref_data.get("timestamp", time.time()),
                 )
             )
 
@@ -634,6 +646,8 @@ class UserPreferenceEngine:
                     value=pref_data["value"],
                     confidence=ConfidenceScore(**pref_data["confidence"]),
                     context_conditions=pref_data.get("context_conditions", {}),
+                    prediction_method=pref_data.get("prediction_method", "unknown"),
+                    timestamp=pref_data.get("timestamp", time.time()),
                 )
             )
 

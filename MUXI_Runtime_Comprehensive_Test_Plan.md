@@ -332,11 +332,12 @@ memory:
   - 2F1: Database schema creation ✅ (PostgreSQL + SQLite)
   - 2F2: User/collection/memory relationships ✅
   - 2F3: Multi-user architecture verification ✅
-- ✅ Test Group 2G: Advanced Memory Features (4/4 tests passing)
+- ✅ Test Group 2G: Advanced Memory Features (5/5 tests passing)
   - 2G1: FIFO Memory Management ✅ (automatic cleanup when limit exceeded)
   - 2G2: Automatic Context Extraction ✅ (extracts user info from conversations)
   - 2G3: Smart Buffer Vector Search ✅ (semantic search with relevance scoring)
   - 2G4: Automatic Context Usage ✅ (applies stored context to responses)
+  - 2G5: User Preference Persistence ✅ (preferences persist across sessions - implementation verified)
 
 **Key Achievements:**
 1. ✅ PostgreSQL multi-user memory system fully working
@@ -354,6 +355,7 @@ memory:
 13. ✅ Context extraction captures user names, projects, and preferences
 14. ✅ Vector search enables semantic memory retrieval
 15. ✅ Stored context automatically improves response quality
+16. ✅ User preferences persist across sessions using long-term memory integration
 
 **Success Criteria:**
 - 25+ memory tests pass (expanded from original 12)
