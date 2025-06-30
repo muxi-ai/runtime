@@ -470,18 +470,49 @@ class UserPreferenceEngine:
     async def _store_preferences(self, storage_key: str, preferences: UserPreferences):
         """Store preferences in long-term memory"""
         try:
-            _ = self._serialize_preferences(preferences)
-            # Store in long-term memory - implementation depends on memory system
-            # For now, this is a placeholder
-            pass
+            serialized_data = self._serialize_preferences(preferences)
+
+            # Extract user_id from storage_key for multi-user mode
+            user_id = None
+            if self.is_multi_user and storage_key.startswith("user_preferences_"):
+                user_id = storage_key.replace("user_preferences_", "")
+
+            # Store in long-term memory
+            await self.overlord.long_term_memory.add(
+                content=f"User preferences for {storage_key}",
+                metadata={
+                    "type": "user_preferences",
+                    "storage_key": storage_key,
+                    "preferences_data": serialized_data,
+                    "last_updated": preferences.last_updated,
+                },
+                external_user_id=user_id,
+            )
         except Exception as e:
             print(f"Error storing preferences: {e}")
 
     async def _load_preferences(self, storage_key: str) -> Optional[Dict[str, Any]]:
         """Load preferences from long-term memory"""
         try:
-            # Load from long-term memory - implementation depends on memory system
-            # For now, this is a placeholder
+            # Extract user_id from storage_key for multi-user mode
+            user_id = None
+            if self.is_multi_user and storage_key.startswith("user_preferences_"):
+                user_id = storage_key.replace("user_preferences_", "")
+
+            # Search for preferences in long-term memory
+            results = await self.overlord.long_term_memory.search(
+                query=f"User preferences for {storage_key}",
+                limit=1,
+                filter_metadata={"type": "user_preferences", "storage_key": storage_key},
+                external_user_id=user_id,
+            )
+
+            if results and len(results) > 0:
+                # Get the most recent preferences
+                most_recent = results[0]
+                metadata = most_recent.get("metadata", {})
+                return metadata.get("preferences_data")
+
             return None
         except Exception as e:
             print(f"Error loading preferences: {e}")
@@ -490,27 +521,133 @@ class UserPreferenceEngine:
     async def _delete_preferences(self, storage_key: str):
         """Delete preferences from long-term memory"""
         try:
-            # Delete from long-term memory - implementation depends on memory system
-            # For now, this is a placeholder
-            pass
+            # Extract user_id from storage_key for multi-user mode
+            user_id = None
+            if self.is_multi_user and storage_key.startswith("user_preferences_"):
+                user_id = storage_key.replace("user_preferences_", "")
+
+            # Search for preferences to get the memory ID
+            results = await self.overlord.long_term_memory.search(
+                query=f"User preferences for {storage_key}",
+                limit=1,
+                filter_metadata={"type": "user_preferences", "storage_key": storage_key},
+                external_user_id=user_id,
+            )
+
+            if results and len(results) > 0:
+                # Delete the memory using its ID
+                memory_id = results[0].get("id")
+                if memory_id:
+                    self.overlord.long_term_memory.delete(memory_id)
         except Exception as e:
             print(f"Error deleting preferences: {e}")
 
     def _serialize_preferences(self, preferences: UserPreferences) -> Dict[str, Any]:
         """Serialize preferences for storage"""
-        # This would convert the preferences object to a storable format
-        # Implementation depends on storage system requirements
         return {
             "user_id": preferences.user_id,
             "deployment_mode": preferences.deployment_mode,
             "last_updated": preferences.last_updated,
-            # Add other serialization logic
+            "explicit": [
+                {
+                    "preference_type": pref.preference_type.value,
+                    "value": pref.value,
+                    "confidence": {
+                        "value": pref.confidence.value,
+                        "data_points": pref.confidence.data_points,
+                        "recency": pref.confidence.recency,
+                        "consistency": pref.confidence.consistency,
+                    },
+                }
+                for pref in preferences.explicit
+            ],
+            "implicit": [
+                {
+                    "preference_type": pref.preference_type.value,
+                    "value": pref.value,
+                    "confidence": {
+                        "value": pref.confidence.value,
+                        "data_points": pref.confidence.data_points,
+                        "recency": pref.confidence.recency,
+                        "consistency": pref.confidence.consistency,
+                    },
+                    "inferred_from": pref.inferred_from,
+                }
+                for pref in preferences.implicit
+            ],
+            "contextual": [
+                {
+                    "preference_type": pref.preference_type.value,
+                    "value": pref.value,
+                    "confidence": {
+                        "value": pref.confidence.value,
+                        "data_points": pref.confidence.data_points,
+                        "recency": pref.confidence.recency,
+                        "consistency": pref.confidence.consistency,
+                    },
+                    "context_conditions": pref.context_conditions,
+                }
+                for pref in preferences.contextual
+            ],
+            "confidence_scores": {
+                pref_type.value: {
+                    "value": score.value,
+                    "data_points": score.data_points,
+                    "recency": score.recency,
+                    "consistency": score.consistency,
+                }
+                for pref_type, score in preferences.confidence_scores.items()
+            },
         }
 
     def _deserialize_preferences(self, data: Dict[str, Any]) -> UserPreferences:
         """Deserialize preferences from storage"""
-        # This would convert stored data back to UserPreferences object
-        # Implementation depends on storage system format
+        # Deserialize explicit preferences
+        explicit_prefs = []
+        for pref_data in data.get("explicit", []):
+            explicit_prefs.append(
+                ExplicitPreference(
+                    preference_type=PreferenceType(pref_data["preference_type"]),
+                    value=pref_data["value"],
+                    confidence=ConfidenceScore(**pref_data["confidence"]),
+                )
+            )
+
+        # Deserialize implicit preferences
+        implicit_prefs = []
+        for pref_data in data.get("implicit", []):
+            implicit_prefs.append(
+                ImplicitPreference(
+                    preference_type=PreferenceType(pref_data["preference_type"]),
+                    value=pref_data["value"],
+                    confidence=ConfidenceScore(**pref_data["confidence"]),
+                    inferred_from=pref_data.get("inferred_from", "unknown"),
+                )
+            )
+
+        # Deserialize contextual preferences
+        contextual_prefs = []
+        for pref_data in data.get("contextual", []):
+            contextual_prefs.append(
+                ContextualPreference(
+                    preference_type=PreferenceType(pref_data["preference_type"]),
+                    value=pref_data["value"],
+                    confidence=ConfidenceScore(**pref_data["confidence"]),
+                    context_conditions=pref_data.get("context_conditions", {}),
+                )
+            )
+
+        # Deserialize confidence scores
+        confidence_scores = {}
+        for pref_type_str, score_data in data.get("confidence_scores", {}).items():
+            confidence_scores[PreferenceType(pref_type_str)] = ConfidenceScore(**score_data)
+
         return UserPreferences(
-            user_id=data.get("user_id"), deployment_mode=data.get("deployment_mode", "single_user")
+            user_id=data.get("user_id"),
+            deployment_mode=data.get("deployment_mode", "single_user"),
+            explicit=explicit_prefs,
+            implicit=implicit_prefs,
+            contextual=contextual_prefs,
+            confidence_scores=confidence_scores,
+            last_updated=data.get("last_updated", time.time()),
         )
