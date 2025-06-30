@@ -61,6 +61,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     external_user_id = Column(String(255), nullable=False, unique=True, index=True)
     external_user_id_hash = Column(String(64), nullable=False, unique=True, index=True)
+    formation_id = Column(String(255), nullable=False)
+    formation_id_hash = Column(String(64), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
@@ -77,6 +79,8 @@ class Memory(Base):
 
     id = Column(String(21), primary_key=True, default=get_default_nanoid)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    formation_id = Column(String(255), nullable=False)
+    formation_id_hash = Column(String(64), nullable=False, index=True)
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
     meta_data = Column(JSONB, nullable=False, default={})
@@ -97,6 +101,8 @@ class Collection(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    formation_id = Column(String(255), nullable=False)
+    formation_id_hash = Column(String(64), nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text)
     created_at = Column(DateTime, default=utc_now)
@@ -116,6 +122,7 @@ class LongTermMemory:
     def __init__(
         self,
         db_manager: DatabaseManager,
+        formation_id: str,
         dimension: int = 1536,  # Default dimension for OpenAI embeddings
         default_collection: str = "default",
         embedding_model: Optional[LLM] = None,
@@ -125,6 +132,7 @@ class LongTermMemory:
 
         Args:
             db_manager: Unified database manager instance (required)
+            formation_id: The formation ID for scoping data
             dimension: The dimension of the vectors to store.
             default_collection: The default collection to use.
             embedding_model: The embedding model to use.
@@ -132,6 +140,8 @@ class LongTermMemory:
         self.dimension = dimension
         self.default_collection = default_collection
         self.embedding_model = embedding_model
+        self.formation_id = formation_id
+        self.formation_id_hash = self._hash_formation_id(formation_id)
 
         # Use provided database manager
         self.db_manager = db_manager
@@ -198,6 +208,15 @@ class LongTermMemory:
             external_id = str(external_id)
         return hashlib.sha256(external_id.encode("utf-8")).hexdigest()
 
+    def _hash_formation_id(self, formation_id: str) -> str:
+        """Generate SHA256 hash of formation ID."""
+        import hashlib
+
+        # Convert to string if not already
+        if not isinstance(formation_id, str):
+            formation_id = str(formation_id)
+        return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
+
     def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
         """Get existing user or create new one."""
         # Handle single-user mode
@@ -209,14 +228,22 @@ class LongTermMemory:
         # Calculate hash
         user_hash = self._hash_external_id(external_user_id)
 
-        # Try to find existing user
-        user = session.query(User).filter_by(external_user_id_hash=user_hash).first()
+        # Try to find existing user with formation scope
+        user = (
+            session.query(User)
+            .filter_by(external_user_id_hash=user_hash, formation_id_hash=self.formation_id_hash)
+            .first()
+        )
         if user:
             return user
 
         # Create new user
         user = User(
-            external_user_id=external_user_id, external_user_id_hash=user_hash, created_at=utc_now()
+            external_user_id=external_user_id,
+            external_user_id_hash=user_hash,
+            formation_id=self.formation_id,
+            formation_id_hash=self.formation_id_hash,
+            created_at=utc_now(),
         )
         session.add(user)
         session.commit()
@@ -235,7 +262,11 @@ class LongTermMemory:
         # Check if default collection exists for this user
         collection = (
             session.query(Collection)
-            .filter_by(user_id=user_id, name=self.default_collection)
+            .filter_by(
+                user_id=user_id,
+                name=self.default_collection,
+                formation_id_hash=self.formation_id_hash,
+            )
             .first()
         )
 
@@ -245,6 +276,8 @@ class LongTermMemory:
                 user_id=user_id,
                 name=self.default_collection,
                 description="Default collection for memories",
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
             )
             session.add(collection)
             session.commit()
@@ -360,6 +393,8 @@ class LongTermMemory:
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
             )
 
             # Add to database
@@ -384,12 +419,20 @@ class LongTermMemory:
             user_id: The internal user ID.
         """
         collection = (
-            session.query(Collection).filter_by(user_id=user_id, name=collection_name).first()
+            session.query(Collection)
+            .filter_by(
+                user_id=user_id, name=collection_name, formation_id_hash=self.formation_id_hash
+            )
+            .first()
         )
 
         if not collection:
             collection = Collection(
-                user_id=user_id, name=collection_name, description=f"Collection: {collection_name}"
+                user_id=user_id,
+                name=collection_name,
+                description=f"Collection: {collection_name}",
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
             )
             session.add(collection)
             session.flush()
@@ -526,6 +569,7 @@ class LongTermMemory:
                     func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
                 )
                 .filter(Memory.user_id == user.id)
+                .filter(Memory.formation_id_hash == self.formation_id_hash)
                 .filter(Memory.collection == collection)
                 .order_by("distance")
                 .limit(k)
@@ -571,7 +615,11 @@ class LongTermMemory:
             The memory object if found, otherwise None.
         """
         with self.Session() as session:
-            memory = session.query(Memory).filter_by(id=memory_id).first()
+            memory = (
+                session.query(Memory)
+                .filter_by(id=memory_id, formation_id_hash=self.formation_id_hash)
+                .first()
+            )
 
             if not memory:
                 return None
@@ -622,7 +670,11 @@ class LongTermMemory:
         )
 
         with self.Session() as session:
-            memory = session.query(Memory).filter_by(id=memory_id).first()
+            memory = (
+                session.query(Memory)
+                .filter_by(id=memory_id, formation_id_hash=self.formation_id_hash)
+                .first()
+            )
 
             if not memory:
                 # Emit memory update failed event
@@ -689,7 +741,11 @@ class LongTermMemory:
         )
 
         with self.Session() as session:
-            memory = session.query(Memory).filter_by(id=memory_id).first()
+            memory = (
+                session.query(Memory)
+                .filter_by(id=memory_id, formation_id_hash=self.formation_id_hash)
+                .first()
+            )
 
             if not memory:
                 # Emit memory deletion failed event
@@ -729,7 +785,9 @@ class LongTermMemory:
             A list of dictionaries containing collection information.
         """
         with self.Session() as session:
-            collections = session.query(Collection).all()
+            collections = (
+                session.query(Collection).filter_by(formation_id_hash=self.formation_id_hash).all()
+            )
 
             return [
                 {
@@ -832,7 +890,7 @@ class LongTermMemory:
         with self.Session() as session:
             memories = (
                 session.query(Memory)
-                .filter_by(collection=collection_name)
+                .filter_by(collection=collection_name, formation_id_hash=self.formation_id_hash)
                 .order_by(desc(Memory.created_at))
                 .limit(limit)
                 .all()

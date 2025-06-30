@@ -59,6 +59,7 @@ class DocumentAwareBufferMemory:
 
     def __init__(
         self,
+        formation_id: str,
         max_size: int = 10,
         buffer_multiplier: int = 10,
         model=None,
@@ -74,6 +75,7 @@ class DocumentAwareBufferMemory:
         Initialize document-aware buffer memory.
 
         Args:
+            formation_id: The formation ID for scoping data
             max_size: Context window size (number of recent messages)
             buffer_multiplier: Total capacity multiplier
             model: Model for generating embeddings
@@ -90,6 +92,7 @@ class DocumentAwareBufferMemory:
         from ....services.memory.short_term import ShortTermMemory
 
         self._short_term_memory = ShortTermMemory(
+            formation_id=formation_id,
             max_size=max_size,
             buffer_multiplier=buffer_multiplier,
             model=model,

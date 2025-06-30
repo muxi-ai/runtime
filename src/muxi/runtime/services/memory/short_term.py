@@ -111,6 +111,7 @@ class ShortTermMemory:
 
     def __init__(
         self,
+        formation_id: str,
         max_size: int = 10,
         buffer_multiplier: int = 10,
         dimension: int = 1536,
@@ -124,6 +125,7 @@ class ShortTermMemory:
         Initialize short-term memory with vector search capabilities.
 
         Args:
+            formation_id: The formation ID for scoping data
             max_size: The context window size - number of recent messages to include
                 when retrieving by recency. Default is 10.
             buffer_multiplier: Multiplier to determine total buffer capacity.
@@ -142,6 +144,9 @@ class ShortTermMemory:
             max_memory_mb: Maximum memory usage in MB for FIFO cleanup. Default is 1000.
             fifo_interval_min: Minimum interval in minutes for FIFO cleanup. Default is 5.
         """
+        # Formation ID for scoping
+        self.formation_id = formation_id
+
         # Buffer size and content
         self.max_size = max_size
         self.buffer_multiplier = buffer_multiplier
@@ -198,6 +203,9 @@ class ShortTermMemory:
         # Initialize metadata dictionary if None
         if metadata is None:
             metadata = {}
+
+        # Automatically add formation_id to metadata
+        metadata["formation_id"] = self.formation_id
 
         # Create item with text, metadata, timestamp, and namespace
         item = {
@@ -385,6 +393,10 @@ class ShortTermMemory:
                 if namespace and item.get("namespace") != namespace:
                     continue
 
+                # Check formation_id match (always filter by formation)
+                if item.get("metadata", {}).get("formation_id") != self.formation_id:
+                    continue
+
                 # Check if all metadata filter criteria match
                 if filter_metadata and not all(
                     key in item["metadata"] and item["metadata"][key] == value
@@ -399,8 +411,14 @@ class ShortTermMemory:
                     break
             return results
         else:
-            # If no filtering, just return the most recent items (most recent first)
-            return [item.copy() for item in reversed(recent_items)][:limit]
+            # If no filtering, still filter by formation_id
+            results = []
+            for item in reversed(recent_items):
+                if item.get("metadata", {}).get("formation_id") == self.formation_id:
+                    results.append(item.copy())
+                    if len(results) >= limit:
+                        break
+            return results
 
     async def search(
         self,
@@ -562,6 +580,10 @@ class ShortTermMemory:
                 if namespace and item.get("namespace") != namespace:
                     continue
 
+                # Check formation_id match (always filter by formation)
+                if item.get("metadata", {}).get("formation_id") != self.formation_id:
+                    continue
+
                 # Apply metadata filters if provided
                 if filter_metadata and not all(
                     key in item["metadata"] and item["metadata"][key] == value
@@ -705,7 +727,10 @@ class ShortTermMemory:
         """
         items = []
         for item in reversed(self.buffer):  # Most recent first
-            if item.get("namespace") == namespace:
+            if (
+                item.get("namespace") == namespace
+                and item.get("metadata", {}).get("formation_id") == self.formation_id
+            ):
                 items.append(item.copy())
                 if limit and len(items) >= limit:
                     break
@@ -730,6 +755,10 @@ class ShortTermMemory:
         for i, item in enumerate(self.buffer):
             # Check namespace filter
             if namespace and item.get("namespace") != namespace:
+                continue
+
+            # Check formation_id match
+            if item.get("metadata", {}).get("formation_id") != self.formation_id:
                 continue
 
             # Check metadata filter
@@ -768,6 +797,10 @@ class ShortTermMemory:
             if namespace and item.get("namespace") != namespace:
                 continue
 
+            # Check formation_id match
+            if item.get("metadata", {}).get("formation_id") != self.formation_id:
+                continue
+
             # Check metadata filter
             if all(item["metadata"].get(k) == v for k, v in metadata_filter.items()):
                 results.append(item.copy())
@@ -797,6 +830,9 @@ class ShortTermMemory:
         """
         if metadata is None:
             metadata = {}
+
+        # Automatically add formation_id to metadata
+        metadata["formation_id"] = self.formation_id
 
         # Create item
         item = {

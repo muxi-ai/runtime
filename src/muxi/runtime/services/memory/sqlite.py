@@ -56,6 +56,7 @@ class SQLiteMemory(BaseMemory):
     def __init__(
         self,
         db_path: str,
+        formation_id: str,
         dimension: int = 1536,
         default_collection: str = "default",
         extensions_dir: str = "extensions",
@@ -65,11 +66,14 @@ class SQLiteMemory(BaseMemory):
 
         Args:
             db_path: Path to the SQLite database file
+            formation_id: The formation ID for scoping data
             dimension: Dimension of the embedding vectors
             default_collection: Name of the default collection
             extensions_dir: Directory containing sqlite-vec extensions
         """
         self.db_path = db_path
+        self.formation_id = formation_id
+        self.formation_id_hash = self._hash_formation_id(formation_id)
         self.dimension = dimension
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
@@ -80,6 +84,15 @@ class SQLiteMemory(BaseMemory):
 
         # Initialize database
         self.conn = self._init_database()
+
+    def _hash_formation_id(self, formation_id: str) -> str:
+        """Generate SHA256 hash of formation ID."""
+        import hashlib
+
+        # Convert to string if not already
+        if not isinstance(formation_id, str):
+            formation_id = str(formation_id)
+        return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
 
     def _init_database(self) -> sqlite3.Connection:
         """
@@ -112,10 +125,13 @@ class SQLiteMemory(BaseMemory):
             """
             CREATE TABLE IF NOT EXISTS collections (
                 id TEXT PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
                 description TEXT,
+                formation_id TEXT NOT NULL,
+                formation_id_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name, formation_id_hash)
             )
         """
         )
@@ -128,6 +144,8 @@ class SQLiteMemory(BaseMemory):
                 text TEXT NOT NULL,
                 embedding BLOB NOT NULL,
                 metadata TEXT,
+                formation_id TEXT NOT NULL,
+                formation_id_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (collection) REFERENCES collections(name)
@@ -137,8 +155,15 @@ class SQLiteMemory(BaseMemory):
 
         # Create default collection if it doesn't exist
         conn.execute(
-            "INSERT OR IGNORE INTO collections " "(id, name, description) VALUES (?, ?, ?)",
-            (self._generate_id(), self.default_collection, "Default collection for memories"),
+            "INSERT OR IGNORE INTO collections "
+            "(id, name, description, formation_id, formation_id_hash) VALUES (?, ?, ?, ?, ?)",
+            (
+                self._generate_id(),
+                self.default_collection,
+                "Default collection for memories",
+                self.formation_id,
+                self.formation_id_hash,
+            ),
         )
 
         conn.commit()
@@ -222,10 +247,18 @@ class SQLiteMemory(BaseMemory):
         self.conn.execute(
             """
             INSERT INTO memories
-            (id, collection, text, embedding, metadata)
-            VALUES (?, ?, ?, ?, ?)
+            (id, collection, text, embedding, metadata, formation_id, formation_id_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (memory_id, collection, text, embedding, metadata and json.dumps(metadata)),
+            (
+                memory_id,
+                collection,
+                text,
+                embedding,
+                metadata and json.dumps(metadata),
+                self.formation_id,
+                self.formation_id_hash,
+            ),
         )
         self.conn.commit()
 
@@ -302,14 +335,15 @@ class SQLiteMemory(BaseMemory):
                 created_at,
                 vec_distance_cosine(embedding, ?) as score
             FROM memories
-            WHERE collection = ?
+            WHERE collection = ? AND formation_id_hash = ?
             ORDER BY score ASC
             LIMIT ?
         """
 
         # Execute search
         cursor = self.conn.execute(
-            query, (query_embedding, collection or self.default_collection, k)
+            query,
+            (query_embedding, collection or self.default_collection, self.formation_id_hash, k),
         )
 
         # Format results
@@ -345,7 +379,8 @@ class SQLiteMemory(BaseMemory):
             The memory object if found, otherwise None
         """
         cursor = self.conn.execute(
-            "SELECT id, text, metadata, created_at FROM memories WHERE id = ?", (memory_id,)
+            "SELECT id, text, metadata, created_at FROM memories WHERE id = ? AND formation_id_hash = ?",
+            (memory_id, self.formation_id_hash),
         )
 
         row = cursor.fetchone()
@@ -380,11 +415,11 @@ class SQLiteMemory(BaseMemory):
             """
             SELECT id, text, metadata, created_at
             FROM memories
-            WHERE collection = ?
+            WHERE collection = ? AND formation_id_hash = ?
             ORDER BY created_at DESC
             LIMIT ?
             """,
-            (collection or self.default_collection, limit),
+            (collection or self.default_collection, self.formation_id_hash, limit),
         )
 
         # Parse results

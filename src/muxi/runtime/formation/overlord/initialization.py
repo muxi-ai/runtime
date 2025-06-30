@@ -242,6 +242,7 @@ async def _initialize_buffer_memory(overlord, buffer_config: Dict[str, Any]) -> 
 
         # Create buffer memory instance
         overlord.buffer_memory = ShortTermMemory(
+            formation_id=overlord.formation_id,
             max_size=size,
             buffer_multiplier=multiplier,
             dimension=dimension,
@@ -342,7 +343,9 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
 
             # Create LongTermMemory using the shared DatabaseManager
             long_term_memory = LongTermMemory(
-                db_manager=db_manager, embedding_model=embedding_model
+                db_manager=db_manager,
+                formation_id=overlord.formation_id,
+                embedding_model=embedding_model,
             )
 
             # Create Memobase with the LongTermMemory instance
@@ -368,7 +371,9 @@ async def _initialize_persistent_memory(overlord, persistent_config: Dict[str, A
 
             # Remove sqlite:// prefix if present
             db_path = connection_string.replace("sqlite://", "")
-            overlord.long_term_memory = SQLiteMemory(db_path=db_path)
+            overlord.long_term_memory = SQLiteMemory(
+                db_path=db_path, formation_id=overlord.formation_id
+            )
 
             # Create DatabaseManager for scheduler access (SQLite)
             db_manager = get_database_manager(connection_string)

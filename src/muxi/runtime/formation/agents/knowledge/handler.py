@@ -135,6 +135,7 @@ class KnowledgeHandler:
     def __init__(
         self,
         agent_id_or_sources: Union[str, List],
+        formation_id: str = "default-formation",
         embedding_dimension: int = 1536,
         cache_dir: str = get_knowledge_dir(),
         mode: str = "local",
@@ -150,6 +151,7 @@ class KnowledgeHandler:
         Initialize the knowledge handler with hybrid architecture components and memory integration.
         """
         self.agent_id_or_sources = agent_id_or_sources
+        self.formation_id = formation_id
         self.embedding_dimension = embedding_dimension
         self.cache_dir = cache_dir
         self.mode = mode
@@ -217,6 +219,7 @@ class KnowledgeHandler:
         # Ensure we have ShortTermMemory for document storage
         if not self.short_term_memory:
             self.short_term_memory = ShortTermMemory(
+                formation_id=self.formation_id,
                 max_size=2000,  # Large context window for documents
                 buffer_multiplier=20,  # 40,000 total capacity for documents
                 dimension=self.embedding_dimension,
