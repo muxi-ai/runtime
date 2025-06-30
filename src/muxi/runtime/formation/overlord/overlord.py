@@ -2798,8 +2798,8 @@ class Overlord:
 
                 # Create LLM instance for video processing with extended timeout for large files
                 video_llm = LLM(
-                    model=model_name, 
-                    api_key=api_key, 
+                    model=model_name,
+                    api_key=api_key,
                     timeout=300.0,  # 5 minutes for large video processing
                     **video_model_config.get("settings", {})
                 )
