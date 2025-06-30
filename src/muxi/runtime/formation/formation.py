@@ -1660,6 +1660,9 @@ class Formation:
                 complexity_threshold=self.config.get("complexity_threshold", 7.0),
             )
 
+            # Set the formation instance reference for memory initialization
+            self._overlord._formation_instance = self
+
             # Mark as running
             self._is_running = True
 

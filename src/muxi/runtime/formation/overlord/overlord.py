@@ -1004,30 +1004,42 @@ class Overlord:
         # Import Formation's initialization functions dynamically to avoid circular imports
         from ..initialization import initialize_buffer_memory
 
-        # Get the formation instance (it should be accessible via _configured_services)
+        # Get the formation instance
         formation = getattr(self, "_formation_instance", None)
-        if formation:
-            await initialize_buffer_memory(formation, self, buffer_config)
-        else:
-            # Fallback: direct initialization
-            from ..initialization import initialize_buffer_memory as init_buffer
+        if not formation:
+            # If no formation instance, create a minimal one for initialization
+            # This is a fallback scenario that shouldn't normally happen
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"config_type": "buffer_memory"},
+                description="No formation instance found during buffer memory initialization",
+            )
+            # Use None as formation - the initialization function should handle this
+            formation = None
 
-            await init_buffer(self, self, buffer_config)
+        await initialize_buffer_memory(formation, self, buffer_config)
 
     async def _initialize_persistent_memory(self, persistent_config: Dict[str, Any]) -> None:
         """Initialize persistent memory from configuration."""
         # Import Formation's initialization functions dynamically to avoid circular imports
         from ..initialization import initialize_persistent_memory
 
-        # Get the formation instance (it should be accessible via _configured_services)
+        # Get the formation instance
         formation = getattr(self, "_formation_instance", None)
-        if formation:
-            await initialize_persistent_memory(formation, self, persistent_config)
-        else:
-            # Fallback: direct initialization
-            from ..initialization import initialize_persistent_memory as init_persistent
+        if not formation:
+            # If no formation instance, create a minimal one for initialization
+            # This is a fallback scenario that shouldn't normally happen
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"config_type": "persistent_memory"},
+                description="No formation instance found during persistent memory initialization",
+            )
+            # Use None as formation - the initialization function should handle this
+            formation = None
 
-            await init_persistent(self, self, persistent_config)
+        await initialize_persistent_memory(formation, self, persistent_config)
 
     async def get_model_for_capability(
         self, capability: str, agent_id: Optional[str] = None

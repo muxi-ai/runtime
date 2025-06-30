@@ -10,7 +10,7 @@ The initialization order is critical:
 2. Then other services can be initialized
 """
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
 from ..datatypes.memory import BufferMemoryConfig, WorkingMemoryConfig
@@ -640,6 +640,61 @@ async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str,
         raise
 
 
+async def _get_embedding_model(
+    overlord, embedding_model_name: Optional[str] = None
+) -> Optional[Any]:
+    """Get embedding model with fallback to default capability.
+
+    Args:
+        overlord: The overlord instance
+        embedding_model_name: Optional specific model name to use
+
+    Returns:
+        The embedding model instance or None if initialization fails
+    """
+    embedding_model = None
+
+    if embedding_model_name:
+        try:
+            # Create model from specific name override
+            embedding_model = await overlord.create_model(model=embedding_model_name)
+        except Exception as e:
+            # Log the specific model failure
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "model_name": embedding_model_name,
+                    "config_type": "embedding_model",
+                },
+                description=f"Failed to create embedding model '{embedding_model_name}': {str(e)}",
+            )
+            # Fall back to default embedding capability
+            try:
+                embedding_model = await overlord.get_model_for_capability("embedding")
+            except Exception as e2:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e2), "config_type": "embedding_model"},
+                    description=f"Failed to initialize default embedding model: {str(e2)}",
+                )
+    else:
+        # No specific model requested, use default capability
+        try:
+            embedding_model = await overlord.get_model_for_capability("embedding")
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "config_type": "embedding_model"},
+                description=f"Failed to initialize default embedding model: {str(e)}",
+            )
+
+    return embedding_model
+
+
 async def initialize_persistent_memory(
     formation, overlord, persistent_config: Dict[str, Any]
 ) -> None:
@@ -668,22 +723,7 @@ async def initialize_persistent_memory(
                 return
 
         # Get embedding model
-        embedding_model = None
-        if embedding_model_name:
-            try:
-                # Create model from specific name override
-                embedding_model = await overlord.create_model(model=embedding_model_name)
-            except Exception:
-                # Fall back to default embedding capability
-                try:
-                    embedding_model = await overlord.get_model_for_capability("embedding")
-                except Exception as e2:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e2), "config_type": "embedding_model"},
-                        description=f"Failed to initialize embedding model: {str(e2)}",
-                    )
+        embedding_model = await _get_embedding_model(overlord, embedding_model_name)
 
         # Determine multi-user mode - check explicit config first, then infer from database type
         explicit_multi_user = persistent_config.get("multi_user")
@@ -773,16 +813,7 @@ async def initialize_persistent_memory(
 
             # Set the embedding provider after initialization
             if embedding_model:
-                try:
-                    embedding_llm = await overlord.get_model_for_capability("embedding")
-                    sqlite_memory.embedding_provider = embedding_llm
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e), "config_type": "embedding_provider"},
-                        description=f"Failed to set embedding provider: {str(e)}",
-                    )
+                sqlite_memory.embedding_provider = embedding_model
 
     except Exception as e:
         observability.observe(

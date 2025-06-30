@@ -34,7 +34,18 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, desc, func, select
+from sqlalchemy import (
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    desc,
+    func,
+    select,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base
 
@@ -59,12 +70,22 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    external_user_id = Column(String(255), nullable=False, unique=True, index=True)
-    external_user_id_hash = Column(String(64), nullable=False, unique=True, index=True)
+    external_user_id = Column(String(255), nullable=False, index=True)
+    external_user_id_hash = Column(String(64), nullable=False, index=True)
     formation_id = Column(String(255), nullable=False)
     formation_id_hash = Column(String(64), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    # Composite unique constraint to ensure uniqueness within each formation
+    __table_args__ = (
+        UniqueConstraint(
+            "external_user_id_hash", "formation_id_hash", name="uq_user_formation_external_id"
+        ),
+        UniqueConstraint(
+            "external_user_id", "formation_id", name="uq_user_formation_external_id_plain"
+        ),
+    )
 
 
 class Memory(Base):
