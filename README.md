@@ -101,12 +101,19 @@ The MUXI Runtime has undergone a complete architectural transformation:
 
 ## Latest System Enhancements
 
+### Formation ID Multi-Formation Support ✅ **COMPLETED**
+- **Complete Data Isolation**: Added formation-level data isolation to all memory systems (buffer memory, PostgreSQL persistent memory, and SQLite memory)
+- **Database Schema Enhancement**: Added `formation_id` and `formation_id_hash` columns to all database tables with automatic filtering
+- **SHA256 Hashing**: Efficient database indexing with consistent 64-character strings regardless of formation_id length
+- **Automatic Propagation**: Formation_id automatically flows from Formation YAML to all memory services
+- **Production Migration**: Database migration system with backward compatibility and default formation support
+
 ### Service Architecture Revolution ✅ **COMPLETED**
 - **Initialization Transformation**: **Comprehensive service initialization moved from Overlord to Formation** - the key architectural change that centralizes operational lifecycle management
-- **Synchronous Configuration Loading**: Enhanced reliability with improved startup process and streamlined async initialization
-- **Enhanced Service Orchestration**: Formation now handles complete service handoff to Overlord for intelligent decision-making
-- **MCP Server Command Handling**: Improved path quoting for spaces and robust command execution
-- **Synchronous Secret Retrieval**: Added reliable synchronous methods to SecretsManager for better compatibility
+- **Formation-Managed Infrastructure**: Formation now handles all configuration, initialization, and infrastructure setup while Overlord focuses on intelligent decision-making
+- **Clean Architectural Separation**: Clear separation of concerns with Formation managing operations and Overlord managing intelligence
+- **Enhanced Service Orchestration**: Formation creates and configures services, then hands them to Overlord for intelligent coordination
+- **Hot Agent Management**: Add/remove agents during runtime without formation restart capability maintained
 
 ### Enhanced Observability System ✅ **COMPLETED**
 - **Comprehensive Documentation**: Complete observability system documentation with production-ready configuration examples
