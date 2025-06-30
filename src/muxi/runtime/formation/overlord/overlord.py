@@ -1670,7 +1670,7 @@ class Overlord:
         # Run the agent
         return await agent.run(input_text, use_memory=use_memory)
 
-    async def select_agent_for_message(self, message: str) -> str:
+    async def select_agent_for_message(self, message: str, request_id: Optional[str] = None) -> str:
         """
         Select the most appropriate agent for a given message using intelligent routing.
 
@@ -1681,6 +1681,7 @@ class Overlord:
         Args:
             message: The message to route. This is the user's message or query
                 that needs to be directed to an appropriate agent.
+            request_id: Optional request ID for request-scoped agent exclusion
 
         Returns:
             The ID of the selected agent. This will always be a valid agent ID
@@ -1689,7 +1690,7 @@ class Overlord:
         Raises:
             ValueError: If no agents are available in the overlord.
         """
-        return await self.agent_router.select_agent_for_message(message)
+        return await self.agent_router.select_agent_for_message(message, request_id)
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
@@ -3341,7 +3342,7 @@ class Overlord:
                 description="Starting agent selection process",
             )
 
-            agent_name = await self.select_agent_for_message(message)
+            agent_name = await self.select_agent_for_message(message, request_id=request_id)
 
             # Emit agent selection completed event
             observability.observe(
@@ -3385,6 +3386,10 @@ class Overlord:
             # On error, still mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)
             raise
+        finally:
+            # Clean up request-specific exclusions
+            if request_id:
+                await self.active_agent_tracker.cleanup_request(request_id)
 
         # Check if agent response contains clarification request
         agent_clarification = await self._check_agent_clarification_request(result, user_id_int)

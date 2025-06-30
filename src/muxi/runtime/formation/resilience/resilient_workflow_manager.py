@@ -329,14 +329,36 @@ class ResilientWorkflowManager:
             )
 
     async def _execute_fallback_agent_strategy(self, workflow: Any, error_context):
-        """Execute fallback agent strategy."""
-        # This would integrate with the agent selection system
-        # For now, return a placeholder
+        """Execute fallback agent strategy with request-scoped exclusion."""
+
+        failed_agent_id = error_context.context_data.get("agent_id")
+        request_id = error_context.context_data.get("request_id")
+
+        if failed_agent_id and request_id and hasattr(workflow, "overlord"):
+            # Get the overlord's active agent tracker
+            tracker = getattr(workflow.overlord, "active_agent_tracker", None)
+            if tracker:
+                # Mark agent as unavailable for this specific request
+                await tracker.exclude_agent_for_request(request_id, failed_agent_id)
+
+                # Return signal to retry from the beginning
+                return RecoveryResult(
+                    success=True,
+                    strategy_used=RecoveryStrategy.FALLBACK_AGENT,
+                    result=None,
+                    metadata={
+                        "retry_from_start": True,
+                        "excluded_agent": failed_agent_id,
+                        "request_id": request_id,
+                    },
+                )
 
         return RecoveryResult(
             success=False,
             strategy_used=RecoveryStrategy.FALLBACK_AGENT,
-            error=WorkflowException("Fallback agent strategy not implemented"),
+            error=WorkflowException(
+                "Unable to execute fallback agent strategy - missing required context"
+            ),
         )
 
     async def _execute_cached_response_strategy(self, workflow: Any, error_context):

@@ -30,7 +30,7 @@ class AgentRouter:
         self.overlord = overlord
         self._routing_cache: Dict[str, Any] = {}
 
-    async def select_agent_for_message(self, message: str) -> str:
+    async def select_agent_for_message(self, message: str, request_id: Optional[str] = None) -> str:
         """
         Select the most appropriate agent for a given message using intelligent routing.
 
@@ -41,6 +41,8 @@ class AgentRouter:
         Args:
             message: The message to route. This is the user's message or query
                 that needs to be directed to an appropriate agent.
+            request_id: Optional request ID for request-scoped agent exclusion
+                (used by resilience fallback strategies)
 
         Returns:
             The ID of the selected agent. This will always be a valid agent ID
@@ -53,9 +55,9 @@ class AgentRouter:
         if not self.overlord.agents:
             raise NoAvailableAgentsError("No agents available")
 
-        # Get available agents (not marked for deletion)
+        # Get available agents (not marked for deletion or excluded for this request)
         available_agents = await self.overlord.active_agent_tracker.get_available_agents(
-            list(self.overlord.agents.keys())
+            list(self.overlord.agents.keys()), request_id=request_id
         )
 
         if not available_agents:
@@ -110,7 +112,7 @@ class AgentRouter:
                 #  Warning - TODO: add observability
                 # ConversationEvents.OVERLORD_ROUTING_FAILED
                 _ = e  # remove this after implementing observability
-                return await self._select_best_available_agent(message)
+                return await self._select_best_available_agent(message, request_id)
 
         try:
             # Create a prompt for the routing model
@@ -124,7 +126,7 @@ class AgentRouter:
 
             # If parsing failed or the agent doesn't exist, use intelligent fallback
             if selected_agent_id is None or selected_agent_id not in self.overlord.agents:
-                selected_agent_id = await self._select_best_available_agent(message)
+                selected_agent_id = await self._select_best_available_agent(message, request_id)
                 #  Warning - TODO: add observability
                 # ConversationEvents.OVERLORD_ROUTING_COMPLETED
                 # Routing model returned invalid agent. Selected best available agent
@@ -147,7 +149,7 @@ class AgentRouter:
             #  Warning - TODO: add observability
             # ConversationEvents.OVERLORD_ROUTING_FAILED
             _ = e  # remove this after implementing observability
-            return await self._select_best_available_agent(message)
+            return await self._select_best_available_agent(message, request_id)
 
     def _create_routing_prompt(self, message: str) -> str:
         """
@@ -187,7 +189,9 @@ Respond with only the agent ID (the text before the colon), nothing else."""
 
         return prompt
 
-    async def _select_best_available_agent(self, message: str) -> str:
+    async def _select_best_available_agent(
+        self, message: str, request_id: Optional[str] = None
+    ) -> str:
         """
         Select the best available agent using intelligent analysis.
 
@@ -196,12 +200,13 @@ Respond with only the agent ID (the text before the colon), nothing else."""
 
         Args:
             message: The message content to analyze
+            request_id: Optional request ID for request-scoped agent exclusion
 
         Returns:
             The ID of the best available agent
         """
         available_agents = await self.overlord.active_agent_tracker.get_available_agents(
-            list(self.overlord.agents.keys())
+            list(self.overlord.agents.keys()), request_id=request_id
         )
 
         if not available_agents:
