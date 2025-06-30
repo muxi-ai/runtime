@@ -2615,9 +2615,9 @@ class Overlord:
             else:
                 content_size = len(content) if isinstance(content, bytes) else 0
 
-            max_size = 20 * 1024 * 1024  # 20MB
+            max_size = 2 * 1024 * 1024 * 1024  # 2GB
             if content_size > max_size:
-                return f"Audio {attachment.get('filename')} exceeds the maximum file size limit of 20MB"
+                return f"Audio {attachment.get('filename')} exceeds the maximum file size limit of 2GB"
             # Get the transcription model from capability models
             transcription_model_config = None
             if hasattr(self, "_capability_models") and "audio" in self._capability_models:
@@ -2643,6 +2643,7 @@ class Overlord:
                 transcription_llm = LLM(
                     model=model_name,
                     api_key=api_key,
+                    timeout=300.0,  # 5 minutes for large audio processing
                     **transcription_model_config.get("settings", {}),
                 )
 
