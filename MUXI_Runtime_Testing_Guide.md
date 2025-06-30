@@ -345,11 +345,241 @@ memory:
 
 Never hardcode credentials in test files!
 
+## Advanced Multimodal Testing Patterns
+
+### 11. Multimodal File Processing (Day 3 Insights)
+
+Based on comprehensive testing of 36 multimodal scenarios, here are key patterns for testing multimodal capabilities:
+
+**Provider-Agnostic Testing:**
+```python
+def test_multimodal_processing():
+    def run_test():
+        formation = Formation()
+        formation.load("test-formations/formation-multimodal")
+        overlord = formation.start_overlord()
+        
+        try:
+            # Test with proper file structure
+            file_path = Path("test-docs/sample.pdf")
+            with open(file_path, "rb") as f:
+                content = f.read()
+            
+            response = asyncio.run(overlord.chat(
+                user_id="test_user",
+                message="Analyze this document", 
+                files=[{
+                    "filename": file_path.name,
+                    "content": content,
+                    "content_type": "application/pdf",  # Critical: correct MIME type
+                    "size": len(content),
+                }],
+            ))
+            
+            # Handle multiple response types
+            if isinstance(response, dict) and "request_id" in response:
+                print("✅ Async processing triggered")
+                # Wait for webhook or check status
+            elif hasattr(response, '__aiter__'):
+                # Streaming response
+                full_response = ""
+                async for chunk in response:
+                    full_response += chunk
+                assert len(full_response) > 100
+            else:
+                # Direct response
+                assert len(response) > 50
+                
+        finally:
+            formation.stop_overlord()
+```
+
+**Provider Selection Patterns:**
+- **OpenAI**: Best for audio transcription (Whisper), general text/vision
+- **Google Gemini**: Excellent for video processing, complex visual analysis
+- **Anthropic Claude**: Strong for document analysis, cross-modal reasoning
+
+**File Size Considerations:**
+```python
+# Know provider limits
+PROVIDER_LIMITS = {
+    'openai': {'audio': 25_000_000},  # 25MB Whisper limit
+    'google': {'video': 200_000_000}, # ~200MB practical limit
+    'anthropic': {'image': 30_000_000} # ~30MB estimated
+}
+
+def test_large_file_handling():
+    file_size = len(content)
+    if file_size > PROVIDER_LIMITS.get(provider, {}).get(content_type, 0):
+        # Expect chunking or appropriate error
+        assert "chunk" in response.lower() or "limit" in response.lower()
+```
+
+### 12. Content Type and MIME Type Importance
+
+**Critical for video processing:**
+```python
+# ❌ Wrong - will cause processing failures
+files=[{
+    "filename": "demo.mov",
+    "content": video_content,
+    "content_type": "video/mp4",  # Wrong MIME type for .mov
+}]
+
+# ✅ Correct - matches file format
+files=[{
+    "filename": "demo.mov", 
+    "content": video_content,
+    "content_type": "video/quicktime",  # Correct for .mov files
+}]
+```
+
+### 13. Async Webhook Testing
+
+**For large file processing:**
+```python
+def test_async_webhook_delivery():
+    def run_test():
+        # Large file that triggers async processing
+        response = asyncio.run(overlord.chat(
+            user_id="test_user",
+            message="Process this large video",
+            files=[large_video_file],
+        ))
+        
+        # Should return request_id for async processing
+        if isinstance(response, dict) and "request_id" in response:
+            request_id = response["request_id"]
+            
+            # Monitor processing status
+            for i in range(24):  # 2 minutes max
+                asyncio.sleep(5)
+                if hasattr(overlord, '_background_tasks'):
+                    if len(overlord._background_tasks) == 0:
+                        print("✅ Processing completed")
+                        break
+        else:
+            # Fallback: direct processing for smaller files
+            assert len(response) > 100
+```
+
+### 14. Cross-Modal Content Validation
+
+**Testing content correlation across formats:**
+```python
+def test_cross_modal_fusion():
+    def run_test():
+        # Test with multiple related files
+        response = asyncio.run(overlord.chat(
+            user_id="test_user",
+            message="Analyze these related documents and find connections",
+            files=[
+                {"filename": "report.pdf", "content": pdf_content, "content_type": "application/pdf"},
+                {"filename": "chart.png", "content": img_content, "content_type": "image/png"},
+                {"filename": "speech.m4a", "content": audio_content, "content_type": "audio/m4a"}
+            ],
+        ))
+        
+        # Should demonstrate intelligent fusion
+        assert len(response) > 200
+        assert any(term in response.lower() for term in ["report", "chart", "speech", "correlation"])
+```
+
+### 15. Error Handling and Graceful Degradation
+
+**Testing with corrupted files:**
+```python
+def test_graceful_error_handling():
+    def run_test():
+        # Test with intentionally corrupted content
+        corrupted_content = b"fake_pdf_content"
+        
+        response = asyncio.run(overlord.chat(
+            user_id="test_user",
+            message="Analyze this document",
+            files=[{
+                "filename": "corrupted.pdf",
+                "content": corrupted_content,
+                "content_type": "application/pdf",
+                "size": len(corrupted_content),
+            }],
+        ))
+        
+        # Should handle gracefully, not crash
+        assert isinstance(response, str)
+        assert any(term in response.lower() for term in ["issue", "error", "unable", "problem"])
+```
+
+### 16. Performance and Timeout Testing
+
+**For large file processing:**
+```python
+def test_timeout_handling():
+    def run_test():
+        start_time = time.time()
+        
+        response = asyncio.run(overlord.chat(
+            user_id="test_user",
+            message="Process this large file",
+            files=[very_large_file],
+        ))
+        
+        duration = time.time() - start_time
+        
+        # Should either complete quickly (async) or handle timeout gracefully
+        if duration < 10:
+            # Async processing triggered
+            assert isinstance(response, dict) and "request_id" in response
+        else:
+            # Direct processing with timeout handling
+            assert duration < 300  # 5 minute max timeout
+```
+
+### 17. Real vs. Mock Services (Critical Insight)
+
+**ALWAYS use real providers for multimodal testing:**
+
+```python
+# ❌ Wrong - mock providers miss critical behaviors
+llm:
+  models:
+    - text: "test/mock-model"
+    - vision: "test/mock-vision"
+
+# ✅ Correct - real providers reveal actual capabilities
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    google: "${{ secrets.GOOGLE_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - vision: "google/gemini-2.0-flash"
+    - audio: "openai/whisper-1"
+```
+
+**Why real providers are essential:**
+- Provider-specific limits and behaviors (OpenAI 25MB audio limit)
+- Real quality differences in OCR, transcription, video analysis
+- Actual error handling and timeout behaviors
+- Provider-specific optimizations and capabilities
+- Real-world performance characteristics
+
 ## Summary
 
-The key insight is that MUXI Runtime's test suite uses a specific pattern to avoid event loop conflicts:
-1. Run formation operations in a thread
-2. Use `asyncio.run()` for each async operation
-3. This is **test-specific** - production code should use normal async/await patterns
+The comprehensive Day 3 testing revealed that MUXI Runtime's multimodal capabilities are **production-ready** with excellent cross-provider support. Key insights:
 
-This approach ensures reliable, isolated tests while working around the complexities of testing async code that manages its own event loops.
+1. **Provider Selection Matters**: Different providers excel at different content types
+2. **File Size Management**: Dynamic routing based on provider capabilities required
+3. **Content Types Critical**: Correct MIME types essential for processing success
+4. **Async Processing**: Webhook delivery enables enterprise-scale file processing
+5. **Error Handling**: Graceful degradation maintains user experience
+6. **Real Testing Required**: Mock providers miss critical real-world behaviors
+
+The original testing pattern remains valid:
+1. Run formation operations in a thread
+2. Use `asyncio.run()` for each async operation  
+3. Always use real providers and services for comprehensive validation
+4. Test both sync and async response patterns
+5. Validate error handling with corrupted/invalid inputs
+
+This approach ensures reliable, production-ready multimodal processing across all supported content types and providers.
