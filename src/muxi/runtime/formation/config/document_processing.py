@@ -58,7 +58,7 @@ class DocumentProcessingConfig:
         # nlp.setdefault("sentence_transformer", "all-MiniLM-L6-v2")
 
         # File processing defaults
-        self.config.setdefault("max_size_mb", 64)
+        self.config.setdefault("max_size_mb", 20)
         self.config.setdefault("cache_ttl_seconds", 3600)
 
     def is_enabled(self) -> bool:
