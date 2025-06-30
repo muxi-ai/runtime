@@ -121,6 +121,7 @@ async def test_shorttermemory_read_verification():
         print("1. Creating ShortTermMemory with predictable embeddings...")
         predictable_llm = PredictableLLM()
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
             dimension=1536,

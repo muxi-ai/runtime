@@ -34,6 +34,7 @@ async def test_no_auth_faissx_detailed():
     try:
         print("\n1. Creating ShortTermMemory with remote mode...")
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=3,
             buffer_multiplier=2,
             dimension=1536,
@@ -151,6 +152,7 @@ async def test_local_vs_remote_comparison():
         # Create local buffer
         print("\n1. Creating LOCAL buffer...")
         local_buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=3, buffer_multiplier=2, dimension=1536,
             model=mock_llm_local, mode="local"
         )
@@ -158,6 +160,7 @@ async def test_local_vs_remote_comparison():
         # Create remote buffer  
         print("2. Creating REMOTE buffer...")
         remote_buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=3, buffer_multiplier=2, dimension=1536,
             model=mock_llm_remote, mode="remote",
             remote={"url": "tcp://localhost:45678"}

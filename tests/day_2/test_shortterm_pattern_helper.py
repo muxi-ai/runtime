@@ -123,6 +123,7 @@ def test_with_actual_shorttermemory():
         
         print("1. Creating ShortTermMemory with remote mode...")
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=3,
             buffer_multiplier=2,
             dimension=1536,

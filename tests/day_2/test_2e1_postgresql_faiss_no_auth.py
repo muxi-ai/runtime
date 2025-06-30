@@ -176,6 +176,7 @@ async def test_shorttermemory_with_auth():
         
         print("1. Creating ShortTermMemory with authenticated remote...")
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=3,
             buffer_multiplier=2,
             dimension=1536,

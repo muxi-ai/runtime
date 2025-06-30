@@ -29,6 +29,7 @@ async def main():
     # Create LongTermMemory
     print("Creating LongTermMemory instance...")
     ltm = LongTermMemory(
+        formation_id="test_formation",
         db_manager=db_manager,
         embedding_model=MockLLM()
     )

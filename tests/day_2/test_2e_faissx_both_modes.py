@@ -68,6 +68,7 @@ async def test_faissx_no_auth_with_tenant():
         # Test with ShortTermMemory
         print("\n5. Testing ShortTermMemory integration...")
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
             dimension=1536,
@@ -156,6 +157,7 @@ async def test_faissx_with_full_auth():
         # Test with ShortTermMemory
         print("\n5. Testing ShortTermMemory with full auth...")
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
             dimension=1536,

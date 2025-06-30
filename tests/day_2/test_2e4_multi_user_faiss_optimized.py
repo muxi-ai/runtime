@@ -77,6 +77,7 @@ async def test_optimized_multi_user_search():
     try:
         # Create buffer with optimized settings
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=30,  # Larger buffer for better results
             buffer_multiplier=2,
             dimension=1536,  # Dimension for text-embedding-3-small
@@ -222,6 +223,7 @@ async def test_cross_query_isolation():
     
     try:
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=20,
             buffer_multiplier=2,
             dimension=1536,

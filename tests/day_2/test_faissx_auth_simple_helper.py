@@ -35,6 +35,7 @@ async def test_faissx_auth_connection():
     try:
         # Create short-term memory with auth config
         memory = ShortTermMemory(
+            formation_id="test_formation",
             max_size=buffer_config.size,
             buffer_multiplier=buffer_config.multiplier,
             mode=buffer_config.mode,

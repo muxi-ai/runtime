@@ -38,6 +38,7 @@ async def test_fifo_memory_management():
     
     # Create buffer with small memory limit to trigger FIFO
     buffer = ShortTermMemory(
+        formation_id="test_formation",
         max_size=5,
         buffer_multiplier=4,  # Total capacity: 20
         dimension=1536,
@@ -161,6 +162,7 @@ async def test_smart_buffer_vector_search():
     # Create buffer with vector search
     model = MockLLM()
     buffer = ShortTermMemory(
+        formation_id="test_formation",
         max_size=10,
         buffer_multiplier=5,
         dimension=1536,

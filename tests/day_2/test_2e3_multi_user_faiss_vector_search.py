@@ -44,6 +44,7 @@ async def test_multi_user_faissx():
     try:
         # Create buffer for multi-user testing
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=10,
             buffer_multiplier=3,
             dimension=1536,
@@ -159,6 +160,7 @@ async def test_tenant_isolation():
     try:
         # Create buffers for different tenants
         tenant1_buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
             dimension=1536,
@@ -171,6 +173,7 @@ async def test_tenant_isolation():
         )
         
         tenant2_buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
             dimension=1536,
@@ -292,6 +295,7 @@ async def test_user_search_relevance():
     try:
         # Create buffer for relevance testing
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=20,
             buffer_multiplier=2,
             dimension=1536,

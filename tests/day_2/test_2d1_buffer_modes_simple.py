@@ -20,6 +20,7 @@ async def test_local_buffer():
     
     # Create local buffer
     buffer = ShortTermMemory(
+        formation_id="test_formation",
         max_size=10,
         buffer_multiplier=5,
         dimension=1536,
@@ -65,6 +66,7 @@ async def test_remote_buffer():
     try:
         # Create remote buffer
         buffer = ShortTermMemory(
+            formation_id="test_formation",
             max_size=10,
             buffer_multiplier=5,
             dimension=1536,

@@ -28,6 +28,7 @@ async def test_builtin_normalization():
     
     # Create buffer - it will normalize automatically
     buffer = ShortTermMemory(
+        formation_id="test_formation",
         max_size=10,
         buffer_multiplier=2,
         dimension=1536,

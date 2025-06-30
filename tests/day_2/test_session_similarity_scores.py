@@ -27,6 +27,7 @@ async def test_similarity_scores_with_session():
     # Create model and buffer
     model = MockLLM()
     buffer = ShortTermMemory(
+        formation_id="test_formation",
         max_size=10,
         buffer_multiplier=2,
         model=model,

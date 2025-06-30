@@ -21,6 +21,7 @@ def test_local_buffer_configuration():
     try:
         # Test direct ShortTermMemory creation with local mode
         buffer_local = ShortTermMemory(
+            formation_id="test_formation",
             max_size=10,
             buffer_multiplier=5,
             dimension=1536,
@@ -81,6 +82,7 @@ def test_remote_buffer_configuration():
         }
         
         buffer_remote = ShortTermMemory(
+            formation_id="test_formation",
             max_size=10,
             buffer_multiplier=5,
             dimension=1536,
