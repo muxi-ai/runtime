@@ -51,7 +51,12 @@ class ScheduledJobAudit(Base, AsyncModelMixin):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert audit entry to dictionary."""
+        """
+        Return a dictionary representation of the audit entry, parsing the `changes` field as JSON if possible.
+        
+        Returns:
+            dict: Dictionary containing audit entry fields, with `changes` parsed as a dictionary if valid JSON, otherwise as a string.
+        """
         result = {
             "id": self.id,
             "job_id": self.job_id,

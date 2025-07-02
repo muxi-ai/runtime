@@ -56,7 +56,11 @@ class ObservabilityCapture:
 
 
 def test_3f1_real_pdf_formula():
-    """Test real PDF processing with formula extraction."""
+    """
+    Test the MUXI system's ability to process a real PDF file and extract mathematical formula explanations.
+    
+    This function loads a sample PDF, sends it to the MUXI overlord for analysis with a prompt requesting formula explanation, and prints the results. It captures observability events during the process, checks for the presence of formula-related content in the response, and reports success or failure accordingly. If the PDF file is missing or an exception occurs, appropriate error messages are displayed.
+    """
 
     print("I am testing real PDF content extraction with formula analysis")
     print("This test validates that MUXI can process actual PDF files and extract")

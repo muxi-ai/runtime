@@ -6,7 +6,15 @@ import time
 from pathlib import Path
 
 def count_tests(day):
-    """Count test files for a given day."""
+    """
+    Count the number of test files for a specified day, excluding helper files.
+    
+    Parameters:
+        day (int): The day number whose test files should be counted.
+    
+    Returns:
+        int: The number of test files matching 'test_*.py' in 'tests/day_<day>', excluding files with 'helper' in their names.
+    """
     test_dir = Path(f"tests/day_{day}")
     test_files = list(test_dir.glob("test_*.py"))
     # Exclude helper files
@@ -14,6 +22,11 @@ def count_tests(day):
     return len(test_files)
 
 def main():
+    """
+    Print a summary of test file counts and names for Days 1 to 3, comparing actual test files to the expected test plan.
+    
+    Displays the number and names of test files found in each day's test directory (excluding helper files), then prints the expected and actual test counts for each day.
+    """
     print("MUXI Runtime Test Status Check")
     print("=" * 50)
     

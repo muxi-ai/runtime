@@ -15,7 +15,15 @@ from tests.day_3.test_utils import get_response_universal, assert_response_valid
 
 
 def get_response(coro):
-    """Helper to get response from async chat"""
+    """
+    Synchronously retrieves the result from an asynchronous chat coroutine.
+    
+    Parameters:
+        coro: An awaitable representing the asynchronous chat operation.
+    
+    Returns:
+        The result produced by the asynchronous chat coroutine.
+    """
     return get_response_universal(coro)
 
 
@@ -42,7 +50,11 @@ def overlord(formation):
 
 
 def test_pdf_comparison(overlord):
-    """Test conceptual understanding of PDF document comparison"""
+    """
+    Tests the system's ability to conceptually analyze and compare two PDF reports.
+    
+    Sends a prompt about comparing Q3 and Q4 PDF reports, then validates that the response demonstrates understanding of document comparison by checking for sufficient length and the presence of key comparison concepts.
+    """
     print("\n=== Test 3A3: PDF Document Comparison ===")
     
     # Test understanding of document comparison
@@ -73,7 +85,11 @@ def test_pdf_comparison(overlord):
 
 
 def test_spreadsheet_data_comparison(overlord):
-    """Test conceptual understanding of spreadsheet data comparison"""
+    """
+    Validates the system's ability to conceptually compare data between Excel spreadsheets and CSV files.
+    
+    Sends a prompt about comparing sales figures in different spreadsheet formats, prints the response, and checks for sufficient length and presence of key data comparison terms. If the response is synchronous, asserts that multiple relevant concepts are mentioned.
+    """
     print("\n=== Test 3A3: Spreadsheet Data Comparison ===")
     
     # Test understanding of data comparison
@@ -103,7 +119,11 @@ def test_spreadsheet_data_comparison(overlord):
 
 
 def test_document_format_differences(overlord):
-    """Test understanding of different document format capabilities"""
+    """
+    Tests the system's ability to explain key differences in analyzing Word documents, PowerPoint presentations, and PDF files.
+    
+    Sends a prompt about document format differences to the overlord, validates the response for sufficient length and presence of relevant terms, and asserts that multiple format-specific concepts are addressed in synchronous responses.
+    """
     print("\n=== Test 3A3: Document Format Differences ===")
     
     # Test understanding of format differences
@@ -134,7 +154,11 @@ def test_document_format_differences(overlord):
 
 
 def test_multi_document_synthesis(overlord):
-    """Test ability to synthesize information from multiple document descriptions"""
+    """
+    Tests whether the system can synthesize and integrate information from multiple described documents into a coherent business narrative.
+    
+    Sends descriptions of a financial report, market analysis, and strategic plan to the overlord, then requests an overall synthesis. Asserts that the response references key aspects from each document type.
+    """
     print("\n=== Test 3A3: Multi-Document Synthesis ===")
     
     # First, describe multiple documents

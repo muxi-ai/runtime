@@ -11,7 +11,11 @@ from src.muxi.runtime.formation.formation import Formation
 
 
 def handle_response(response):
-    """Universal response handler for overlord.chat() responses"""
+    """
+    Processes and normalizes various response types from overlord.chat() calls into a string.
+    
+    Handles string, dictionary, object, and asynchronous streaming responses, extracting relevant content or error messages as appropriate. For streaming responses, collects all output chunks and concatenates them into a single string.
+    """
     if isinstance(response, str):
         return response
     elif isinstance(response, dict):
@@ -42,17 +46,35 @@ def handle_response(response):
 
 
 async def collect_stream(stream):
-    """Collect all chunks from an async generator"""
+    """
+    Asynchronously collects and concatenates all chunks from an async generator stream.
+    
+    Parameters:
+        stream: An asynchronous generator yielding string chunks.
+    
+    Returns:
+        str: The concatenated string of all collected chunks.
+    """
     chunks = []
     async for chunk in stream:
         chunks.append(chunk)
     return ''.join(chunks)
 
 async def test_local_buffer_with_real_llm():
-    """Test local buffer memory with real LLM"""
+    """
+    Tests the local buffer memory mode with a real LLM, verifying context retention and vector search capabilities.
+    
+    Simulates a user session by adding context, querying for remembered information, and performing semantic search on previously provided content. Returns a dictionary indicating test status and whether context retention and vector search succeeded.
+    """
     print("\n=== Testing Local Buffer with Real LLM ===")
 
     def run_test():
+        """
+        Runs a test to verify local buffer memory mode with a real LLM, checking context retention and vector search capabilities.
+        
+        Returns:
+            dict: A dictionary indicating test status and boolean results for context retention and vector search.
+        """
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-local-real.yaml")
         overlord = formation.start_overlord()
@@ -116,10 +138,22 @@ async def test_local_buffer_with_real_llm():
         return future.result()
 
 async def test_remote_buffer_with_real_llm():
-    """Test remote buffer memory with real LLM"""
+    """
+    Test the remote buffer memory mode using a real large language model (LLM).
+    
+    This function loads a remote buffer formation, starts an overlord instance, and verifies that user context and technical content are correctly retained and retrievable via chat interactions. It checks for context retention (user name, NLP, and computer vision expertise) and validates remote vector search by querying for previously mentioned technical tools. Results are returned as a dictionary indicating test status and success of context retention and remote search.
+     
+    Returns:
+        dict: Contains test status and boolean flags for context retention and remote search success.
+    """
     print("\n=== Testing Remote Buffer with Real LLM ===")
 
     def run_test():
+        """
+        Runs a test to verify remote buffer memory and vector search functionality with a real LLM.
+        
+        The test checks if user context is retained and recalled correctly, and if technical content can be retrieved via vector search. Returns a dictionary indicating test status and results for context retention and remote search.
+        """
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-remote-real.yaml")
         overlord = formation.start_overlord()
@@ -183,7 +217,12 @@ async def test_remote_buffer_with_real_llm():
         return future.result()
 
 async def test_mode_comparison():
-    """Compare local vs remote buffer behavior"""
+    """
+    Compares the behavioral differences between local and remote buffer memory modes.
+    
+    Returns:
+        dict: A dictionary listing key features of local and remote buffer modes.
+    """
     print("\n=== Comparing Buffer Modes ===")
 
     # Test scenario: Same content in both modes
@@ -210,7 +249,12 @@ async def test_mode_comparison():
     }
 
 async def main():
-    """Run all buffer mode tests"""
+    """
+    Runs all buffer mode tests sequentially, prints a summary of results, and returns a dictionary with detailed test outcomes.
+    
+    Returns:
+        dict: Contains results for local and remote buffer tests, mode comparison, and overall pass status.
+    """
     print("🚀 Testing Buffer Memory Modes with Real LLMs")
     print("=" * 60)
 

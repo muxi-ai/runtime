@@ -103,11 +103,22 @@ class DocumentProcessingConfig:
         return self.config["extraction"]["nlp"].get("sentence_transformer", "all-MiniLM-L6-v2")
 
     def get_max_file_size_bytes(self) -> int:
-        """Get maximum file size in bytes."""
+        """
+        Return the maximum allowed file size for document processing in bytes.
+        """
         return self.get_max_file_size_mb() * 1024 * 1024
 
     def get_settings(self) -> Dict[str, Any]:
-        """Get all document processing settings."""
+        """
+        Return a dictionary summarizing the current document processing configuration.
+        
+        Returns:
+            A dictionary containing:
+                - enabled (bool): Whether document processing is enabled.
+                - extraction (dict): Extraction-related configuration settings.
+                - max_size_mb (int): Maximum allowed file size in megabytes.
+                - cache_ttl_seconds (int): Cache time-to-live in seconds.
+        """
         return {
             "enabled": self.is_enabled(),
             "extraction": self.config.get("extraction", {}),

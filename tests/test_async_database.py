@@ -19,7 +19,17 @@ class MockEmbeddingModel:
     """Mock embedding model for testing."""
 
     async def embed(self, text: str) -> List[float]:
-        """Return a simple embedding based on text length."""
+        """
+        Asynchronously generates a fixed-size embedding vector for the input text.
+        
+        The embedding is a 1536-dimensional list of floats, where each dimension corresponds to the normalized ordinal value of a character in the input text (up to 1536 characters). Remaining dimensions are filled with zeros.
+        
+        Parameters:
+            text (str): The input text to embed.
+        
+        Returns:
+            List[float]: A 1536-dimensional embedding vector representing the input text.
+        """
         # Simple embedding: normalize text length to 1536 dimensions
         embedding = [0.0] * 1536
         for i, char in enumerate(text[:1536]):
@@ -29,7 +39,11 @@ class MockEmbeddingModel:
 
 @pytest.mark.asyncio
 async def test_async_database_operations():
-    """Test basic async database operations."""
+    """
+    Test asynchronous creation and retrieval of a user record in a temporary SQLite database.
+    
+    Verifies that a user can be created and queried using async database operations, ensuring correct data persistence and retrieval.
+    """
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
@@ -68,7 +82,11 @@ async def test_async_database_operations():
 
 @pytest.mark.asyncio
 async def test_async_memory_operations():
-    """Test async memory storage and retrieval."""
+    """
+    Test asynchronous memory storage and retrieval using the LongTermMemory service.
+    
+    This test adds multiple memory entries asynchronously and verifies that search operations return the expected results, including correct result count and required fields. It also prints the duration of async operations and asserts that asynchronous operations are faster than synchronous ones for concurrent tasks.
+    """
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
@@ -128,7 +146,11 @@ async def test_async_memory_operations():
 
 @pytest.mark.asyncio
 async def test_async_vs_sync_performance():
-    """Compare performance of async vs sync operations."""
+    """
+    Measures and compares the performance of synchronous and asynchronous database operations for creating multiple user records.
+    
+    The test creates 50 user records synchronously and asynchronously in a temporary SQLite database, prints the durations and speedup, and asserts that asynchronous operations are not significantly slower than synchronous ones.
+    """
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
@@ -183,7 +205,11 @@ async def test_async_vs_sync_performance():
 
 @pytest.mark.asyncio
 async def test_async_model_mixin_methods():
-    """Test AsyncModelMixin helper methods."""
+    """
+    Test the asynchronous CRUD helper methods provided by AsyncModelMixin on the User model.
+    
+    This test verifies that the async `create`, `get`, `update`, `get_all`, and `delete` methods function correctly within an async database session, ensuring proper creation, retrieval, updating, listing, and deletion of User records.
+    """
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
