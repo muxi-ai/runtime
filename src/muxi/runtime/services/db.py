@@ -135,26 +135,15 @@ class DatabaseManager:
         self.connection_string = self._resolve_connection_string(connection_string)
         self.database_type = self._detect_database_type(self.connection_string)
 
-        # Create both sync and async engines for backward compatibility
+        # Create sync engine first
         self.engine = self._create_engine()
-        self.async_engine = self._create_async_engine()
-
-        # Create both sync and async session factories
         self.Session = sessionmaker(bind=self.engine)
-        self.AsyncSession = async_sessionmaker(bind=self.async_engine, expire_on_commit=False)
+        
+        # Lazy initialization for async engine to avoid import errors
+        self._async_engine = None
+        self._async_session_factory = None
 
-        # Initialize pgvector extension for async engine if PostgreSQL
-        if self.database_type == "postgresql":
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.create_task(self._init_async_pgvector())
-                else:
-                    loop.run_until_complete(self._init_async_pgvector())
-            except Exception:
-                # Non-critical failure, extension might already exist
-                pass
+        # Note: pgvector extension for async engine will be initialized on first use
 
         observability.observe(
             event_type=observability.SystemEvents.DATABASE_MANAGER_INITIALIZED,
@@ -317,6 +306,22 @@ class DatabaseManager:
         
         return self.connection_string
     
+    @property
+    def async_engine(self):
+        """Lazy initialization of async engine."""
+        if self._async_engine is None:
+            self._async_engine = self._create_async_engine()
+        return self._async_engine
+    
+    @property
+    def AsyncSession(self):
+        """Lazy initialization of async session factory."""
+        if self._async_session_factory is None:
+            self._async_session_factory = async_sessionmaker(
+                bind=self.async_engine, expire_on_commit=False
+            )
+        return self._async_session_factory
+    
     async def _init_async_pgvector(self):
         """Initialize pgvector extension for async PostgreSQL connections."""
         try:
@@ -429,8 +434,8 @@ class DatabaseManager:
 
     async def close_async(self) -> None:
         """Close the async database connection and cleanup resources."""
-        if hasattr(self, "async_engine"):
-            await self.async_engine.dispose()
+        if self._async_engine is not None:
+            await self._async_engine.dispose()
             observability.observe(
                 event_type=observability.SystemEvents.DATABASE_MANAGER_CLOSED,
                 level=observability.EventLevel.INFO,
@@ -442,7 +447,7 @@ class DatabaseManager:
         """Close the database connection and cleanup resources."""
         if hasattr(self, "engine"):
             self.engine.dispose()
-        if hasattr(self, "async_engine"):
+        if self._async_engine is not None:
             # Note: This is synchronous disposal of async engine
             # In production, prefer using close_async() when possible
             import asyncio
@@ -450,10 +455,10 @@ class DatabaseManager:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     # Schedule async disposal if event loop is running
-                    asyncio.create_task(self.async_engine.dispose())
+                    asyncio.create_task(self._async_engine.dispose())
                 else:
                     # Run disposal synchronously if no event loop
-                    loop.run_until_complete(self.async_engine.dispose())
+                    loop.run_until_complete(self._async_engine.dispose())
             except Exception:
                 # Fallback to sync disposal
                 pass

@@ -37,6 +37,14 @@ async def test_async_database_operations():
     # Initialize database manager
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
     
+    # Create tables
+    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    db_manager.create_tables(MemoryBase.metadata)
+    
+    # Create tables
+    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    db_manager.create_tables(MemoryBase.metadata)
+    
     # Test async session creation
     async with db_manager.get_async_session() as session:
         # Create a test user
@@ -71,6 +79,14 @@ async def test_async_memory_operations():
     
     # Initialize components
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
+    
+    # Create tables
+    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    db_manager.create_tables(MemoryBase.metadata)
+    
+    # Create tables
+    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    db_manager.create_tables(MemoryBase.metadata)
     embedding_model = MockEmbeddingModel()
     memory = LongTermMemory(
         db_manager=db_manager,
@@ -122,6 +138,10 @@ async def test_async_vs_sync_performance():
     
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
     
+    # Create tables
+    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    db_manager.create_tables(MemoryBase.metadata)
+    
     # Test sync operations
     sync_start = time.time()
     with db_manager.get_session() as session:
@@ -172,6 +192,10 @@ async def test_async_model_mixin_methods():
         db_path = tmp.name
     
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
+    
+    # Create tables
+    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    db_manager.create_tables(MemoryBase.metadata)
     
     async with db_manager.get_async_session() as session:
         # Test create
