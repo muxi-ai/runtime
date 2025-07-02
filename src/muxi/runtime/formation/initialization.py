@@ -355,24 +355,21 @@ def initialize_document_processing(formation) -> None:
 
     try:
         # Create document processing configuration
-        config = DocumentProcessingConfig(**doc_config)
+        # Pass the llm_config instead of document_processing_config
+        llm_config = formation._llm_config if hasattr(formation, "_llm_config") else {}
+        config = DocumentProcessingConfig(llm_config)
 
         # Initialize document chunk manager
-        formation._document_chunk_manager = DocumentChunkManager(
-            chunk_size=config.chunk_size,
-            chunk_overlap=config.chunk_overlap,
-            max_chunks_per_doc=config.max_chunks_per_doc,
-            storage_backend=config.storage_backend,
-        )
+        formation._document_chunk_manager = DocumentChunkManager(document_config=config)
 
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
             data={
                 "service": "document_processing",
-                "chunk_size": config.chunk_size,
-                "chunk_overlap": config.chunk_overlap,
-                "backend": config.storage_backend,
+                "chunk_size": config.get_chunk_size(),
+                "chunk_overlap": config.get_chunk_overlap(),
+                "enabled": config.is_enabled(),
             },
             description="Document processing initialized",
         )
@@ -394,10 +391,8 @@ def initialize_background_services(formation) -> None:
 
         formation._cache_manager = IntelligentCacheManager(
             enable_analytics=True,
-            ttl_seconds=3600,
-            max_cache_size_mb=100,
-            eviction_policy="lru",
-            formation_id=formation.formation_id,
+            default_ttl_seconds=3600,
+            l3_max_memory_mb=100,
         )
         # Cache manager will be started later if needed
 
@@ -505,6 +500,8 @@ def initialize_document_processing_config(formation) -> None:
 
         # Initialize DocumentChunkManager with the configuration
         formation._document_chunker = DocumentChunkManager(formation._document_processing_config)
+        # Also set as _document_chunk_manager for backwards compatibility
+        formation._document_chunk_manager = formation._document_chunker
 
     except Exception as e:
         observability.observe(

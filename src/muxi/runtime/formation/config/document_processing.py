@@ -1,6 +1,5 @@
 """Document processing configuration for MUXI runtime."""
 
-
 from typing import Any, Dict, List, Tuple
 
 
@@ -106,3 +105,12 @@ class DocumentProcessingConfig:
     def get_max_file_size_bytes(self) -> int:
         """Get maximum file size in bytes."""
         return self.get_max_file_size_mb() * 1024 * 1024
+
+    def get_settings(self) -> Dict[str, Any]:
+        """Get all document processing settings."""
+        return {
+            "enabled": self.is_enabled(),
+            "extraction": self.config.get("extraction", {}),
+            "max_size_mb": self.get_max_file_size_mb(),
+            "cache_ttl_seconds": self.get_cache_ttl_seconds(),
+        }
