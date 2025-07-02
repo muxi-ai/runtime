@@ -17,7 +17,7 @@ from muxi.runtime.services.memory.long_term import LongTermMemory, User, Memory,
 
 class MockEmbeddingModel:
     """Mock embedding model for testing."""
-    
+
     async def embed(self, text: str) -> List[float]:
         """Return a simple embedding based on text length."""
         # Simple embedding: normalize text length to 1536 dimensions
@@ -33,18 +33,14 @@ async def test_async_database_operations():
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
-    
+
     # Initialize database manager
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
-    
+
     # Create tables
     from muxi.runtime.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
-    
-    # Create tables
-    from muxi.runtime.services.memory.long_term import Base as MemoryBase
-    db_manager.create_tables(MemoryBase.metadata)
-    
+
     # Test async session creation
     async with db_manager.get_async_session() as session:
         # Create a test user
@@ -56,7 +52,7 @@ async def test_async_database_operations():
             formation_id_hash="formation_hash"
         )
         assert user.id is not None
-        
+
         # Query the user
         found_user = await User.get(
             session,
@@ -65,7 +61,7 @@ async def test_async_database_operations():
         )
         assert found_user is not None
         assert found_user.id == user.id
-    
+
     # Cleanup
     db_manager.close()
 
@@ -76,14 +72,14 @@ async def test_async_memory_operations():
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
-    
+
     # Initialize components
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
-    
+
     # Create tables
     from muxi.runtime.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
-    
+
     # Create tables
     from muxi.runtime.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
@@ -93,10 +89,10 @@ async def test_async_memory_operations():
         formation_id="test_formation",
         embedding_model=embedding_model
     )
-    
+
     # Test async memory operations
     start_time = time.time()
-    
+
     # Add memories
     memory_ids = []
     for i in range(10):
@@ -106,28 +102,29 @@ async def test_async_memory_operations():
             external_user_id="test_user"
         )
         memory_ids.append(memory_id)
-    
+
     # Search memories
     results = await memory.search(
         query="test async database",
         limit=5,
         external_user_id="test_user"
     )
-    
+
     end_time = time.time()
     duration = end_time - start_time
-    
+
     # Verify results
     assert len(results) > 0
     assert len(results) <= 5
     assert all('text' in result for result in results)
     assert all('score' in result for result in results)
-    
-    print(f"Async operations completed in {duration:.3f} seconds")
-    
-    # Cleanup
-    await db_manager.close_async()
 
+    print(f"Async operations completed in {duration:.3f} seconds")
+
+    # Cleanup
+    # Async should be faster for concurrent operations
+    # Expecting at least some performance improvement for concurrent operations
+    assert async_duration < sync_duration, f"Async operations should be faster than sync for concurrent operations. Async: {async_duration:.3f}s, Sync: {sync_duration:.3f}s"
 
 @pytest.mark.asyncio
 async def test_async_vs_sync_performance():
@@ -135,13 +132,13 @@ async def test_async_vs_sync_performance():
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
-    
+
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
-    
+
     # Create tables
     from muxi.runtime.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
-    
+
     # Test sync operations
     sync_start = time.time()
     with db_manager.get_session() as session:
@@ -155,7 +152,7 @@ async def test_async_vs_sync_performance():
             session.add(user)
         session.commit()
     sync_duration = time.time() - sync_start
-    
+
     # Test async operations
     async_start = time.time()
     async with db_manager.get_async_session() as session:
@@ -172,14 +169,14 @@ async def test_async_vs_sync_performance():
             tasks.append(task)
         await asyncio.gather(*tasks)
     async_duration = time.time() - async_start
-    
+
     print(f"Sync operations: {sync_duration:.3f}s")
     print(f"Async operations: {async_duration:.3f}s")
     print(f"Speedup: {sync_duration/async_duration:.2f}x")
-    
+
     # Async should be faster for concurrent operations
     assert async_duration < sync_duration * 1.5  # Allow some overhead
-    
+
     # Cleanup
     await db_manager.close_async()
 
@@ -190,13 +187,13 @@ async def test_async_model_mixin_methods():
     # Create temporary SQLite database
     with tempfile.NamedTemporaryFile(suffix='.db', delete=False) as tmp:
         db_path = tmp.name
-    
+
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
-    
+
     # Create tables
     from muxi.runtime.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
-    
+
     async with db_manager.get_async_session() as session:
         # Test create
         user = await User.create(
@@ -206,30 +203,30 @@ async def test_async_model_mixin_methods():
             formation_id="test_formation",
             formation_id_hash="formation_hash"
         )
-        
+
         # Test get
         found = await User.get(session, id=user.id)
         assert found is not None
         assert found.external_user_id == "mixin_test"
-        
+
         # Test update
         await found.update(session, external_user_id="updated_mixin_test")
-        
+
         # Verify update
         updated = await User.get(session, id=user.id)
         assert updated.external_user_id == "updated_mixin_test"
-        
+
         # Test get_all
         all_users = await User.get_all(session, formation_id="test_formation")
         assert len(all_users) >= 1
-        
+
         # Test delete
         await updated.delete(session)
-        
+
         # Verify deletion
         deleted = await User.get(session, id=user.id)
         assert deleted is None
-    
+
     # Cleanup
     await db_manager.close_async()
 

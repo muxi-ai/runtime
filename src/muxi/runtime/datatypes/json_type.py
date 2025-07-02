@@ -37,23 +37,26 @@ class JSONType(TypeDecorator):
         """Convert Python object to database format."""
         if value is None:
             return None
-        
+
         # For PostgreSQL, let the native JSON type handle it
         if dialect.name == "postgresql":
             return value
-        
+
         # For SQLite, serialize to JSON string
-        return json.dumps(value)
+        try:
+            return json.dumps(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"Cannot serialize value to JSON: {value}") from e
 
     def process_result_value(self, value, dialect):
         """Convert database format to Python object."""
         if value is None:
             return None
-        
+
         # For PostgreSQL, the value is already deserialized
         if dialect.name == "postgresql":
             return value
-            
+
         # For SQLite, deserialize from JSON string
         if isinstance(value, (list, dict)):
             # Already a Python object

@@ -34,22 +34,22 @@ Base = declarative_base()
 class AsyncModelMixin:
     """
     Mixin class to add common async query helpers to SQLAlchemy models.
-    
+
     Usage:
         class MyModel(Base, AsyncModelMixin):
             __tablename__ = 'my_table'
             ...
     """
-    
+
     @classmethod
     async def get(cls, session: AsyncSession, **kwargs):
         """
         Get a single instance by keyword arguments.
-        
+
         Args:
             session: Async database session
             **kwargs: Filter criteria
-            
+
         Returns:
             Model instance or None
         """
@@ -57,16 +57,16 @@ class AsyncModelMixin:
         stmt = select(cls).filter_by(**kwargs)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
-    
+
     @classmethod
     async def get_all(cls, session: AsyncSession, **kwargs):
         """
         Get all instances matching the criteria.
-        
+
         Args:
             session: Async database session
             **kwargs: Filter criteria
-            
+
         Returns:
             List of model instances
         """
@@ -74,16 +74,16 @@ class AsyncModelMixin:
         stmt = select(cls).filter_by(**kwargs)
         result = await session.execute(stmt)
         return result.scalars().all()
-    
+
     @classmethod
     async def create(cls, session: AsyncSession, **kwargs):
         """
         Create a new instance.
-        
+
         Args:
             session: Async database session
             **kwargs: Model attributes
-            
+
         Returns:
             Created model instance
         """
@@ -91,11 +91,11 @@ class AsyncModelMixin:
         session.add(instance)
         await session.flush()  # Flush to get ID without committing
         return instance
-    
+
     async def update(self, session: AsyncSession, **kwargs):
         """
         Update instance attributes.
-        
+
         Args:
             session: Async database session
             **kwargs: Attributes to update
@@ -104,11 +104,11 @@ class AsyncModelMixin:
             if hasattr(self, key):
                 setattr(self, key, value)
         await session.flush()
-    
+
     async def delete(self, session: AsyncSession):
         """
         Delete this instance.
-        
+
         Args:
             session: Async database session
         """
@@ -138,10 +138,13 @@ class DatabaseManager:
         # Create sync engine first
         self.engine = self._create_engine()
         self.Session = sessionmaker(bind=self.engine)
-        
+
         # Lazy initialization for async engine to avoid import errors
         self._async_engine = None
         self._async_session_factory = None
+
+        # Keep track of cleanup tasks to avoid warnings about unawaited tasks
+        self._cleanup_tasks = []
 
         # Note: pgvector extension for async engine will be initialized on first use
 
@@ -265,7 +268,7 @@ class DatabaseManager:
         """
         # Convert connection string to async driver format
         async_connection_string = self._convert_to_async_connection_string()
-        
+
         if self.database_type == "postgresql":
             # PostgreSQL async configuration with connection pooling
             engine = create_async_engine(
@@ -303,16 +306,16 @@ class DatabaseManager:
             # Replace sqlite:// with sqlite+aiosqlite://
             if self.connection_string.startswith("sqlite://"):
                 return self.connection_string.replace("sqlite://", "sqlite+aiosqlite://", 1)
-        
+
         return self.connection_string
-    
+
     @property
     def async_engine(self):
         """Lazy initialization of async engine."""
         if self._async_engine is None:
             self._async_engine = self._create_async_engine()
         return self._async_engine
-    
+
     @property
     def AsyncSession(self):
         """Lazy initialization of async session factory."""
@@ -321,7 +324,7 @@ class DatabaseManager:
                 bind=self.async_engine, expire_on_commit=False
             )
         return self._async_session_factory
-    
+
     async def _init_async_pgvector(self):
         """Initialize pgvector extension for async PostgreSQL connections."""
         try:
@@ -449,7 +452,11 @@ class DatabaseManager:
                 loop = asyncio.get_event_loop()
                 if loop.is_running():
                     # Schedule async disposal if event loop is running
-                    asyncio.create_task(self._async_engine.dispose())
+                    task = asyncio.create_task(self._async_engine.dispose())
+                    # Keep reference to avoid warnings about unawaited tasks
+                    self._cleanup_tasks.append(task)
+                    # Remove task from list when completed
+                    task.add_done_callback(lambda t: self._cleanup_tasks.remove(t))
                 else:
                     # Run disposal synchronously if no event loop
                     loop.run_until_complete(self._async_engine.dispose())
