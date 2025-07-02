@@ -52,7 +52,10 @@ sqlite-vec>=0.1.6  # SQLite vector extension for similarity search
 
 # Database
 psycopg2-binary>=2.9.9
-SQLAlchemy>=2.0.17
+SQLAlchemy[asyncio]>=2.0.17
+asyncpg>=0.29.0  # PostgreSQL async driver for SQLAlchemy
+aiosqlite>=0.20.0  # SQLite async driver for SQLAlchemy
+greenlet>=3.0.0  # Required for SQLAlchemy async operations
 
 # Observability and transport dependencies
 msgpack>=1.0.0  # Binary serialization for observability events
