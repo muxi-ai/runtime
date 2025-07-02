@@ -147,14 +147,9 @@ class LongTermMemory:
         embedding_model: Optional[LLM] = None,
     ):
         """
-        Initialize the long-term memory.
-
-        Args:
-            db_manager: Unified database manager instance (required)
-            formation_id: The formation ID for scoping data
-            dimension: The dimension of the vectors to store.
-            default_collection: The default collection to use.
-            embedding_model: The embedding model to use.
+        Initialize a LongTermMemory instance for persistent semantic memory storage.
+        
+        Sets up database connections, determines multi-user mode, creates necessary tables, and ensures default user and collection exist in single-user mode. Supports configuration of vector dimension, default collection, and optional embedding model.
         """
         self.dimension = dimension
         self.default_collection = default_collection
@@ -311,19 +306,16 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> str:
         """
-        Add content to long-term memory.
-
-        This method stores new content in the long-term memory system with
-        optional metadata and pre-computed embedding. If no embedding is
-        provided, one will be generated using the embedding provider.
-
-        Args:
-            content: The text content to store.
-            metadata: Optional metadata to associate with the content.
-            embedding: Optional pre-computed embedding vector.
-
+        Asynchronously adds new content to long-term memory, generating an embedding if not provided.
+        
+        Parameters:
+            content (str): The text content to store.
+            metadata (dict, optional): Additional metadata to associate with the content.
+            embedding (list[float] or np.ndarray, optional): Pre-computed embedding vector. If not provided, an embedding is generated.
+            external_user_id (str, optional): The external user identifier for multi-user environments.
+        
         Returns:
-            The ID of the newly created memory entry.
+            str: The unique ID of the newly created memory entry.
         """
         # Emit memory storage started event
         observability.observe(
@@ -372,20 +364,17 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> str:
         """
-        Async internal method to add a memory to the database.
-
-        This is an asynchronous implementation that uses async database operations
-        for improved performance.
-
-        Args:
-            text: The text content to store.
-            embedding: The vector embedding of the text.
-            metadata: Optional metadata to associate with the content.
-            collection: The collection to store the memory in.
-            external_user_id: External user identifier.
-
+        Asynchronously adds a new memory entry to the database with the specified text, embedding, metadata, collection, and user context.
+        
+        Parameters:
+            text (str): The text content to store as memory.
+            embedding (Union[List[float], np.ndarray]): The vector embedding representing the content.
+            metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
+            collection (str, optional): The collection name to store the memory in. Defaults to the default collection if not specified.
+            external_user_id (str, optional): The external user identifier for multi-user environments.
+        
         Returns:
-            The ID of the newly created memory entry.
+            str: The unique ID of the newly created memory entry.
         """
         if metadata is None:
             metadata = {}
@@ -431,19 +420,17 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> str:
         """
-        Internal method to add a memory to the database.
-
-        This is a synchronous implementation that directly interacts with
-        the database to add a new memory entry.
-
-        Args:
-            text: The text content to store.
-            embedding: The vector embedding of the text.
-            metadata: Optional metadata to associate with the content.
-            collection: The collection to store the memory in.
-
+        Synchronously adds a new memory entry to the database with associated text, embedding, metadata, and collection.
+        
+        Parameters:
+            text (str): The text content to store.
+            embedding (Union[List[float], np.ndarray]): The vector embedding representing the text.
+            metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
+            collection (str, optional): The collection name to store the memory in.
+            external_user_id (str, optional): The external user identifier for multi-user environments.
+        
         Returns:
-            The ID of the newly created memory entry.
+            str: The unique ID of the newly created memory entry.
         """
         if metadata is None:
             metadata = {}
@@ -526,21 +513,20 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Search for memories similar to the query.
-
-        This method performs a semantic similarity search for memories
-        matching the query, with support for metadata filtering and
-        collection-specific searching.
-
-        Args:
-            query: The text query to search for.
-            limit: Maximum number of results to return.
-            query_embedding: Optional pre-computed embedding vector for the query.
-            collection: The collection to search in. If None, uses the default collection.
-            filter_metadata: Optional metadata filters to apply.
-
+        Asynchronously performs a semantic similarity search for memories matching a text query.
+        
+        If a query embedding is not provided, it is generated using the embedding model. Supports filtering by collection and metadata, and returns a list of the most relevant memories with similarity scores.
+        
+        Parameters:
+            query (str): The text query to search for.
+            limit (int): Maximum number of results to return.
+            query_embedding (Optional[Union[List[float], np.ndarray]]): Optional pre-computed embedding vector for the query.
+            collection (Optional[str]): The collection to search in. Defaults to the default collection if not specified.
+            filter_metadata (Optional[Dict[str, Any]]): Optional metadata filters to apply.
+            external_user_id (Optional[str]): The external user ID for multi-user environments.
+        
         Returns:
-            A list of dictionaries containing the search results, ordered by relevance.
+            List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores, ordered by relevance.
         """
         # Emit memory search started event
         observability.observe(
@@ -951,18 +937,14 @@ class LongTermMemory:
         self, limit: int = 10, collection: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get the most recent memories.
-
-        This method retrieves the most recently created memories from a
-        specified collection, ordered by creation date.
-
-        Args:
-            limit: The maximum number of memories to return.
-            collection: The collection to get memories from. If None, the
-                default collection will be used.
-
+        Retrieve the most recent memories from a specified or default collection, ordered by creation date.
+        
+        Parameters:
+            limit (int): Maximum number of memories to return.
+            collection (str, optional): Name of the collection to retrieve memories from. Uses the default collection if not specified.
+        
         Returns:
-            A list of dictionaries containing memory information.
+            List[Dict[str, Any]]: A list of dictionaries containing memory details, including ID, text, metadata, timestamps, and collection name.
         """
         collection_name = collection or self.default_collection
 
@@ -988,7 +970,15 @@ class LongTermMemory:
             ]
 
     async def _get_or_create_user_async(self, session: AsyncSession, external_user_id: Optional[str] = None) -> User:
-        """Async version of get or create user."""
+        """
+        Asynchronously retrieves an existing user or creates a new one based on the external user ID and formation scope.
+        
+        Raises:
+            ValueError: If `external_user_id` is not provided in multi-user mode.
+        
+        Returns:
+            User: The retrieved or newly created user instance.
+        """
         # Handle single-user mode
         if not self.is_multi_user:
             external_user_id = "0"
@@ -1020,7 +1010,9 @@ class LongTermMemory:
     async def _ensure_collection_exists_async(
         self, session: AsyncSession, collection_name: str, user_id: int
     ) -> None:
-        """Async version of ensure collection exists."""
+        """
+        Asynchronously ensures that a collection with the specified name exists for the given user and formation, creating it if it does not already exist.
+        """
         collection = await Collection.get(
             session,
             user_id=user_id,
@@ -1047,20 +1039,19 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
-        Async internal method to search for similar embeddings in the database.
-
-        This is an asynchronous implementation that uses async database operations
-        for improved performance.
-
-        Args:
-            query_embedding: The vector embedding to search for.
+        Asynchronously searches for memories with embeddings most similar to the given query embedding.
+        
+        Performs a vector similarity search within the specified collection and user scope, optionally filtering by metadata. Returns up to `k` results as tuples of similarity score and memory data.
+         
+        Parameters:
+            query_embedding: The embedding vector to search against.
             k: Maximum number of results to return.
-            collection: The collection to search in. If None, uses the default collection.
-            filter_metadata: Optional metadata filters to apply.
-            external_user_id: External user identifier.
-
+            collection: Name of the collection to search in; defaults to the default collection if not specified.
+            filter_metadata: Optional dictionary of metadata key-value pairs to filter results.
+            external_user_id: External user identifier to scope the search.
+        
         Returns:
-            A list of tuples containing (similarity_score, memory_dict).
+            A list of tuples, each containing a similarity score (float) and a dictionary with memory details.
         """
         # Convert numpy array to list if necessary
         if isinstance(query_embedding, np.ndarray):

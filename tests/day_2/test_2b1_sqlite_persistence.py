@@ -18,6 +18,11 @@ class MockLLM:
 
 async def main():
     # Use SQLite database
+    """
+    Runs an end-to-end test of the SQLiteMemory class, including database creation, memory insertion, direct table verification, search queries, and retrieval of recent memories.
+    
+    This coroutine creates a new SQLite database, adds sample memory records with mock embeddings, verifies the contents via direct SQL queries, tests search functionality, and prints results for manual inspection. The database file is removed and recreated to ensure a clean test environment.
+    """
     db_path = "test_sqlite_memory.db"
     
     # Remove existing database file
