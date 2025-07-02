@@ -9,7 +9,7 @@ Models:
 """
 
 import json
-from ...utils.datetime_utils import utc_now
+from ...utils.datetime_utils import utc_now_naive
 from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
@@ -39,7 +39,7 @@ class ScheduledJobAudit(Base, AsyncModelMixin):
     action = Column(
         String(50), nullable=False
     )  # created, updated, paused, resumed, deleted, replaced
-    timestamp = Column(DateTime, nullable=False, default=utc_now, index=True)
+    timestamp = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
     changes = Column(Text, nullable=True)  # JSON string of what changed
     reason = Column(Text, nullable=True)  # Optional reason for the action
 
@@ -107,8 +107,8 @@ class ScheduledJob(Base, AsyncModelMixin):
     status = Column(String(20), nullable=False, default="ACTIVE", index=True)
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=utc_now)
-    updated_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now)
 
     # Execution tracking
     last_run_at = Column(DateTime, nullable=True)

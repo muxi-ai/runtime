@@ -27,3 +27,16 @@ def utc_now_iso() -> str:
         Current datetime in UTC as ISO format string with 'Z' suffix
     """
     return utc_now().isoformat().replace("+00:00", "Z")
+
+
+def utc_now_naive() -> datetime:
+    """
+    Get current UTC time without timezone information.
+    
+    This is needed for databases that use TIMESTAMP WITHOUT TIME ZONE columns,
+    particularly when using asyncpg with PostgreSQL.
+    
+    Returns:
+        Current datetime in UTC without timezone information
+    """
+    return datetime.utcnow()

@@ -52,7 +52,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # Note: No longer importing global config - values passed as parameters
 from ...utils.id_generator import get_default_nanoid
-from ...utils.datetime_utils import utc_now
+from ...utils.datetime_utils import utc_now_naive
 from ..llm import LLM
 from .. import observability
 from ..db import DatabaseManager, Base, AsyncModelMixin
@@ -72,8 +72,8 @@ class User(Base, AsyncModelMixin):
     external_user_id_hash = Column(String(64), nullable=False, index=True)
     formation_id = Column(String(255), nullable=False)
     formation_id_hash = Column(String(64), nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     # Composite unique constraint to ensure uniqueness within each formation
     __table_args__ = (
@@ -103,8 +103,8 @@ class Memory(Base, AsyncModelMixin):
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
     meta_data = Column(JSONType, nullable=False, default={})
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     collection = Column(String(255), nullable=False, index=True)
 
 
@@ -124,8 +124,8 @@ class Collection(Base, AsyncModelMixin):
     formation_id_hash = Column(String(64), nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text)
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
 
 class LongTermMemory:
