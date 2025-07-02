@@ -15,7 +15,7 @@ from typing import Any, Dict
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
 from sqlalchemy.types import TEXT, TypeDecorator
 
-from ..db import Base
+from ..db import Base, AsyncModelMixin
 
 
 class JSONType(TypeDecorator):
@@ -38,7 +38,7 @@ class JSONType(TypeDecorator):
         return json.loads(value)
 
 
-class ScheduledJobAudit(Base):
+class ScheduledJobAudit(Base, AsyncModelMixin):
     """
     Audit trail for scheduled job lifecycle events.
 
@@ -91,7 +91,7 @@ class ScheduledJobAudit(Base):
         return result
 
 
-class ScheduledJob(Base):
+class ScheduledJob(Base, AsyncModelMixin):
     """
     Scheduled job model for storing both recurring and one-time AI tasks.
 

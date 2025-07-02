@@ -48,19 +48,17 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Note: No longer importing global config - values passed as parameters
 from ...utils.id_generator import get_default_nanoid
 from ...utils.datetime_utils import utc_now
 from ..llm import LLM
 from .. import observability
-from ..db import DatabaseManager
-
-# Create SQLAlchemy Base
-Base = declarative_base()
+from ..db import DatabaseManager, Base, AsyncModelMixin
 
 
-class User(Base):
+class User(Base, AsyncModelMixin):
     """
     User table for multi-user support.
 
@@ -88,7 +86,7 @@ class User(Base):
     )
 
 
-class Memory(Base):
+class Memory(Base, AsyncModelMixin):
     """
     Memory table for storing vector embeddings and metadata.
 
@@ -110,7 +108,7 @@ class Memory(Base):
     collection = Column(String(255), nullable=False, index=True)
 
 
-class Collection(Base):
+class Collection(Base, AsyncModelMixin):
     """
     Collection table for organizing memories.
 
@@ -168,6 +166,7 @@ class LongTermMemory:
         self.db_manager = db_manager
         self.engine = self.db_manager.engine
         self.Session = self.db_manager.Session
+        self.AsyncSession = self.db_manager.AsyncSession
 
         # Determine if we're in multi-user mode
         self.is_multi_user = self.db_manager.database_type == "postgresql"
@@ -346,8 +345,8 @@ class LongTermMemory:
         if embedding is None:
             embedding = await self.embedding_model.embed(content)
 
-        # Insert into database
-        memory_id = self._add_internal(
+        # Insert into database using async method
+        memory_id = await self._add_internal_async(
             content, embedding, metadata, self.default_collection, external_user_id
         )
 
@@ -363,6 +362,65 @@ class LongTermMemory:
             description="Long-term memory storage completed",
         )
         return memory_id
+
+    async def _add_internal_async(
+        self,
+        text: str,
+        embedding: Union[List[float], np.ndarray],
+        metadata: Dict[str, Any] = None,
+        collection: Optional[str] = None,
+        external_user_id: Optional[str] = None,
+    ) -> str:
+        """
+        Async internal method to add a memory to the database.
+
+        This is an asynchronous implementation that uses async database operations
+        for improved performance.
+
+        Args:
+            text: The text content to store.
+            embedding: The vector embedding of the text.
+            metadata: Optional metadata to associate with the content.
+            collection: The collection to store the memory in.
+            external_user_id: External user identifier.
+
+        Returns:
+            The ID of the newly created memory entry.
+        """
+        if metadata is None:
+            metadata = {}
+
+        if collection is None:
+            collection = self.default_collection
+
+        # Add timestamp to metadata
+        metadata["timestamp"] = time.time()
+
+        async with self.db_manager.get_async_session() as session:
+            # Get or create user
+            user = await self._get_or_create_user_async(session, external_user_id)
+
+            # Ensure collection exists for this user
+            await self._ensure_collection_exists_async(session, collection, user.id)
+
+            # Convert numpy array to list if necessary
+            if isinstance(embedding, np.ndarray):
+                embedding = embedding.tolist()
+
+            # Create memory using async model helper
+            memory = await Memory.create(
+                session,
+                user_id=user.id,
+                text=text,
+                embedding=embedding,
+                meta_data=metadata,
+                collection=collection,
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
+            )
+
+            # Return ID
+            return memory.id
 
     def _add_internal(
         self,
@@ -506,8 +564,8 @@ class LongTermMemory:
         if collection is None:
             collection = self.default_collection
 
-        # Search in database
-        results = self._search_internal(
+        # Search in database using async method
+        results = await self._search_internal_async(
             query_embedding, limit, collection, filter_metadata, external_user_id
         )
 
@@ -927,4 +985,140 @@ class LongTermMemory:
                     "collection": m.collection,
                 }
                 for m in memories
+            ]
+
+    async def _get_or_create_user_async(self, session: AsyncSession, external_user_id: Optional[str] = None) -> User:
+        """Async version of get or create user."""
+        # Handle single-user mode
+        if not self.is_multi_user:
+            external_user_id = "0"
+        elif external_user_id is None:
+            raise ValueError("external_user_id is required in multi-user mode")
+
+        # Calculate hash
+        external_user_id_hash = self._hash_external_id(external_user_id)
+
+        # Try to get existing user
+        user = await User.get(
+            session,
+            external_user_id_hash=external_user_id_hash,
+            formation_id_hash=self.formation_id_hash,
+        )
+
+        if not user:
+            # Create new user
+            user = await User.create(
+                session,
+                external_user_id=external_user_id,
+                external_user_id_hash=external_user_id_hash,
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
+            )
+
+        return user
+
+    async def _ensure_collection_exists_async(
+        self, session: AsyncSession, collection_name: str, user_id: int
+    ) -> None:
+        """Async version of ensure collection exists."""
+        collection = await Collection.get(
+            session,
+            user_id=user_id,
+            name=collection_name,
+            formation_id_hash=self.formation_id_hash,
+        )
+
+        if not collection:
+            await Collection.create(
+                session,
+                user_id=user_id,
+                name=collection_name,
+                description=f"Collection: {collection_name}",
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
+            )
+
+    async def _search_internal_async(
+        self,
+        query_embedding: Union[List[float], np.ndarray],
+        k: int = 5,
+        collection: Optional[str] = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        external_user_id: Optional[str] = None,
+    ) -> List[Tuple[float, Dict[str, Any]]]:
+        """
+        Async internal method to search for similar embeddings in the database.
+
+        This is an asynchronous implementation that uses async database operations
+        for improved performance.
+
+        Args:
+            query_embedding: The vector embedding to search for.
+            k: Maximum number of results to return.
+            collection: The collection to search in. If None, uses the default collection.
+            filter_metadata: Optional metadata filters to apply.
+            external_user_id: External user identifier.
+
+        Returns:
+            A list of tuples containing (similarity_score, memory_dict).
+        """
+        # Convert numpy array to list if necessary
+        if isinstance(query_embedding, np.ndarray):
+            query_embedding = query_embedding.tolist()
+
+        # Use default collection if not specified
+        if collection is None:
+            collection = self.default_collection
+
+        async with self.db_manager.get_async_session() as session:
+            # Get user
+            user = await self._get_or_create_user_async(session, external_user_id)
+
+            # For PostgreSQL with pgvector, we need to cast the query embedding
+            if self.db_manager.database_type == "postgresql":
+                from sqlalchemy import cast
+                from pgvector.sqlalchemy import Vector
+
+                query_embedding_vector = cast(query_embedding, Vector(self.dimension))
+            else:
+                query_embedding_vector = query_embedding
+
+            # Build query
+            query = (
+                select(
+                    Memory,
+                    func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
+                )
+                .filter(Memory.user_id == user.id)
+                .filter(Memory.formation_id_hash == self.formation_id_hash)
+                .filter(Memory.collection == collection)
+                .order_by("distance")
+                .limit(k)
+            )
+
+            # Add metadata filters if provided
+            if filter_metadata:
+                for key, value in filter_metadata.items():
+                    query = query.filter(Memory.meta_data[key].astext == str(value))
+
+            # Execute query
+            result = await session.execute(query)
+            results = result.all()
+
+            # Format results
+            return [
+                (
+                    1.0 / (1.0 + float(result.distance)),  # Convert distance to similarity score
+                    {
+                        "id": result.Memory.id,
+                        "text": result.Memory.text,
+                        "meta_data": result.Memory.meta_data,
+                        "created_at": (
+                            result.Memory.created_at.isoformat()
+                            if result.Memory.created_at
+                            else None
+                        ),
+                    },
+                )
+                for result in results
             ]
