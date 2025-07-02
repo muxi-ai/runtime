@@ -9,6 +9,35 @@ from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 from src.muxi.runtime.formation.formation import Formation  # noqa: E402
 
 
+def handle_response(response):
+    """Universal response handler for overlord.chat() responses"""
+    if isinstance(response, str):
+        return response
+    elif isinstance(response, dict):
+        if "request_id" in response:
+            # Async processing
+            return f"Async processing: {response['request_id']}"
+        elif "content" in response:
+            return response["content"]
+        elif "error" in response:
+            return f"Error: {response['error']}"
+    elif hasattr(response, 'content'):
+        # MuxiResponse object
+        return response.content
+    elif hasattr(response, '__aiter__'):
+        # Streaming response - collect it
+        return asyncio.run(collect_stream(response))
+    return str(response)
+
+
+async def collect_stream(stream):
+    """Collect all chunks from an async generator"""
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+    return ''.join(chunks)
+
+
 # Create mock LLM for embedding
 class MockLLM:
     def __init__(self, dimension=1536):
@@ -27,16 +56,7 @@ async def test_local_buffer_memory():
         # Helper function to handle async generator responses
         def get_response(coro):
             result = asyncio.run(coro)
-            if hasattr(result, "__aiter__"):
-                # It's an async generator, collect all chunks
-                async def collect():
-                    chunks = []
-                    async for chunk in result:
-                        chunks.append(chunk)
-                    return "".join(chunks)
-
-                return asyncio.run(collect())
-            return result
+            return handle_response(result)
 
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-local.yaml")
@@ -101,16 +121,7 @@ async def test_remote_buffer_memory():
         # Helper function to handle async generator responses
         def get_response(coro):
             result = asyncio.run(coro)
-            if hasattr(result, "__aiter__"):
-                # It's an async generator, collect all chunks
-                async def collect():
-                    chunks = []
-                    async for chunk in result:
-                        chunks.append(chunk)
-                    return "".join(chunks)
-
-                return asyncio.run(collect())
-            return result
+            return handle_response(result)
 
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-remote.yaml")

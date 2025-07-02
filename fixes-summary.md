@@ -28,6 +28,7 @@
 ## Test Status 📊
 
 ### ✅ PASSING
+- **Test 2B (SQLite Persistence)**: Working correctly with formation_id
 - **Test 2C (PostgreSQL User Isolation)**: Working correctly after database cleanup
 - **Test 2G (Remember User Info)**: Core functionality working
 

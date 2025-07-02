@@ -9,6 +9,35 @@ from concurrent.futures import ThreadPoolExecutor
 
 from src.muxi.runtime.formation.formation import Formation
 
+
+def handle_response(response):
+    """Universal response handler for overlord.chat() responses"""
+    if isinstance(response, str):
+        return response
+    elif isinstance(response, dict):
+        if "request_id" in response:
+            # Async processing
+            return f"Async processing: {response['request_id']}"
+        elif "content" in response:
+            return response["content"]
+        elif "error" in response:
+            return f"Error: {response['error']}"
+    elif hasattr(response, 'content'):
+        # MuxiResponse object
+        return response.content
+    elif hasattr(response, '__aiter__'):
+        # Streaming response - collect it
+        return asyncio.run(collect_stream(response))
+    return str(response)
+
+
+async def collect_stream(stream):
+    """Collect all chunks from an async generator"""
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+    return ''.join(chunks)
+
 async def test_local_buffer_with_real_llm():
     """Test local buffer memory with real LLM"""
     print("\n=== Testing Local Buffer with Real LLM ===")
@@ -24,16 +53,18 @@ async def test_local_buffer_with_real_llm():
             
             # Add context
             response1 = asyncio.run(overlord.chat("My name is Bob and I'm a Python developer working on AI projects", user_id="bob"))
-            print(f"Context set: {response1[:100]}...")
+            response1_text = handle_response(response1)
+            print(f"Context set: {response1_text[:100]}...")
             
             # Test recall
             response2 = asyncio.run(overlord.chat("What's my name and what do I do?", user_id="bob"))
-            print(f"Context recall: {response2[:200]}...")
+            response2_text = handle_response(response2)
+            print(f"Context recall: {response2_text[:200]}...")
             
             # Verify context is remembered
-            bob_remembered = "bob" in response2.lower()
-            python_remembered = "python" in response2.lower()
-            ai_mentioned = "ai" in response2.lower() or "artificial" in response2.lower()
+            bob_remembered = "bob" in response2_text.lower()
+            python_remembered = "python" in response2_text.lower()
+            ai_mentioned = "ai" in response2_text.lower() or "artificial" in response2_text.lower()
             
             print(f"✓ Name remembered: {bob_remembered}")
             print(f"✓ Python mentioned: {python_remembered}")  
@@ -49,9 +80,10 @@ async def test_local_buffer_with_real_llm():
             
             # Search for ML-related content
             response3 = asyncio.run(overlord.chat("What have I said about AI and machine learning?", user_id="bob"))
-            print(f"ML search result: {response3[:200]}...")
+            response3_text = handle_response(response3)
+            print(f"ML search result: {response3_text[:200]}...")
             
-            ml_found = "machine learning" in response3.lower() or "neural" in response3.lower()
+            ml_found = "machine learning" in response3_text.lower() or "neural" in response3_text.lower()
             print(f"✓ ML content found: {ml_found}")
             
             return {
@@ -88,16 +120,18 @@ async def test_remote_buffer_with_real_llm():
             
             # Add context
             response1 = asyncio.run(overlord.chat("I'm Carol, a data scientist specializing in NLP and computer vision", user_id="carol"))
-            print(f"Context set: {response1[:100]}...")
+            response1_text = handle_response(response1)
+            print(f"Context set: {response1_text[:100]}...")
             
             # Test recall
             response2 = asyncio.run(overlord.chat("Tell me about my background", user_id="carol"))
-            print(f"Context recall: {response2[:200]}...")
+            response2_text = handle_response(response2)
+            print(f"Context recall: {response2_text[:200]}...")
             
             # Verify context is remembered
-            carol_remembered = "carol" in response2.lower()
-            nlp_mentioned = "nlp" in response2.lower() or "natural language" in response2.lower()
-            cv_mentioned = "computer vision" in response2.lower() or "vision" in response2.lower()
+            carol_remembered = "carol" in response2_text.lower()
+            nlp_mentioned = "nlp" in response2_text.lower() or "natural language" in response2_text.lower()
+            cv_mentioned = "computer vision" in response2_text.lower() or "vision" in response2_text.lower()
             
             print(f"✓ Name remembered: {carol_remembered}")
             print(f"✓ NLP mentioned: {nlp_mentioned}")
@@ -113,9 +147,10 @@ async def test_remote_buffer_with_real_llm():
             
             # Search for technical content
             response3 = asyncio.run(overlord.chat("What technical tools have I mentioned?", user_id="carol"))
-            print(f"Technical search result: {response3[:200]}...")
+            response3_text = handle_response(response3)
+            print(f"Technical search result: {response3_text[:200]}...")
             
-            tech_found = any(term in response3.lower() for term in ["transformer", "bert", "cnn", "yolo"])
+            tech_found = any(term in response3_text.lower() for term in ["transformer", "bert", "cnn", "yolo"])
             print(f"✓ Technical content found: {tech_found}")
             
             return {

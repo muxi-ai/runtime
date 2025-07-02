@@ -31,6 +31,7 @@ async def main():
     print("Creating SQLiteMemory instance...")
     sqlite_memory = SQLiteMemory(
         db_path=db_path,
+        formation_id="test_formation",
         dimension=1536,
         default_collection="default"
     )
