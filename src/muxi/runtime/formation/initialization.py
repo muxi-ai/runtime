@@ -267,6 +267,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
     """Initialize persistent memory from configuration."""
     try:
         connection_string = persistent_config.get("connection_string")
+        formation_id = getattr(formation, "formation_id", "default-formation")
 
         # Check if connection string still contains uninterpolated secrets
         # This should not happen as secrets are interpolated during formation loading
@@ -291,6 +292,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = LongTermMemory(
                 connection_string=connection_string,
+                formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
             formation._is_multi_user = True
@@ -302,6 +304,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = SQLiteMemory(
                 db_path=connection_string,
+                formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
             memory_type = "SQLite"
@@ -312,6 +315,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = Memobase(
                 connection_string=connection_string,
+                formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
             memory_type = "Memobase"

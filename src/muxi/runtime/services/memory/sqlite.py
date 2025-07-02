@@ -60,6 +60,7 @@ class SQLiteMemory(BaseMemory):
         dimension: int = 1536,
         default_collection: str = "default",
         extensions_dir: str = "extensions",
+        embedding_model=None,  # Accept but ignore for compatibility
     ):
         """
         Initialize SQLite-based long-term memory.
@@ -70,6 +71,7 @@ class SQLiteMemory(BaseMemory):
             dimension: Dimension of the embedding vectors
             default_collection: Name of the default collection
             extensions_dir: Directory containing sqlite-vec extensions
+            embedding_model: Optional embedding model (accepted for compatibility)
         """
         self.db_path = db_path
         self.formation_id = formation_id

@@ -376,13 +376,13 @@ async def test_preference_persistence():
                     user_id="developer_bob",
                     message_id="msg1",
                     feedback_type="positive",
-                    rating=5,
+                    feedback_content="Great response!",
                     timestamp=time.time(),
                 )
             ]
 
             # Learn preferences
-            preference_engine = overlord.overlord.preference_engine
+            preference_engine = overlord.preference_engine
             preferences = asyncio.run(
                 preference_engine.analyze_user_preferences(
                     user_id="developer_bob", conversation_history=messages, feedback_data=feedback
@@ -409,7 +409,7 @@ async def test_preference_persistence():
         overlord2 = formation2.start_overlord()
 
         try:
-            preference_engine2 = overlord2.overlord.preference_engine
+            preference_engine2 = overlord2.preference_engine
 
             # Load preferences from storage
             loaded_prefs = asyncio.run(preference_engine2.get_stored_preferences("developer_bob"))

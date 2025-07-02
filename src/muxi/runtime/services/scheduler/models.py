@@ -108,7 +108,7 @@ class ScheduledJob(Base, AsyncModelMixin):
 
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
-    updated_at = Column(DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now_naive)
 
     # Execution tracking
     last_run_at = Column(DateTime, nullable=True)
