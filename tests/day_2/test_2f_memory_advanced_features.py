@@ -16,6 +16,47 @@ from src.muxi.runtime.services.memory.short_term import ShortTermMemory  # noqa:
 from src.muxi.runtime.datatypes.intelligence import Message, FeedbackEvent  # noqa: E402
 
 
+def handle_response(response):
+    """
+    Normalizes various response types from overlord.chat() into a consistent string output.
+    
+    Handles plain strings, dictionaries with content, error, or async request IDs, objects with a content attribute, and asynchronous streaming responses by collecting all chunks. Returns a string representation suitable for further processing or display.
+    """
+    if isinstance(response, str):
+        return response
+    elif isinstance(response, dict):
+        if "request_id" in response:
+            # Async processing
+            return f"Async processing: {response['request_id']}"
+        elif "content" in response:
+            return response["content"]
+        elif "error" in response:
+            return f"Error: {response['error']}"
+    elif hasattr(response, 'content'):
+        # MuxiResponse object
+        return response.content
+    elif hasattr(response, '__aiter__'):
+        # Streaming response - collect it
+        return asyncio.run(collect_stream(response))
+    return str(response)
+
+
+async def collect_stream(stream):
+    """
+    Asynchronously collects and concatenates all chunks from an async generator stream into a single string.
+    
+    Parameters:
+        stream: An asynchronous generator yielding string chunks.
+    
+    Returns:
+        str: The concatenated string of all collected chunks.
+    """
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+    return ''.join(chunks)
+
+
 # Mock LLM for testing
 class MockLLM:
     """Mock LLM with configurable embeddings"""
@@ -100,11 +141,26 @@ async def test_fifo_memory_management():
 
 
 async def test_automatic_context_extraction():
-    """Test automatic extraction of context from conversations"""
+    """
+    Test whether the conversational AI system automatically extracts and recalls user context from conversation history.
+    
+    Sends a sequence of messages containing personal and project information, then queries the system to verify if it can recall the extracted context (such as user name and project details). Runs the test in a separate thread to avoid event loop conflicts.
+    
+    Returns:
+        dict: A dictionary with the test status and flags indicating if the name and project context were successfully extracted.
+    """
     print("\n=== Testing Automatic Context Extraction ===")
 
     def run_test():
         # Load formation with context extraction
+        """
+        Tests automatic extraction and recall of user context from conversation history.
+        
+        Sends a sequence of messages containing user identity and project information to a conversational AI system configured for context extraction. Verifies if the system can recall and return the user's name and project details when prompted.
+        
+        Returns:
+            result (dict): Dictionary with test status and flags indicating if the user's name and project were successfully extracted and recalled.
+        """
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-auto-extract.yaml")
         overlord = formation.start_overlord()
@@ -121,7 +177,8 @@ async def test_automatic_context_extraction():
                     user_id="alice",
                 )
             )
-            print(f"Response 1: {response1[:100]}...")
+            response1_text = handle_response(response1)
+            print(f"Response 1: {response1_text[:100]}...")
 
             # Message 2: More context
             response2 = asyncio.run(
@@ -131,7 +188,8 @@ async def test_automatic_context_extraction():
                     user_id="alice",
                 )
             )
-            print(f"Response 2: {response2[:100]}...")
+            response2_text = handle_response(response2)
+            print(f"Response 2: {response2_text[:100]}...")
 
             # Message 3: Test if context was extracted
             response3 = asyncio.run(
@@ -139,24 +197,25 @@ async def test_automatic_context_extraction():
                     "Can you remind me what my name is and what I'm working on?", user_id="alice"
                 )
             )
-            print(f"Response 3: {response3[:200]}...")
+            response3_text = handle_response(response3)
+            print(f"Response 3: {response3_text[:200]}...")
 
             # Check if context was remembered
-            context_extracted = ("alice" in response3.lower() or "Alice" in response3) and (
-                "python" in response3.lower() or "machine learning" in response3.lower()
+            context_extracted = ("alice" in response3_text.lower() or "Alice" in response3_text) and (
+                "python" in response3_text.lower() or "machine learning" in response3_text.lower()
             )
 
             print(f"\n✓ Context extraction: {'SUCCESS' if context_extracted else 'FAILED'}")
-            print(f"  - Name remembered: {'alice' in response3.lower()}")
+            print(f"  - Name remembered: {'alice' in response3_text.lower()}")
             print(
-                f"  - Project remembered: {'python' in response3.lower() or 'machine learning' in response3.lower()}"
+                f"  - Project remembered: {'python' in response3_text.lower() or 'machine learning' in response3_text.lower()}"
             )
 
             return {
                 "status": "success" if context_extracted else "failed",
-                "name_extracted": "alice" in response3.lower(),
-                "project_extracted": "python" in response3.lower()
-                or "machine learning" in response3.lower(),
+                "name_extracted": "alice" in response3_text.lower(),
+                "project_extracted": "python" in response3_text.lower()
+                or "machine learning" in response3_text.lower(),
             }
 
         except Exception as e:
@@ -254,11 +313,24 @@ async def test_smart_buffer_vector_search():
 
 
 async def test_automatic_context_usage():
-    """Test automatic usage of context in responses"""
+    """
+    Test whether the conversational AI system automatically applies previously established user context and preferences in its responses.
+    
+    The test simulates a user establishing preferences (concise answers, beginner level) and project context (weather app in Python), then asks follow-up questions without repeating this context. It checks if the system's responses reflect the established context by evaluating conciseness, beginner-friendliness, and project relevance. Also verifies context persistence across multiple queries.
+    
+    Returns:
+        result (dict): Contains test status, flags for context usage, response conciseness, beginner-friendliness, and project relevance.
+    """
     print("\n=== Testing Automatic Context Usage ===")
 
     def run_test():
         # Load formation
+        """
+        Tests whether user preferences and project context are automatically applied in responses and persist across multiple queries.
+        
+        Returns:
+            result (dict): Contains test status, flags for context usage, response conciseness, beginner-friendliness, and project relevance.
+        """
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-basic.yaml")
         overlord = formation.start_overlord()
@@ -275,7 +347,8 @@ async def test_automatic_context_usage():
                     user_id="bob",
                 )
             )
-            print(f"Preference set: {response1[:100]}...")
+            response1_text = handle_response(response1)
+            print(f"Preference set: {response1_text[:100]}...")
 
             # Set project context
             response2 = asyncio.run(
@@ -284,29 +357,31 @@ async def test_automatic_context_usage():
                     user_id="bob",
                 )
             )
-            print(f"Project context set: {response2[:100]}...")
+            response2_text = handle_response(response2)
+            print(f"Project context set: {response2_text[:100]}...")
 
             # Ask question without repeating context
             print("\nAsking question without repeating context...")
             response3 = asyncio.run(overlord.chat("How do I handle errors?", user_id="bob"))
 
-            print(f"Response: {response3}")
+            response3_text = handle_response(response3)
+            print(f"Response: {response3_text}")
 
             # Check if context was used
             context_used = False
-            concise = len(response3.split(".")) <= 4  # Roughly 2-3 sentences
+            concise = len(response3_text.split(".")) <= 4  # Roughly 2-3 sentences
             beginner_friendly = any(
-                word in response3.lower() for word in ["simple", "basic", "easy", "start", "begin"]
+                word in response3_text.lower() for word in ["simple", "basic", "easy", "start", "begin"]
             )
             weather_related = any(
-                word in response3.lower() for word in ["api", "weather", "request", "http"]
+                word in response3_text.lower() for word in ["api", "weather", "request", "http"]
             )
 
             context_used = concise or beginner_friendly or weather_related
 
             print("\n✓ Automatic context usage:")
             print(
-                f"  - Response conciseness: {'YES' if concise else 'NO'} ({len(response3.split('.'))-1} sentences)"
+                f"  - Response conciseness: {'YES' if concise else 'NO'} ({len(response3_text.split('.'))-1} sentences)"
             )
             print(f"  - Beginner-friendly: {'YES' if beginner_friendly else 'NO'}")
             print(f"  - Project-relevant: {'YES' if weather_related else 'NO'}")
@@ -335,11 +410,23 @@ async def test_automatic_context_usage():
 
 
 async def test_preference_persistence():
-    """Test user preference persistence across sessions"""
+    """
+    Test whether user preferences are correctly learned, persisted, and reapplied across sessions.
+    
+    Simulates two sessions: the first establishes user preferences through conversation and feedback, verifies they are stored, and the second reloads the system to check if preferences are loaded and reflected in responses. Returns a dictionary summarizing persistence and application results.
+    """
     print("\n=== Testing User Preference Persistence ===")
 
     def run_test():
         # First session: Learn preferences
+        """
+        Runs a two-session test to verify user preference persistence and application in a conversational AI system.
+        
+        The first session simulates a user establishing preferences through conversation and feedback, then checks that preferences are stored. The second session reloads the system, verifies that preferences are correctly loaded and match the original, and tests if responses reflect the learned preferences (e.g., brief, technical, with code examples).
+        
+        Returns:
+            dict: Test results including status, whether preferences were stored and loaded, if they match, and if they are correctly applied in responses.
+        """
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-sqlite.yaml")
         overlord = formation.start_overlord()
@@ -376,13 +463,13 @@ async def test_preference_persistence():
                     user_id="developer_bob",
                     message_id="msg1",
                     feedback_type="positive",
-                    rating=5,
+                    feedback_content="Great response!",
                     timestamp=time.time(),
                 )
             ]
 
             # Learn preferences
-            preference_engine = overlord.overlord.preference_engine
+            preference_engine = overlord.user_preference_engine
             preferences = asyncio.run(
                 preference_engine.analyze_user_preferences(
                     user_id="developer_bob", conversation_history=messages, feedback_data=feedback
@@ -409,7 +496,7 @@ async def test_preference_persistence():
         overlord2 = formation2.start_overlord()
 
         try:
-            preference_engine2 = overlord2.overlord.preference_engine
+            preference_engine2 = overlord2.user_preference_engine
 
             # Load preferences from storage
             loaded_prefs = asyncio.run(preference_engine2.get_stored_preferences("developer_bob"))
@@ -432,10 +519,11 @@ async def test_preference_persistence():
                 response = asyncio.run(
                     overlord2.chat("How do I create a REST API?", user_id="developer_bob")
                 )
+                response_text = handle_response(response)
 
                 # Check if response reflects learned preferences (brief, technical)
-                is_brief = len(response) < 500  # Arbitrary threshold
-                has_code = "```" in response or "def " in response or "import " in response
+                is_brief = len(response_text) < 500  # Arbitrary threshold
+                has_code = "```" in response_text or "def " in response_text or "import " in response_text
 
                 print(f"Session 2 - Brief response: {'✅' if is_brief else '❌'}")
                 print(f"Session 2 - Has code examples: {'✅' if has_code else '❌'}")

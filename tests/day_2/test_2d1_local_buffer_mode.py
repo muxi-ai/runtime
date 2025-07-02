@@ -9,9 +9,56 @@ from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 from src.muxi.runtime.formation.formation import Formation  # noqa: E402
 
 
+def handle_response(response):
+    """
+    Processes and normalizes various response types from overlord.chat(), returning a string representation of the result.
+    
+    Handles string, dictionary, object, and asynchronous streaming responses, extracting relevant content or error messages as appropriate.
+    """
+    if isinstance(response, str):
+        return response
+    elif isinstance(response, dict):
+        if "request_id" in response:
+            # Async processing
+            return f"Async processing: {response['request_id']}"
+        elif "content" in response:
+            return response["content"]
+        elif "error" in response:
+            return f"Error: {response['error']}"
+    elif hasattr(response, 'content'):
+        # MuxiResponse object
+        return response.content
+    elif hasattr(response, '__aiter__'):
+        # Streaming response - collect it
+        return asyncio.run(collect_stream(response))
+    return str(response)
+
+
+async def collect_stream(stream):
+    """
+    Asynchronously collects all chunks from an async generator and concatenates them into a single string.
+    
+    Parameters:
+        stream: An asynchronous generator yielding string chunks.
+    
+    Returns:
+        str: The concatenated string of all collected chunks.
+    """
+    chunks = []
+    async for chunk in stream:
+        chunks.append(chunk)
+    return ''.join(chunks)
+
+
 # Create mock LLM for embedding
 class MockLLM:
     def __init__(self, dimension=1536):
+        """
+        Initialize the mock language model with a specified embedding dimension.
+        
+        Parameters:
+            dimension (int): The size of the embedding vector. Defaults to 1536.
+        """
         self.dimension = dimension
 
     async def embed(self, text):
@@ -20,23 +67,26 @@ class MockLLM:
 
 
 async def test_local_buffer_memory():
-    """Test local buffer memory mode"""
+    """
+    Test the local buffer memory mode of the chat system.
+    
+    Runs a sequence of interactions using a local buffer memory formation to verify that user context is retained, buffer overflow is handled correctly (older messages are forgotten when the buffer is exceeded), and the system responds as expected. Executes the test logic in a separate thread to avoid event loop conflicts.
+    
+    Returns:
+        dict: A summary of the test results, including mode, context retention status, buffer overflow handling, and overall status. If the test fails, includes an error message.
+    """
     print("\n=== Testing Local Buffer Memory ===")
 
     def run_test():
         # Helper function to handle async generator responses
+        """
+        Runs a test to verify local buffer memory behavior in the chat system.
+        
+        The test checks that user context (name and company) is retained after initial input, and that buffer overflow causes older messages to be forgotten. Returns a dictionary summarizing the test mode, context retention, buffer overflow handling, and status.
+        """
         def get_response(coro):
             result = asyncio.run(coro)
-            if hasattr(result, "__aiter__"):
-                # It's an async generator, collect all chunks
-                async def collect():
-                    chunks = []
-                    async for chunk in result:
-                        chunks.append(chunk)
-                    return "".join(chunks)
-
-                return asyncio.run(collect())
-            return result
+            return handle_response(result)
 
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-local.yaml")
@@ -94,23 +144,24 @@ async def test_local_buffer_memory():
 
 
 async def test_remote_buffer_memory():
-    """Test remote buffer memory mode (simulated)"""
+    """
+    Test the remote buffer memory mode by verifying that user context is retained and recalled correctly.
+    
+    Sends user information to the chat system using a remote buffer memory formation, then queries for the stored context to ensure both the user's name and preferred language are remembered. Returns a dictionary summarizing the test outcome, including context retention and status.
+    """
     print("\n=== Testing Remote Buffer Memory ===")
 
     def run_test():
         # Helper function to handle async generator responses
+        """
+        Tests remote buffer memory mode by setting and recalling user context, verifying that the system retains user information across messages.
+        
+        Returns:
+            dict: A summary containing the buffer mode, context retention result, and test status.
+        """
         def get_response(coro):
             result = asyncio.run(coro)
-            if hasattr(result, "__aiter__"):
-                # It's an async generator, collect all chunks
-                async def collect():
-                    chunks = []
-                    async for chunk in result:
-                        chunks.append(chunk)
-                    return "".join(chunks)
-
-                return asyncio.run(collect())
-            return result
+            return handle_response(result)
 
         formation = Formation()
         formation.load("test-formations/formation-memory/formation-buffer-remote.yaml")

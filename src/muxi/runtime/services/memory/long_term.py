@@ -46,21 +46,19 @@ from sqlalchemy import (
     select,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from ...datatypes.json_type import JSONType
 from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Note: No longer importing global config - values passed as parameters
 from ...utils.id_generator import get_default_nanoid
-from ...utils.datetime_utils import utc_now
+from ...utils.datetime_utils import utc_now_naive
 from ..llm import LLM
 from .. import observability
-from ..db import DatabaseManager
-
-# Create SQLAlchemy Base
-Base = declarative_base()
+from ..db import DatabaseManager, Base, AsyncModelMixin
 
 
-class User(Base):
+class User(Base, AsyncModelMixin):
     """
     User table for multi-user support.
 
@@ -74,8 +72,8 @@ class User(Base):
     external_user_id_hash = Column(String(64), nullable=False, index=True)
     formation_id = Column(String(255), nullable=False)
     formation_id_hash = Column(String(64), nullable=False, index=True)
-    created_at = Column(DateTime, nullable=False, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     # Composite unique constraint to ensure uniqueness within each formation
     __table_args__ = (
@@ -88,7 +86,7 @@ class User(Base):
     )
 
 
-class Memory(Base):
+class Memory(Base, AsyncModelMixin):
     """
     Memory table for storing vector embeddings and metadata.
 
@@ -104,13 +102,13 @@ class Memory(Base):
     formation_id_hash = Column(String(64), nullable=False, index=True)
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
-    meta_data = Column(JSONB, nullable=False, default={})
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    meta_data = Column(JSONType, nullable=False, default={})
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
     collection = Column(String(255), nullable=False, index=True)
 
 
-class Collection(Base):
+class Collection(Base, AsyncModelMixin):
     """
     Collection table for organizing memories.
 
@@ -126,8 +124,8 @@ class Collection(Base):
     formation_id_hash = Column(String(64), nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text)
-    created_at = Column(DateTime, default=utc_now)
-    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, default=utc_now_naive)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
 
 class LongTermMemory:
@@ -149,14 +147,9 @@ class LongTermMemory:
         embedding_model: Optional[LLM] = None,
     ):
         """
-        Initialize the long-term memory.
-
-        Args:
-            db_manager: Unified database manager instance (required)
-            formation_id: The formation ID for scoping data
-            dimension: The dimension of the vectors to store.
-            default_collection: The default collection to use.
-            embedding_model: The embedding model to use.
+        Initialize a LongTermMemory instance for persistent semantic memory storage.
+        
+        Sets up database connections, determines multi-user mode, creates necessary tables, and ensures default user and collection exist in single-user mode. Supports configuration of vector dimension, default collection, and optional embedding model.
         """
         self.dimension = dimension
         self.default_collection = default_collection
@@ -168,6 +161,7 @@ class LongTermMemory:
         self.db_manager = db_manager
         self.engine = self.db_manager.engine
         self.Session = self.db_manager.Session
+        self.AsyncSession = self.db_manager.AsyncSession
 
         # Determine if we're in multi-user mode
         self.is_multi_user = self.db_manager.database_type == "postgresql"
@@ -312,19 +306,16 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> str:
         """
-        Add content to long-term memory.
-
-        This method stores new content in the long-term memory system with
-        optional metadata and pre-computed embedding. If no embedding is
-        provided, one will be generated using the embedding provider.
-
-        Args:
-            content: The text content to store.
-            metadata: Optional metadata to associate with the content.
-            embedding: Optional pre-computed embedding vector.
-
+        Asynchronously adds new content to long-term memory, generating an embedding if not provided.
+        
+        Parameters:
+            content (str): The text content to store.
+            metadata (dict, optional): Additional metadata to associate with the content.
+            embedding (list[float] or np.ndarray, optional): Pre-computed embedding vector. If not provided, an embedding is generated.
+            external_user_id (str, optional): The external user identifier for multi-user environments.
+        
         Returns:
-            The ID of the newly created memory entry.
+            str: The unique ID of the newly created memory entry.
         """
         # Emit memory storage started event
         observability.observe(
@@ -346,8 +337,8 @@ class LongTermMemory:
         if embedding is None:
             embedding = await self.embedding_model.embed(content)
 
-        # Insert into database
-        memory_id = self._add_internal(
+        # Insert into database using async method
+        memory_id = await self._add_internal_async(
             content, embedding, metadata, self.default_collection, external_user_id
         )
 
@@ -364,6 +355,62 @@ class LongTermMemory:
         )
         return memory_id
 
+    async def _add_internal_async(
+        self,
+        text: str,
+        embedding: Union[List[float], np.ndarray],
+        metadata: Dict[str, Any] = None,
+        collection: Optional[str] = None,
+        external_user_id: Optional[str] = None,
+    ) -> str:
+        """
+        Asynchronously adds a new memory entry to the database with the specified text, embedding, metadata, collection, and user context.
+        
+        Parameters:
+            text (str): The text content to store as memory.
+            embedding (Union[List[float], np.ndarray]): The vector embedding representing the content.
+            metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
+            collection (str, optional): The collection name to store the memory in. Defaults to the default collection if not specified.
+            external_user_id (str, optional): The external user identifier for multi-user environments.
+        
+        Returns:
+            str: The unique ID of the newly created memory entry.
+        """
+        if metadata is None:
+            metadata = {}
+
+        if collection is None:
+            collection = self.default_collection
+
+        # Add timestamp to metadata
+        metadata["timestamp"] = time.time()
+
+        async with self.db_manager.get_async_session() as session:
+            # Get or create user
+            user = await self._get_or_create_user_async(session, external_user_id)
+
+            # Ensure collection exists for this user
+            await self._ensure_collection_exists_async(session, collection, user.id)
+
+            # Convert numpy array to list if necessary
+            if isinstance(embedding, np.ndarray):
+                embedding = embedding.tolist()
+
+            # Create memory using async model helper
+            memory = await Memory.create(
+                session,
+                user_id=user.id,
+                text=text,
+                embedding=embedding,
+                meta_data=metadata,
+                collection=collection,
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
+            )
+
+            # Return ID
+            return memory.id
+
     def _add_internal(
         self,
         text: str,
@@ -373,19 +420,17 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> str:
         """
-        Internal method to add a memory to the database.
-
-        This is a synchronous implementation that directly interacts with
-        the database to add a new memory entry.
-
-        Args:
-            text: The text content to store.
-            embedding: The vector embedding of the text.
-            metadata: Optional metadata to associate with the content.
-            collection: The collection to store the memory in.
-
+        Synchronously adds a new memory entry to the database with associated text, embedding, metadata, and collection.
+        
+        Parameters:
+            text (str): The text content to store.
+            embedding (Union[List[float], np.ndarray]): The vector embedding representing the text.
+            metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
+            collection (str, optional): The collection name to store the memory in.
+            external_user_id (str, optional): The external user identifier for multi-user environments.
+        
         Returns:
-            The ID of the newly created memory entry.
+            str: The unique ID of the newly created memory entry.
         """
         if metadata is None:
             metadata = {}
@@ -468,21 +513,20 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Search for memories similar to the query.
-
-        This method performs a semantic similarity search for memories
-        matching the query, with support for metadata filtering and
-        collection-specific searching.
-
-        Args:
-            query: The text query to search for.
-            limit: Maximum number of results to return.
-            query_embedding: Optional pre-computed embedding vector for the query.
-            collection: The collection to search in. If None, uses the default collection.
-            filter_metadata: Optional metadata filters to apply.
-
+        Asynchronously performs a semantic similarity search for memories matching a text query.
+        
+        If a query embedding is not provided, it is generated using the embedding model. Supports filtering by collection and metadata, and returns a list of the most relevant memories with similarity scores.
+        
+        Parameters:
+            query (str): The text query to search for.
+            limit (int): Maximum number of results to return.
+            query_embedding (Optional[Union[List[float], np.ndarray]]): Optional pre-computed embedding vector for the query.
+            collection (Optional[str]): The collection to search in. Defaults to the default collection if not specified.
+            filter_metadata (Optional[Dict[str, Any]]): Optional metadata filters to apply.
+            external_user_id (Optional[str]): The external user ID for multi-user environments.
+        
         Returns:
-            A list of dictionaries containing the search results, ordered by relevance.
+            List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores, ordered by relevance.
         """
         # Emit memory search started event
         observability.observe(
@@ -506,8 +550,8 @@ class LongTermMemory:
         if collection is None:
             collection = self.default_collection
 
-        # Search in database
-        results = self._search_internal(
+        # Search in database using async method
+        results = await self._search_internal_async(
             query_embedding, limit, collection, filter_metadata, external_user_id
         )
 
@@ -893,18 +937,14 @@ class LongTermMemory:
         self, limit: int = 10, collection: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
-        Get the most recent memories.
-
-        This method retrieves the most recently created memories from a
-        specified collection, ordered by creation date.
-
-        Args:
-            limit: The maximum number of memories to return.
-            collection: The collection to get memories from. If None, the
-                default collection will be used.
-
+        Retrieve the most recent memories from a specified or default collection, ordered by creation date.
+        
+        Parameters:
+            limit (int): Maximum number of memories to return.
+            collection (str, optional): Name of the collection to retrieve memories from. Uses the default collection if not specified.
+        
         Returns:
-            A list of dictionaries containing memory information.
+            List[Dict[str, Any]]: A list of dictionaries containing memory details, including ID, text, metadata, timestamps, and collection name.
         """
         collection_name = collection or self.default_collection
 
@@ -927,4 +967,149 @@ class LongTermMemory:
                     "collection": m.collection,
                 }
                 for m in memories
+            ]
+
+    async def _get_or_create_user_async(self, session: AsyncSession, external_user_id: Optional[str] = None) -> User:
+        """
+        Asynchronously retrieves an existing user or creates a new one based on the external user ID and formation scope.
+        
+        Raises:
+            ValueError: If `external_user_id` is not provided in multi-user mode.
+        
+        Returns:
+            User: The retrieved or newly created user instance.
+        """
+        # Handle single-user mode
+        if not self.is_multi_user:
+            external_user_id = "0"
+        elif external_user_id is None:
+            raise ValueError("external_user_id is required in multi-user mode")
+
+        # Calculate hash
+        external_user_id_hash = self._hash_external_id(external_user_id)
+
+        # Try to get existing user
+        user = await User.get(
+            session,
+            external_user_id_hash=external_user_id_hash,
+            formation_id_hash=self.formation_id_hash,
+        )
+
+        if not user:
+            # Create new user
+            user = await User.create(
+                session,
+                external_user_id=external_user_id,
+                external_user_id_hash=external_user_id_hash,
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
+            )
+
+        return user
+
+    async def _ensure_collection_exists_async(
+        self, session: AsyncSession, collection_name: str, user_id: int
+    ) -> None:
+        """
+        Asynchronously ensures that a collection with the specified name exists for the given user and formation, creating it if it does not already exist.
+        """
+        collection = await Collection.get(
+            session,
+            user_id=user_id,
+            name=collection_name,
+            formation_id_hash=self.formation_id_hash,
+        )
+
+        if not collection:
+            await Collection.create(
+                session,
+                user_id=user_id,
+                name=collection_name,
+                description=f"Collection: {collection_name}",
+                formation_id=self.formation_id,
+                formation_id_hash=self.formation_id_hash,
+            )
+
+    async def _search_internal_async(
+        self,
+        query_embedding: Union[List[float], np.ndarray],
+        k: int = 5,
+        collection: Optional[str] = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        external_user_id: Optional[str] = None,
+    ) -> List[Tuple[float, Dict[str, Any]]]:
+        """
+        Asynchronously searches for memories with embeddings most similar to the given query embedding.
+        
+        Performs a vector similarity search within the specified collection and user scope, optionally filtering by metadata. Returns up to `k` results as tuples of similarity score and memory data.
+         
+        Parameters:
+            query_embedding: The embedding vector to search against.
+            k: Maximum number of results to return.
+            collection: Name of the collection to search in; defaults to the default collection if not specified.
+            filter_metadata: Optional dictionary of metadata key-value pairs to filter results.
+            external_user_id: External user identifier to scope the search.
+        
+        Returns:
+            A list of tuples, each containing a similarity score (float) and a dictionary with memory details.
+        """
+        # Convert numpy array to list if necessary
+        if isinstance(query_embedding, np.ndarray):
+            query_embedding = query_embedding.tolist()
+
+        # Use default collection if not specified
+        if collection is None:
+            collection = self.default_collection
+
+        async with self.db_manager.get_async_session() as session:
+            # Get user
+            user = await self._get_or_create_user_async(session, external_user_id)
+
+            # For PostgreSQL with pgvector, we need to cast the query embedding
+            if self.db_manager.database_type == "postgresql":
+                from sqlalchemy import cast
+                from pgvector.sqlalchemy import Vector
+
+                query_embedding_vector = cast(query_embedding, Vector(self.dimension))
+            else:
+                query_embedding_vector = query_embedding
+
+            # Build query
+            query = (
+                select(
+                    Memory,
+                    func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
+                )
+                .filter(Memory.user_id == user.id)
+                .filter(Memory.formation_id_hash == self.formation_id_hash)
+                .filter(Memory.collection == collection)
+                .order_by("distance")
+                .limit(k)
+            )
+
+            # Add metadata filters if provided
+            if filter_metadata:
+                for key, value in filter_metadata.items():
+                    query = query.filter(Memory.meta_data[key].astext == str(value))
+
+            # Execute query
+            result = await session.execute(query)
+            results = result.all()
+
+            # Format results
+            return [
+                (
+                    1.0 / (1.0 + float(result.distance)),  # Convert distance to similarity score
+                    {
+                        "id": result.Memory.id,
+                        "text": result.Memory.text,
+                        "meta_data": result.Memory.meta_data,
+                        "created_at": (
+                            result.Memory.created_at.isoformat()
+                            if result.Memory.created_at
+                            else None
+                        ),
+                    },
+                )
+                for result in results
             ]

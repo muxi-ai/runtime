@@ -264,9 +264,14 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
 
 
 def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) -> None:
-    """Initialize persistent memory from configuration."""
+    """
+    Initializes the persistent memory system for the formation based on the provided configuration.
+    
+    Determines the memory backend (PostgreSQL, SQLite, or Memobase) from the connection string, checks for uninterpolated secrets, and passes the formation ID and embedding model name to the memory constructor. Stores the resulting memory instance and database manager (if available) on the formation. Emits observability events for both success and failure. Persistent memory initialization errors are logged but do not interrupt execution.
+    """
     try:
         connection_string = persistent_config.get("connection_string")
+        formation_id = getattr(formation, "formation_id", "default-formation")
 
         # Check if connection string still contains uninterpolated secrets
         # This should not happen as secrets are interpolated during formation loading
@@ -291,6 +296,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = LongTermMemory(
                 connection_string=connection_string,
+                formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
             formation._is_multi_user = True
@@ -302,6 +308,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = SQLiteMemory(
                 db_path=connection_string,
+                formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
             memory_type = "SQLite"
@@ -312,6 +319,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
             formation._long_term_memory = Memobase(
                 connection_string=connection_string,
+                formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
             memory_type = "Memobase"
@@ -342,33 +350,28 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
 
 def initialize_document_processing(formation) -> None:
-    """Initialize document processing components."""
-    doc_config = (
-        formation._document_processing_config
-        if hasattr(formation, "_document_processing_config")
-        else {}
-    )
-
+    """
+    Initializes the document processing configuration and chunk manager for the formation.
+    
+    Creates a `DocumentProcessingConfig` from the formation's LLM configuration and uses it to initialize a `DocumentChunkManager`, which is stored on the formation. Emits an observability event on success or a warning event if initialization fails.
+    """
     try:
         # Create document processing configuration
-        config = DocumentProcessingConfig(**doc_config)
+        # Pass the llm_config instead of document_processing_config
+        llm_config = formation._llm_config if hasattr(formation, "_llm_config") else {}
+        config = DocumentProcessingConfig(llm_config)
 
         # Initialize document chunk manager
-        formation._document_chunk_manager = DocumentChunkManager(
-            chunk_size=config.chunk_size,
-            chunk_overlap=config.chunk_overlap,
-            max_chunks_per_doc=config.max_chunks_per_doc,
-            storage_backend=config.storage_backend,
-        )
+        formation._document_chunk_manager = DocumentChunkManager(document_config=config)
 
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
             data={
                 "service": "document_processing",
-                "chunk_size": config.chunk_size,
-                "chunk_overlap": config.chunk_overlap,
-                "backend": config.storage_backend,
+                "chunk_size": config.get_chunk_size(),
+                "chunk_overlap": config.get_chunk_overlap(),
+                "enabled": config.is_enabled(),
             },
             description="Document processing initialized",
         )
@@ -383,17 +386,19 @@ def initialize_document_processing(formation) -> None:
 
 
 def initialize_background_services(formation) -> None:
-    """Initialize background services like cache, request tracking, webhooks."""
+    """
+    Initializes background services for the formation, including cache management, request tracking, and webhook handling.
+    
+    On failure, emits a warning-level observability event with error details.
+    """
     try:
         # Initialize cache manager
         from .caching import IntelligentCacheManager
 
         formation._cache_manager = IntelligentCacheManager(
             enable_analytics=True,
-            ttl_seconds=3600,
-            max_cache_size_mb=100,
-            eviction_policy="lru",
-            formation_id=formation.formation_id,
+            default_ttl_seconds=3600,
+            l3_max_memory_mb=100,
         )
         # Cache manager will be started later if needed
 
@@ -473,10 +478,9 @@ def initialize_clarification_config(formation) -> None:
 
 def initialize_document_processing_config(formation) -> None:
     """
-    Initialize document processing configuration from LLM models in formation config.
-
-    This processes the unified document configuration from llm.models.documents.settings
-    for use by document-related components.
+    Initializes the document processing configuration and chunk manager for the formation.
+    
+    Creates a `DocumentProcessingConfig` from the formation's LLM configuration and assigns it to the formation. Initializes a `DocumentChunkManager` with this configuration and assigns it to both `_document_chunker` and `_document_chunk_manager` for compatibility. Emits an observability event if document processing is enabled. On failure, logs a warning and falls back to a default configuration.
     """
     try:
         # Use the pre-configured LLM config
@@ -501,6 +505,8 @@ def initialize_document_processing_config(formation) -> None:
 
         # Initialize DocumentChunkManager with the configuration
         formation._document_chunker = DocumentChunkManager(formation._document_processing_config)
+        # Also set as _document_chunk_manager for backwards compatibility
+        formation._document_chunk_manager = formation._document_chunker
 
     except Exception as e:
         observability.observe(

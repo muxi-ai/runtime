@@ -60,16 +60,18 @@ class SQLiteMemory(BaseMemory):
         dimension: int = 1536,
         default_collection: str = "default",
         extensions_dir: str = "extensions",
+        embedding_model=None,  # Accept but ignore for compatibility
     ):
         """
-        Initialize SQLite-based long-term memory.
-
-        Args:
-            db_path: Path to the SQLite database file
-            formation_id: The formation ID for scoping data
-            dimension: Dimension of the embedding vectors
-            default_collection: Name of the default collection
-            extensions_dir: Directory containing sqlite-vec extensions
+        Initialize a local SQLite-based vector memory store with support for persistent collections and embeddings.
+        
+        Parameters:
+            db_path (str): Path to the SQLite database file.
+            formation_id (str): Identifier used to scope data within the database.
+            dimension (int, optional): Dimensionality of embedding vectors. Defaults to 1536.
+            default_collection (str, optional): Name of the default collection. Defaults to "default".
+            extensions_dir (str, optional): Directory containing sqlite-vec extensions. Defaults to "extensions".
+            embedding_model (optional): Accepted for compatibility but not used.
         """
         self.db_path = db_path
         self.formation_id = formation_id

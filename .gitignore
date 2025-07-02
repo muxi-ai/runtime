@@ -184,3 +184,5 @@ test-docs/small.pdf
 test-docs/speech.m4a
 test-docs/spreadsheet.csv
 test-docs/spreadsheet.xlsx
+.claude/.mcp.json
+.claude/.mcp.json

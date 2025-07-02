@@ -6,7 +6,9 @@ Tests basic agent responses and multi-agent routing functionality.
 import pytest
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
-from muxi.runtime.formation import Formation
+import sys
+sys.path.insert(0, '.')
+from src.muxi.runtime.formation import Formation
 
 
 class TestBasicCommunication:

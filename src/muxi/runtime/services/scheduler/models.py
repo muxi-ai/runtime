@@ -9,36 +9,16 @@ Models:
 """
 
 import json
-from ...utils.datetime_utils import utc_now
+from ...utils.datetime_utils import utc_now_naive
 from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
-from sqlalchemy.types import TEXT, TypeDecorator
 
-from ..db import Base
-
-
-class JSONType(TypeDecorator):
-    """Custom JSON type that works with both PostgreSQL and SQLite."""
-
-    impl = TEXT
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        if value is None:
-            return None
-        return json.dumps(value)
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return None
-        if isinstance(value, (list, dict)):
-            # Already a Python object (e.g., from PostgreSQL JSONB)
-            return value
-        return json.loads(value)
+from ..db import Base, AsyncModelMixin
+from ...datatypes.json_type import JSONType
 
 
-class ScheduledJobAudit(Base):
+class ScheduledJobAudit(Base, AsyncModelMixin):
     """
     Audit trail for scheduled job lifecycle events.
 
@@ -59,7 +39,7 @@ class ScheduledJobAudit(Base):
     action = Column(
         String(50), nullable=False
     )  # created, updated, paused, resumed, deleted, replaced
-    timestamp = Column(DateTime, nullable=False, default=utc_now, index=True)
+    timestamp = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
     changes = Column(Text, nullable=True)  # JSON string of what changed
     reason = Column(Text, nullable=True)  # Optional reason for the action
 
@@ -71,7 +51,12 @@ class ScheduledJobAudit(Base):
     )
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert audit entry to dictionary."""
+        """
+        Return a dictionary representation of the audit entry, parsing the `changes` field as JSON if possible.
+        
+        Returns:
+            dict: Dictionary containing audit entry fields, with `changes` parsed as a dictionary if valid JSON, otherwise as a string.
+        """
         result = {
             "id": self.id,
             "job_id": self.job_id,
@@ -91,7 +76,7 @@ class ScheduledJobAudit(Base):
         return result
 
 
-class ScheduledJob(Base):
+class ScheduledJob(Base, AsyncModelMixin):
     """
     Scheduled job model for storing both recurring and one-time AI tasks.
 
@@ -127,8 +112,8 @@ class ScheduledJob(Base):
     status = Column(String(20), nullable=False, default="ACTIVE", index=True)
 
     # Timestamps
-    created_at = Column(DateTime, nullable=False, default=utc_now)
-    updated_at = Column(DateTime, nullable=False, default=utc_now, onupdate=utc_now)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive, onupdate=utc_now_naive)
 
     # Execution tracking
     last_run_at = Column(DateTime, nullable=True)

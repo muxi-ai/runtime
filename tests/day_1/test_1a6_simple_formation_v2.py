@@ -12,7 +12,11 @@ from src.muxi.runtime.formation.formation import Formation
 
 
 async def test_simple_formation():
-    """Test basic formation functionality with schema v1.0.0."""
+    """
+    Asynchronously tests the loading, initialization, and basic functionality of a minimal formation configuration using schema version 1.0.0.
+    
+    This function creates a temporary YAML file with a simple formation definition, loads it, starts the overlord process, verifies agent and memory system initialization, optionally tests the agent's intent detection service, and ensures proper shutdown and cleanup. Assertions and printed output are used to confirm each step's success.
+    """
     print("Testing Simple Formation with Schema v1.0.0...")
     
     # Create minimal valid formation following the schema
@@ -23,6 +27,8 @@ description: "Basic test formation for validation"
 
 # LLM configuration with separate capabilities
 llm:
+  api_keys:
+    openai: "test-key-for-validation"
   models:
     - text: "openai/gpt-4o-mini"
     - embedding: "openai/text-embedding-3-small"
@@ -73,10 +79,10 @@ agents:
             
             # Test the service works (fallback mode without LLM)
             from src.muxi.runtime.datatypes.intent import IntentType
-            result = await agent.intent_service.detect_intent(
+            result = asyncio.run(agent.intent_service.detect_intent(
                 "Do you remember what we discussed?",
                 IntentType.QUERY_TYPE
-            )
+            ))
             print(f"   Fallback detection result: {result.intent} (confidence: {result.confidence})")
         else:
             print("   ℹ️  IntentDetectionService not initialized (which is OK for basic test)")

@@ -86,7 +86,6 @@ from .initialization import (
     initialize_observability,
     initialize_llm_config,
     initialize_memory_systems,
-    initialize_document_processing,
     initialize_background_services,
     initialize_clarification_config,
     initialize_document_processing_config,
@@ -863,19 +862,9 @@ class Formation:
 
     def _initialize_services(self) -> None:
         """
-        Initialize all services after configuration is loaded.
-
-        This is called after _prepare_services() and initializes actual service
-        instances. Observability MUST be initialized first to ensure all events
-        go to the configured destination.
-
-        Order is critical:
-        1. Observability (FIRST!)
-        2. LLM configuration
-        3. Memory systems
-        4. Document processing
-        5. Background services
-        6. Other services
+        Initializes all core and auxiliary services required for the Formation runtime after configuration is loaded.
+        
+        This method must be called after `_prepare_services()`. It initializes services in a specific order to ensure dependencies are satisfied, starting with observability, followed by LLM configuration, memory systems, document processing configuration, background services, clarification configuration, and agent loading. Updates the internal registry of configured services with initialized instances.
         """
         # 1. Initialize observability FIRST
         # This ensures all subsequent events go to the configured file
@@ -887,17 +876,14 @@ class Formation:
         # 3. Initialize memory systems
         initialize_memory_systems(self)
 
-        # 4. Initialize document processing
-        initialize_document_processing(self)
+        # 4. Initialize document processing configuration
+        initialize_document_processing_config(self)
 
         # 5. Initialize background services
         initialize_background_services(self)
 
         # 6. Initialize clarification configuration
         initialize_clarification_config(self)
-
-        # 7. Initialize document processing configuration
-        initialize_document_processing_config(self)
 
         # 8. Load agents configuration
         load_agents_from_configuration(self)
@@ -1211,15 +1197,23 @@ class Formation:
             raise ValueError("Clarification configuration must be a dictionary")
 
     def _setup_document_processing_config(self) -> None:
-        """Setup and validate document processing configuration."""
-        self._document_processing_config = self.config.get("document_processing", {})
-
-        # Validate document processing structure
-        if not isinstance(self._document_processing_config, dict):
-            raise ValueError("Document processing configuration must be a dictionary")
+        """
+        Ensures the `_document_processing_config` attribute exists on the instance, initializing it to `None` if absent.
+        
+        This method does not load or validate the document processing configuration; initialization is deferred to `initialize_document_processing_config`.
+        """
+        # Document processing config is initialized later by initialize_document_processing_config
+        # For now, just ensure the attribute exists
+        if not hasattr(self, "_document_processing_config"):
+            self._document_processing_config = None
 
     def _setup_scheduler_config(self) -> None:
-        """Setup and validate scheduler configuration."""
+        """
+        Sets up and validates the scheduler configuration from the loaded formation config.
+        
+        Raises:
+            ConfigurationValidationError: If the scheduler configuration is not a dictionary or if required fields are invalid.
+        """
         self._scheduler_config = self.config.get("scheduler", {})
 
         # Validate scheduler structure
