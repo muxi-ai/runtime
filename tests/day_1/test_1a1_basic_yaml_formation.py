@@ -11,8 +11,10 @@ import asyncio
 import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
-from muxi.runtime.formation import Formation
-from muxi.runtime.datatypes.exceptions import (
+import sys
+sys.path.insert(0, '.')
+from src.muxi.runtime.formation import Formation
+from src.muxi.runtime.datatypes.exceptions import (
     ConfigurationNotFoundError,
     ConfigurationValidationError,
     ConfigurationLoadError

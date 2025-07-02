@@ -103,7 +103,7 @@ def test_3f1_real_pdf_formula():
                             "size": len(pdf_content),
                         }
                     ],
-                    use_async=True,  # Use async processing to test webhook
+                    use_async=False,  # Use sync processing for immediate response
                 )
             )
 
