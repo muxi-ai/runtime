@@ -347,12 +347,6 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 
 def initialize_document_processing(formation) -> None:
     """Initialize document processing components."""
-    doc_config = (
-        formation._document_processing_config
-        if hasattr(formation, "_document_processing_config")
-        else {}
-    )
-
     try:
         # Create document processing configuration
         # Pass the llm_config instead of document_processing_config
