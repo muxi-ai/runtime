@@ -13,29 +13,9 @@ from ...utils.datetime_utils import utc_now
 from typing import Any, Dict
 
 from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
-from sqlalchemy.types import TEXT, TypeDecorator
 
 from ..db import Base, AsyncModelMixin
-
-
-class JSONType(TypeDecorator):
-    """Custom JSON type that works with both PostgreSQL and SQLite."""
-
-    impl = TEXT
-    cache_ok = True
-
-    def process_bind_param(self, value, dialect):
-        if value is None:
-            return None
-        return json.dumps(value)
-
-    def process_result_value(self, value, dialect):
-        if value is None:
-            return None
-        if isinstance(value, (list, dict)):
-            # Already a Python object (e.g., from PostgreSQL JSONB)
-            return value
-        return json.loads(value)
+from ...datatypes.json_type import JSONType
 
 
 class ScheduledJobAudit(Base, AsyncModelMixin):

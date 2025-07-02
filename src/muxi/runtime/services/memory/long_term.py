@@ -46,7 +46,7 @@ from sqlalchemy import (
     select,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from ...datatypes.json_type import JSONType
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,7 +102,7 @@ class Memory(Base, AsyncModelMixin):
     formation_id_hash = Column(String(64), nullable=False, index=True)
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
-    meta_data = Column(JSONB, nullable=False, default={})
+    meta_data = Column(JSONType, nullable=False, default={})
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
     collection = Column(String(255), nullable=False, index=True)

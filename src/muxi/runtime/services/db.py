@@ -436,12 +436,6 @@ class DatabaseManager:
         """Close the async database connection and cleanup resources."""
         if self._async_engine is not None:
             await self._async_engine.dispose()
-            observability.observe(
-                event_type=observability.SystemEvents.DATABASE_MANAGER_CLOSED,
-                level=observability.EventLevel.INFO,
-                data={"async": True},
-                description="Async database manager closed and resources cleaned up",
-            )
 
     def close(self) -> None:
         """Close the database connection and cleanup resources."""
@@ -462,11 +456,6 @@ class DatabaseManager:
             except Exception:
                 # Fallback to sync disposal
                 pass
-        observability.observe(
-            event_type=observability.SystemEvents.DATABASE_MANAGER_CLOSED,
-            level=observability.EventLevel.INFO,
-            description="Database manager closed and resources cleaned up",
-        )
 
 
 # Global database manager instance (will be initialized by formation)
