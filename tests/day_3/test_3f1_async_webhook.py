@@ -60,27 +60,27 @@ class ObservabilityCapture:
 async def check_request_status(overlord, request_id, max_wait=60):
     """Poll request status until completion or timeout."""
     start_time = time.time()
-    
+
     while time.time() - start_time < max_wait:
         # Get request status
         request_state = await overlord.request_tracker.get_request(request_id)
-        
+
         if not request_state:
             print(f"⚠️  Request {request_id} not found in tracker")
             return None
-            
+
         print(f"📊 Request status: {request_state.status.value}")
-        
+
         if request_state.status.value == "completed":
             print(f"✅ Request completed in {request_state.processing_time:.2f} seconds")
             return request_state
         elif request_state.status.value == "failed":
             print(f"❌ Request failed: {request_state.error}")
             return request_state
-            
+
         # Wait before next check
         await asyncio.sleep(2)
-    
+
     print(f"⏱️  Timeout waiting for request completion after {max_wait} seconds")
     return None
 
@@ -88,10 +88,10 @@ async def check_request_status(overlord, request_id, max_wait=60):
 def check_webhook_site(webhook_url):
     """Check webhook.site for received webhooks."""
     # Extract the UUID from the webhook URL
-    # Format: https://webhook.site/165c81e9-a78b-4b15-8ecb-75298746f5b9
+    # Format: https://webhook.site/ef0cfa0f-4d38-443d-b459-ed5233fe6fbd
     uuid = webhook_url.split("/")[-1]
     api_url = f"https://webhook.site/token/{uuid}/requests"
-    
+
     try:
         response = requests.get(api_url, timeout=5)
         if response.status_code == 200:
@@ -174,9 +174,9 @@ def test_3f1_async_pdf_webhook():
                 print(f"Message: {response.get('message')}")
                 print(f"Webhook URL: {response.get('processing_info', {}).get('webhook_url', 'Not specified')}")
                 print()
-                
+
                 request_id = response.get('request_id')
-                
+
                 print("✅ Async request submitted successfully")
                 print("⏳ Webhook will be sent upon completion to:", webhook_url)
                 print()
@@ -184,7 +184,7 @@ def test_3f1_async_pdf_webhook():
                 print("📋 Check the log file at: /Users/ran/Desktop/multimodal.log")
                 print("🛑 Press Ctrl+C when you receive the webhook to stop the test")
                 print()
-                
+
                 # Keep the process alive until webhook is delivered
                 try:
                     max_wait = 60  # Maximum 60 seconds
@@ -198,7 +198,7 @@ def test_3f1_async_pdf_webhook():
                     print(f"\n⚠️  Timeout after {max_wait} seconds - webhook may not have been delivered")
                 except KeyboardInterrupt:
                     print("\n🛑 Test interrupted by user")
-                
+
             else:
                 print("❌ Unexpected response format (not async)")
                 print(f"Response: {response}")

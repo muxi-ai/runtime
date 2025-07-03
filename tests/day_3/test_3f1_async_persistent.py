@@ -55,7 +55,7 @@ async def test_async_pdf_persistent():
         print("\n✅ Async request submitted!")
         print(f"Request ID: {response['request_id']}")
         print("Session ID: test_session_123")
-        print("Webhook URL: https://webhook.site/165c81e9-a78b-4b15-8ecb-75298746f5b9")
+        print("Webhook URL: https://webhook.site/ef0cfa0f-4d38-443d-b459-ed5233fe6fbd")
         print()
         print("⏳ Background processing has started...")
         print("📋 Check log at: /Users/ran/Desktop/multimodal.log")
@@ -81,7 +81,7 @@ async def test_async_pdf_persistent():
                         print(f"[{counter}s] Request status: {request_state.status.value}")
                         if request_state.status.value == "completed":
                             print("\n✅ Request completed! Webhook should have been sent.")
-                            print("Check https://webhook.site/165c81e9-a78b-4b15-8ecb-75298746f5b9")
+                            print("Check https://webhook.site/ef0cfa0f-4d38-443d-b459-ed5233fe6fbd")
                             # Give it another 5 seconds to ensure webhook is sent
                             await asyncio.sleep(5)
                             break

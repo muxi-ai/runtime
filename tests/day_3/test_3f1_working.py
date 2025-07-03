@@ -58,7 +58,7 @@ async def run_async_test():
         print("\n✅ Async request submitted!")
         print(f"Request ID: {response['request_id']}")
         print("Session ID: test_session_123")
-        print("Webhook URL: https://webhook.site/165c81e9-a78b-4b15-8ecb-75298746f5b9")
+        print("Webhook URL: https://webhook.site/ef0cfa0f-4d38-443d-b459-ed5233fe6fbd")
         print()
         print("⏳ Background task is processing...")
         print("📋 Check log at: /Users/ran/Desktop/multimodal.log")
