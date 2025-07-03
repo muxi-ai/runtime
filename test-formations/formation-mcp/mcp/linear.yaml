@@ -1,0 +1,16 @@
+# HTTP-based MCP server configuration schema
+schema: "1.0.0"                    # Schema version (Semantic Versioning)
+id: "linear-mcp"                    # Unique server name/id (required)
+description: "Linear MCP Server"  # Human-readable description
+active: true                       # optional; true (exists for start/stop commands)
+type: "http"                       # Server type: http (required)
+
+# Connection details
+endpoint: "https://mcp.linear.app/sse"  # Server endpoint URL (required)
+timeout_seconds: 30                # Request timeout (overrides default)
+retry_attempts: 3                  # Number of retry attempts (overrides default)
+
+# Authentication (optional)
+auth:
+  type: "bearer"                   # Auth type: bearer, basic, api_key, none
+  token: "${{ secrets.LINEAR_MCP_TOKEN }}"   # Auth token (for bearer)

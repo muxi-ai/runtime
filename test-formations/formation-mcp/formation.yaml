@@ -1,0 +1,52 @@
+schema: "1.0.0"
+id: "test_formation"
+description: "Formation for testing buffer and persistent memory systems"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+    google: "${{ secrets.GEMINI_API_KEY }}"
+  models:
+    - text: "openai/gpt-4o-mini"
+    - vision: "google/gemini-2.0-flash"
+    - video: "google/gemini-2.0-flash"
+    - audio: "openai/whisper-1"
+    - documents: "openai/gpt-4o"
+      settings:
+        max_size_mb: 20
+        extraction:
+          chunk_size: 1000
+          overlap: 100
+          strategy: "adaptive"
+    - embedding: "openai/text-embedding-3-small"
+
+runtime:
+  built_in_mcps: false
+  mcp_server_startup_timeout: 5  # Reduce timeout to 5 seconds
+
+memory:
+  working:
+    max_memory_mb: 1
+    fifo_interval_min: 5
+    vector_dimension: 1536
+    mode: "local"
+
+  buffer:
+    size: 50
+    multiplier: 10
+    vector_search: true
+
+  persistent:
+    connection_string: "${{ secrets.POSTGRES_URI }}"
+    embedding_model: "openai/text-embedding-3-small"
+
+logging:
+  enabled: true
+  streams:
+    # File example
+    - transport: "file"
+      level: "debug"
+      format: "text"
+      destination: "/Users/ran/Desktop/mcp.log"
+      events: ["*"]
