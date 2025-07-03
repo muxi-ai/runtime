@@ -27,7 +27,7 @@ class JSONType(TypeDecorator):
     def load_dialect_impl(self, dialect):
         """
         Selects the appropriate SQLAlchemy type descriptor for JSON storage based on the database dialect.
-        
+
         For PostgreSQL, returns the native JSON type with `none_as_null=True`. For other dialects, returns a TEXT type for JSON serialization.
         """
         if dialect.name == "postgresql":
@@ -40,9 +40,9 @@ class JSONType(TypeDecorator):
     def process_bind_param(self, value, dialect):
         """
         Serializes a Python object for storage in a database JSON column.
-        
+
         If the dialect is PostgreSQL, returns the value unchanged for native JSON handling. For other dialects, serializes the value to a JSON string. Returns None if the input is None.
-        
+
         Raises:
             ValueError: If the value cannot be serialized to JSON.
         """
@@ -62,7 +62,7 @@ class JSONType(TypeDecorator):
     def process_result_value(self, value, dialect):
         """
         Converts a database value to a Python object after retrieval.
-        
+
         If the value is `None`, returns `None`. For PostgreSQL, returns the value as-is since it is already deserialized. For other dialects, returns the value directly if it is a Python list or dict; otherwise, deserializes the JSON string to a Python object.
         """
         if value is None:
