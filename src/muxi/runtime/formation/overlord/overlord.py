@@ -90,6 +90,7 @@ from ..agents import Agent
 from ..background.request_tracker import RequestStatus
 from ...services import observability
 from ...datatypes.response import MuxiResponse
+from ...datatypes.clarification import ClarificationRequest, ClarificationResponse
 from ...services.mcp.service import MCPService
 from ...services.memory.short_term import ShortTermMemory
 from ...services.memory.long_term import LongTermMemory
@@ -97,6 +98,7 @@ from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
 from ...services.a2a.registry_client import A2ARegistryClient
 from ...services.a2a.server import A2AServer
+from ..memory.credential_resolver import CredentialResolver
 from .agent_router import AgentRouter
 from .chat_orchestrator import ChatOrchestrator
 from .mcp_coordinator import MCPCoordinator
@@ -345,6 +347,9 @@ class Overlord:
         # Chat orchestration system
         self.chat_orchestrator = ChatOrchestrator(self)
 
+        # Pending clarifications tracking
+        self._pending_clarifications: Dict[str, Dict[str, Any]] = {}
+
         # MCP coordination system with configuration
         mcp_config = configured_services.get("mcp_config") if configured_services else None
         self.mcp_coordinator = MCPCoordinator(self, config=mcp_config)
@@ -369,6 +374,24 @@ class Overlord:
         # Set formation_id for unified response format
         self.formation_id = self.formation_config.get("formation_id", "default-formation")
         set_formation_id(self.formation_id)
+
+        # Initialize credential resolver if database is configured
+        self.credential_resolver = None
+        if configured_services:
+            db_manager = configured_services.get("db_manager")
+            if (
+                db_manager
+                and hasattr(db_manager, "async_session_maker")
+                and db_manager.async_session_maker
+            ):
+                # Calculate formation_id_hash (consistent with memory services)
+                formation_id_hash = hashlib.sha256(self.formation_id.encode()).hexdigest()
+
+                self.credential_resolver = CredentialResolver(
+                    async_session_maker=db_manager.async_session_maker,
+                    formation_id=self.formation_id,
+                    formation_id_hash=formation_id_hash,
+                )
 
         # Accept pre-generated API keys from Formation
         api_keys = api_keys or {}
@@ -3623,6 +3646,156 @@ class Overlord:
                     "information. Please try again."
                 ),
             )
+
+    async def handle_missing_credential(
+        self, service: str, user_id: str, context: Optional[Dict[str, Any]] = None
+    ) -> Optional[ClarificationRequest]:
+        """
+        Handle missing credential by generating a clarification request.
+
+        This method is called when a MissingCredentialError is raised during
+        tool execution. It generates an appropriate clarification request that
+        can be presented to the user.
+
+        Args:
+            service: The service name that requires credentials (e.g., "github")
+            user_id: The user ID who needs to provide credentials
+            context: Optional context about why the credential is needed
+
+        Returns:
+            ClarificationRequest or None if clarification is disabled
+        """
+        try:
+            # Check if clarification is enabled
+            if not self._clarification_config_obj or not self._clarification_config_obj.enabled:
+                observability.observe(
+                    event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": service,
+                        "user_id": user_id,
+                        "reason": "clarification_disabled",
+                    },
+                    description="Clarification disabled - cannot request missing credential",
+                )
+                return None
+
+            # Import credential handler
+            from ..clarification.credential_handler import CredentialClarificationHandler
+
+            # Create credential clarification handler
+            handler = CredentialClarificationHandler()
+
+            # Generate clarification request
+            clarification_request = handler.generate_credential_request(
+                service=service, context=context
+            )
+
+            # Store the clarification request for this user/session
+            # This allows us to handle the response when it comes back
+            session_id = context.get("session_id") if context else None
+            if session_id:
+                self._pending_clarifications[session_id] = {
+                    "type": "credential",
+                    "service": service,
+                    "user_id": user_id,
+                    "request": clarification_request,
+                    "handler": handler,
+                    "timestamp": time.time(),
+                }
+
+            observability.observe(
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUESTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "clarification_type": "credential",
+                    "service": service,
+                    "user_id": user_id,
+                    "has_context": bool(context),
+                },
+                description=f"Requesting {service} credentials from user",
+            )
+
+            return clarification_request
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"service": service, "user_id": user_id, "error": str(e)},
+                description=f"Failed to generate credential clarification: {str(e)}",
+            )
+            return None
+
+    async def process_credential_clarification_response(
+        self,
+        response: ClarificationResponse,
+        service: str,
+        user_id: str,
+        session_id: Optional[str] = None,
+    ) -> bool:
+        """
+        Process a user's response to a credential clarification request.
+
+        Args:
+            response: The clarification response from the user
+            service: The service the credential is for
+            user_id: The user providing the credential
+            session_id: Optional session ID
+
+        Returns:
+            True if credential was successfully stored, False otherwise
+        """
+        try:
+            # Get the pending clarification info
+            if session_id and session_id in self._pending_clarifications:
+                clarification_info = self._pending_clarifications[session_id]
+                if (
+                    clarification_info.get("type") == "credential"
+                    and clarification_info.get("service") == service
+                ):
+                    handler = clarification_info.get("handler")
+
+                    # Parse the credential from the response
+                    if handler:
+                        credential_data = handler.parse_credential_response(response, service)
+
+                        if credential_data and self.credential_resolver:
+                            # Store the credential
+                            await self.credential_resolver.store_credential(
+                                user_id=user_id, service=service, credentials=credential_data
+                            )
+
+                            # Clean up pending clarification
+                            del self._pending_clarifications[session_id]
+
+                            observability.observe(
+                                event_type=observability.SystemEvents.CREDENTIAL_UPDATE,
+                                level=observability.EventLevel.INFO,
+                                data={
+                                    "service": service,
+                                    "user_id": user_id,
+                                    "credential_type": (
+                                        list(credential_data.keys())[0]
+                                        if credential_data
+                                        else "unknown"
+                                    ),
+                                },
+                                description=f"Successfully stored {service} credentials for user",
+                            )
+
+                            return True
+
+            return False
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"service": service, "user_id": user_id, "error": str(e)},
+                description=f"Failed to process credential clarification response: {str(e)}",
+            )
+            return False
 
     async def _process_streaming_chat(
         self,

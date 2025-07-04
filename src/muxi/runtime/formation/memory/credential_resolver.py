@@ -1,0 +1,231 @@
+"""
+Credential Resolution Service for User-Specific Credentials
+
+This service handles runtime resolution of user credentials for MCP servers
+and other components that need to access services on behalf of users.
+"""
+
+from typing import Optional, Dict, Any
+from datetime import datetime
+from sqlalchemy import Column, Integer, String, DateTime, select
+from sqlalchemy.orm import declarative_base
+import nanoid
+
+from ...datatypes.json_type import JSONType
+from ...datatypes.exceptions import FormationError
+
+Base = declarative_base()
+
+
+class MissingCredentialError(FormationError):
+    """Raised when a required user credential is not found."""
+
+    def __init__(self, service: str, user_id: str):
+        self.service = service
+        self.user_id = user_id
+        super().__init__(
+            f"Missing credential for service '{service}' for user '{user_id}'",
+            {"service": service, "user_id": user_id, "error_type": "missing_credential"},
+        )
+
+
+class Credential(Base):
+    """SQLAlchemy model for user credentials that works with both PostgreSQL and SQLite."""
+
+    __tablename__ = "credentials"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(String, nullable=False)  # Changed from Integer to String for flexibility
+    credential_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    service = Column(String, nullable=False)  # Always lowercase
+    credentials = Column(JSONType, nullable=False, default={})  # Works with both DBs
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    formation_id = Column(String, nullable=False, default="default-formation")
+    formation_id_hash = Column(String, nullable=False)
+
+    # Add indexes in the database migration
+
+
+class CredentialResolver:
+    """
+    Service for resolving user-specific credentials at runtime.
+
+    This service provides caching and database access for user credentials,
+    supporting both PostgreSQL (JSONB) and SQLite (TEXT) storage through
+    the JSONType abstraction.
+    """
+
+    def __init__(self, async_session_maker, formation_id: str, formation_id_hash: str):
+        """
+        Initialize the credential resolver.
+
+        Args:
+            async_session_maker: Async SQLAlchemy session factory
+            formation_id: The formation ID (human-readable)
+            formation_id_hash: The hashed formation ID for database queries
+        """
+        self.async_session_maker = async_session_maker
+        self.formation_id = formation_id
+        self.formation_id_hash = formation_id_hash
+        self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
+
+    async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
+        """
+        Resolve user credentials for a service.
+
+        Args:
+            user_id: The user ID
+            service: The service name (will be normalized to lowercase)
+
+        Returns:
+            The credential data if found, None otherwise
+
+        Raises:
+            MissingCredentialError: If credential is required but not found
+        """
+        # Normalize service name to lowercase
+        service = service.lower()
+
+        # Check cache first
+        if user_id in self._cache and service in self._cache[user_id]:
+            return self._cache[user_id][service]
+
+        # Query database using async session
+        async with self.async_session_maker() as session:
+            stmt = (
+                select(Credential)
+                .where(
+                    Credential.user_id == user_id,
+                    Credential.service == service,
+                    Credential.formation_id_hash == self.formation_id_hash,
+                )
+                .limit(1)
+            )
+
+            result = await session.execute(stmt)
+            credential = result.scalar_one_or_none()
+
+            if credential:
+                # Cache the result
+                if user_id not in self._cache:
+                    self._cache[user_id] = {}
+                self._cache[user_id][service] = credential.credentials
+                return credential.credentials
+
+            return None
+
+    async def store_credential(
+        self, user_id: str, service: str, credentials: Dict[str, Any]
+    ) -> None:
+        """
+        Store user credentials in the database.
+
+        Args:
+            user_id: The user ID
+            service: The service name (will be normalized to lowercase)
+            credentials: The credential data to store
+        """
+        # Normalize service to lowercase for consistent storage
+        service = service.lower()
+
+        async with self.async_session_maker() as session:
+            # Check if credential already exists
+            stmt = select(Credential).where(
+                Credential.user_id == user_id,
+                Credential.service == service,
+                Credential.formation_id_hash == self.formation_id_hash,
+            )
+            result = await session.execute(stmt)
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Update existing credential
+                existing.credentials = credentials
+                existing.updated_at = datetime.utcnow()
+            else:
+                # Create new credential
+                new_cred = Credential(
+                    user_id=user_id,
+                    credential_id=nanoid.generate(),  # Generate unique ID
+                    name=service,  # Can be customized later
+                    service=service,
+                    credentials=credentials,
+                    formation_id=self.formation_id,
+                    formation_id_hash=self.formation_id_hash,
+                )
+                session.add(new_cred)
+
+            await session.commit()
+
+            # Clear cache for this user/service
+            if user_id in self._cache:
+                self._cache[user_id].pop(service, None)
+
+    def clear_cache(self, user_id: str = None) -> None:
+        """
+        Clear cached credentials.
+
+        Args:
+            user_id: If provided, clear only this user's cache. Otherwise clear all.
+        """
+        if user_id:
+            self._cache.pop(user_id, None)
+        else:
+            self._cache.clear()
+
+    async def delete_credential(self, user_id: str, service: str) -> bool:
+        """
+        Delete a user credential from the database.
+
+        Args:
+            user_id: The user ID
+            service: The service name (will be normalized to lowercase)
+
+        Returns:
+            True if deleted, False if not found
+        """
+        # Normalize service to lowercase
+        service = service.lower()
+
+        async with self.async_session_maker() as session:
+            stmt = select(Credential).where(
+                Credential.user_id == user_id,
+                Credential.service == service,
+                Credential.formation_id_hash == self.formation_id_hash,
+            )
+            result = await session.execute(stmt)
+            credential = result.scalar_one_or_none()
+
+            if credential:
+                await session.delete(credential)
+                await session.commit()
+
+                # Clear cache
+                if user_id in self._cache:
+                    self._cache[user_id].pop(service, None)
+
+                return True
+
+            return False
+
+    async def list_credentials(self, user_id: str) -> Dict[str, Dict[str, Any]]:
+        """
+        List all credentials for a user.
+
+        Args:
+            user_id: The user ID
+
+        Returns:
+            Dictionary mapping service names to credentials
+        """
+        async with self.async_session_maker() as session:
+            stmt = select(Credential).where(
+                Credential.user_id == user_id,
+                Credential.formation_id_hash == self.formation_id_hash,
+            )
+            result = await session.execute(stmt)
+            credentials = result.scalars().all()
+
+            return {cred.service: cred.credentials for cred in credentials}

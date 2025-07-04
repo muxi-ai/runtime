@@ -9,13 +9,13 @@ from typing import Dict, List, Any, Optional, Union
 from pathlib import Path
 import yaml
 import json
+import re
 
 # Import the MCP registry to get valid MCP names dynamically
-try:
-    from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
-except ImportError:
-    # Fallback if import fails
-    BUILTIN_MCP_REGISTRY = {}
+from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
+
+# Pattern for detecting user credentials in configuration
+USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
 
 class ValidationError(Exception):
@@ -2272,6 +2272,51 @@ def validate_formation(
     """
     validator = FormationValidator()
     return validator.validate(formation_path, secrets_manager)
+
+
+def validate_user_credentials_requirements(config: Dict[str, Any]) -> None:
+    """
+    Validate that database is configured if user credentials are used.
+
+    This function checks if any user credential placeholders (${{ user.credentials.* }})
+    are used in the configuration and ensures that persistent database storage is
+    configured when they are found.
+
+    Args:
+        config: The formation configuration dictionary to validate
+
+    Raises:
+        ValueError: If user credentials are used but database is not configured
+    """
+
+    def contains_user_credentials(obj: Any) -> bool:
+        """Recursively check if object contains user credential patterns."""
+        if isinstance(obj, str):
+            return bool(USER_CREDENTIAL_PATTERN.search(obj))
+        elif isinstance(obj, dict):
+            return any(contains_user_credentials(v) for v in obj.values())
+        elif isinstance(obj, list):
+            return any(contains_user_credentials(item) for item in obj)
+        return False
+
+    # Check if any part of config uses user credentials
+    if contains_user_credentials(config):
+        # Ensure persistent memory is configured
+        memory_config = config.get("memory", {})
+        persistent = memory_config.get("persistent", {})
+
+        if not persistent or not persistent.get("enabled", False):
+            raise ValueError(
+                "User credentials (${{ user.credentials.* }}) require persistent database storage. "
+                "Please configure memory.persistent in your formation."
+            )
+
+        # Ensure we have a valid database configuration
+        if not persistent.get("provider") or not persistent.get("config"):
+            raise ValueError(
+                "User credentials require a properly configured database. "
+                "Please specify memory.persistent.provider and config."
+            )
 
 
 def validate_formation_cli(formation_path: Union[str, Path]) -> None:

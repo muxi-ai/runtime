@@ -42,7 +42,7 @@ import threading
 
 
 # Configuration imports
-from .config.validation import validate_formation
+from .config.validation import validate_formation, validate_user_credentials_requirements
 from .config.formation_loader import FormationLoader
 
 # Service imports
@@ -259,7 +259,7 @@ class Formation:
                 except Exception as e:
                     # Log the SecretsManager initialization failure
                     observability.observe(
-                        event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                         level=observability.EventLevel.ERROR,
                         data={
                             "error": str(e),
@@ -297,6 +297,15 @@ class Formation:
 
             # Load configuration synchronously
             self.config = self._load_config_sync(config_path, normalized_path)
+
+            # Validate user credentials requirements (ensure database is configured if needed)
+            try:
+                validate_user_credentials_requirements(self.config)
+            except ValueError as e:
+                raise ConfigurationValidationError(
+                    [str(e)],
+                    {"config_path": normalized_path, "validation_type": "user_credentials"},
+                )
 
             # Validate dependencies before proceeding
             dependency_result = self._dependency_validator.validate_formation_dependencies(
@@ -542,7 +551,7 @@ class Formation:
 
                 except Exception as e:
                     observability.observe(
-                        event_type=observability.ErrorEvents.FAILED_INITIALIZATION,
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                         level=observability.EventLevel.WARNING,
                         data={"agent_file": str(agent_file), "error": str(e)},
                         description=f"Failed to load agent file {agent_file}: {e}",
@@ -862,9 +871,15 @@ class Formation:
 
     def _initialize_services(self) -> None:
         """
-        Initializes all core and auxiliary services required for the Formation runtime after configuration is loaded.
-        
-        This method must be called after `_prepare_services()`. It initializes services in a specific order to ensure dependencies are satisfied, starting with observability, followed by LLM configuration, memory systems, document processing configuration, background services, clarification configuration, and agent loading. Updates the internal registry of configured services with initialized instances.
+        Initializes all core and auxiliary services required for the Formation
+        runtime after configuration is loaded.
+
+        This method must be called after `_prepare_services()`.
+        It initializes services in a specific order to ensure dependencies
+        are satisfied, starting with observability, followed by LLM configuration,
+        memory systems, document processing configuration, background services,
+        clarification configuration, and agent loading. Updates the internal
+        registry of configured services with initialized instances.
         """
         # 1. Initialize observability FIRST
         # This ensures all subsequent events go to the configured file
@@ -1199,8 +1214,9 @@ class Formation:
     def _setup_document_processing_config(self) -> None:
         """
         Ensures the `_document_processing_config` attribute exists on the instance, initializing it to `None` if absent.
-        
-        This method does not load or validate the document processing configuration; initialization is deferred to `initialize_document_processing_config`.
+
+        This method does not load or validate the document processing configuration;
+        initialization is deferred to `initialize_document_processing_config`.
         """
         # Document processing config is initialized later by initialize_document_processing_config
         # For now, just ensure the attribute exists
@@ -1210,9 +1226,10 @@ class Formation:
     def _setup_scheduler_config(self) -> None:
         """
         Sets up and validates the scheduler configuration from the loaded formation config.
-        
+
         Raises:
-            ConfigurationValidationError: If the scheduler configuration is not a dictionary or if required fields are invalid.
+            ConfigurationValidationError: If the scheduler configuration is not a
+            dictionary or if required fields are invalid.
         """
         self._scheduler_config = self.config.get("scheduler", {})
 

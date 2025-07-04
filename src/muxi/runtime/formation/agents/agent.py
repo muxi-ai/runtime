@@ -137,6 +137,7 @@ class Agent:
         self._knowledge_initialized = False
 
         # Initialize the context with system message
+        self._current_user_id = None  # Track current user for tool invocations
         self._messages = []
         if self.system_message:
             self._messages.append({"role": "system", "content": self.system_message})
@@ -702,6 +703,9 @@ class Agent:
             The agent's response as an MuxiResponse, possibly including tool call results
             or clarification requests in metadata.
         """
+        # Store current user_id for tool invocations
+        self._current_user_id = user_id
+
         # Convert string message to MuxiResponse if needed
         if isinstance(message, str):
             content = message
@@ -1350,9 +1354,19 @@ class Agent:
                 description=f"Agent {self.agent_id} invoking tool {tool_name}",
             )
 
+            # Get credential resolver from overlord's MCP coordinator if available
+            credential_resolver = None
+            if self.overlord and hasattr(self.overlord, "mcp_coordinator"):
+                credential_resolver = self.overlord.mcp_coordinator
+
             if server_id:
                 result = await self._mcp_service.invoke_tool(
-                    server_id, tool_name, parameters, timeout=self.request_timeout
+                    server_id,
+                    tool_name,
+                    parameters,
+                    timeout=self.request_timeout,
+                    user_id=self._current_user_id,
+                    credential_resolver=credential_resolver,
                 )
             else:
                 # Try to find the tool in any available server
@@ -1361,7 +1375,12 @@ class Agent:
                 for server_name in servers:
                     try:
                         result = await self._mcp_service.invoke_tool(
-                            server_name, tool_name, parameters, timeout=self.request_timeout
+                            server_name,
+                            tool_name,
+                            parameters,
+                            timeout=self.request_timeout,
+                            user_id=self._current_user_id,
+                            credential_resolver=credential_resolver,
                         )
                         break
                     except Exception:
@@ -1385,6 +1404,23 @@ class Agent:
             return result
 
         except Exception as e:
+            # Check if this is a MissingCredentialError
+            from ..memory.credential_resolver import MissingCredentialError
+
+            if isinstance(e, MissingCredentialError):
+                # Trigger clarification flow through overlord
+                if self.overlord and hasattr(self.overlord, "handle_missing_credential"):
+                    await self.overlord.handle_missing_credential(
+                        service=e.service,
+                        user_id=e.user_id,
+                        context={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "server_id": server_id,
+                        },
+                    )
+                    # Re-raise to let overlord handle the clarification
+                    raise
             observability.observe(
                 event_type=observability.ConversationEvents.TOOL_CALL_FAILED,
                 level=observability.EventLevel.ERROR,

@@ -230,6 +230,15 @@ class ClarificationResult:
 
 
 @dataclass
+class ClarificationResponse:
+    """User's response to a clarification request"""
+    
+    request_type: str = "credential_required"
+    answers: List[Dict[str, Any]] = field(default_factory=list)
+    raw_response: Optional[str] = None
+
+
+@dataclass
 class ParameterMapping:
     """Mapping between user context keys and parameter names"""
 

@@ -6,10 +6,12 @@ that was previously embedded in the main Overlord class.
 """
 
 from typing import Dict, List, Optional, Any
+import re
 
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...datatypes.schema import MCPServiceSchema
+from ..memory.credential_resolver import MissingCredentialError
 
 
 class MCPCoordinator:
@@ -57,6 +59,107 @@ class MCPCoordinator:
         self.retry_attempts = self.config.retry_attempts
         self.retry_delay = self.config.retry_delay
 
+    async def _resolve_user_credentials(
+        self, auth: Dict[str, Any], user_id: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Resolve user credentials in auth configuration.
+
+        This method handles ${{ user.credentials.SERVICE }} placeholders by
+        fetching user-specific credentials from the database at runtime.
+
+        Args:
+            auth: Authentication configuration that may contain credential placeholders
+            user_id: The user ID for credential resolution
+
+        Returns:
+            Auth config with credentials resolved
+
+        Raises:
+            MissingCredentialError: If required credentials are not found
+        """
+        if not auth or not user_id or not self.overlord.credential_resolver:
+            return auth
+
+        # Pattern to match user credential placeholders
+        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+
+        resolved = {}
+        for key, value in auth.items():
+            if isinstance(value, str):
+                # Check if this is a user credential placeholder
+                match = USER_CREDENTIAL_PATTERN.match(value)
+                if match:
+                    service = match.group(1).lower()  # Normalize to lowercase
+
+                    # Resolve credential from database
+                    credentials = await self.overlord.credential_resolver.resolve(user_id, service)
+
+                    if credentials is None:
+                        # Trigger clarification flow by raising error
+                        raise MissingCredentialError(service, user_id)
+
+                    # Replace placeholder with actual credential
+                    # If credentials is a dict, extract the appropriate field
+                    if isinstance(credentials, dict):
+                        # Common patterns: token, api_key, access_token, key
+                        for field in ["token", "api_key", "access_token", "key", "password"]:
+                            if field in credentials:
+                                resolved[key] = credentials[field]
+                                break
+                        else:
+                            # If no standard field found, use the whole dict
+                            resolved[key] = credentials
+                    else:
+                        # If it's a string or other type, use directly
+                        resolved[key] = credentials
+                else:
+                    # Not a user credential, keep as-is
+                    resolved[key] = value
+            else:
+                # Non-string values pass through
+                resolved[key] = value
+
+        return resolved
+
+    async def resolve_mcp_auth_for_execution(
+        self, server_id: str, auth: Dict[str, Any], user_id: str
+    ) -> Dict[str, Any]:
+        """
+        Resolve authentication for MCP tool execution.
+
+        This method is called at tool execution time when we have user context.
+        It resolves any ${{ user.credentials.* }} placeholders in the auth config.
+
+        Args:
+            server_id: The MCP server ID
+            auth: Authentication configuration that may contain credential placeholders
+            user_id: The user ID for credential resolution
+
+        Returns:
+            Auth config with all credentials resolved
+
+        Raises:
+            MissingCredentialError: If required credentials are not found
+        """
+        if not auth or not user_id:
+            return auth
+
+        try:
+            # Resolve user credentials now that we have user context
+            resolved_auth = await self._resolve_user_credentials(auth, user_id)
+            return resolved_auth
+        except MissingCredentialError:
+            # Re-raise to trigger clarification flow
+            raise
+        except Exception as e:
+            # Log credential resolution failure
+            error_msg = f"Credential resolution failed for MCP server {server_id}: {str(e)}"
+            print(f"ERROR: {error_msg}", flush=True)
+            raise ValueError(
+                f"Failed to resolve user credentials for MCP server {server_id}: {str(e)}"
+            ) from e
+
     async def register_mcp_server(
         self,
         server_id: str,
@@ -83,6 +186,8 @@ class MCPCoordinator:
                 servers, specifying the command to execute.
             auth: Optional authentication configuration for the MCP server.
                 Supports secrets interpolation with ${{ secrets.NAME }} syntax.
+                User credentials (${{ user.credentials.SERVICE }}) are stored
+                but resolved later at tool execution time.
                 Format depends on the server's requirements.
             model: Optional model to use for this MCP handler. Some MCP servers
                 require a model for processing tool invocations.
@@ -107,10 +212,13 @@ class MCPCoordinator:
         # Use configured default timeout if none specified
         timeout = request_timeout if request_timeout is not None else self.default_timeout
 
-        # Interpolate secrets in auth if provided
+        # Process auth configuration - only interpolate secrets at registration time
+        # User credentials will be resolved later at tool execution time
         final_auth = auth
         if auth:
             try:
+                # Only interpolate ${{ secrets.* }} patterns
+                # Keep ${{ user.credentials.* }} patterns as-is for later resolution
                 final_auth = await self.overlord.interpolate_secrets(auth)
             except Exception as e:
                 # Log secret interpolation failure - this is critical for auth debugging
@@ -121,7 +229,9 @@ class MCPCoordinator:
 
                 # Do NOT continue with original auth - this would cause silent auth failures
                 # Instead, raise the error so the caller knows secrets interpolation failed
-                raise ValueError(f"Failed to interpolate secrets for MCP server {server_id}: {str(e)}") from e
+                raise ValueError(
+                    f"Failed to interpolate secrets for MCP server {server_id}: {str(e)}"
+                ) from e
 
         # Register the server with the MCP service
         res = await self.mcp_service.register_mcp_server(

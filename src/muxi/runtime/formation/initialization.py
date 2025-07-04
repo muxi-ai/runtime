@@ -266,8 +266,13 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
 def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) -> None:
     """
     Initializes the persistent memory system for the formation based on the provided configuration.
-    
-    Determines the memory backend (PostgreSQL, SQLite, or Memobase) from the connection string, checks for uninterpolated secrets, and passes the formation ID and embedding model name to the memory constructor. Stores the resulting memory instance and database manager (if available) on the formation. Emits observability events for both success and failure. Persistent memory initialization errors are logged but do not interrupt execution.
+
+    Determines the memory backend (PostgreSQL, SQLite, or Memobase) from the
+    connection string, checks for uninterpolated secrets, and passes the
+    formation ID and embedding model name to the memory constructor.
+    Stores the resulting memory instance and database manager (if available)
+    on the formation. Emits observability events for both success and failure.
+    Persistent memory initialization errors are logged but do not interrupt execution.
     """
     try:
         connection_string = persistent_config.get("connection_string")
@@ -293,9 +298,14 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         if connection_string.startswith("postgresql://"):
             # PostgreSQL memory
             from ..services.memory.long_term import LongTermMemory
+            from ..services.db import get_database_manager
+
+            # Create database manager
+            db_manager = get_database_manager(connection_string)
+            formation._db_manager = db_manager
 
             formation._long_term_memory = LongTermMemory(
-                connection_string=connection_string,
+                db_manager=db_manager,
                 formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
@@ -303,8 +313,13 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             memory_type = "PostgreSQL"
 
         elif connection_string.endswith(".db") or "sqlite" in connection_string:
-            # SQLite memory
+            # SQLite memory with database manager for credentials
             from ..services.memory.sqlite import SQLiteMemory
+            from ..services.db import get_database_manager
+
+            # Create database manager for SQLite (needed for credentials table)
+            db_manager = get_database_manager(f"sqlite:///{connection_string}")
+            formation._db_manager = db_manager
 
             formation._long_term_memory = SQLiteMemory(
                 db_path=connection_string,
@@ -316,6 +331,11 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
         else:
             # Default to Memobase
             from ..services.memory.memobase import Memobase
+            from ..services.db import get_database_manager
+
+            # Create database manager
+            db_manager = get_database_manager(connection_string)
+            formation._db_manager = db_manager
 
             formation._long_term_memory = Memobase(
                 connection_string=connection_string,
@@ -323,10 +343,6 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
                 embedding_model=embedding_model_name,
             )
             memory_type = "Memobase"
-
-        # Store database manager for scheduler
-        if hasattr(formation._long_term_memory, "db_manager"):
-            formation._db_manager = formation._long_term_memory.db_manager
 
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
@@ -352,8 +368,10 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
 def initialize_document_processing(formation) -> None:
     """
     Initializes the document processing configuration and chunk manager for the formation.
-    
-    Creates a `DocumentProcessingConfig` from the formation's LLM configuration and uses it to initialize a `DocumentChunkManager`, which is stored on the formation. Emits an observability event on success or a warning event if initialization fails.
+
+    Creates a `DocumentProcessingConfig` from the formation's LLM configuration and uses it
+    to initialize a `DocumentChunkManager`, which is stored on the formation. Emits an
+    observability event on success or a warning event if initialization fails.
     """
     try:
         # Create document processing configuration
@@ -387,8 +405,9 @@ def initialize_document_processing(formation) -> None:
 
 def initialize_background_services(formation) -> None:
     """
-    Initializes background services for the formation, including cache management, request tracking, and webhook handling.
-    
+    Initializes background services for the formation, including cache management,
+    request tracking, and webhook handling.
+
     On failure, emits a warning-level observability event with error details.
     """
     try:
@@ -479,8 +498,13 @@ def initialize_clarification_config(formation) -> None:
 def initialize_document_processing_config(formation) -> None:
     """
     Initializes the document processing configuration and chunk manager for the formation.
-    
-    Creates a `DocumentProcessingConfig` from the formation's LLM configuration and assigns it to the formation. Initializes a `DocumentChunkManager` with this configuration and assigns it to both `_document_chunker` and `_document_chunk_manager` for compatibility. Emits an observability event if document processing is enabled. On failure, logs a warning and falls back to a default configuration.
+
+    Creates a `DocumentProcessingConfig` from the formation's LLM configuration
+    and assigns it to the formation. Initializes a `DocumentChunkManager`
+    with this configuration and assigns it to both `_document_chunker` and
+    `_document_chunk_manager` for compatibility. Emits an observability event
+    if document processing is enabled. On failure, logs a warning and falls
+    back to a default configuration.
     """
     try:
         # Use the pre-configured LLM config

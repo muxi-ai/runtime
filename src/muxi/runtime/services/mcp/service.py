@@ -290,25 +290,31 @@ class MCPService:
         tool_name: str,
         parameters: Dict[str, Any],
         request_timeout: Optional[int] = None,
+        user_id: Optional[str] = None,
+        credential_resolver: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Invoke a tool on an MCP server.
 
         This method executes a tool on the specified MCP server with the given
         parameters, handling locking to prevent concurrent issues and managing
-        timeouts.
+        timeouts. It also handles runtime credential resolution for user-specific
+        authentication.
 
         Args:
             server_id: The ID of the server to use
             tool_name: The name of the tool to invoke
             parameters: The parameters to pass to the tool
             request_timeout: Optional timeout override for this specific request
+            user_id: Optional user ID for credential resolution
+            credential_resolver: Optional credential resolver for user-specific auth
 
         Returns:
             The result of the tool invocation as a dictionary with status and result
 
         Raises:
             ValueError: If the server ID is not valid
+            MissingCredentialError: If required user credentials are not found
         """
         if server_id not in self.handlers:
             raise ValueError(f"Unknown MCP server: {server_id}")
@@ -332,6 +338,111 @@ class MCPService:
 
         handler = self.handlers[server_id]
         server_name = self.connections[server_id]["server_name"]
+
+        # Check if we need to resolve user credentials at runtime
+        auth = self.connections[server_id].get("credentials", {})
+        resolved_auth = auth
+
+        if user_id and credential_resolver and auth:
+            # Check if auth contains user credential placeholders
+            import re
+
+            USER_CREDENTIAL_PATTERN = re.compile(
+                r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
+            )
+
+            # Check if any auth value contains user credential placeholders
+            needs_resolution = False
+            for value in auth.values():
+                if isinstance(value, str) and USER_CREDENTIAL_PATTERN.search(value):
+                    needs_resolution = True
+                    break
+
+            if needs_resolution:
+                try:
+                    # Use the MCP coordinator's resolution method if available
+                    if hasattr(credential_resolver, "resolve_mcp_auth_for_execution"):
+                        # This is an MCP coordinator
+                        resolved_auth = await credential_resolver.resolve_mcp_auth_for_execution(
+                            server_id=server_id, auth=auth, user_id=user_id
+                        )
+                    else:
+                        # Direct credential resolver - resolve manually
+                        resolved_auth = {}
+                        for key, value in auth.items():
+                            if isinstance(value, str):
+                                match = USER_CREDENTIAL_PATTERN.match(value)
+                                if match:
+                                    service = match.group(1).lower()
+                                    credentials = await credential_resolver.resolve(
+                                        user_id, service
+                                    )
+                                    if credentials is None:
+                                        from ...formation.memory.credential_resolver import (
+                                            MissingCredentialError,
+                                        )
+
+                                        raise MissingCredentialError(service, user_id)
+                                    # Extract appropriate credential field
+                                    if isinstance(credentials, dict):
+                                        for field in [
+                                            "token",
+                                            "api_key",
+                                            "access_token",
+                                            "key",
+                                            "password",
+                                        ]:
+                                            if field in credentials:
+                                                resolved_auth[key] = credentials[field]
+                                                break
+                                        else:
+                                            resolved_auth[key] = credentials
+                                    else:
+                                        resolved_auth[key] = credentials
+                                else:
+                                    resolved_auth[key] = value
+                            else:
+                                resolved_auth[key] = value
+
+                except Exception as e:
+                    # Re-raise MissingCredentialError to trigger clarification flow
+                    if "MissingCredentialError" in str(type(e)):
+                        raise
+                    # Log other credential resolution failures
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "server_id": server_id,
+                            "tool_name": tool_name,
+                            "error": str(e),
+                            "user_id": user_id,
+                        },
+                        description=f"Failed to resolve user credentials for MCP tool: {str(e)}",
+                    )
+                    raise
+
+                # If credentials were resolved, we need to reconnect with the new auth
+                if resolved_auth != auth:
+                    # Store original connection info
+                    original_conn = self.connections[server_id].copy()
+                    url = original_conn.get("url")
+                    command = original_conn.get("command")
+                    # Get timeout from connection or use default
+                    conn_timeout = original_conn.get("request_timeout", 60)
+
+                    # Disconnect current connection
+                    await handler.disconnect_server(server_name)
+
+                    # Reconnect with resolved credentials
+                    await handler.connect_server(
+                        name=server_name,
+                        url=url,
+                        command=command,
+                        credentials=resolved_auth,
+                        request_timeout=conn_timeout,
+                        server_id=server_id,
+                    )
 
         # Acquire lock for this handler to prevent concurrent issues
         async with self.locks[server_id]:
