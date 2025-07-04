@@ -137,7 +137,6 @@ class Agent:
         self._knowledge_initialized = False
 
         # Initialize the context with system message
-        self._current_user_id = None  # Track current user for tool invocations
         self._messages = []
         if self.system_message:
             self._messages.append({"role": "system", "content": self.system_message})
@@ -703,9 +702,6 @@ class Agent:
             The agent's response as an MuxiResponse, possibly including tool call results
             or clarification requests in metadata.
         """
-        # Store current user_id for tool invocations
-        self._current_user_id = user_id
-
         # Convert string message to MuxiResponse if needed
         if isinstance(message, str):
             content = message
@@ -1326,6 +1322,7 @@ class Agent:
         tool_name: str,
         parameters: Dict[str, Any],
         server_id: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Invoke a tool via MCP.
@@ -1334,6 +1331,7 @@ class Agent:
             tool_name: Name of the tool to invoke.
             parameters: Parameters to pass to the tool.
             server_id: Optional server ID for multi-server setups.
+            user_id: Optional user ID for credential resolution.
 
         Returns:
             The tool execution result.
@@ -1341,6 +1339,8 @@ class Agent:
         Raises:
             Exception: If tool invocation fails.
         """
+        from ..memory.credential_resolver import MissingCredentialError
+
         try:
             observability.observe(
                 event_type=observability.ConversationEvents.TOOL_CALL_STARTED,
@@ -1365,7 +1365,7 @@ class Agent:
                     tool_name,
                     parameters,
                     timeout=self.request_timeout,
-                    user_id=self._current_user_id,
+                    user_id=user_id,
                     credential_resolver=credential_resolver,
                 )
             else:
@@ -1379,7 +1379,7 @@ class Agent:
                             tool_name,
                             parameters,
                             timeout=self.request_timeout,
-                            user_id=self._current_user_id,
+                            user_id=user_id,
                             credential_resolver=credential_resolver,
                         )
                         break
@@ -1405,8 +1405,6 @@ class Agent:
 
         except Exception as e:
             # Check if this is a MissingCredentialError
-            from ..memory.credential_resolver import MissingCredentialError
-
             if isinstance(e, MissingCredentialError):
                 # Trigger clarification flow through overlord
                 if self.overlord and hasattr(self.overlord, "handle_missing_credential"):

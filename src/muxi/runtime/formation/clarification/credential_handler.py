@@ -11,10 +11,6 @@ from ...datatypes.clarification import ClarificationRequest, ClarificationRespon
 class CredentialClarificationHandler:
     """Handles clarification requests for missing user credentials."""
 
-    def __init__(self):
-        """Initialize the credential clarification handler."""
-        pass
-
     def generate_credential_request(
         self, service: str, context: Optional[Dict[str, Any]] = None
     ) -> ClarificationRequest:

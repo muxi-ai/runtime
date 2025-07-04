@@ -31,6 +31,7 @@
 # =============================================================================
 
 import asyncio
+import re
 from typing import Any, Dict, Optional
 from ...utils.datetime_utils import utc_now_iso
 
@@ -43,6 +44,10 @@ from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .health.monitor import MCPHealthMonitor, MCPCapabilitiesNegotiator
 from .. import observability
+from ...formation.memory.credential_resolver import MissingCredentialError
+
+# Regex pattern for user credential placeholders
+USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
 
 class MCPService:
@@ -345,12 +350,6 @@ class MCPService:
 
         if user_id and credential_resolver and auth:
             # Check if auth contains user credential placeholders
-            import re
-
-            USER_CREDENTIAL_PATTERN = re.compile(
-                r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
-            )
-
             # Check if any auth value contains user credential placeholders
             needs_resolution = False
             for value in auth.values():
@@ -378,10 +377,6 @@ class MCPService:
                                         user_id, service
                                     )
                                     if credentials is None:
-                                        from ...formation.memory.credential_resolver import (
-                                            MissingCredentialError,
-                                        )
-
                                         raise MissingCredentialError(service, user_id)
                                     # Extract appropriate credential field
                                     if isinstance(credentials, dict):
@@ -406,7 +401,7 @@ class MCPService:
 
                 except Exception as e:
                     # Re-raise MissingCredentialError to trigger clarification flow
-                    if "MissingCredentialError" in str(type(e)):
+                    if isinstance(e, MissingCredentialError):
                         raise
                     # Log other credential resolution failures
                     observability.observe(

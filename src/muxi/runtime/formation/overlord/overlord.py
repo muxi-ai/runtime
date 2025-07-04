@@ -598,6 +598,11 @@ class Overlord:
         # Set request timeout
         self.request_timeout = request_timeout
 
+        # Initialize clarification tracking with TTL
+        self._pending_clarifications: Dict[str, Dict[str, Any]] = {}
+        self._clarification_ttl_seconds = 3600  # 1 hour TTL for pending clarifications
+        self._clarification_cleanup_task: Optional[asyncio.Task] = None
+
         # ===================================================================
         # INTELLIGENCE COORDINATORS - Intelligence concerns
         # ===================================================================
@@ -788,6 +793,21 @@ class Overlord:
             and hasattr(self, "pending_external_registrations")
         ):
             await self.a2a_coordinator._process_pending_agent_registrations()
+
+        # Start clarification cleanup task
+        if not self._clarification_cleanup_task or self._clarification_cleanup_task.done():
+            self._clarification_cleanup_task = self._create_tracked_task(
+                self._cleanup_stale_clarifications(), name="clarification_cleanup"
+            )
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "ttl_seconds": self._clarification_ttl_seconds,
+                    "check_interval_seconds": 300,
+                },
+                description="Started clarification cleanup task",
+            )
 
         # Start scheduler service if enabled
         if hasattr(self, "formation_config") and self.formation_config.get("scheduler", {}).get(
@@ -3667,7 +3687,7 @@ class Overlord:
         """
         try:
             # Check if clarification is enabled
-            if not self._clarification_config_obj or not self._clarification_config_obj.enabled:
+            if not self.clarification_config or not self.clarification_config.enabled:
                 observability.observe(
                     event_type=observability.ConversationEvents.CLARIFICATION_SKIPPED,
                     level=observability.EventLevel.INFO,
@@ -3796,6 +3816,77 @@ class Overlord:
                 description=f"Failed to process credential clarification response: {str(e)}",
             )
             return False
+
+    async def _cleanup_stale_clarifications(self) -> None:
+        """
+        Clean up stale pending clarifications based on TTL.
+
+        This method runs periodically to remove clarifications that have
+        exceeded their TTL, preventing memory growth from abandoned or
+        failed clarification flows.
+        """
+        while True:
+            try:
+                # Sleep for cleanup interval (check every 5 minutes)
+                await asyncio.sleep(300)
+
+                current_time = time.time()
+                stale_sessions = []
+
+                # Find stale clarifications
+                for session_id, clarification_info in self._pending_clarifications.items():
+                    timestamp = clarification_info.get("timestamp", 0)
+                    age_seconds = current_time - timestamp
+
+                    if age_seconds > self._clarification_ttl_seconds:
+                        stale_sessions.append(session_id)
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.CLEANUP,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "session_id": session_id,
+                                "type": clarification_info.get("type", "unknown"),
+                                "age_seconds": age_seconds,
+                                "ttl_seconds": self._clarification_ttl_seconds,
+                            },
+                            description=f"Removing stale clarification for session {session_id}",
+                        )
+
+                # Remove stale entries
+                for session_id in stale_sessions:
+                    del self._pending_clarifications[session_id]
+
+                if stale_sessions:
+                    observability.observe(
+                        event_type=observability.SystemEvents.CLEANUP,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "removed_count": len(stale_sessions),
+                            "remaining_count": len(self._pending_clarifications),
+                        },
+                        description=f"Cleaned up {len(stale_sessions)} stale clarifications",
+                    )
+
+            except asyncio.CancelledError:
+                # Task was cancelled - exit cleanly
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.INFO,
+                    data={"reason": "cancelled"},
+                    description="Clarification cleanup task cancelled",
+                )
+                break
+            except Exception as e:
+                # Log error but continue running
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={"error": str(e)},
+                    description=f"Error in clarification cleanup: {str(e)}",
+                )
+                # Sleep before retrying
+                await asyncio.sleep(60)
 
     async def _process_streaming_chat(
         self,

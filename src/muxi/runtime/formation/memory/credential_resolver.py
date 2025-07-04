@@ -6,7 +6,7 @@ and other components that need to access services on behalf of users.
 """
 
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, select
 from sqlalchemy.orm import declarative_base
 import nanoid
@@ -40,8 +40,12 @@ class Credential(Base):
     name = Column(String, nullable=False)
     service = Column(String, nullable=False)  # Always lowercase
     credentials = Column(JSONType, nullable=False, default={})  # Works with both DBs
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     formation_id = Column(String, nullable=False, default="default-formation")
     formation_id_hash = Column(String, nullable=False)
 
@@ -131,37 +135,44 @@ class CredentialResolver:
         service = service.lower()
 
         async with self.async_session_maker() as session:
-            # Check if credential already exists
-            stmt = select(Credential).where(
-                Credential.user_id == user_id,
-                Credential.service == service,
-                Credential.formation_id_hash == self.formation_id_hash,
-            )
-            result = await session.execute(stmt)
-            existing = result.scalar_one_or_none()
-
-            if existing:
-                # Update existing credential
-                existing.credentials = credentials
-                existing.updated_at = datetime.utcnow()
-            else:
-                # Create new credential
-                new_cred = Credential(
-                    user_id=user_id,
-                    credential_id=nanoid.generate(),  # Generate unique ID
-                    name=service,  # Can be customized later
-                    service=service,
-                    credentials=credentials,
-                    formation_id=self.formation_id,
-                    formation_id_hash=self.formation_id_hash,
+            try:
+                # Check if credential already exists
+                stmt = select(Credential).where(
+                    Credential.user_id == user_id,
+                    Credential.service == service,
+                    Credential.formation_id_hash == self.formation_id_hash,
                 )
-                session.add(new_cred)
+                result = await session.execute(stmt)
+                existing = result.scalar_one_or_none()
 
-            await session.commit()
+                if existing:
+                    # Update existing credential
+                    existing.credentials = credentials
+                    existing.updated_at = datetime.now(timezone.utc)
+                else:
+                    # Create new credential
+                    new_cred = Credential(
+                        user_id=user_id,
+                        credential_id=nanoid.generate(),  # Generate unique ID
+                        name=service,  # Can be customized later
+                        service=service,
+                        credentials=credentials,
+                        formation_id=self.formation_id,
+                        formation_id_hash=self.formation_id_hash,
+                    )
+                    session.add(new_cred)
 
-            # Clear cache for this user/service
-            if user_id in self._cache:
-                self._cache[user_id].pop(service, None)
+                await session.commit()
+
+                # Clear cache for this user/service
+                if user_id in self._cache:
+                    self._cache[user_id].pop(service, None)
+
+            except Exception as e:
+                await session.rollback()
+                raise FormationError(
+                    f"Failed to store credential for service '{service}': {str(e)}"
+                ) from e
 
     def clear_cache(self, user_id: str = None) -> None:
         """

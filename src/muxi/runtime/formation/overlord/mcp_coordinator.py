@@ -84,11 +84,20 @@ class MCPCoordinator:
         # Pattern to match user credential placeholders
         USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
-        resolved = {}
-        for key, value in auth.items():
-            if isinstance(value, str):
+        async def resolve_auth_recursive(data: Any) -> Any:
+            """Recursively resolve credential placeholders in nested data structures."""
+            if isinstance(data, dict):
+                # Process dictionary recursively
+                resolved_dict = {}
+                for key, value in data.items():
+                    resolved_dict[key] = await resolve_auth_recursive(value)
+                return resolved_dict
+            elif isinstance(data, list):
+                # Process list recursively
+                return [await resolve_auth_recursive(item) for item in data]
+            elif isinstance(data, str):
                 # Check if this is a user credential placeholder
-                match = USER_CREDENTIAL_PATTERN.match(value)
+                match = USER_CREDENTIAL_PATTERN.match(data)
                 if match:
                     service = match.group(1).lower()  # Normalize to lowercase
 
@@ -105,22 +114,20 @@ class MCPCoordinator:
                         # Common patterns: token, api_key, access_token, key
                         for field in ["token", "api_key", "access_token", "key", "password"]:
                             if field in credentials:
-                                resolved[key] = credentials[field]
-                                break
-                        else:
-                            # If no standard field found, use the whole dict
-                            resolved[key] = credentials
+                                return credentials[field]
+                        # If no standard field found, use the whole dict
+                        return credentials
                     else:
                         # If it's a string or other type, use directly
-                        resolved[key] = credentials
+                        return credentials
                 else:
                     # Not a user credential, keep as-is
-                    resolved[key] = value
+                    return data
             else:
-                # Non-string values pass through
-                resolved[key] = value
+                # Non-string, non-dict, non-list values pass through
+                return data
 
-        return resolved
+        return await resolve_auth_recursive(auth)
 
     async def resolve_mcp_auth_for_execution(
         self, server_id: str, auth: Dict[str, Any], user_id: str
