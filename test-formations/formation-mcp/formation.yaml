@@ -1,6 +1,6 @@
 schema: "1.0.0"
 id: "test_formation"
-description: "Formation for testing buffer and persistent memory systems"
+description: "Formation for testing mcp servers"
 
 llm:
   api_keys:
