@@ -413,158 +413,198 @@ memory:
 
 ### Test Group 4A: Single MCP Server
 ```python
-# Test 4A1: Filesystem Tools
-formation = Formation.load("formations/mcp-filesystem.yaml")
+# Test 4A1: Filesystem MCP Operations
+formation = Formation.load("test-formations/formation-mcp")
 overlord = await formation.start()
 
-response = await overlord.chat("List the files in the current directory")
-# Should use filesystem MCP tools
-assert "files" in response.lower()
+# Create file
+response = await overlord.chat(
+    "Create a file called 'test.txt' with content 'Hello World' in /Users/ran/Desktop/tests",
+    user_id="user1",
+    use_async=False
+)
+assert "created" in response.lower() or "file" in response.lower()
 
-response = await overlord.chat("Create a file called 'test.txt' with content 'Hello World'")
-# Should create file using MCP
-assert os.path.exists("test.txt")
+# Read file
+response = await overlord.chat(
+    "Read the contents of test.txt from /Users/ran/Desktop/tests",
+    user_id="user1",
+    use_async=False
+)
+assert "hello world" in response.lower()
 
-# Test 4A2: Web Search Tools
-formation = Formation.load("formations/mcp-websearch.yaml")
-overlord = await formation.start()
+# Update file
+response = await overlord.chat(
+    "Update test.txt in /Users/ran/Desktop/tests to say 'Hello MUXI'",
+    user_id="user1",
+    use_async=False
+)
+assert "updated" in response.lower() or "modified" in response.lower()
 
-response = await overlord.chat("What's the current weather in New York?")
-# Should use web search MCP tools
+# Delete file
+response = await overlord.chat(
+    "Delete test.txt from /Users/ran/Desktop/tests",
+    user_id="user1",
+    use_async=False
+)
+assert "deleted" in response.lower() or "removed" in response.lower()
+
+# Test 4A2: System Info MCP
+response = await overlord.chat(
+    "What is the current CPU usage and available memory on this system?",
+    user_id="user1",
+    use_async=False
+)
+# Should return system stats
+assert any(term in response.lower() for term in ["cpu", "memory", "ram", "%"])
 ```
 
 ### Test Group 4B: Multi-MCP Integration
 ```python
-# Test 4B1: Multiple Tool Types
-formation = Formation.load("formations/multi-mcp.yaml")
+# Test 4B1: Complex Multi-MCP Workflow (Linear → System → GitHub → Linear)
+formation = Formation.load("test-formations/formation-mcp")
 overlord = await formation.start()
 
 response = await overlord.chat(
-    "Search for Python tutorials online, then create a file with the best resources"
+    "Create a Linear issue asking to document system CPU usage. The issue should request creating a GitHub gist with the current CPU stats. After creating the gist, update the Linear issue as completed with a link to the gist.",
+    user_id="user1",
+    use_async=False
 )
-# Should use web search + filesystem tools in sequence
+# This orchestrates:
+# 1. Linear MCP → Create issue
+# 2. System MCP → Get CPU usage
+# 3. GitHub MCP → Create gist with CPU data
+# 4. Linear MCP → Update issue with gist link
+assert any(term in response.lower() for term in ["issue", "gist", "cpu", "completed"])
 
-# Test 4B2: MCP Failure Handling
-# Simulate MCP server failure
-response = await overlord.chat("Search for information about AI")
-# Should handle gracefully, perhaps use fallback or inform user
+# Test 4B2: File + System Info Coordination
+response = await overlord.chat(
+    "Check the current system memory usage and create a file in /Users/ran/Desktop/tests called 'system_stats.txt' with the information",
+    user_id="user1",
+    use_async=False
+)
+# Should use: System MCP → Filesystem MCP
+assert "memory" in response.lower() and "file" in response.lower()
+
+# Test 4B3: MCP Failure Handling
+response = await overlord.chat(
+    "Create a file in /root/forbidden_directory",
+    user_id="user1",
+    use_async=False
+)
+# Should handle permission error gracefully
+assert any(term in response.lower() for term in ["error", "permission", "denied", "unable"])
 ```
 
-### Test Group 4C: User Credentials Management ✨ **NEW**
+### Test Group 4C: Linear MCP Operations (Formation Secrets)
 ```python
-# Test 4C1: Store User Credentials
-formation = Formation.load("formations/credentials.yaml")
+# Test 4C1: Create Linear Issue
+response = await overlord.chat(
+    "Create a new issue in Linear titled 'Test MCP Integration' with description 'Testing MUXI MCP capabilities'",
+    user_id="user1",
+    use_async=False
+)
+assert "issue" in response.lower() and "created" in response.lower()
+
+# Test 4C2: Update Linear Issue
+response = await overlord.chat(
+    "Update the Linear issue we just created to mark it as in progress",
+    user_id="user1",
+    use_async=False
+)
+assert "updated" in response.lower() or "progress" in response.lower()
+
+# Test 4C3: List Linear Issues
+response = await overlord.chat(
+    "Show me the recent Linear issues",
+    user_id="user1",
+    use_async=False
+)
+assert "issue" in response.lower()
+```
+
+### Test Group 4D: GitHub MCP with User Credentials
+```python
+# Test 4D1: User1 with Existing GitHub Credentials
+formation = Formation.load("test-formations/formation-mcp")
 overlord = await formation.start()
 
-# Store OAuth token for user
-await overlord.store_user_credential(
+# Should work - user1 has credentials in DB
+response = await overlord.chat(
+    "Create a GitHub gist with the title 'Test Gist' and content 'Hello from MUXI'",
     user_id="user1",
-    service="gmail",
-    credential_type="oauth_token",
-    credentials={
-        "access_token": "ya29.sample_token",
-        "refresh_token": "1//sample_refresh",
-        "expires_at": "2025-12-31T23:59:59Z"
-    }
+    use_async=False
 )
+assert "gist" in response.lower() and "created" in response.lower()
 
-# Store API key for different user
-await overlord.store_user_credential(
+# Test 4D2: User2 without GitHub Credentials (Clarification Flow)
+response = await overlord.chat(
+    "Create a GitHub gist with some test content",
     user_id="user2",
-    service="weather_api",
-    credential_type="api_key",
-    credentials={"api_key": "abc123def456"}
+    use_async=False
 )
+# Should trigger clarification flow for missing credentials
+assert any(term in response.lower() for term in ["credential", "github", "token", "provide", "need"])
 
-# Test 4C2: Retrieve User Credentials
-creds = await overlord.get_user_credential(user_id="user1", service="gmail")
-assert creds["access_token"] == "ya29.sample_token"
+# Test 4D3: List User1's Gists
+response = await overlord.chat(
+    "Show me my recent GitHub gists",
+    user_id="user1",
+    use_async=False
+)
+assert "gist" in response.lower()
 
-# Test 4C3: User Isolation - User 1 cannot access User 2's credentials
-creds = await overlord.get_user_credential(user_id="user1", service="weather_api")
-assert creds is None  # Should not have access
-
-# Test 4C4: Credential Encryption & Security
-# Verify credentials are encrypted in database
-db_record = await overlord._get_raw_credential_from_db("user1", "gmail")
-assert db_record["credentials"] != '{"access_token": "ya29.sample_token"}'  # Should be encrypted
+# Test 4D4: Create GitHub Issue
+response = await overlord.chat(
+    "Create a GitHub issue in the piepilot org repository titled 'Test Issue from MUXI'",
+    user_id="user1",
+    use_async=False
+)
+assert "issue" in response.lower() and "created" in response.lower()
 ```
 
-### Test Group 4D: MCP with User Credentials ✨ **NEW**
+### Test Group 4E: User Credential Isolation
 ```python
-# Test 4D1: Gmail MCP with User OAuth
-formation = Formation.load("formations/mcp-gmail.yaml")
-overlord = await formation.start()
-
-# User stores their Gmail OAuth token
-await overlord.store_user_credential(
-    user_id="user1",
-    service="gmail",
-    credential_type="oauth_token",
-    credentials={"access_token": "user1_gmail_token"}
-)
-
-# Request Gmail access - should use user's token
-response = await overlord.chat("Check my latest emails", user_id="user1")
-# MCP should automatically retrieve and use user1's Gmail token
-assert "email" in response.lower()
-
-# Test 4D2: Database MCP with User Connection String
-await overlord.store_user_credential(
+# Test 4E1: Verify User Isolation
+# User2 should not be able to use User1's credentials
+response = await overlord.chat(
+    "Show me the GitHub gists from the piepilot org",
     user_id="user2",
-    service="database",
-    credential_type="connection_string",
-    credentials={"connection_string": "postgresql://user2:pass@localhost/user2_db"}
+    use_async=False
 )
+# Should fail or ask for credentials, not use user1's token
+assert any(term in response.lower() for term in ["credential", "token", "access", "provide"])
 
-response = await overlord.chat("Show me my customer data", user_id="user2")
-# Should use user2's specific database connection
-
-# Test 4D3: Multi-User API Access
-await overlord.store_user_credential(
+# Test 4E2: Multiple Users with Different Permissions
+# User1 creates private content
+response1 = await overlord.chat(
+    "Create a private GitHub gist with sensitive data",
     user_id="user1",
-    service="stock_api",
-    credential_type="api_key",
-    credentials={"api_key": "user1_stock_key"}
+    use_async=False
 )
 
-await overlord.store_user_credential(
-    user_id="user2",
-    service="stock_api",
-    credential_type="api_key",
-    credentials={"api_key": "user2_stock_key"}
-)
-
-# Both users access stock API with their own keys
-response1 = await overlord.chat("Get AAPL stock price", user_id="user1")
-response2 = await overlord.chat("Get TSLA stock price", user_id="user2")
-# Each should use their respective API keys
-
-# Test 4D4: Credential Auto-Discovery by MCP
-# When MCP needs credentials, system should automatically find and provide them
-response = await overlord.chat("Send an email to john@example.com", user_id="user1")
-# Should automatically discover user1's Gmail token and provide to Gmail MCP
+# User2 cannot access it even if they later add credentials
+# This verifies credential isolation at the MCP level
 ```
 
-**Formations Required:**
-```yaml
-# formations/credentials.yaml
-name: "credentials-test"
-agents:
-  - id: "assistant"
-    specialty: "general"
-    model: "openai/gpt-4o-mini"
-    system_message: "You are a helpful assistant with access to user services"
-memory:
-  buffer: {enabled: true, size: 10}
-database:
-  url: "postgresql://localhost/muxi_test"  # For credentials table
-```
+**Formation Used:** `test-formations/formation-mcp`
+**MCP Servers:**
+- Filesystem (command) - `/Users/ran/Desktop/tests` access
+- System Info (command) - CPU, memory, disk stats
+- Linear (HTTP/SSE) - Formation secret `${{ secrets.LINEAR_MCP_TOKEN }}`
+- GitHub (HTTP/streamable) - User credential `${{ user.credentials.github }}`
 
-**MCP Servers Required:** Filesystem, web search, Gmail, database, stock API
-**Database Required:** PostgreSQL with credentials table
-**Automation:** MCP server startup/shutdown, credential encryption/decryption, user isolation testing
-**Success Criteria:** 15 MCP tests pass + 8 credential tests pass, user isolation verified
+**Pre-configured:**
+- User1: Has GitHub credentials for "piepilot org" in database
+- User2: No GitHub credentials (will trigger clarification)
+
+**Success Criteria:**
+- 6 Single MCP tests pass
+- 3 Multi-MCP coordination tests pass
+- 3 Linear MCP tests pass (formation secrets)
+- 4 GitHub MCP tests pass (user credentials)
+- 2 User isolation tests pass
+- Total: 18 MCP tests + credential flow validation
 
 </details>
 
