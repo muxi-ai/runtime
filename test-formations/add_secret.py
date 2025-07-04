@@ -32,8 +32,8 @@ async def add_secret_to_formation(secret_name: str, secret_value: str):
         secrets_manager = SecretsManager(formation_dir)
         await secrets_manager.initialize_encryption()
 
-        # Store the secret
-        await secrets_manager.store_secret(secret_name, secret_value)
+        # Store the secret (with overwrite=True to update existing secrets)
+        await secrets_manager.store_secret(secret_name, secret_value, overwrite=True)
 
         print(f"✅ Secret '{secret_name}' added successfully!")
 
