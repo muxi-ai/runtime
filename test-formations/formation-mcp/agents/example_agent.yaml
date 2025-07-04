@@ -11,3 +11,6 @@ role: "general"
 specialties:
   - "mcp"
   - "mcp_servers"
+
+# Enable MCP access for this agent
+mcp_enabled: true

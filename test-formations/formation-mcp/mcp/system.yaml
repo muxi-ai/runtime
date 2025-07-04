@@ -1,7 +1,7 @@
 schema: "1.0.0"
 id: "system-mcp"
 description: "Get system information like CPU, memory, disk, etc."
-active: true
+active: false                      # Temporarily disabled for debugging
 
 type: "command"
 

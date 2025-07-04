@@ -2,11 +2,12 @@
 schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "github-mcp"                    # Unique server name/id (required)
 description: "Github MCP"  # Human-readable description
-active: true                       # optional; true (exists for start/stop commands)
+active: false                      # Disabled for testing (uses user credentials)
 type: "http"                       # Server type: http (required)
 
 # Connection details
 endpoint: "https://api.githubcopilot.com/mcp/"  # Server endpoint URL (required)
+# transport_type will be auto-detected with credentials
 timeout_seconds: 30                # Request timeout (overrides default)
 retry_attempts: 3                  # Number of retry attempts (overrides default)
 

@@ -2,11 +2,12 @@
 schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "linear-mcp"                    # Unique server name/id (required)
 description: "Linear MCP Server"  # Human-readable description
-active: true                       # optional; true (exists for start/stop commands)
+active: true                       # Updated LINEAR_MCP_TOKEN
 type: "http"                       # Server type: http (required)
 
 # Connection details
 endpoint: "https://mcp.linear.app/sse"  # Server endpoint URL (required)
+transport_type: "http"             # Auto-detect transport (SSE or streamable)
 timeout_seconds: 30                # Request timeout (overrides default)
 retry_attempts: 3                  # Number of retry attempts (overrides default)
 
