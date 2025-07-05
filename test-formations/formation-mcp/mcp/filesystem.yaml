@@ -8,5 +8,5 @@ type: "command"
 install: "npm install -g @modelcontextprotocol/server-filesystem"
 
 command: "npx"
-args: ["-y", "@modelcontextprotocol/server-filesystem", "/"]
+args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/ran/Desktop/"]
 timeout_seconds: 60
