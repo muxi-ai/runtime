@@ -15,6 +15,31 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import text  # noqa: E402
 from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
+from sqlalchemy.exc import OperationalError  # noqa: E402
+
+
+async def create_index_if_not_exists(conn, index_name: str, index_sql: str):
+    """
+    Create an index if it doesn't already exist.
+
+    This function handles the creation of indexes in a database-agnostic way,
+    checking for existing indexes using proper error handling rather than
+    string matching.
+    """
+    try:
+        await conn.execute(text(index_sql))
+        return True
+    except OperationalError as e:
+        # For SQLite, check if the error is about an existing index
+        # SQLite uses SQLITE_ERROR (1) for "index already exists"
+        if hasattr(e.orig, "args") and len(e.orig.args) > 0:
+            error_msg = str(e.orig.args[0]).lower()
+            # Check for index already exists error
+            if "already exists" in error_msg and "index" in error_msg:
+                return False
+
+        # For other databases or unknown errors, re-raise
+        raise
 
 
 async def add_indexes(connection_string: str):
@@ -69,45 +94,37 @@ async def add_indexes(connection_string: str):
         else:
             # SQLite
             # Note: SQLite doesn't support IF NOT EXISTS for indexes in older versions
-            # We'll use a try/except approach
-            try:
-                await conn.execute(
-                    text(
-                        """
-                    CREATE INDEX idx_credentials_user_service
-                    ON credentials(user_id, service, formation_id_hash);
-                """
-                    )
-                )
-            except Exception as e:
-                if "already exists" not in str(e):
-                    raise
+            # We'll use our helper function for robust error handling
 
-            try:
-                await conn.execute(
-                    text(
-                        """
-                    CREATE INDEX idx_credentials_user_formation
-                    ON credentials(user_id, formation_id_hash);
+            # Create first index
+            await create_index_if_not_exists(
+                conn,
+                "idx_credentials_user_service",
                 """
-                    )
-                )
-            except Exception as e:
-                if "already exists" not in str(e):
-                    raise
+                CREATE INDEX idx_credentials_user_service
+                ON credentials(user_id, service, formation_id_hash);
+                """,
+            )
 
-            try:
-                await conn.execute(
-                    text(
-                        """
-                    CREATE INDEX idx_credentials_service_lower
-                    ON credentials(service COLLATE NOCASE);
+            # Create second index
+            await create_index_if_not_exists(
+                conn,
+                "idx_credentials_user_formation",
                 """
-                    )
-                )
-            except Exception as e:
-                if "already exists" not in str(e):
-                    raise
+                CREATE INDEX idx_credentials_user_formation
+                ON credentials(user_id, formation_id_hash);
+                """,
+            )
+
+            # Create third index
+            await create_index_if_not_exists(
+                conn,
+                "idx_credentials_service_lower",
+                """
+                CREATE INDEX idx_credentials_service_lower
+                ON credentials(service COLLATE NOCASE);
+                """,
+            )
 
         print("✅ Indexes added successfully!")
 
