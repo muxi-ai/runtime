@@ -17,12 +17,7 @@ class MCPMessageHandler:
 
     def create_request(self, method: str, params: dict) -> SessionMessage:
         """Create proper MCP request message."""
-        request = JSONRPCRequest(
-            jsonrpc="2.0",
-            id=str(uuid.uuid4()),
-            method=method,
-            params=params
-        )
+        request = JSONRPCRequest(jsonrpc="2.0", id=str(uuid.uuid4()), method=method, params=params)
         return SessionMessage(message=request)
 
     def parse_response(self, message: Union[SessionMessage, bytes, dict, str]) -> Dict[str, Any]:
@@ -31,20 +26,20 @@ class MCPMessageHandler:
         # Handle bytes response (need to decode and parse JSON)
         if isinstance(message, bytes):
             try:
-                decoded = message.decode('utf-8')
+                decoded = message.decode("utf-8")
                 parsed = json.loads(decoded)
                 return {
                     "status": "success",
                     "result": parsed,
                     "id": parsed.get("id"),
-                    "jsonrpc": parsed.get("jsonrpc", "2.0")
+                    "jsonrpc": parsed.get("jsonrpc", "2.0"),
                 }
             except (UnicodeDecodeError, json.JSONDecodeError) as e:
                 return {
                     "status": "error",
                     "error": f"Failed to parse response: {e}",
                     "id": None,
-                    "jsonrpc": "2.0"
+                    "jsonrpc": "2.0",
                 }
 
         # Handle string response (parse JSON)
@@ -55,14 +50,14 @@ class MCPMessageHandler:
                     "status": "success",
                     "result": parsed,
                     "id": parsed.get("id"),
-                    "jsonrpc": parsed.get("jsonrpc", "2.0")
+                    "jsonrpc": parsed.get("jsonrpc", "2.0"),
                 }
             except json.JSONDecodeError as e:
                 return {
                     "status": "error",
                     "error": f"Failed to parse JSON response: {e}",
                     "id": None,
-                    "jsonrpc": "2.0"
+                    "jsonrpc": "2.0",
                 }
 
         # Handle dict response directly
@@ -71,17 +66,40 @@ class MCPMessageHandler:
                 "status": "success",
                 "result": message,
                 "id": message.get("id"),
-                "jsonrpc": message.get("jsonrpc", "2.0")
+                "jsonrpc": message.get("jsonrpc", "2.0"),
             }
 
         # Handle SessionMessage objects
         if isinstance(message, SessionMessage):
-            if isinstance(message.message, JSONRPCResponse):
+            # Check if message.message is a JSONRPCMessage with a root attribute
+            if hasattr(message.message, "root"):
+                # Handle JSONRPCMessage wrapper
+                root = message.message.root
+                if isinstance(root, JSONRPCResponse):
+                    return {
+                        "status": "success",
+                        "result": root.result,
+                        "id": root.id,
+                        "jsonrpc": root.jsonrpc,
+                    }
+                elif isinstance(root, JSONRPCError):
+                    return {
+                        "status": "error",
+                        "error": {
+                            "code": root.error.code,
+                            "message": root.error.message,
+                            "data": getattr(root.error, "data", None),
+                        },
+                        "id": root.id,
+                        "jsonrpc": root.jsonrpc,
+                    }
+            # Fall back to direct handling
+            elif isinstance(message.message, JSONRPCResponse):
                 return {
                     "status": "success",
                     "result": message.message.result,
                     "id": message.message.id,
-                    "jsonrpc": message.message.jsonrpc
+                    "jsonrpc": message.message.jsonrpc,
                 }
             elif isinstance(message.message, JSONRPCError):
                 return {
@@ -89,10 +107,10 @@ class MCPMessageHandler:
                     "error": {
                         "code": message.message.error.code,
                         "message": message.message.error.message,
-                        "data": getattr(message.message.error, 'data', None)
+                        "data": getattr(message.message.error, "data", None),
                     },
                     "id": message.message.id,
-                    "jsonrpc": message.message.jsonrpc
+                    "jsonrpc": message.message.jsonrpc,
                 }
             else:
                 # Handle raw message data within SessionMessage
@@ -100,7 +118,7 @@ class MCPMessageHandler:
                     "status": "success",
                     "result": message.message if isinstance(message.message, dict) else {},
                     "id": getattr(message.message, "id", None),
-                    "jsonrpc": getattr(message.message, "jsonrpc", "2.0")
+                    "jsonrpc": getattr(message.message, "jsonrpc", "2.0"),
                 }
 
         # Fallback for unknown types
@@ -108,7 +126,7 @@ class MCPMessageHandler:
             "status": "error",
             "error": f"Unknown response type: {type(message)}",
             "id": None,
-            "jsonrpc": "2.0"
+            "jsonrpc": "2.0",
         }
 
     def create_notification(self, method: str, params: dict) -> SessionMessage:
@@ -118,7 +136,7 @@ class MCPMessageHandler:
             jsonrpc="2.0",
             method=method,
             params=params,
-            id=None  # Notifications explicitly have no ID
+            id=None,  # Notifications explicitly have no ID
         )
         return SessionMessage(message=notification)
 
@@ -203,15 +221,14 @@ class MCPMessageHandler:
 
         return has_id and (has_result or has_error) and not (has_result and has_error)
 
-    def format_error_response(self, request_id: str, code: int, message: str, data: Any = None) -> Dict[str, Any]:
+    def format_error_response(
+        self, request_id: str, code: int, message: str, data: Any = None
+    ) -> Dict[str, Any]:
         """Format proper MCP error response."""
         error_response = {
             "jsonrpc": "2.0",
             "id": request_id,
-            "error": {
-                "code": code,
-                "message": message
-            }
+            "error": {"code": code, "message": message},
         }
         if data is not None:
             error_response["error"]["data"] = data

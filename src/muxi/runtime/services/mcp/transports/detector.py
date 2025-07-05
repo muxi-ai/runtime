@@ -35,7 +35,7 @@
 # =============================================================================
 
 import aiohttp
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import hashlib
 
@@ -145,7 +145,12 @@ class TransportDetector:
     _cache = TransportCache()
 
     @staticmethod
-    async def detect_best_transport(url: str, timeout: int = 10, use_cache: bool = True) -> str:
+    async def detect_best_transport(
+        url: str,
+        timeout: int = 10,
+        use_cache: bool = True,
+        credentials: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """
         Detect the best available transport for an MCP server.
 
@@ -159,6 +164,7 @@ class TransportDetector:
             url: The MCP server URL to test
             timeout: Timeout in seconds for each transport test
             use_cache: Whether to use cached transport results
+            credentials: Optional authentication credentials for the server
 
         Returns:
             Transport type string ("streamable_http" or "http_sse")
@@ -177,7 +183,9 @@ class TransportDetector:
         detected_transport = TransportDetector._detect_from_url_pattern(url)
         if detected_transport:
             # If we can detect from URL pattern, test that transport first
-            if await TransportDetector._test_transport(url, detected_transport, timeout):
+            if await TransportDetector._test_transport(
+                url, detected_transport, timeout, credentials
+            ):
                 TransportDetector._cache.cache_transport(
                     url, detected_transport, {"detection_method": "url_pattern"}
                 )
@@ -187,7 +195,7 @@ class TransportDetector:
         transports_to_try = ["streamable_http", "http_sse"]
 
         for transport_type in transports_to_try:
-            if await TransportDetector._test_transport(url, transport_type, timeout):
+            if await TransportDetector._test_transport(url, transport_type, timeout, credentials):
                 # Cache successful transport
                 TransportDetector._cache.cache_transport(
                     url, transport_type, {"detection_method": "connection_test"}
@@ -227,7 +235,9 @@ class TransportDetector:
         return None
 
     @staticmethod
-    async def _test_transport(url: str, transport_type: str, timeout: int) -> bool:
+    async def _test_transport(
+        url: str, transport_type: str, timeout: int, credentials: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Test a specific transport type against a URL.
 
@@ -235,19 +245,22 @@ class TransportDetector:
             url: Server URL
             transport_type: Transport type to test
             timeout: Timeout in seconds
+            credentials: Optional authentication credentials for the server
 
         Returns:
             True if transport is supported, False otherwise
         """
         if transport_type == "streamable_http":
-            return await TransportDetector._test_streamable_http(url, timeout)
+            return await TransportDetector._test_streamable_http(url, timeout, credentials)
         elif transport_type == "http_sse":
-            return await TransportDetector._test_http_sse(url, timeout)
+            return await TransportDetector._test_http_sse(url, timeout, credentials)
         else:
             return False
 
     @staticmethod
-    async def _test_streamable_http(url: str, timeout: int) -> bool:
+    async def _test_streamable_http(
+        url: str, timeout: int, credentials: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Test Streamable HTTP transport using direct HTTP communication.
 
@@ -256,6 +269,7 @@ class TransportDetector:
         Args:
             url: The MCP server URL to test
             timeout: Timeout in seconds for the test
+            credentials: Optional authentication credentials for the server
 
         Returns:
             True if Streamable HTTP is supported, False otherwise
@@ -277,9 +291,19 @@ class TransportDetector:
                     "params": {},
                 }
 
-                async with session.post(
-                    test_url, json=test_request, headers={"Content-Type": "application/json"}
-                ) as response:
+                # Build headers with authentication if provided
+                headers = {"Content-Type": "application/json"}
+                if credentials:
+                    auth_type = credentials.get("type", "bearer").lower()
+                    if auth_type == "bearer" and "token" in credentials:
+                        headers["Authorization"] = f"Bearer {credentials['token']}"
+                    elif auth_type == "api_key":
+                        if "header_name" in credentials:
+                            headers[credentials["header_name"]] = credentials["key"]
+                        else:
+                            headers["X-API-Key"] = credentials.get("key", "")
+
+                async with session.post(test_url, json=test_request, headers=headers) as response:
                     # Accept any response that's not a hard connection error
                     # Streamable servers should respond to POST requests
                     return response.status in [200, 400, 404, 405]  # Not 500+ or connection error
@@ -288,13 +312,16 @@ class TransportDetector:
             return False
 
     @staticmethod
-    async def _test_http_sse(url: str, timeout: int) -> bool:
+    async def _test_http_sse(
+        url: str, timeout: int, credentials: Optional[Dict[str, Any]] = None
+    ) -> bool:
         """
         Test HTTP+SSE transport using direct HTTP communication.
 
         Args:
             url: The MCP server URL to test
             timeout: Timeout in seconds for the test
+            credentials: Optional authentication credentials for the server
 
         Returns:
             True if HTTP+SSE is supported, False otherwise
@@ -308,10 +335,20 @@ class TransportDetector:
             async with aiohttp.ClientSession(
                 timeout=aiohttp.ClientTimeout(total=timeout)
             ) as session:
+                # Build headers with authentication if provided
+                headers = {"Accept": "text/event-stream"}
+                if credentials:
+                    auth_type = credentials.get("type", "bearer").lower()
+                    if auth_type == "bearer" and "token" in credentials:
+                        headers["Authorization"] = f"Bearer {credentials['token']}"
+                    elif auth_type == "api_key":
+                        if "header_name" in credentials:
+                            headers[credentials["header_name"]] = credentials["key"]
+                        else:
+                            headers["X-API-Key"] = credentials.get("key", "")
+
                 # Test SSE endpoint with proper headers
-                async with session.get(
-                    test_url, headers={"Accept": "text/event-stream"}
-                ) as response:
+                async with session.get(test_url, headers=headers) as response:
                     # SSE servers should respond favorably to event-stream requests
                     return response.status in [200, 404]  # Not hard errors
 
@@ -320,7 +357,10 @@ class TransportDetector:
 
     @staticmethod
     async def detect_with_fallback(
-        url: str, timeout: int = 10, use_cache: bool = True
+        url: str,
+        timeout: int = 10,
+        use_cache: bool = True,
+        credentials: Optional[Dict[str, Any]] = None,
     ) -> Tuple[str, Dict]:
         """
         Detect transport with detailed fallback information.
@@ -329,6 +369,7 @@ class TransportDetector:
             url: Server URL
             timeout: Timeout in seconds
             use_cache: Whether to use cached results
+            credentials: Optional authentication credentials for the server
 
         Returns:
             Tuple of (transport_type, detection_metadata)
@@ -352,7 +393,7 @@ class TransportDetector:
 
             # Try detection
             transport_type = await TransportDetector.detect_best_transport(
-                url, timeout, use_cache=False
+                url, timeout, use_cache=False, credentials=credentials
             )
 
             detection_metadata["transport_type"] = transport_type

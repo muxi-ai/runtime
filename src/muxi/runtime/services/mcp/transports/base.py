@@ -229,3 +229,20 @@ class BaseTransport:
             "last_activity": self.last_activity.isoformat() if self.last_activity else None,
             **self.connection_stats,
         }
+
+    async def test_connection(self) -> bool:
+        """
+        Quick test to see if transport can connect.
+        Used for fallback detection.
+
+        Returns:
+            bool: True if connection successful, False otherwise
+        """
+        try:
+            await self.connect()
+            if self.connected:
+                await self.disconnect()
+                return True
+            return False
+        except Exception:
+            return False

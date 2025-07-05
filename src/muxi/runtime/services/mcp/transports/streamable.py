@@ -1,19 +1,20 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Real MCP Streamable HTTP Transport
-# Description:  Fixed streamable HTTP transport using direct HTTP communication
-# Role:         Provides real MCP protocol support bypassing SDK bugs
+# Title:        MCP Streamable HTTP Transport using SDK
+# Description:  Streamable HTTP transport using official MCP SDK
+# Role:         Provides MCP protocol support via SDK streamablehttp_client
 # Usage:        Primary transport for modern MCP servers
 # Author:       Muxi Framework Team
 # =============================================================================
 
-import asyncio
-import aiohttp
+import httpx
 from typing import Any, Dict, Optional
 from datetime import datetime
-from ....utils.datetime_utils import utc_now_iso
-import uuid
+
+# MCP SDK imports
+from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.session import ClientSession
 
 from .base import (
     BaseTransport,
@@ -24,151 +25,191 @@ from ..protocol.message_handler import MCPMessageHandler
 
 
 class StreamableHTTPTransport(BaseTransport):
-    """Fixed MCP Streamable HTTP transport using direct HTTP communication."""
+    """MCP Streamable HTTP transport using official SDK."""
 
     def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
-        """Initialize fixed streamable HTTP transport."""
+        """Initialize MCP SDK streamable HTTP transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
         self.session = None
+        self.read_stream = None
+        self.write_stream = None
+        self.get_session_id = None
+        self.client_context = None
+        print(f"[StreamableHTTP] Initialized with URL: {url}")
+        print(f"[StreamableHTTP] Auth config: {auth}")
 
     async def connect(self) -> bool:
-        """Connect to the MCP server with health check."""
-        error_details = {"url": self.url, "timestamp": utc_now_iso()}
+        """Connect using MCP SDK streamablehttp_client."""
+        if self.connected:
+            return True
 
         try:
-            self.session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=30),
-                headers={"Content-Type": "application/json"},
+            # Convert auth dict to httpx.Auth
+            httpx_auth = self._create_httpx_auth(self.auth)
+
+            # Use SDK client
+            self.client_context = streamablehttp_client(
+                url=self.url, auth=httpx_auth, timeout=self.request_timeout
             )
 
-            # Test connection with minimal POST request instead of GET
-            # Send a simple JSON-RPC request to test connectivity
-            test_request = {"jsonrpc": "2.0", "id": "test", "method": "tools/list", "params": {}}
+            # Enter context and get streams
+            self.read_stream, self.write_stream, self.get_session_id = (
+                await self.client_context.__aenter__()
+            )
 
-            async with self.session.post(self.url, json=test_request) as response:
-                if response.status == 400:
-                    # 400 might be expected if server doesn't like our test request format
-                    # but it means the server is responding to POST requests
-                    self.connection_stats["connected"] = True
-                    return True
-                elif 200 <= response.status < 300:
-                    # Success response is even better
-                    self.connection_stats["connected"] = True
-                    return True
-                else:
-                    # Other errors (like 405, 404) indicate real problems
-                    error_details["error"] = f"Server unreachable: {response.status}"
-                    raise MCPConnectionError(f"Server unreachable: {response.status}")
+            # Create session for high-level operations
+            self.session = ClientSession(self.read_stream, self.write_stream)
+            await self.session.__aenter__()
 
-        except aiohttp.ClientError as e:
-            error_details["error"] = f"Connection failed: {str(e)}"
-            raise MCPConnectionError(f"Connection failed: {str(e)}")
+            # Initialize the connection
+            await self.session.initialize()
+
+            self.connected = True
+            self.connect_time = datetime.now()
+            self.last_activity = datetime.now()
+
+            print(f"[StreamableHTTP] Connected successfully to {self.url}")
+            return True
+
         except Exception as e:
-            error_details["error"] = str(e)
-            raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
+            print(f"[StreamableHTTP] Connection failed: {e}")
+            # Clean up any partially created resources
+            await self._cleanup()
+            raise MCPConnectionError(f"Failed to connect to {self.url}: {e}")
 
-    async def send_request(
-        self, request: Dict[str, Any], timeout: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """Send request via HTTP POST."""
-        if not self.session or not self.connection_stats.get("connected", False):
+    def _create_httpx_auth(self, auth_config: Optional[Dict]) -> Optional[httpx.Auth]:
+        """Convert auth config to httpx.Auth object."""
+        if not auth_config:
+            return None
+
+        auth_type = auth_config.get("type", "bearer").lower()
+
+        if auth_type == "bearer" and "token" in auth_config:
+            # Custom Bearer auth class
+            class BearerAuth(httpx.Auth):
+                def __init__(self, token):
+                    self.token = token
+
+                def auth_flow(self, request):
+                    request.headers["Authorization"] = f"Bearer {self.token}"
+                    yield request
+
+            return BearerAuth(auth_config["token"])
+
+        elif auth_type == "basic":
+            return httpx.BasicAuth(
+                username=auth_config.get("username", ""), password=auth_config.get("password", "")
+            )
+
+        elif auth_type == "api_key":
+            # API key auth
+            class ApiKeyAuth(httpx.Auth):
+                def __init__(self, key, header_name=None):
+                    self.key = key
+                    self.header_name = header_name or "X-API-Key"
+
+                def auth_flow(self, request):
+                    request.headers[self.header_name] = self.key
+                    yield request
+
+            return ApiKeyAuth(auth_config.get("key", ""), auth_config.get("header_name"))
+
+        return None
+
+    async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
+        """Send request using MCP SDK session."""
+        if not self.connected or not self.session:
             raise MCPConnectionError("Not connected to MCP server")
 
-        # Use provided timeout or fall back to instance default
-        request_timeout = timeout or self.request_timeout
+        method = request_obj.get("method")
+        params = request_obj.get("params", {})
 
         try:
-            # For streamable HTTP, send all requests to the base URL with JSON-RPC method in body
-            method = request.get("method", "")
-            params = request.get("params", {})
-
-            # Create proper JSON-RPC request
-            session_message = self.message_handler.create_request(method, params)
-
-            # Extract the raw JSON-RPC data
-            if hasattr(session_message.message, "model_dump"):
-                json_request = session_message.message.model_dump()
-            else:
-                # Fallback for compatibility
-                json_request = {
-                    "jsonrpc": "2.0",
-                    "id": str(uuid.uuid4()),
-                    "method": method,
-                    "params": params,
+            # Use SDK's high-level methods
+            if method == "tools/list":
+                result = await self.session.list_tools()
+                # Convert to expected format
+                return {
+                    "status": "success",
+                    "result": {"tools": [tool.model_dump() for tool in result.tools]},
                 }
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                result = await self.session.call_tool(tool_name, arguments)
+                # Convert to expected format
+                return {"status": "success", "result": result.model_dump()}
+            elif method == "resources/list":
+                result = await self.session.list_resources()
+                return {
+                    "status": "success",
+                    "result": {"resources": [res.model_dump() for res in result.resources]},
+                }
+            elif method == "prompts/list":
+                result = await self.session.list_prompts()
+                return {
+                    "status": "success",
+                    "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
+                }
+            else:
+                # For other methods, use generic approach
+                # Create proper MCP message
+                request_message = self.message_handler.create_request(method, params)
 
-            # Send HTTP request to base URL (streamable servers handle routing via JSON-RPC method)
-            raw_response = await self._send_http_request(self.url, json_request, request_timeout)
+                # Send via write stream
+                await self.write_stream.send(request_message)
 
-            # Parse the response using the message handler to get consistent format
-            parsed_response = self.message_handler.parse_response(raw_response)
+                # Read response
+                response_message = await self.read_stream.receive()
 
-            # Update stats
-            self.connection_stats["requests_sent"] = (
-                self.connection_stats.get("requests_sent", 0) + 1
-            )
-            self.connection_stats["last_activity"] = utc_now_iso()
+                # Parse response
+                parsed = self.message_handler.parse_response(response_message)
 
-            return parsed_response
+                self.last_activity = datetime.now()
+                self.connection_stats["requests_sent"] += 1
+                self.connection_stats["responses_received"] += 1
 
-        except Exception as e:
-            self.connection_stats["errors"] = self.connection_stats.get("errors", 0) + 1
-            raise MCPConnectionError(f"Request failed: {str(e)}")
+                return parsed
 
-    def _map_method_to_endpoint(self, method: str) -> str:
-        """Map MCP method to HTTP endpoint."""
-        # Remove the jsonrpc prefix if present and map to endpoint
-        endpoint_map = {
-            "tools/list": "tools/list",
-            "tools/call": "tools/call",
-            "resources/list": "resources/list",
-            "resources/read": "resources/read",
-            "prompts/list": "prompts/list",
-            "prompts/get": "prompts/get",
-            "sampling/createMessage": "sampling/createMessage",
-            "initialize": "initialize",
-            "ping": "ping",
-        }
-
-        return endpoint_map.get(method, method)
-
-    async def _send_http_request(self, url: str, json_request: dict, timeout: int) -> dict:
-        """Send HTTP POST request to MCP server."""
-        try:
-            # Send HTTP POST request using asyncio.wait_for for Python 3.10 compatibility
-            async def make_request():
-                async with self.session.post(
-                    url, json=json_request, headers={"Content-Type": "application/json"}
-                ) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    else:
-                        response_text = await response.text()
-                        raise MCPRequestError(f"HTTP {response.status} for {url}: {response_text}")
-
-            return await asyncio.wait_for(make_request(), timeout=timeout)
-
-        except asyncio.TimeoutError:
-            self.connection_stats["errors_encountered"] += 1
-            raise MCPRequestError(f"Request timeout after {timeout}s")
         except Exception as e:
             self.connection_stats["errors_encountered"] += 1
             raise MCPRequestError(f"Request failed: {e}")
 
-    async def disconnect(self) -> None:
-        """Disconnect from the MCP server."""
-        if self.session:
-            await self.session.close()
-            self.session = None
+    async def _cleanup(self):
+        """Clean up resources even if not fully connected."""
+        try:
+            # Close session if it exists
+            if self.session:
+                try:
+                    await self.session.__aexit__(None, None, None)
+                except Exception:
+                    pass
 
-        self.connection_stats["connected"] = False
-        self.connection_stats["disconnected_at"] = utc_now_iso()
+            # Close client context if it exists
+            if self.client_context:
+                try:
+                    await self.client_context.__aexit__(None, None, None)
+                except Exception:
+                    pass
+
+        finally:
+            self.connected = False
+            self.session = None
+            self.read_stream = None
+            self.write_stream = None
+            self.get_session_id = None
+            self.client_context = None
+
+    async def disconnect(self) -> bool:
+        """Disconnect from MCP server."""
+        await self._cleanup()
+        return True
 
     @property
     def is_connected(self) -> bool:
         """Check if transport is connected."""
-        return self.session is not None and self.connection_stats.get("connected", False)
+        return self.connected and self.session is not None
 
     def get_connection_stats(self) -> Dict[str, Any]:
         """
@@ -186,50 +227,17 @@ class StreamableHTTPTransport(BaseTransport):
                 "protocol_version": "2025-03-26",
                 "supports_streaming": True,
                 "supports_cancellation": True,
+                "has_active_session": self.session is not None,
             }
         )
 
-        # Add session duration if connected
-        if self.connected and self.connect_time:
-            session_duration = (datetime.now() - self.connect_time).total_seconds()
-            base_stats["session_duration_s"] = session_duration
-
-        # Add session info if available
-        if self.session:
-            base_stats["has_active_session"] = True
-
-        # Calculate efficiency metrics
-        if self.connection_stats["requests_sent"] > 0:
-            base_stats["success_rate"] = 1.0 - (
-                self.connection_stats["errors_encountered"] / self.connection_stats["requests_sent"]
-            )
-            base_stats["avg_bytes_per_request"] = (
-                self.connection_stats["bytes_sent"] / self.connection_stats["requests_sent"]
-            )
-
-        if self.connection_stats["responses_received"] > 0:
-            base_stats["avg_bytes_per_response"] = (
-                self.connection_stats["bytes_received"]
-                / self.connection_stats["responses_received"]
-            )
+        # Add session ID if available
+        if self.get_session_id:
+            try:
+                session_id = self.get_session_id()
+                if session_id:
+                    base_stats["session_id"] = session_id
+            except Exception:
+                pass
 
         return base_stats
-
-    def get_transport_info(self) -> Dict[str, Any]:
-        """
-        Get transport information and capabilities.
-
-        Returns:
-            Dict containing transport information
-        """
-        return {
-            "type": "streamable_http",
-            "protocol_version": "2025-03-26",
-            "supports_streaming": True,
-            "supports_cancellation": True,
-            "supports_batching": False,  # Not implemented yet
-            "max_concurrent_requests": 10,  # HTTP allows multiple concurrent requests
-            "url": self.url,
-            "connected": self.connected,
-            "has_active_session": self.session is not None,
-        }

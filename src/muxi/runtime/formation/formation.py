@@ -87,6 +87,7 @@ from .initialization import (
     initialize_llm_config,
     initialize_memory_systems,
     initialize_background_services,
+    initialize_mcp_services,
     initialize_clarification_config,
     initialize_document_processing_config,
     load_agents_from_configuration,
@@ -300,7 +301,7 @@ class Formation:
 
             # Validate user credentials requirements (ensure database is configured if needed)
             try:
-                validate_user_credentials_requirements(self.config)
+                validate_user_credentials_requirements(self.config, self.secrets_manager)
             except ValueError as e:
                 raise ConfigurationValidationError(
                     [str(e)],
@@ -555,6 +556,92 @@ class Formation:
                         level=observability.EventLevel.WARNING,
                         data={"agent_file": str(agent_file), "error": str(e)},
                         description=f"Failed to load agent file {agent_file}: {e}",
+                    )
+                    continue
+
+        # Discover MCP servers from mcp/ directory
+        mcp_dir = formation_dir / "mcp"
+        if mcp_dir.exists() and mcp_dir.is_dir():
+            # Initialize MCP structure if not present
+            if "mcp" not in config:
+                config["mcp"] = {}
+            if "servers" not in config["mcp"]:
+                config["mcp"]["servers"] = []
+
+            # Load each MCP server file
+            for mcp_file in sorted(mcp_dir.glob("*.yaml")) + sorted(mcp_dir.glob("*.yml")):
+                try:
+                    with open(mcp_file, "r") as f:
+                        mcp_config = yaml.safe_load(f)
+
+                    # Interpolate secrets in MCP config
+                    if self.secrets_manager:
+                        mcp_config = self._interpolate_secrets_sync(mcp_config)
+
+                    # Ensure MCP server has an ID
+                    if "id" not in mcp_config:
+                        mcp_config["id"] = mcp_file.stem
+
+                    # Check if server is active (default to True)
+                    if mcp_config.get("active", True):
+                        config["mcp"]["servers"].append(mcp_config)
+                        observability.observe(
+                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                            level=observability.EventLevel.DEBUG,
+                            data={"server_id": mcp_config["id"], "file": str(mcp_file)},
+                            description=f"Discovered MCP server: {mcp_config['id']}",
+                        )
+
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"mcp_file": str(mcp_file), "error": str(e)},
+                        description=f"Failed to load MCP file {mcp_file}: {e}",
+                    )
+                    continue
+
+        # Discover A2A services from a2a/ directory
+        a2a_dir = formation_dir / "a2a"
+        if a2a_dir.exists() and a2a_dir.is_dir():
+            # Initialize A2A structure if not present
+            if "a2a" not in config:
+                config["a2a"] = {}
+            if "outbound" not in config["a2a"]:
+                config["a2a"]["outbound"] = {}
+            if "services" not in config["a2a"]["outbound"]:
+                config["a2a"]["outbound"]["services"] = []
+
+            # Load each A2A service file
+            for a2a_file in sorted(a2a_dir.glob("*.yaml")) + sorted(a2a_dir.glob("*.yml")):
+                try:
+                    with open(a2a_file, "r") as f:
+                        a2a_config = yaml.safe_load(f)
+
+                    # Interpolate secrets in A2A config
+                    if self.secrets_manager:
+                        a2a_config = self._interpolate_secrets_sync(a2a_config)
+
+                    # Ensure A2A service has an ID
+                    if "id" not in a2a_config:
+                        a2a_config["id"] = a2a_file.stem
+
+                    # Check if service is active (default to True)
+                    if a2a_config.get("active", True):
+                        config["a2a"]["outbound"]["services"].append(a2a_config)
+                        observability.observe(
+                            event_type=observability.SystemEvents.A2A_CONFIG_LOAD_COMPLETED,
+                            level=observability.EventLevel.DEBUG,
+                            data={"service_id": a2a_config["id"], "file": str(a2a_file)},
+                            description=f"Discovered A2A service: {a2a_config['id']}",
+                        )
+
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"a2a_file": str(a2a_file), "error": str(e)},
+                        description=f"Failed to load A2A file {a2a_file}: {e}",
                     )
                     continue
 
@@ -859,6 +946,7 @@ class Formation:
                 "llm_config": self._llm_config,
                 "memory_config": self._memory_config,
                 "mcp_config": mcp_config_obj,  # Standardized config object
+                "mcp_servers": getattr(self, "_mcp_servers", []),  # Actual server configurations
                 "a2a_config": a2a_config_obj,  # Standardized config object
                 "logging_config": self._logging_config,
                 "clarification_config": self._clarification_config,
@@ -897,7 +985,10 @@ class Formation:
         # 5. Initialize background services
         initialize_background_services(self)
 
-        # 6. Initialize clarification configuration
+        # 6. Initialize MCP services
+        initialize_mcp_services(self)
+
+        # 7. Initialize clarification configuration
         initialize_clarification_config(self)
 
         # 8. Load agents configuration

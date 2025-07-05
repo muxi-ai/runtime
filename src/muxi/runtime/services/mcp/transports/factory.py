@@ -8,11 +8,14 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
-from typing import Optional, List
-from .base import BaseTransport
+from typing import Optional, List, Dict, Any, Set
+from .base import BaseTransport, MCPConnectionError
 from .http_sse import HTTPSSETransport
 from .streamable import StreamableHTTPTransport
 from .command import CommandLineTransport
+
+# Module-level cache for SSE servers (persists for formation lifetime)
+_sse_server_cache: Set[str] = set()
 
 
 class MCPTransportFactory:
@@ -21,11 +24,14 @@ class MCPTransportFactory:
 
     Supports automatic transport selection with fallback capabilities:
     - Streamable HTTP (MCP 2025-03-26) - Primary choice for HTTP URLs
-    - HTTP+SSE (MCP 2024-11-05) - Fallback for HTTP URLs
+    - HTTP+SSE (MCP 2024-11-05) - Fallback for HTTP URLs (deprecated)
     - Command Line - For local process communication
+
+    Formation YAML only exposes two types: "command" and "http"
+    HTTP automatically tries streamable first, falls back to SSE if needed.
     """
 
-    # Supported transport types
+    # Supported transport types (internal use only)
     TRANSPORT_STREAMABLE_HTTP = "streamable_http"
     TRANSPORT_HTTP_SSE = "http_sse"
     TRANSPORT_COMMAND = "command"
@@ -35,6 +41,7 @@ class MCPTransportFactory:
         url: Optional[str] = None,
         command: Optional[str] = None,
         transport_type: Optional[str] = None,
+        auth: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> BaseTransport:
         """Create a transport instance based on parameters.
@@ -42,20 +49,19 @@ class MCPTransportFactory:
         Args:
             url: URL for HTTP-based MCP servers
             command: Command for command-line based MCP servers
-            transport_type: Explicit transport type selection:
-                - "streamable_http": Use Streamable HTTP (MCP 2025-03-26)
-                - "http_sse": Use HTTP+SSE (MCP 2024-11-05)
-                - "command": Use command-line transport
-                - None: Auto-select (defaults to streamable_http for URLs)
+            transport_type: Explicit transport type selection
+            auth: Authentication configuration
             **kwargs: Additional parameters for transport initialization
 
         Returns:
             An instance of BaseTransport
 
         Raises:
-            ValueError: If parameters are invalid or transport type is unsupported
+            ValueError: If parameters are invalid
         """
-        # TODO: Add observability logging for transport creation
+        # Extract auth from kwargs if not provided directly
+        if auth is None and "credentials" in kwargs:
+            auth = kwargs["credentials"]
 
         # Validate basic parameters
         if url is not None and command is not None:
@@ -72,76 +78,96 @@ class MCPTransportFactory:
 
         # Handle command-line transport
         if command is not None:
-            if (
-                transport_type is not None
-                and transport_type != MCPTransportFactory.TRANSPORT_COMMAND
-            ):
-                raise ValueError(
-                    f"Transport type '{transport_type}' is not compatible with command parameter. "
-                    f"Use transport_type='{MCPTransportFactory.TRANSPORT_COMMAND}' or omit it."
-                )
-            return CommandLineTransport(command)
+            return CommandLineTransport(command, auth=auth, request_timeout=request_timeout)
 
         # Handle HTTP-based transports
         if url is not None:
-            # Auto-select transport type if not specified
-            if transport_type is None:
-                transport_type = MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP
+            # Check if we already know this server uses SSE
+            if url in _sse_server_cache:
+                return HTTPSSETransport(url, request_timeout=request_timeout, auth=auth)
 
-            # Create appropriate HTTP transport
-            if transport_type == MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP:
-                return StreamableHTTPTransport(url, request_timeout)
-            elif transport_type == MCPTransportFactory.TRANSPORT_HTTP_SSE:
-                return HTTPSSETransport(url, request_timeout)
-            else:
-                raise ValueError(
-                    f"Unsupported transport type '{transport_type}' for HTTP URLs. "
-                    f"Supported types: {MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP}, "
-                    f"{MCPTransportFactory.TRANSPORT_HTTP_SSE}"
-                )
+            # Default to streamable HTTP
+            return StreamableHTTPTransport(url, request_timeout=request_timeout, auth=auth)
 
         # This should never be reached due to earlier validation
         raise ValueError("Unable to determine appropriate transport type.")
 
     @staticmethod
-    def create_transport_with_fallback(
-        url: Optional[str] = None, command: Optional[str] = None, **kwargs
+    async def create_transport_with_fallback(
+        url: Optional[str] = None,
+        command: Optional[str] = None,
+        auth: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ) -> BaseTransport:
         """
-        Create a transport instance with automatic fallback for HTTP URLs.
+        Create transport with automatic SSE fallback for HTTP servers.
 
-        For HTTP URLs, attempts to create StreamableHTTPTransport first,
-        then falls back to HTTPSSETransport if needed.
+        This is the main entry point that implements the fallback logic.
+        For HTTP servers:
+        1. Try streamable HTTP first (unless we know it's SSE)
+        2. Fall back to SSE if streamable fails
+        3. Cache SSE servers for formation lifetime
 
         Args:
             url: URL for HTTP-based MCP servers
             command: Command for command-line based MCP servers
+            auth: Authentication configuration
             **kwargs: Additional parameters for transport initialization
 
         Returns:
             An instance of BaseTransport
 
         Raises:
+            MCPConnectionError: If both transports fail
             ValueError: If parameters are invalid
         """
-        # TODO: Add observability logging for transport creation with fallback
+        # Extract auth from kwargs if not provided directly
+        if auth is None and "credentials" in kwargs:
+            auth = kwargs["credentials"]
 
         # For command-line, no fallback needed
         if command is not None:
-            return MCPTransportFactory.create_transport(command=command, **kwargs)
+            return MCPTransportFactory.create_transport(command=command, auth=auth, **kwargs)
 
-        # For HTTP URLs, try streamable_http first
+        # For HTTP URLs, implement fallback logic
         if url is not None:
+            print(f"[Factory] Trying to connect to {url}")
+            # First, try streamable HTTP (unless we know it's SSE)
+            if url not in _sse_server_cache:
+                try:
+                    transport = MCPTransportFactory.create_transport(url=url, auth=auth, **kwargs)
+                    # Try to connect to verify it works
+                    await transport.connect()
+                    if transport.connected:
+                        return transport
+                    else:
+                        await transport.disconnect()
+                except Exception as e:
+                    # Log the streamable HTTP failure
+                    print(f"Streamable HTTP failed for {url}: {e}")
+
+            # Fall back to SSE
+            print(f"[Factory] Falling back to SSE for {url}")
             try:
-                return MCPTransportFactory.create_transport(
-                    url=url, transport_type=MCPTransportFactory.TRANSPORT_STREAMABLE_HTTP, **kwargs
-                )
-            except Exception:
-                # TODO: Add observability logging for fallback
-                # Fall back to HTTP+SSE
-                return MCPTransportFactory.create_transport(
-                    url=url, transport_type=MCPTransportFactory.TRANSPORT_HTTP_SSE, **kwargs
-                )
+                transport = HTTPSSETransport(url, auth=auth, **kwargs)
+                # Test SSE connection too
+                await transport.connect()
+                if transport.connected:
+                    print("[Factory] SSE connection successful")
+                    # Remember this server uses SSE
+                    _sse_server_cache.add(url)
+                    print(f"Server {url} uses SSE transport (cached for formation lifetime)")
+                    return transport
+                else:
+                    print("[Factory] SSE connection test failed")
+                    await transport.disconnect()
+            except Exception as e:
+                print(f"SSE test failed for {url}: {e}")
+
+            # Both transports failed
+            raise MCPConnectionError(
+                f"Failed to connect to {url} with both streamable HTTP and SSE"
+            )
 
         raise ValueError("Must provide either url or command.")
 

@@ -167,6 +167,86 @@ class MCPCoordinator:
                 f"Failed to resolve user credentials for MCP server {server_id}: {str(e)}"
             ) from e
 
+    async def _resolve_initialization_credentials(
+        self, auth_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Replace user.credentials.X with secrets.USER_CREDENTIALS_X for initialization.
+
+        This method transforms user credential placeholders to initialization secret patterns
+        that can be resolved during formation startup when there's no user context.
+
+        Args:
+            auth_config: Authentication configuration that may contain user credential placeholders
+
+        Returns:
+            Auth config with user credential patterns replaced by initialization secret patterns
+
+        Example:
+            Input:  {"token": "${{ user.credentials.github }}"}
+            Output: {"token": "${{ secrets.USER_CREDENTIALS_GITHUB }}"}
+        """
+        if not auth_config:
+            return auth_config
+
+        # Pattern to match user credential placeholders
+        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+
+        def transform_recursive(data: Any) -> Any:
+            """Recursively transform credential placeholders in nested data structures."""
+            if isinstance(data, dict):
+                # Process dictionary recursively
+                transformed_dict = {}
+                for key, value in data.items():
+                    transformed_dict[key] = transform_recursive(value)
+                return transformed_dict
+            elif isinstance(data, list):
+                # Process list recursively
+                return [transform_recursive(item) for item in data]
+            elif isinstance(data, str):
+                # Check if this is a user credential placeholder
+                match = USER_CREDENTIAL_PATTERN.match(data)
+                if match:
+                    service_name = match.group(1)
+                    # Transform to initialization secret pattern
+                    # user.credentials.github -> secrets.USER_CREDENTIALS_GITHUB
+                    initialization_secret = f"USER_CREDENTIALS_{service_name.upper()}"
+                    return f"${{{{ secrets.{initialization_secret} }}}}"
+                else:
+                    return data
+            else:
+                # Non-string, non-dict, non-list values pass through
+                return data
+
+        return transform_recursive(auth_config)
+
+    def _validate_credential_format(self, credential: str, service_name: str) -> bool:
+        """
+        Validate that a credential has the expected format for the service.
+
+        Args:
+            credential: The credential value to validate
+            service_name: The service name (e.g., 'github', 'linear')
+
+        Returns:
+            bool: True if valid, False otherwise
+
+        Raises:
+            ValueError: If credential format is invalid
+        """
+        if not credential or not isinstance(credential, str) or not credential.strip():
+            raise ValueError(f"Invalid {service_name} credential: empty or not a string")
+
+        # Service-specific validation
+        if service_name.lower() == "github":
+            # GitHub tokens start with ghp_ or github_pat_
+            if not (credential.startswith("ghp_") or credential.startswith("github_pat_")):
+                raise ValueError(
+                    "Invalid GitHub credential format. GitHub tokens should start with 'ghp_' or 'github_pat_'"
+                )
+
+        return True
+
     async def register_mcp_server(
         self,
         server_id: str,
@@ -175,6 +255,7 @@ class MCPCoordinator:
         auth: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: Optional[int] = None,
+        transport_type: Optional[str] = None,
     ) -> str:
         """
         Register an MCP server with the centralized MCP service with secrets support.
@@ -224,9 +305,57 @@ class MCPCoordinator:
         final_auth = auth
         if auth:
             try:
-                # Only interpolate ${{ secrets.* }} patterns
-                # Keep ${{ user.credentials.* }} patterns as-is for later resolution
-                final_auth = await self.overlord.interpolate_secrets(auth)
+                # First, transform user.credentials.* to USER_CREDENTIALS_* for initialization
+                initialization_auth = await self._resolve_initialization_credentials(auth)
+
+                # Then interpolate all secrets (including transformed ones)
+                final_auth = await self.overlord.secrets_interpolator.interpolate_secrets(
+                    initialization_auth
+                )
+
+                # Validate credential format if we resolved any initialization credentials
+                if final_auth != auth:  # Credentials were transformed/resolved
+                    # Find which service credentials were used
+                    USER_CREDENTIAL_PATTERN = re.compile(
+                        r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}}"
+                    )
+
+                    def find_services(obj):
+                        """Find service names in original auth config."""
+                        services = []
+                        if isinstance(obj, str):
+                            match = USER_CREDENTIAL_PATTERN.match(obj)
+                            if match:
+                                services.append(match.group(1))
+                        elif isinstance(obj, dict):
+                            for value in obj.values():
+                                services.extend(find_services(value))
+                        elif isinstance(obj, list):
+                            for item in obj:
+                                services.extend(find_services(item))
+                        return services
+
+                    # Validate resolved credentials
+                    services = find_services(auth)
+                    if services and final_auth:
+                        # Extract the resolved credential value (look for token field specifically)
+                        if isinstance(final_auth, dict):
+                            # For bearer auth, the token is in the 'token' field
+                            token_value = final_auth.get("token")
+                            if (
+                                token_value
+                                and isinstance(token_value, str)
+                                and not token_value.startswith("${{")
+                            ):
+                                # This is a resolved credential
+                                for service in services:
+                                    try:
+                                        self._validate_credential_format(token_value, service)
+                                    except ValueError as ve:
+                                        raise ValueError(
+                                            f"MCP server '{server_id}' initialization failed: {str(ve)}"
+                                        ) from ve
+
             except Exception as e:
                 # Log secret interpolation failure - this is critical for auth debugging
                 error_msg = f"Secret interpolation failed for MCP server {server_id}: {str(e)}"
@@ -241,18 +370,44 @@ class MCPCoordinator:
                 ) from e
 
         # Register the server with the MCP service
-        res = await self.mcp_service.register_mcp_server(
-            server_id=server_id,
-            url=url,
-            command=command,
-            credentials=final_auth,
-            model=model,
-            request_timeout=timeout,
-        )
+        try:
+            print(f"[MCPCoordinator] Registering server '{server_id}':")
+            print(f"  URL: {url}")
+            print(f"  Transport type: {transport_type}")
+            print(f"  Auth config: {final_auth}")
+            if final_auth and isinstance(final_auth, dict) and "token" in final_auth:
+                print(f"  Token (first 40 chars): {final_auth['token'][:40]}...")
 
-        #  Info - TODO: add observability
-        # ConversationEvents.MCP_SERVER_REGISTERED
-        return res
+            res = await self.mcp_service.register_mcp_server(
+                server_id=server_id,
+                url=url,
+                command=command,
+                transport_type=transport_type,
+                credentials=final_auth,
+                model=model,
+                request_timeout=timeout,
+            )
+
+            # Verify that the server was successfully registered
+            # The register_mcp_server call will throw if connection fails
+            # Just verify the server exists in our registry
+            servers = await self.mcp_service.list_servers()
+            if server_id not in servers:
+                raise ConnectionError(
+                    f"MCP server '{server_id}' registration failed - server not found after registration"
+                )
+
+            #  Info - TODO: add observability
+            # ConversationEvents.MCP_SERVER_REGISTERED
+            return res
+
+        except Exception as e:
+            # Fail fast on any MCP server connection/query errors
+            error_msg = f"Failed to query MCP server '{server_id}': {str(e)}"
+            print(f"ERROR: {error_msg}", flush=True)
+
+            # Re-raise with clear error message
+            raise ConnectionError(error_msg) from e
 
     async def list_mcp_tools(
         self, server_id: Optional[str] = None

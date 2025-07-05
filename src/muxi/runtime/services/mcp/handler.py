@@ -125,11 +125,19 @@ class MCPServerClient:
 
         try:
             # Create transport using factory with automatic type selection
-            self.transport = MCPTransportFactory.create_transport(
-                url=self.url,
-                command=self.command,
-                request_timeout=self.request_timeout,
-            )
+            # For HTTP servers, use the fallback method to auto-detect SSE
+            if self.url:
+                self.transport = await MCPTransportFactory.create_transport_with_fallback(
+                    url=self.url,
+                    auth=self.credentials,
+                    request_timeout=self.request_timeout,
+                )
+            else:
+                self.transport = MCPTransportFactory.create_transport(
+                    command=self.command,
+                    auth=self.credentials,
+                    request_timeout=self.request_timeout,
+                )
 
             # Attempt connection
             success = await self.transport.connect()

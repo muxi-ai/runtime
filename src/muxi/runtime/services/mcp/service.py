@@ -32,7 +32,7 @@
 
 import asyncio
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 from ...utils.datetime_utils import utc_now_iso
 
 from ..llm import LLM
@@ -161,6 +161,15 @@ class MCPService:
         }
         return server_id
 
+    async def list_servers(self) -> List[str]:
+        """
+        List all registered server IDs.
+
+        Returns:
+            List of server IDs
+        """
+        return list(self.connections.keys())
+
     async def register_mcp_server(
         self,
         server_id: str,
@@ -223,7 +232,10 @@ class MCPService:
                 # Use enhanced transport detector with caching
                 detected_transport, detection_metadata = (
                     await TransportDetector.detect_with_fallback(
-                        url=url, timeout=min(request_timeout // 2, 30), use_cache=True
+                        url=url,
+                        timeout=min(request_timeout // 2, 30),
+                        use_cache=True,
+                        credentials=credentials,
                     )
                 )
 
@@ -1061,7 +1073,11 @@ class MCPService:
             }
 
     async def test_transport_connectivity(
-        self, url: str, transport_type: Optional[str] = None, timeout: int = 10
+        self,
+        url: str,
+        transport_type: Optional[str] = None,
+        timeout: int = 10,
+        credentials: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """
         Test connectivity to an MCP server with specific or auto-detected transport.
@@ -1072,6 +1088,7 @@ class MCPService:
             url: Server URL to test
             transport_type: Specific transport to test, or None for auto-detection
             timeout: Timeout in seconds for the test
+            credentials: Optional authentication credentials for the server
 
         Returns:
             Detailed connectivity test results
@@ -1087,7 +1104,7 @@ class MCPService:
         try:
             if transport_type:
                 # Test specific transport
-                test_passed = await TransportDetector._test_transport(url, transport_type, timeout)
+                test_passed = await TransportDetector._test_transport(url, transport_type, timeout, credentials)
 
                 test_results["tests_performed"].append(
                     {
@@ -1111,7 +1128,10 @@ class MCPService:
                 # Auto-detect best transport
                 detected_transport, detection_metadata = (
                     await TransportDetector.detect_with_fallback(
-                        url, timeout, use_cache=False  # Don't use cache for testing
+                        url,
+                        timeout,
+                        use_cache=False,  # Don't use cache for testing
+                        credentials=credentials,
                     )
                 )
 

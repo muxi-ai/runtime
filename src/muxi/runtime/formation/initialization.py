@@ -403,6 +403,64 @@ def initialize_document_processing(formation) -> None:
         )
 
 
+def initialize_mcp_services(formation) -> None:
+    """
+    Initialize MCP service and register configured MCP servers.
+
+    This function:
+    1. Gets the singleton MCP service instance
+    2. Stores the MCP servers for later registration by overlord
+    3. Emits observability events for tracking
+    """
+    try:
+        from ..services.mcp import MCPService
+
+        # Get the singleton MCP service
+        mcp_service = MCPService.get_instance()
+        formation._mcp_service = mcp_service
+
+        # Get MCP configuration
+        # The servers are in formation._mcp_config which comes from config["mcp"]
+        mcp_config = formation._mcp_config if hasattr(formation, "_mcp_config") else {}
+        servers = mcp_config.get("servers", [])
+
+        # Store the servers in formation for later access by overlord
+        formation._mcp_servers = servers
+
+        if not servers:
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "mcp",
+                    "server_count": 0,
+                },
+                description="No MCP servers configured",
+            )
+        else:
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "mcp",
+                    "server_count": len(servers),
+                },
+                description=f"Found {len(servers)} MCP servers to configure",
+            )
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "mcp",
+                "error": str(e),
+            },
+            description=f"Failed to initialize MCP service: {str(e)}",
+        )
+        # Don't raise - MCP is optional functionality
+
+
 def initialize_background_services(formation) -> None:
     """
     Initializes background services for the formation, including cache management,

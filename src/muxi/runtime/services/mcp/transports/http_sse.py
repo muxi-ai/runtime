@@ -1,18 +1,20 @@
 # =============================================================================
 # FRONTMATTER
 # =============================================================================
-# Title:        Real MCP HTTP+SSE Transport
-# Description:  Real MCP SDK-based HTTP+SSE transport implementation
-# Role:         Provides real MCP protocol support via sse_client
-# Usage:        Used for MCP servers supporting HTTP+SSE protocol
+# Title:        MCP HTTP+SSE Transport using SDK
+# Description:  HTTP+SSE transport using official MCP SDK
+# Role:         Provides MCP protocol support via SDK sse_client
+# Usage:        Fallback transport for legacy MCP servers using SSE
 # Author:       Muxi Framework Team
 # =============================================================================
 
-import asyncio
-import json
-import aiohttp
+import httpx
 from typing import Any, Dict, Optional
 from datetime import datetime
+
+# MCP SDK imports
+from mcp.client.sse import sse_client
+from mcp.client.session import ClientSession
 
 from .base import (
     BaseTransport,
@@ -23,246 +25,209 @@ from ..protocol.message_handler import MCPMessageHandler
 
 
 class HTTPSSETransport(BaseTransport):
-    """Real MCP HTTP+SSE transport with working SSE client."""
+    """MCP HTTP+SSE transport using official SDK."""
 
     def __init__(self, url: str, request_timeout: int = 30, auth: Optional[Any] = None):
-        """Initialize real MCP HTTP+SSE transport."""
+        """Initialize MCP SDK HTTP+SSE transport."""
         super().__init__(url, request_timeout, auth)
         self.message_handler = MCPMessageHandler()
         self.session = None
-        self.response = None
-        self.message_queue = asyncio.Queue()
-        self.reader_task = None
+        self.client_context = None
+        self.read_stream = None
+        self.write_stream = None
+        print(f"[HTTP_SSE] Initialized with URL: {url}")
+        print(f"[HTTP_SSE] Auth config: {auth}")
 
     async def connect(self) -> bool:
-        """Connect using working HTTP+SSE implementation."""
+        """Connect using MCP SDK sse_client."""
         if self.connected:
             return True
 
         try:
-            # Create aiohttp session
-            self.session = aiohttp.ClientSession()
+            # Convert auth dict to httpx.Auth
+            httpx_auth = self._create_httpx_auth(self.auth)
 
-            # Connect to SSE endpoint
-            self.response = await self.session.get(
-                self.url,
-                headers={
-                    "Accept": "text/event-stream",
-                    "Cache-Control": "no-cache",
-                    "Connection": "keep-alive",
-                },
+            # Use SDK client - it handles endpoint discovery!
+            self.client_context = sse_client(
+                url=self.url,
+                auth=httpx_auth,
+                timeout=60,  # Increase connection timeout
+                sse_read_timeout=300,  # 5 minutes for SSE
             )
 
-            if self.response.status != 200:
-                raise MCPConnectionError(f"HTTP error: {self.response.status}")
+            # Enter context and get streams
+            self.read_stream, self.write_stream = await self.client_context.__aenter__()
 
-            # Start reading SSE events
-            self.reader_task = asyncio.create_task(self._read_sse_events())
+            # Create session for high-level operations
+            self.session = ClientSession(self.read_stream, self.write_stream)
+            await self.session.__aenter__()
+
+            # Initialize the connection
+            await self.session.initialize()
 
             self.connected = True
             self.connect_time = datetime.now()
             self.last_activity = datetime.now()
+
+            print(f"[HTTP_SSE] Connected successfully to {self.url}")
             return True
 
         except Exception as e:
-            error_details = {
-                "url": self.url,
-                "error": str(e),
-                "timestamp": datetime.now().isoformat(),
-            }
-            raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
+            print(f"[HTTP_SSE] Connection failed: {e}")
+            # Clean up any partially created resources
+            await self._cleanup()
+            raise MCPConnectionError(f"Failed to connect to {self.url}: {e}")
 
-    async def _read_sse_events(self):
-        """Read SSE events and queue MCP messages."""
-        try:
-            buffer = ""
-            async for data in self.response.content:
-                chunk = data.decode("utf-8")
-                buffer += chunk
+    def _create_httpx_auth(self, auth_config: Optional[Dict]) -> Optional[httpx.Auth]:
+        """Convert auth config to httpx.Auth object."""
+        if not auth_config:
+            return None
 
-                # Process complete SSE events
-                while "\r\n\r\n" in buffer:
-                    event_data, buffer = buffer.split("\r\n\r\n", 1)
-                    await self._process_sse_event(event_data)
+        auth_type = auth_config.get("type", "bearer").lower()
 
-        except Exception as e:
-            print(f"SSE reader error: {e}")
+        if auth_type == "bearer" and "token" in auth_config:
+            # Custom Bearer auth class
+            class BearerAuth(httpx.Auth):
+                def __init__(self, token):
+                    self.token = token
 
-    async def _process_sse_event(self, event_data: str):
-        """Process a single SSE event."""
-        try:
-            lines = event_data.strip().split("\r\n")
-            data_content = None
+                def auth_flow(self, request):
+                    request.headers["Authorization"] = f"Bearer {self.token}"
+                    yield request
 
-            for line in lines:
-                if line.startswith("data: "):
-                    data_content = line[6:]  # Remove 'data: ' prefix
-                    break
+            return BearerAuth(auth_config["token"])
 
-            if data_content:
-                # Parse JSON message
-                message_data = json.loads(data_content)
+        elif auth_type == "basic":
+            return httpx.BasicAuth(
+                username=auth_config.get("username", ""), password=auth_config.get("password", "")
+            )
 
-                # Convert to SessionMessage format for compatibility
-                from mcp.shared.message import SessionMessage
-                from mcp.types import JSONRPCResponse, JSONRPCRequest, JSONRPCNotification
+        elif auth_type == "api_key":
+            # API key auth
+            class ApiKeyAuth(httpx.Auth):
+                def __init__(self, key, header_name=None):
+                    self.key = key
+                    self.header_name = header_name or "X-API-Key"
 
-                if "result" in message_data:
-                    # Response message
-                    response = JSONRPCResponse(
-                        jsonrpc=message_data.get("jsonrpc", "2.0"),
-                        id=message_data.get("id"),
-                        result=message_data.get("result"),
-                    )
-                    session_msg = SessionMessage(message=response)
-                elif "method" in message_data:
-                    # Check if it's a notification (no id) or request (has id)
-                    message_id = message_data.get("id")
-                    if message_id is None:
-                        # Notification message
-                        notification = JSONRPCNotification(
-                            jsonrpc=message_data.get("jsonrpc", "2.0"),
-                            method=message_data.get("method"),
-                            params=message_data.get("params", {}),
-                        )
-                        session_msg = SessionMessage(message=notification)
-                    else:
-                        # Request message
-                        request = JSONRPCRequest(
-                            jsonrpc=message_data.get("jsonrpc", "2.0"),
-                            id=message_id,
-                            method=message_data.get("method"),
-                            params=message_data.get("params", {}),
-                        )
-                        session_msg = SessionMessage(message=request)
-                else:
-                    # Raw message data - create a basic session message
-                    session_msg = SessionMessage(message=message_data)
+                def auth_flow(self, request):
+                    request.headers[self.header_name] = self.key
+                    yield request
 
-                await self.message_queue.put(session_msg)
+            return ApiKeyAuth(auth_config.get("key", ""), auth_config.get("header_name"))
 
-        except Exception as e:
-            print(f"Error processing SSE event: {e}")
-            # Don't fail on processing errors, just log them
-
-    async def _send_http_request(self, message_data: dict) -> dict:
-        """Send HTTP POST request for MCP messages."""
-        try:
-            # Determine correct POST URL based on MCP method
-            method = message_data.get("method", "")
-
-            if self.url.endswith("/sse"):
-                base_url = self.url[:-4]  # Remove '/sse' suffix
-            else:
-                base_url = self.url
-
-            # Map MCP methods to specific endpoints
-            if method == "tools/list":
-                post_url = f"{base_url}/mcp/tools/list"
-            elif method == "tools/call":
-                post_url = f"{base_url}/mcp/tools/call"
-            elif method == "resources/list":
-                post_url = f"{base_url}/mcp/resources/list"
-            elif method == "prompts/list":
-                post_url = f"{base_url}/mcp/prompts/list"
-            elif method == "initialize":
-                post_url = f"{base_url}/mcp/initialize"
-            elif method == "ping":
-                post_url = f"{base_url}/mcp/ping"
-            else:
-                # Fallback for unknown methods
-                post_url = f"{base_url}/mcp/{method}"
-
-            async with self.session.post(
-                post_url, json=message_data, headers={"Content-Type": "application/json"}
-            ) as response:
-                if response.status == 200:
-                    return await response.json()
-                else:
-                    raise MCPRequestError(f"HTTP POST failed: {response.status} for URL {post_url}")
-        except Exception as e:
-            raise MCPRequestError(f"Failed to send HTTP request: {e}")
+        return None
 
     async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
-        """Send MCP request via HTTP POST and receive response via SSE."""
-        if not self.connected:
+        """Send request using MCP SDK session."""
+        if not self.connected or not self.session:
             raise MCPConnectionError("Not connected to MCP server")
 
-        # Use provided timeout or default
-        actual_timeout = timeout or self.request_timeout
+        method = request_obj.get("method")
+        params = request_obj.get("params", {})
 
-        # Convert to proper MCP format
-        if isinstance(request_obj, dict):
-            method = request_obj.get("method")
-            params = request_obj.get("params", {})
-        else:
-            raise MCPRequestError("Invalid request format")
-
-        # Create proper MCP message
-        request_message = self.message_handler.create_request(method, params)
-
-        # Extract raw message data for HTTP POST
-        raw_message = request_message.message
-        if hasattr(raw_message, "model_dump"):
-            message_data = raw_message.model_dump()
-        else:
-            message_data = {
-                "jsonrpc": "2.0",
-                "id": getattr(raw_message, "id", None),
-                "method": method,
-                "params": params,
-            }
-
-        # Send HTTP POST request
         try:
-            # For tools/list and other methods, send via HTTP POST
-            response_data = await self._send_http_request(message_data)
-            return {
-                "status": "success",
-                "result": response_data.get("result", response_data),
-                "id": response_data.get("id"),
-                "jsonrpc": response_data.get("jsonrpc", "2.0"),
-            }
+            # Use SDK's high-level methods
+            if method == "tools/list":
+                result = await self.session.list_tools()
+                # Convert to expected format
+                return {
+                    "status": "success",
+                    "result": {"tools": [tool.model_dump() for tool in result.tools]},
+                }
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                result = await self.session.call_tool(tool_name, arguments)
+                # Convert to expected format
+                return {"status": "success", "result": result.model_dump()}
+            elif method == "resources/list":
+                result = await self.session.list_resources()
+                return {
+                    "status": "success",
+                    "result": {"resources": [res.model_dump() for res in result.resources]},
+                }
+            elif method == "prompts/list":
+                result = await self.session.list_prompts()
+                return {
+                    "status": "success",
+                    "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
+                }
+            else:
+                # For other methods, use generic approach
+                # Create proper MCP message
+                request_message = self.message_handler.create_request(method, params)
+
+                # Send via write stream
+                await self.write_stream.send(request_message)
+
+                # Read response
+                response_message = await self.read_stream.receive()
+
+                # Parse response
+                parsed = self.message_handler.parse_response(response_message)
+
+                self.last_activity = datetime.now()
+                self.connection_stats["requests_sent"] += 1
+                self.connection_stats["responses_received"] += 1
+
+                return parsed
+
         except Exception as e:
-            # If HTTP POST fails, try to get response from SSE stream
-            try:
-                response_message = await asyncio.wait_for(
-                    self.message_queue.get(), timeout=actual_timeout
-                )
-                return self.message_handler.parse_response(response_message)
-            except asyncio.TimeoutError:
-                raise MCPRequestError(f"Request timeout after {actual_timeout}s: {e}")
-            except Exception as stream_error:
-                raise MCPRequestError(f"Request failed: {e}, Stream error: {stream_error}")
+            self.connection_stats["errors_encountered"] += 1
+            raise MCPRequestError(f"Request failed: {e}")
 
-    async def disconnect(self) -> bool:
-        """Disconnect from MCP server."""
-        if not self.connected:
-            return True
-
+    async def _cleanup(self):
+        """Clean up resources even if not fully connected."""
         try:
-            # Cancel SSE reader task
-            if self.reader_task and not self.reader_task.done():
-                self.reader_task.cancel()
+            # Close session if it exists
+            if self.session:
                 try:
-                    await self.reader_task
-                except asyncio.CancelledError:
+                    await self.session.__aexit__(None, None, None)
+                except Exception:
                     pass
 
-            # Close HTTP response
-            if self.response:
-                self.response.close()
+            # Close client context if it exists
+            if self.client_context:
+                try:
+                    await self.client_context.__aexit__(None, None, None)
+                except Exception:
+                    pass
 
-            # Close aiohttp session
-            if self.session:
-                await self.session.close()
-
-        except Exception:
-            pass
         finally:
             self.connected = False
             self.session = None
-            self.response = None
-            self.reader_task = None
+            self.client_context = None
+            self.read_stream = None
+            self.write_stream = None
 
+    async def disconnect(self) -> bool:
+        """Disconnect from MCP server."""
+        await self._cleanup()
         return True
+
+    @property
+    def is_connected(self) -> bool:
+        """Check if transport is connected."""
+        return self.connected and self.session is not None
+
+    def get_connection_stats(self) -> Dict[str, Any]:
+        """
+        Get connection statistics and performance metrics.
+
+        Returns:
+            Dict containing connection statistics
+        """
+        base_stats = super().get_connection_stats()
+
+        # Add SSE-specific stats
+        base_stats.update(
+            {
+                "transport_type": "http_sse",
+                "protocol_version": "2024-11-05",
+                "supports_streaming": True,
+                "supports_endpoint_discovery": True,
+                "has_active_session": self.session is not None,
+            }
+        )
+
+        return base_stats

@@ -2274,19 +2274,25 @@ def validate_formation(
     return validator.validate(formation_path, secrets_manager)
 
 
-def validate_user_credentials_requirements(config: Dict[str, Any]) -> None:
+def validate_user_credentials_requirements(
+    config: Dict[str, Any], secrets_manager: Optional[Any] = None
+) -> None:
     """
     Validate that database is configured if user credentials are used.
+    Also validates that USER_CREDENTIALS_* secrets exist for MCP servers.
 
     This function checks if any user credential placeholders (${{ user.credentials.* }})
-    are used in the configuration and ensures that persistent database storage is
-    configured when they are found.
+    are used in the configuration and ensures that:
+    1. Persistent database storage is configured when they are found
+    2. For MCP servers, corresponding USER_CREDENTIALS_* secrets exist
 
     Args:
         config: The formation configuration dictionary to validate
+        secrets_manager: Optional secrets manager to check for initialization credentials
 
     Raises:
         ValueError: If user credentials are used but database is not configured
+                   or if USER_CREDENTIALS_* secrets are missing for MCP servers
     """
 
     def contains_user_credentials(obj: Any) -> bool:
@@ -2298,6 +2304,22 @@ def validate_user_credentials_requirements(config: Dict[str, Any]) -> None:
         elif isinstance(obj, list):
             return any(contains_user_credentials(item) for item in obj)
         return False
+
+    def find_user_credentials_in_mcp(obj: Any, found_credentials: set, path: str = "") -> None:
+        """Recursively find all user credential patterns in MCP configurations."""
+        if isinstance(obj, str):
+            match = USER_CREDENTIAL_PATTERN.search(obj)
+            if match:
+                service_name = match.group(1)
+                found_credentials.add((service_name, path))
+        elif isinstance(obj, dict):
+            for key, value in obj.items():
+                new_path = f"{path}.{key}" if path else key
+                find_user_credentials_in_mcp(value, found_credentials, new_path)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                new_path = f"{path}[{i}]"
+                find_user_credentials_in_mcp(item, found_credentials, new_path)
 
     # Check if any part of config uses user credentials
     if contains_user_credentials(config):
@@ -2317,6 +2339,66 @@ def validate_user_credentials_requirements(config: Dict[str, Any]) -> None:
                 "User credentials require a properly configured database. "
                 "Please specify memory.persistent.provider and config."
             )
+
+    # Check MCP servers for user credentials that need initialization secrets
+    mcp_config = config.get("mcp", {})
+    servers = mcp_config.get("servers", [])
+
+    # Also check agent-level MCP servers
+    agents = config.get("agents", [])
+    for agent in agents:
+        if isinstance(agent, dict) and "mcp_servers" in agent:
+            agent_servers = agent["mcp_servers"]
+            if isinstance(agent_servers, list):
+                servers.extend(agent_servers)
+
+    # Find all user credentials in MCP server configurations
+    found_credentials = set()
+    for server in servers:
+        if isinstance(server, dict):
+            server_id = server.get("id", "unknown")
+            find_user_credentials_in_mcp(server, found_credentials, f"mcp_server[{server_id}]")
+
+    # Check if we have corresponding USER_CREDENTIALS_* secrets
+    if found_credentials and secrets_manager:
+        import asyncio
+
+        async def check_secrets():
+            await secrets_manager.initialize_encryption()
+            available_secrets = await secrets_manager.list_secrets()
+            return available_secrets
+
+        try:
+            # Get available secrets
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            available_secrets = loop.run_until_complete(check_secrets())
+            loop.close()
+
+            # Check each found credential
+            missing_secrets = []
+            for service_name, location in found_credentials:
+                initialization_secret = f"USER_CREDENTIALS_{service_name.upper()}"
+                if initialization_secret not in available_secrets:
+                    missing_secrets.append((service_name, initialization_secret, location))
+
+            if missing_secrets:
+                error_msg = "MCP servers require initialization credentials:\n"
+                for service, secret, location in missing_secrets:
+                    error_msg += f"\n  • {location} uses ${{{{ user.credentials.{service} }}}} but {secret} is missing."
+                    error_msg += f"\n    To fix: python -m muxi.runtime.utils.secrets add {secret} <{service}_token>\n"
+
+                raise ValueError(error_msg)
+
+        except ValueError as e:
+            # Re-raise our validation errors
+            if "initialization credentials" in str(e):
+                raise
+            # Other ValueError might be from secrets manager
+            raise
+        except Exception:
+            # For other exceptions, just continue (secrets manager might not be initialized)
+            pass
 
 
 def validate_formation_cli(formation_path: Union[str, Path]) -> None:
