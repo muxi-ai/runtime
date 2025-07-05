@@ -8,14 +8,20 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
+import logging
+import threading
 from typing import Optional, List, Dict, Any, Set
 from .base import BaseTransport, MCPConnectionError
 from .http_sse import HTTPSSETransport
 from .streamable import StreamableHTTPTransport
 from .command import CommandLineTransport
 
+# Create logger for this module
+logger = logging.getLogger(__name__)
+
 # Module-level cache for SSE servers (persists for formation lifetime)
 _sse_server_cache: Set[str] = set()
+_sse_cache_lock = threading.Lock()  # Use threading.Lock for both sync and async contexts
 
 
 class MCPTransportFactory:
@@ -40,7 +46,7 @@ class MCPTransportFactory:
     def create_transport(
         url: Optional[str] = None,
         command: Optional[str] = None,
-        transport_type: Optional[str] = None,
+        transport_type: Optional[str] = None,  # Kept for API compatibility, auto-detected
         auth: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> BaseTransport:
@@ -83,8 +89,9 @@ class MCPTransportFactory:
         # Handle HTTP-based transports
         if url is not None:
             # Check if we already know this server uses SSE
-            if url in _sse_server_cache:
-                return HTTPSSETransport(url, request_timeout=request_timeout, auth=auth)
+            with _sse_cache_lock:
+                if url in _sse_server_cache:
+                    return HTTPSSETransport(url, request_timeout=request_timeout, auth=auth)
 
             # Default to streamable HTTP
             return StreamableHTTPTransport(url, request_timeout=request_timeout, auth=auth)
@@ -131,9 +138,12 @@ class MCPTransportFactory:
 
         # For HTTP URLs, implement fallback logic
         if url is not None:
-            print(f"[Factory] Trying to connect to {url}")
+            logger.debug(f"Trying to connect to {url}")
             # First, try streamable HTTP (unless we know it's SSE)
-            if url not in _sse_server_cache:
+            with _sse_cache_lock:
+                is_sse_cached = url in _sse_server_cache
+
+            if not is_sse_cached:
                 try:
                     transport = MCPTransportFactory.create_transport(url=url, auth=auth, **kwargs)
                     # Try to connect to verify it works
@@ -144,25 +154,26 @@ class MCPTransportFactory:
                         await transport.disconnect()
                 except Exception as e:
                     # Log the streamable HTTP failure
-                    print(f"Streamable HTTP failed for {url}: {e}")
+                    logger.debug(f"Streamable HTTP failed for {url}: {e}")
 
             # Fall back to SSE
-            print(f"[Factory] Falling back to SSE for {url}")
+            logger.info(f"Falling back to SSE for {url}")
             try:
                 transport = HTTPSSETransport(url, auth=auth, **kwargs)
                 # Test SSE connection too
                 await transport.connect()
                 if transport.connected:
-                    print("[Factory] SSE connection successful")
+                    logger.info("SSE connection successful")
                     # Remember this server uses SSE
-                    _sse_server_cache.add(url)
-                    print(f"Server {url} uses SSE transport (cached for formation lifetime)")
+                    with _sse_cache_lock:
+                        _sse_server_cache.add(url)
+                    logger.info(f"Server {url} uses SSE transport (cached for formation lifetime)")
                     return transport
                 else:
-                    print("[Factory] SSE connection test failed")
+                    logger.warning("SSE connection test failed")
                     await transport.disconnect()
             except Exception as e:
-                print(f"SSE test failed for {url}: {e}")
+                logger.error(f"SSE test failed for {url}: {e}")
 
             # Both transports failed
             raise MCPConnectionError(

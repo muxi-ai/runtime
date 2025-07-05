@@ -8,7 +8,7 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
-import httpx
+import logging
 from typing import Any, Dict, Optional
 from datetime import datetime
 
@@ -22,6 +22,10 @@ from .base import (
     MCPRequestError,
 )
 from ..protocol.message_handler import MCPMessageHandler
+from .auth import create_httpx_auth
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
 
 
 class HTTPSSETransport(BaseTransport):
@@ -35,8 +39,16 @@ class HTTPSSETransport(BaseTransport):
         self.client_context = None
         self.read_stream = None
         self.write_stream = None
-        print(f"[HTTP_SSE] Initialized with URL: {url}")
-        print(f"[HTTP_SSE] Auth config: {auth}")
+        logger.debug(f"Initialized with URL: {url}")
+        # Log auth config safely without exposing sensitive data
+        if auth and isinstance(auth, dict):
+            safe_auth = {
+                k: "******" if k.lower() in ["token", "password", "key", "secret"] else v
+                for k, v in auth.items()
+            }
+            logger.debug(f"Auth config: {safe_auth}")
+        else:
+            logger.debug(f"Auth config: {auth}")
 
     async def connect(self) -> bool:
         """Connect using MCP SDK sse_client."""
@@ -45,7 +57,7 @@ class HTTPSSETransport(BaseTransport):
 
         try:
             # Convert auth dict to httpx.Auth
-            httpx_auth = self._create_httpx_auth(self.auth)
+            httpx_auth = create_httpx_auth(self.auth)
 
             # Use SDK client - it handles endpoint discovery!
             self.client_context = sse_client(
@@ -69,53 +81,14 @@ class HTTPSSETransport(BaseTransport):
             self.connect_time = datetime.now()
             self.last_activity = datetime.now()
 
-            print(f"[HTTP_SSE] Connected successfully to {self.url}")
+            logger.info(f"Connected successfully to {self.url}")
             return True
 
         except Exception as e:
-            print(f"[HTTP_SSE] Connection failed: {e}")
+            logger.error(f"Connection failed: {e}")
             # Clean up any partially created resources
             await self._cleanup()
             raise MCPConnectionError(f"Failed to connect to {self.url}: {e}")
-
-    def _create_httpx_auth(self, auth_config: Optional[Dict]) -> Optional[httpx.Auth]:
-        """Convert auth config to httpx.Auth object."""
-        if not auth_config:
-            return None
-
-        auth_type = auth_config.get("type", "bearer").lower()
-
-        if auth_type == "bearer" and "token" in auth_config:
-            # Custom Bearer auth class
-            class BearerAuth(httpx.Auth):
-                def __init__(self, token):
-                    self.token = token
-
-                def auth_flow(self, request):
-                    request.headers["Authorization"] = f"Bearer {self.token}"
-                    yield request
-
-            return BearerAuth(auth_config["token"])
-
-        elif auth_type == "basic":
-            return httpx.BasicAuth(
-                username=auth_config.get("username", ""), password=auth_config.get("password", "")
-            )
-
-        elif auth_type == "api_key":
-            # API key auth
-            class ApiKeyAuth(httpx.Auth):
-                def __init__(self, key, header_name=None):
-                    self.key = key
-                    self.header_name = header_name or "X-API-Key"
-
-                def auth_flow(self, request):
-                    request.headers[self.header_name] = self.key
-                    yield request
-
-            return ApiKeyAuth(auth_config.get("key", ""), auth_config.get("header_name"))
-
-        return None
 
     async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
         """Send request using MCP SDK session."""

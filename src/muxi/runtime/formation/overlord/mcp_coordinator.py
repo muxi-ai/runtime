@@ -374,9 +374,29 @@ class MCPCoordinator:
             print(f"[MCPCoordinator] Registering server '{server_id}':")
             print(f"  URL: {url}")
             print(f"  Transport type: {transport_type}")
-            print(f"  Auth config: {final_auth}")
-            if final_auth and isinstance(final_auth, dict) and "token" in final_auth:
-                print(f"  Token (first 40 chars): {final_auth['token'][:40]}...")
+
+            # Log auth config safely without exposing sensitive data
+            if final_auth and isinstance(final_auth, dict):
+                safe_auth = {}
+                for key, value in final_auth.items():
+                    if key.lower() in [
+                        "token",
+                        "password",
+                        "key",
+                        "secret",
+                        "api_key",
+                        "access_token",
+                    ]:
+                        # Mask sensitive values
+                        if isinstance(value, str):
+                            safe_auth[key] = f"****** (length: {len(value)})"
+                        else:
+                            safe_auth[key] = "****** (non-string)"
+                    else:
+                        safe_auth[key] = value
+                print(f"  Auth config: {safe_auth}")
+            else:
+                print(f"  Auth config: {final_auth}")
 
             res = await self.mcp_service.register_mcp_server(
                 server_id=server_id,
