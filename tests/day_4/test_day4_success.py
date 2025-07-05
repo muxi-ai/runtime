@@ -3,6 +3,7 @@
 
 import asyncio
 import sys
+
 sys.path.insert(0, ".")
 
 from src.muxi.runtime.services.mcp.transports.factory import MCPTransportFactory  # noqa: E402
@@ -13,34 +14,23 @@ async def test_mcp_servers():
     print("\nDAY 4 MCP SUCCESS TEST")
     print("=" * 80)
 
-    results = {
-        "linear": False,
-        "github": False
-    }
+    results = {"linear": False, "github": False}
 
     # Test 1: Linear MCP
     print("\n1. Testing Linear MCP...")
     print("   URL: https://mcp.linear.app/sse")
 
     try:
-        linear_auth = {
-            "type": "bearer",
-            "token": "8b3d900f-8838-40ee-9b6d-e9a764ca6d7c:eVoEBHq9aLPbgyoW:83JZMuDm2HffhbRP3ehuWeuBazdzEwKw"
-        }
+        linear_auth = {"type": "bearer", "token": "<redacted>"}
 
         transport = await MCPTransportFactory.create_transport_with_fallback(
-            url="https://mcp.linear.app/sse",
-            auth=linear_auth,
-            request_timeout=30
+            url="https://mcp.linear.app/sse", auth=linear_auth, request_timeout=30
         )
 
         print(f"   Transport: {type(transport).__name__}")
 
         # Transport is already connected from factory test
-        response = await transport.send_request({
-            "method": "tools/list",
-            "params": {}
-        })
+        response = await transport.send_request({"method": "tools/list", "params": {}})
 
         if response.get("status") == "success":
             tools = response.get("result", {}).get("tools", [])
@@ -59,24 +49,16 @@ async def test_mcp_servers():
     print("   URL: https://api.githubcopilot.com/mcp/")
 
     try:
-        github_auth = {
-            "type": "bearer",
-            "token": "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"
-        }
+        github_auth = {"type": "bearer", "token": "<redacted>"}
 
         transport = await MCPTransportFactory.create_transport_with_fallback(
-            url="https://api.githubcopilot.com/mcp/",
-            auth=github_auth,
-            request_timeout=30
+            url="https://api.githubcopilot.com/mcp/", auth=github_auth, request_timeout=30
         )
 
         print(f"   Transport: {type(transport).__name__}")
 
         # Transport is already connected from factory test
-        response = await transport.send_request({
-            "method": "tools/list",
-            "params": {}
-        })
+        response = await transport.send_request({"method": "tools/list", "params": {}})
 
         if response.get("status") == "success":
             tools = response.get("result", {}).get("tools", [])
@@ -132,6 +114,7 @@ async def test_mcp_servers():
 
 if __name__ == "__main__":
     import warnings
+
     warnings.filterwarnings("ignore", category=RuntimeWarning)
 
     print("Running Day 4 MCP success test...")
