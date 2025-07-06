@@ -830,8 +830,64 @@ class Agent:
                 enhanced_message = f"{content}{context_enhancement}"
                 self._messages[-1]["content"] = enhanced_message
 
-        # Process the message with the model directly
-        raw_response = await self.model.chat(self._messages)
+        # Check if we should include MCP tools
+        tools = None
+        if self.overlord and hasattr(self.overlord, "mcp_service"):
+            try:
+                mcp_service = self.overlord.mcp_service
+                # Access tool_registry directly
+                available_tools = mcp_service.tool_registry
+
+                # Format tools for LLM if any are available
+                if available_tools:
+                    tools = []
+                    for server_id, server_tools in available_tools.items():
+                        for tool_name, tool_info in server_tools.items():
+                            # Convert MCP tool format to OpenAI function format
+                            tool_def = {
+                                "type": "function",
+                                "function": {
+                                    "name": f"{server_id}__{tool_name}",  # Prefix with server_id
+                                    "description": tool_info.get("description", ""),
+                                    "parameters": tool_info.get(
+                                        "inputSchema", {"type": "object", "properties": {}}
+                                    ),
+                                },
+                            }
+                            tools.append(tool_def)
+            except Exception as e:
+                # Log but don't fail if we can't get tools
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "tool_discovery",
+                    },
+                    description=f"Failed to get MCP tools for agent {self.agent_id}: {str(e)}",
+                )
+
+        # Process the message with the model, including tools if available
+        if tools:
+            try:
+                raw_response = await self.model.chat(self._messages, tools=tools)
+            except Exception as e:
+                # Log error and fallback to no tools
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "llm_call_with_tools",
+                    },
+                    description=f"Failed to call LLM with tools for agent {self.agent_id}: {str(e)}",
+                )
+                # Fallback to no tools
+                raw_response = await self.model.chat(self._messages)
+        else:
+            raw_response = await self.model.chat(self._messages)
 
         # Extract the actual content string from the response
         if isinstance(raw_response, str):
@@ -840,13 +896,13 @@ class Agent:
             # Handle ChatCompletionResponse object
             message = raw_response.choices[0].message
             if isinstance(message, dict):
-                content = message.get("content", "")
+                content = message.get("content", "") or ""  # Handle None content
             else:
                 # Handle message as object with content attribute/property
-                content = getattr(message, "content", "")
+                content = getattr(message, "content", "") or ""  # Handle None content
         elif isinstance(raw_response, dict) and "choices" in raw_response:
             # Handle dict response format
-            content = raw_response["choices"][0]["message"]["content"]
+            content = raw_response["choices"][0]["message"].get("content", "") or ""
         else:
             # Try to extract content from string representation if it's embedded
             response_str = str(raw_response)
@@ -900,23 +956,132 @@ class Agent:
                 user_id=user_id,
             )
 
-        # Check for tool calls and execute them if present
-        if "<|tool_call|>" in content or "tool_name" in content.lower():
-            try:
-                # Parse and execute tool calls
-                # ... existing tool call handling logic ...
-                pass
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.ConversationEvents.TOOL_CALL_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "agent_id": self.agent_id,
-                        "error": str(e),
-                        "content": content[:500],  # First 500 chars for debugging
-                    },
-                    description=f"Tool call execution failed: {str(e)}",
+        # Check for tool calls in the response
+        tool_calls = None
+        if hasattr(raw_response, "choices") and raw_response.choices:
+            message = raw_response.choices[0].message
+            # Handle both dict and object message types
+            if isinstance(message, dict):
+                if "tool_calls" in message and message["tool_calls"]:
+                    tool_calls = message["tool_calls"]
+            else:
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    tool_calls = message.tool_calls
+        elif isinstance(raw_response, dict) and "choices" in raw_response:
+            message = raw_response["choices"][0]["message"]
+            if "tool_calls" in message and message["tool_calls"]:
+                tool_calls = message["tool_calls"]
+
+        # Execute tool calls if present
+        if tool_calls:
+            tool_results = []
+            for tool_call in tool_calls:
+                try:
+                    # Extract tool info
+                    if hasattr(tool_call, "function"):
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        tool_id = tool_call.id
+                    else:
+                        tool_name = tool_call["function"]["name"]
+                        tool_args = json.loads(tool_call["function"]["arguments"])
+                        tool_id = tool_call["id"]
+
+                    # Split server_id and actual tool name
+                    if "__" in tool_name:
+                        server_id, actual_tool_name = tool_name.split("__", 1)
+                    else:
+                        # Fallback if no server prefix
+                        server_id = None
+                        actual_tool_name = tool_name
+
+                    # Invoke the tool
+                    result = await self.invoke_tool(
+                        tool_name=actual_tool_name,
+                        parameters=tool_args,
+                        server_id=server_id,
+                        user_id=user_id,
+                    )
+
+                    # Format tool result
+                    tool_results.append(
+                        {"tool_call_id": tool_id, "role": "tool", "content": json.dumps(result)}
+                    )
+
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.TOOL_CALL_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
+                        },
+                        description=f"Tool call execution failed: {str(e)}",
+                    )
+                    # Add error result
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_id if "tool_id" in locals() else "unknown",
+                            "role": "tool",
+                            "content": json.dumps({"error": str(e)}),
+                        }
+                    )
+
+            # If we have tool results, we need to send them back to the model
+            if tool_results:
+                # Add the assistant message with tool calls
+                self._messages.append(
+                    {
+                        "role": "assistant",
+                        "content": content or "",
+                        "tool_calls": [
+                            {
+                                "id": tc.id if hasattr(tc, "id") else tc["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": (
+                                        tc.function.name
+                                        if hasattr(tc, "function")
+                                        else tc["function"]["name"]
+                                    ),
+                                    "arguments": (
+                                        tc.function.arguments
+                                        if hasattr(tc, "function")
+                                        else tc["function"]["arguments"]
+                                    ),
+                                },
+                            }
+                            for tc in tool_calls
+                        ],
+                    }
                 )
+
+                # Add tool results
+                self._messages.extend(tool_results)
+
+                # Get final response from model after tool execution
+                final_response = await self.model.chat(self._messages)
+
+                # Extract content from final response
+                if isinstance(final_response, str):
+                    content = final_response
+                elif hasattr(final_response, "choices") and final_response.choices:
+                    message = final_response.choices[0].message
+                    if isinstance(message, dict):
+                        content = message.get("content", "")
+                    else:
+                        content = getattr(message, "content", "")
+                elif isinstance(final_response, dict) and "choices" in final_response:
+                    content = final_response["choices"][0]["message"]["content"]
+                else:
+                    content = str(final_response)
+
+                # Update the response content
+                response.content = content
+
+                # Add final response to context
+                self._messages.append({"role": "assistant", "content": content})
 
         return response
 

@@ -1124,6 +1124,13 @@ Provide a helpful, conversational response that directly addresses what the user
             # Call OneLLM ChatCompletion using async method
             response = await ChatCompletion.acreate(**params)
 
+            # Check if response contains tool calls - if so, return the full response
+            if hasattr(response, "choices") and response.choices:
+                message = response.choices[0].message
+                if isinstance(message, dict) and "tool_calls" in message and message["tool_calls"]:
+                    # Return the full response object for the agent to handle tool calls
+                    return response
+
             # Extract content from response
             if isinstance(response, dict) and "choices" in response:
                 content = response["choices"][0]["message"]["content"] or ""
