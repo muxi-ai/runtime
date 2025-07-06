@@ -872,11 +872,9 @@ class Overlord:
                     if "command" in server_config:
                         # Command-based server
                         command = server_config["command"]
+                        # Pass args separately if provided
                         if "args" in server_config:
-                            # Combine command and args
-                            command_parts = [command]
-                            command_parts.extend(server_config["args"])
-                            command = " ".join(command_parts)
+                            registration_params["args"] = server_config["args"]
                         registration_params["command"] = command
                     elif "url" in server_config:
                         # HTTP/SSE server

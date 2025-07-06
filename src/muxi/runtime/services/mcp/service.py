@@ -175,6 +175,7 @@ class MCPService:
         server_id: str,
         url: Optional[str] = None,
         command: Optional[str] = None,
+        args: Optional[List[str]] = None,
         transport_type: Optional[str] = "auto",
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
@@ -191,6 +192,7 @@ class MCPService:
             server_id: Unique identifier for the MCP server
             url: URL for HTTP/SSE MCP servers
             command: Command for command-line MCP servers
+            args: Optional list of arguments for command-line MCP servers
             transport_type: Transport type selection ("auto", "streamable_http", "http_sse", "command")
             credentials: Optional credentials for authentication
             model: Optional model to use for this MCP handler
@@ -223,7 +225,7 @@ class MCPService:
         # Handle command-line transport directly
         if command or transport_type == "command":
             return await self._connect_single_transport(
-                server_id, url, command, "command", credentials, model, request_timeout
+                server_id, url, command, args, "command", credentials, model, request_timeout
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
@@ -263,6 +265,7 @@ class MCPService:
                     server_id,
                     recommended_url,
                     command,
+                    args,
                     detected_transport,
                     credentials,
                     model,
@@ -298,7 +301,7 @@ class MCPService:
 
         # Proceed with explicitly specified transport type
         return await self._connect_single_transport(
-            server_id, url, command, transport_type, credentials, model, request_timeout
+            server_id, url, command, args, transport_type, credentials, model, request_timeout
         )
 
     async def invoke_tool(
@@ -585,6 +588,7 @@ class MCPService:
         server_id: str,
         url: Optional[str],
         command: Optional[str],
+        args: Optional[List[str]],
         transport_type: str,
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
@@ -607,6 +611,7 @@ class MCPService:
                     name=server_name,
                     url=url,
                     command=command,
+                    args=args,
                     credentials=credentials,
                     request_timeout=request_timeout,
                     server_id=server_id,
@@ -1077,7 +1082,7 @@ class MCPService:
         url: str,
         transport_type: Optional[str] = None,
         timeout: int = 10,
-        credentials: Optional[Dict[str, Any]] = None
+        credentials: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Test connectivity to an MCP server with specific or auto-detected transport.
@@ -1104,7 +1109,9 @@ class MCPService:
         try:
             if transport_type:
                 # Test specific transport
-                test_passed = await TransportDetector._test_transport(url, transport_type, timeout, credentials)
+                test_passed = await TransportDetector._test_transport(
+                    url, transport_type, timeout, credentials
+                )
 
                 test_results["tests_performed"].append(
                     {

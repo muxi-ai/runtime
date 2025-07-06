@@ -252,6 +252,7 @@ class MCPCoordinator:
         server_id: str,
         url: Optional[str] = None,
         command: Optional[str] = None,
+        args: Optional[List[str]] = None,
         auth: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: Optional[int] = None,
@@ -272,6 +273,7 @@ class MCPCoordinator:
                 providing the endpoint to send MCP requests to.
             command: Command for command-line MCP servers. Required for CLI-based MCP
                 servers, specifying the command to execute.
+            args: Optional list of arguments for command-line MCP servers.
             auth: Optional authentication configuration for the MCP server.
                 Supports secrets interpolation with ${{ secrets.NAME }} syntax.
                 User credentials (${{ user.credentials.SERVICE }}) are stored
@@ -402,6 +404,7 @@ class MCPCoordinator:
                 server_id=server_id,
                 url=url,
                 command=command,
+                args=args,
                 transport_type=transport_type,
                 credentials=final_auth,
                 model=model,

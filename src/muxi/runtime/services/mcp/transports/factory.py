@@ -46,6 +46,7 @@ class MCPTransportFactory:
     def create_transport(
         url: Optional[str] = None,
         command: Optional[str] = None,
+        args: Optional[List[str]] = None,
         transport_type: Optional[str] = None,  # Kept for API compatibility, auto-detected
         auth: Optional[Dict[str, Any]] = None,
         **kwargs,
@@ -55,6 +56,7 @@ class MCPTransportFactory:
         Args:
             url: URL for HTTP-based MCP servers
             command: Command for command-line based MCP servers
+            args: Optional list of arguments for command-line MCP servers
             transport_type: Explicit transport type selection
             auth: Authentication configuration
             **kwargs: Additional parameters for transport initialization
@@ -84,7 +86,9 @@ class MCPTransportFactory:
 
         # Handle command-line transport
         if command is not None:
-            return CommandLineTransport(command, auth=auth, request_timeout=request_timeout)
+            return CommandLineTransport(
+                command, args=args, auth=auth, request_timeout=request_timeout
+            )
 
         # Handle HTTP-based transports
         if url is not None:
@@ -103,6 +107,7 @@ class MCPTransportFactory:
     async def create_transport_with_fallback(
         url: Optional[str] = None,
         command: Optional[str] = None,
+        args: Optional[List[str]] = None,
         auth: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> BaseTransport:
@@ -118,6 +123,7 @@ class MCPTransportFactory:
         Args:
             url: URL for HTTP-based MCP servers
             command: Command for command-line based MCP servers
+            args: Optional list of arguments for command-line MCP servers
             auth: Authentication configuration
             **kwargs: Additional parameters for transport initialization
 
@@ -134,7 +140,9 @@ class MCPTransportFactory:
 
         # For command-line, no fallback needed
         if command is not None:
-            return MCPTransportFactory.create_transport(command=command, auth=auth, **kwargs)
+            return MCPTransportFactory.create_transport(
+                command=command, args=args, auth=auth, **kwargs
+            )
 
         # For HTTP URLs, implement fallback logic
         if url is not None:

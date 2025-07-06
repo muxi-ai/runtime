@@ -76,6 +76,7 @@ class MCPServerClient:
         name: str,
         url: Optional[str] = None,
         command: Optional[str] = None,
+        args: Optional[List[str]] = None,
         credentials: Optional[Dict[str, Any]] = None,
         request_timeout: int = 60,
     ):
@@ -86,12 +87,14 @@ class MCPServerClient:
             name: Unique name for this server connection
             url: URL for HTTP-based MCP servers (mutually exclusive with command)
             command: Command for command-line based MCP servers (mutually exclusive with url)
+            args: Optional list of arguments for command-line MCP servers
             credentials: Optional authentication credentials (not yet implemented)
             request_timeout: Timeout for requests in seconds
         """
         self.name = name
         self.url = url
         self.command = command
+        self.args = args
         self.credentials = credentials
         self.request_timeout = request_timeout
         self.transport = None
@@ -135,6 +138,7 @@ class MCPServerClient:
             else:
                 self.transport = MCPTransportFactory.create_transport(
                     command=self.command,
+                    args=self.args,
                     auth=self.credentials,
                     request_timeout=self.request_timeout,
                 )
@@ -597,6 +601,7 @@ class MCPHandler:
         name: str,
         url: Optional[str] = None,
         command: Optional[str] = None,
+        args: Optional[List[str]] = None,
         credentials: Optional[Dict[str, Any]] = None,
         request_timeout: int = 60,
         server_id: Optional[str] = None,
@@ -608,6 +613,7 @@ class MCPHandler:
             name: Unique name for this server
             url: URL for HTTP-based servers (mutually exclusive with command)
             command: Command for command-line based servers (mutually exclusive with url)
+            args: Optional list of arguments for command-line MCP servers
             credentials: Optional authentication credentials
             request_timeout: Timeout for requests in seconds
             server_id: Optional server ID for explicit mapping to tool registry
@@ -637,6 +643,7 @@ class MCPHandler:
             name=name,
             url=url,
             command=command,
+            args=args,
             credentials=credentials,
             request_timeout=request_timeout,
         )
