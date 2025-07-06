@@ -14,6 +14,7 @@ from datetime import datetime
 
 # Real MCP SDK imports
 from mcp.client.stdio import stdio_client, StdioServerParameters
+from mcp.client.session import ClientSession
 
 from .base import (
     BaseTransport,
@@ -53,6 +54,7 @@ class CommandLineTransport(BaseTransport):
 
         self.env = env or {}
         self.message_handler = MCPMessageHandler()
+        self.client_context = None  # Store the stdio_client context manager
         self.session = None
         self.read_stream = None
         self.write_stream = None
@@ -65,7 +67,7 @@ class CommandLineTransport(BaseTransport):
         }
 
     async def connect(self) -> bool:
-        """Connect using real MCP SDK stdio_client."""
+        """Connect using MCP SDK pattern with proper context management."""
         if self.connected:
             return True
 
@@ -75,9 +77,18 @@ class CommandLineTransport(BaseTransport):
                 command=self.command, args=self.args, env=self.env
             )
 
-            # Connect using real MCP SDK
-            self.session = stdio_client(server_params)
-            self.read_stream, self.write_stream = await self.session.__aenter__()
+            # Store the context manager itself
+            self.client_context = stdio_client(server_params)
+
+            # Enter context and get streams
+            self.read_stream, self.write_stream = await self.client_context.__aenter__()
+
+            # Create session for high-level operations
+            self.session = ClientSession(self.read_stream, self.write_stream)
+            await self.session.__aenter__()
+
+            # Initialize the connection
+            await self.session.initialize()
 
             self.connected = True
             self.connect_time = datetime.now()
@@ -85,6 +96,8 @@ class CommandLineTransport(BaseTransport):
             return True
 
         except Exception as e:
+            # Cleanup on error
+            await self._cleanup()
             error_details = {
                 "command": self.command,
                 "args": self.args,
@@ -99,8 +112,8 @@ class CommandLineTransport(BaseTransport):
         timeout: Optional[int] = None,
         cancellation_token: Optional[CancellationToken] = None,
     ) -> Dict[str, Any]:
-        """Send request using real MCP protocol."""
-        if not self.connected:
+        """Send request using MCP SDK high-level methods."""
+        if not self.connected or not self.session:
             raise MCPConnectionError("Not connected to MCP server")
 
         if cancellation_token:
@@ -114,26 +127,62 @@ class CommandLineTransport(BaseTransport):
             else:
                 raise MCPRequestError("Invalid request format")
 
-            # Create proper MCP request message
-            request_message = self.message_handler.create_request(method, params)
-
-            # Send via MCP SDK streams
-            await self.write_stream.send(request_message)
-
-            # Wait for response with timeout
             request_timeout = timeout or self.request_timeout
-            response_message = await asyncio.wait_for(
-                self.read_stream.receive(), timeout=request_timeout
-            )
 
-            # Parse response using message handler
-            parsed_response = self.message_handler.parse_response(response_message)
+            # Route to appropriate session method based on MCP method
+            if method == "tools/list":
+                result = await asyncio.wait_for(self.session.list_tools(), timeout=request_timeout)
+                return {
+                    "status": "success",
+                    "result": {"tools": [tool.model_dump() for tool in result.tools]},
+                }
+            elif method == "tools/call":
+                tool_name = params.get("name")
+                arguments = params.get("arguments", {})
+                result = await asyncio.wait_for(
+                    self.session.call_tool(tool_name, arguments), timeout=request_timeout
+                )
+                return {"status": "success", "result": result.model_dump()}
+            elif method == "resources/list":
+                result = await asyncio.wait_for(
+                    self.session.list_resources(), timeout=request_timeout
+                )
+                return {
+                    "status": "success",
+                    "result": {"resources": [res.model_dump() for res in result.resources]},
+                }
+            elif method == "prompts/list":
+                result = await asyncio.wait_for(
+                    self.session.list_prompts(), timeout=request_timeout
+                )
+                return {
+                    "status": "success",
+                    "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
+                }
+            else:
+                # For other methods, use the raw streams
+                request_message = self.message_handler.create_request(method, params)
+
+                # Send via write stream
+                await self.write_stream.send(request_message)
+
+                # Read response with timeout
+                response_message = await asyncio.wait_for(
+                    self.read_stream.receive(), timeout=request_timeout
+                )
+
+                # Parse response
+                parsed_response = self.message_handler.parse_response(response_message)
+
+                self.last_activity = datetime.now()
+                self.connection_stats["requests_sent"] += 1
+                self.connection_stats["responses_received"] += 1
+
+                return parsed_response
 
             self.last_activity = datetime.now()
             self.connection_stats["requests_sent"] += 1
             self.connection_stats["responses_received"] += 1
-
-            return parsed_response
 
         except asyncio.TimeoutError as e:
             self.connection_stats["errors_encountered"] += 1
@@ -144,22 +193,32 @@ class CommandLineTransport(BaseTransport):
             error_details = {"error": str(e), "timestamp": datetime.now().isoformat()}
             raise MCPRequestError("Request failed", error_details) from e
 
+    async def _cleanup(self) -> None:
+        """Proper cleanup in same async context."""
+        try:
+            if self.session:
+                await self.session.__aexit__(None, None, None)
+                self.session = None
+        except Exception:
+            pass
+
+        try:
+            if self.client_context:
+                await self.client_context.__aexit__(None, None, None)
+                self.client_context = None
+        except Exception:
+            pass
+        finally:
+            self.connected = False
+            self.read_stream = None
+            self.write_stream = None
+
     async def disconnect(self) -> bool:
         """Disconnect from MCP server."""
         if not self.connected:
             return True
 
-        try:
-            if self.session:
-                await self.session.__aexit__(None, None, None)
-        except Exception:
-            pass
-        finally:
-            self.connected = False
-            self.session = None
-            self.read_stream = None
-            self.write_stream = None
-
+        await self._cleanup()
         return True
 
     def get_connection_stats(self) -> Dict[str, Any]:

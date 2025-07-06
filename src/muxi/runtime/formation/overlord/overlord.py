@@ -794,8 +794,19 @@ class Overlord:
         ):
             await self.a2a_coordinator._process_pending_agent_registrations()
 
-        # Register MCP servers from formation configuration
-        await self._register_mcp_servers_from_formation()
+        # MCP servers are now registered by Formation in its event loop
+        # Just get the MCP service from configured services
+        if hasattr(self, "_configured_services") and self._configured_services:
+            mcp_service = self._configured_services.get("mcp_service")
+            if mcp_service:
+                self.mcp_service = mcp_service
+                self.mcp_coordinator = mcp_service  # Alias for compatibility
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"service": "mcp"},
+                    description="MCP service initialized from Formation",
+                )
 
         # Start clarification cleanup task
         if not self._clarification_cleanup_task or self._clarification_cleanup_task.done():
