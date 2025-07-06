@@ -1009,13 +1009,16 @@ class Agent:
                     )
 
                 except Exception as e:
+                    import traceback
+                    error_trace = traceback.format_exc()
                     observability.observe(
-                        event_type=observability.ConversationEvents.TOOL_CALL_FAILED,
+                        event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={
                             "agent_id": self.agent_id,
                             "tool_name": tool_name if "tool_name" in locals() else "unknown",
                             "error": str(e),
+                            "error_trace": error_trace,
                         },
                         description=f"Tool call execution failed: {str(e)}",
                     )
@@ -1508,7 +1511,7 @@ class Agent:
 
         try:
             observability.observe(
-                event_type=observability.ConversationEvents.TOOL_CALL_STARTED,
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": self.agent_id,
@@ -1529,7 +1532,7 @@ class Agent:
                     server_id,
                     tool_name,
                     parameters,
-                    timeout=self.request_timeout,
+                    request_timeout=self.request_timeout,
                     user_id=user_id,
                     credential_resolver=credential_resolver,
                 )
@@ -1543,7 +1546,7 @@ class Agent:
                             server_name,
                             tool_name,
                             parameters,
-                            timeout=self.request_timeout,
+                            request_timeout=self.request_timeout,
                             user_id=user_id,
                             credential_resolver=credential_resolver,
                         )
@@ -1555,7 +1558,7 @@ class Agent:
                     raise Exception(f"Tool '{tool_name}' not found in any connected server")
 
             observability.observe(
-                event_type=observability.ConversationEvents.TOOL_CALL_COMPLETED,
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": self.agent_id,
@@ -1585,7 +1588,7 @@ class Agent:
                     # Re-raise to let overlord handle the clarification
                     raise
             observability.observe(
-                event_type=observability.ConversationEvents.TOOL_CALL_FAILED,
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
                 level=observability.EventLevel.ERROR,
                 data={
                     "agent_id": self.agent_id,

@@ -82,8 +82,22 @@ class ModernProtocolFeatures:
             else:
                 meta_value = meta_attr
 
+            # Extract content text if it's a structured content object
+            content = result.content
+            if isinstance(content, list) and len(content) > 0:
+                # Handle TextContent objects with type and text fields
+                first_content = content[0]
+                if hasattr(first_content, 'text'):
+                    content_text = first_content.text
+                elif hasattr(first_content, 'get') and callable(first_content.get):
+                    content_text = first_content.get('text', str(content))
+                else:
+                    content_text = str(content)
+            else:
+                content_text = str(content)
+
             return {
-                "content": result.content,
+                "content": content_text,
                 "isError": result.isError,
                 "links": getattr(result, "links", []),
                 "_meta": meta_value,

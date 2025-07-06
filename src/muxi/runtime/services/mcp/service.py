@@ -482,7 +482,42 @@ class MCPService:
                     cancellation_token=None,
                 )
 
+                # First check if we have a parsed response from the message handler
+                if isinstance(result, dict):
+                    # Check for JSON-RPC error structure from message handler
+                    if result.get("status") == "error":
+                        # Extract the error message from the JSON-RPC error structure
+                        error_info = result.get("error", {})
+                        if isinstance(error_info, dict):
+                            error_message = error_info.get("message", "Unknown error")
+                            error_data = error_info.get("data")
+                            if error_data:
+                                error_message = f"{error_message}: {error_data}"
+                        else:
+                            error_message = str(error_info) if error_info else "Unknown error"
+
+                        # Emit error event
+                        observability.observe(
+                            event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+                            level=observability.EventLevel.ERROR,
+                            data={
+                                "server_id": server_id,
+                                "tool_name": tool_name,
+                                "error": error_message,
+                                "error_code": error_info.get("code") if isinstance(error_info, dict) else None,
+                            },
+                            description=(f"MCP tool returned error: {tool_name} on {server_id}"),
+                        )
+
+                        return {"error": error_message, "status": "error"}
+
+                    # Check if it's a successful parsed response with a nested result
+                    if result.get("status") == "success" and "result" in result:
+                        # Extract the actual result from the parsed response
+                        result = result["result"]
+
                 # Process result using modern protocol features
+                # This handles structured output with isError field
                 processed_result = ModernProtocolFeatures.process_structured_output(result)
 
                 # Enhanced observability with structured output info
@@ -1158,3 +1193,76 @@ class MCPService:
             test_results["recommended_action"] = "Check server is running and accessible"
 
         return test_results
+
+    async def disconnect_all(self) -> Dict[str, Any]:
+        """
+        Disconnect all connected MCP servers.
+
+        This method is called during overlord shutdown to ensure proper cleanup
+        of all MCP server connections and avoid async cleanup errors.
+
+        Returns:
+            Dict with disconnection results for each server
+        """
+        results = {
+            "total_servers": len(self.handlers),
+            "disconnected": 0,
+            "failed": 0,
+            "servers": {}
+        }
+
+        # Disconnect all handlers
+        for server_id, handler in list(self.handlers.items()):
+            try:
+                # Cancel any pending requests first
+                handler.cancel_all_requests()
+
+                # Disconnect all servers in the handler
+                for server_name in list(handler.servers.keys()):
+                    await handler.disconnect_server(server_name)
+
+                # Clean up handler reference
+                del self.handlers[server_id]
+
+                # Clean up connection info
+                if server_id in self.connections:
+                    del self.connections[server_id]
+
+                # Clean up tool registry
+                if server_id in self.tool_registry:
+                    del self.tool_registry[server_id]
+
+                results["disconnected"] += 1
+                results["servers"][server_id] = "disconnected"
+
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
+                    level=observability.EventLevel.INFO,
+                    data={"server_id": server_id},
+                    description=f"Disconnected MCP server during shutdown: {server_id}"
+                )
+
+            except Exception as e:
+                results["failed"] += 1
+                results["servers"][server_id] = f"error: {str(e)}"
+
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={"server_id": server_id, "error": str(e)},
+                    description=f"Failed to disconnect MCP server during shutdown: {server_id}"
+                )
+
+        # Clear all registries
+        self.handlers.clear()
+        self.connections.clear()
+        self.tool_registry.clear()
+
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_SERVICE_SHUTDOWN,
+            level=observability.EventLevel.INFO,
+            data=results,
+            description="MCP service shutdown complete"
+        )
+
+        return results
