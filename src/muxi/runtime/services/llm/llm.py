@@ -855,7 +855,7 @@ class LLM:
         files: Optional[List[Union[str, Path]]] = None,
         fusion_mode: Optional[str] = "adaptive",  # "basic", "adaptive", "advanced"
         **kwargs: Any,
-    ) -> str:
+    ) -> Union[str, Any]:
         """
         Enhanced chat with unified multimodal processing.
 
@@ -874,7 +874,8 @@ class LLM:
             **kwargs: Additional provider-specific parameters.
 
         Returns:
-            The generated text response as a string.
+            The generated text response as a string, or the full response object
+            when tool calls are detected (for agents to handle tool execution).
 
         Raises:
             LLMError: For various error conditions with appropriate classification.
@@ -906,7 +907,7 @@ class LLM:
 
         # Handle text-only conversations
         if not files:
-            return await self._text_chat(
+            result = await self._text_chat(
                 messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
@@ -916,6 +917,10 @@ class LLM:
                 stop=stop,
                 **kwargs,
             )
+            # Check if we need to return the full response for tool calls
+            if "tools" in kwargs and not isinstance(result, str):
+                return result
+            return result
 
         # Handle multimodal conversations
         if fusion_mode == "basic" or self.fusion_engine is None:
@@ -1125,6 +1130,7 @@ Provide a helpful, conversational response that directly addresses what the user
             response = await ChatCompletion.acreate(**params)
 
             # Check if response contains tool calls - if so, return the full response
+            # This violates the return type but is necessary for tool calling support
             if hasattr(response, "choices") and response.choices:
                 message = response.choices[0].message
                 if isinstance(message, dict) and "tool_calls" in message and message["tool_calls"]:

@@ -49,21 +49,53 @@ def create_httpx_auth(auth_config: Optional[Dict[str, Any]]) -> Optional[httpx.A
 
     Returns:
         httpx.Auth object or None if no auth config provided
+
+    Raises:
+        ValueError: If auth config is invalid or missing required fields
     """
     if not auth_config:
         return None
 
+    # Validate input type
+    if not isinstance(auth_config, dict):
+        raise ValueError(f"Auth config must be a dictionary, got {type(auth_config).__name__}")
+
     auth_type = auth_config.get("type", "bearer").lower()
 
-    if auth_type == "bearer" and "token" in auth_config:
-        return BearerAuth(auth_config["token"])
-
-    elif auth_type == "basic":
-        return httpx.BasicAuth(
-            username=auth_config.get("username", ""), password=auth_config.get("password", "")
+    # Validate auth type
+    valid_auth_types = {"bearer", "basic", "api_key"}
+    if auth_type not in valid_auth_types:
+        raise ValueError(
+            f"Invalid auth type '{auth_type}'. Must be one of: {', '.join(valid_auth_types)}"
         )
 
-    elif auth_type == "api_key":
-        return ApiKeyAuth(auth_config.get("key", ""), auth_config.get("header_name"))
+    if auth_type == "bearer":
+        token = auth_config.get("token")
+        if not token or not isinstance(token, str) or not token.strip():
+            raise ValueError("Bearer auth requires a non-empty 'token' field")
+        return BearerAuth(token)
 
-    return None
+    elif auth_type == "basic":
+        username = auth_config.get("username")
+        password = auth_config.get("password")
+
+        if not username or not isinstance(username, str) or not username.strip():
+            raise ValueError("Basic auth requires a non-empty 'username' field")
+        if not password or not isinstance(password, str):
+            raise ValueError("Basic auth requires a 'password' field")
+
+        return httpx.BasicAuth(username=username, password=password)
+
+    elif auth_type == "api_key":
+        key = auth_config.get("key")
+        if not key or not isinstance(key, str) or not key.strip():
+            raise ValueError("API key auth requires a non-empty 'key' field")
+
+        header_name = auth_config.get("header_name")
+        if header_name and not isinstance(header_name, str):
+            raise ValueError("API key 'header_name' must be a string if provided")
+
+        return ApiKeyAuth(key, header_name)
+
+    # This should never be reached due to earlier validation
+    raise ValueError(f"Unhandled auth type: {auth_type}")
