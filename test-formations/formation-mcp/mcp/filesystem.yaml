@@ -2,10 +2,9 @@
 schema: "1.0.0"
 id: "filesystem-mcp"
 description: "Local filesystem tools"
-active: false                      # Temporarily disabled for debugging
+active: true                       # Enable for filesystem test
 
 type: "command"
-install: "npm install -g @modelcontextprotocol/server-filesystem"
 
 command: "npx"
 args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/ran/Desktop/"]
