@@ -4,9 +4,10 @@ Clean exit utility to suppress MCP async cleanup errors.
 
 import os
 import sys
+from typing import NoReturn
 
 
-def clean_exit(code: int = 0) -> None:
+def clean_exit(code: int = 0) -> NoReturn:
     """
     Exit the process cleanly, suppressing MCP SDK async cleanup errors.
 
@@ -16,9 +17,12 @@ def clean_exit(code: int = 0) -> None:
     Args:
         code: Exit code (default: 0)
     """
-    # Flush output streams
-    sys.stdout.flush()
-    sys.stderr.flush()
+    # Best-effort flush; ignore failures (e.g. streams already closed)
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.flush()
+        except Exception:
+            pass
 
     # Use os._exit to skip Python cleanup (including async generator cleanup)
     os._exit(code)

@@ -802,10 +802,10 @@ class Overlord:
                 self.mcp_service = mcp_service
                 self.mcp_coordinator = mcp_service  # Alias for compatibility
                 observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                    event_type=observability.SystemEvents.SERVICE_INITIALIZED,
                     level=observability.EventLevel.INFO,
-                    data={"service": "mcp"},
-                    description="MCP service initialized from Formation",
+                    data={"service": "mcp", "source": "formation"},
+                    description="MCP service received from Formation",
                 )
 
         # Start clarification cleanup task
@@ -840,110 +840,6 @@ class Overlord:
 
         #  Info - TODO: add observability
         #  SystemEvents.STARTED (overlord)
-
-    async def _register_mcp_servers_from_formation(self) -> None:
-        """Register MCP servers configured in the formation."""
-        try:
-            # Get MCP servers from configured services
-            if not hasattr(self, "_configured_services") or not self._configured_services:
-                return
-
-            mcp_servers = self._configured_services.get("mcp_servers", [])
-            if not mcp_servers:
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                    level=observability.EventLevel.DEBUG,
-                    data={"server_count": 0},
-                    description="No MCP servers to register",
-                )
-                return
-
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                level=observability.EventLevel.INFO,
-                data={"server_count": len(mcp_servers)},
-                description=f"Registering {len(mcp_servers)} MCP servers",
-            )
-
-            # Register each server
-            for server_config in mcp_servers:
-                try:
-                    server_id = server_config.get("id", "unknown")
-
-                    # Skip inactive servers
-                    if not server_config.get("active", True):
-                        continue
-
-                    # Prepare registration parameters
-                    registration_params = {
-                        "server_id": server_id,
-                    }
-
-                    # Determine server type and set appropriate parameter
-                    if "command" in server_config:
-                        # Command-based server
-                        command = server_config["command"]
-                        # Pass args separately if provided
-                        if "args" in server_config:
-                            registration_params["args"] = server_config["args"]
-                        registration_params["command"] = command
-                    elif "url" in server_config:
-                        # HTTP/SSE server
-                        registration_params["url"] = server_config["url"]
-                    elif "endpoint" in server_config:
-                        # HTTP server with endpoint notation
-                        registration_params["url"] = server_config["endpoint"]
-                    else:
-                        observability.observe(
-                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                            level=observability.EventLevel.WARNING,
-                            data={
-                                "server_id": server_id,
-                                "error": "No command or url specified",
-                            },
-                            description=f"Invalid MCP server config: {server_id}",
-                        )
-                        continue
-
-                    # Add optional parameters
-                    if "auth" in server_config:
-                        registration_params["auth"] = server_config["auth"]
-                    if "timeout_seconds" in server_config:
-                        registration_params["request_timeout"] = server_config["timeout_seconds"]
-                    if "transport_type" in server_config:
-                        registration_params["transport_type"] = server_config["transport_type"]
-
-                    # Register the server via MCP coordinator
-                    await self.mcp_coordinator.register_mcp_server(**registration_params)
-
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
-                        level=observability.EventLevel.INFO,
-                        data={
-                            "server_id": server_id,
-                            "description": server_config.get("description", ""),
-                        },
-                        description=f"MCP server registered: {server_id}",
-                    )
-
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                        level=observability.EventLevel.ERROR,
-                        data={
-                            "server_id": server_config.get("id", "unknown"),
-                            "error": str(e),
-                        },
-                        description=f"Failed to register MCP server: {str(e)}",
-                    )
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={"error": str(e)},
-                description=f"Failed to register MCP servers: {str(e)}",
-            )
 
     async def ensure_started(self) -> None:
         """Ensure that the overlord startup is complete.

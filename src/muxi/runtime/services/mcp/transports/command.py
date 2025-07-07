@@ -106,6 +106,12 @@ class CommandLineTransport(BaseTransport):
             }
             raise MCPConnectionError("Failed to connect to MCP server", error_details) from e
 
+    def _update_success_stats(self) -> None:
+        """Update statistics for successful request/response."""
+        self.last_activity = datetime.now()
+        self.connection_stats["requests_sent"] += 1
+        self.connection_stats["responses_received"] += 1
+
     async def send_request(
         self,
         request_obj: Any,
@@ -132,6 +138,7 @@ class CommandLineTransport(BaseTransport):
             # Route to appropriate session method based on MCP method
             if method == "tools/list":
                 result = await asyncio.wait_for(self.session.list_tools(), timeout=request_timeout)
+                self._update_success_stats()
                 return {
                     "status": "success",
                     "result": {"tools": [tool.model_dump() for tool in result.tools]},
@@ -142,11 +149,13 @@ class CommandLineTransport(BaseTransport):
                 result = await asyncio.wait_for(
                     self.session.call_tool(tool_name, arguments), timeout=request_timeout
                 )
+                self._update_success_stats()
                 return {"status": "success", "result": result.model_dump()}
             elif method == "resources/list":
                 result = await asyncio.wait_for(
                     self.session.list_resources(), timeout=request_timeout
                 )
+                self._update_success_stats()
                 return {
                     "status": "success",
                     "result": {"resources": [res.model_dump() for res in result.resources]},
@@ -155,6 +164,7 @@ class CommandLineTransport(BaseTransport):
                 result = await asyncio.wait_for(
                     self.session.list_prompts(), timeout=request_timeout
                 )
+                self._update_success_stats()
                 return {
                     "status": "success",
                     "result": {"prompts": [prompt.model_dump() for prompt in result.prompts]},
@@ -174,15 +184,8 @@ class CommandLineTransport(BaseTransport):
                 # Parse response
                 parsed_response = self.message_handler.parse_response(response_message)
 
-                self.last_activity = datetime.now()
-                self.connection_stats["requests_sent"] += 1
-                self.connection_stats["responses_received"] += 1
-
+                self._update_success_stats()
                 return parsed_response
-
-            self.last_activity = datetime.now()
-            self.connection_stats["requests_sent"] += 1
-            self.connection_stats["responses_received"] += 1
 
         except asyncio.TimeoutError as e:
             self.connection_stats["errors_encountered"] += 1

@@ -50,6 +50,12 @@ from .config.formation_loader import FormationLoader
 # Service imports
 from ..services import observability
 from ..services.secrets.secrets_manager import SecretsManager
+from ..services.mcp.transports.base import (
+    MCPConnectionError,
+    MCPRequestError,
+    MCPTimeoutError,
+    MCPCancelledError,
+)
 
 # Validation imports
 from ..utils import DependencyValidator
@@ -1824,17 +1830,33 @@ class Formation:
                     description=f"MCP server registered: {server_id}",
                 )
 
-            except Exception as e:
+            except (MCPConnectionError, MCPTimeoutError, MCPCancelledError) as e:
+                # These are recoverable errors - log and continue with other servers
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "server_id": server_config.get("id", "unknown"),
                         "error": str(e),
+                        "error_type": type(e).__name__,
                     },
                     description=f"Failed to register MCP server: {str(e)}",
                 )
                 # Continue with other servers even if one fails
+            except MCPRequestError as e:
+                # Configuration errors are also recoverable - log and continue
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_config.get("id", "unknown"),
+                        "error": str(e),
+                        "error_type": "MCPRequestError",
+                        "note": "Check server configuration",
+                    },
+                    description=f"Invalid MCP server configuration: {str(e)}",
+                )
+                # Continue with other servers even if one has bad config
 
     async def start_overlord(self):
         """
@@ -2191,10 +2213,6 @@ class Formation:
         # Use os._exit to skip Python cleanup (including async generator cleanup)
         os._exit(code)
 
-    # Backward compatibility aliases
-    clean_exit = shutdown  # Deprecated: use shutdown() instead
-    aclean_exit = ashutdown  # Deprecated: use ashutdown() instead
-
     def stop(self) -> None:
         """
         Stop formation infrastructure and cleanup resources.
@@ -2360,9 +2378,6 @@ class Formation:
 
             except Exception as e:
                 raise ValueError(f"Failed to load {schema_type} schema from {schema}: {e}") from e
-
-        else:
-            raise TypeError(f"Schema must be dict or str, got {type(schema).__name__}")
 
     async def _check_agent_conflict(self, agent_schema: Dict[str, Any]) -> None:
         """
