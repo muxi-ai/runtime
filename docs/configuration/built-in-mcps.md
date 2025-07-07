@@ -28,6 +28,38 @@ runtime:
   built_in_mcps: false
 ```
 
+### MCP Service Configuration
+
+Configure advanced MCP behavior including intelligent tool chaining:
+
+```yaml
+# formation.yaml
+mcp:
+  # Connection/retry settings (for transient failures)
+  default_retry_attempts: 3           # Retry attempts for server connection issues
+  default_timeout_seconds: 30         # Timeout per individual tool call
+  
+  # Tool execution settings (for intelligent chaining)
+  max_tool_iterations: 10             # Max loops of (execute → analyze → decide)
+  max_tool_calls: 50                  # Max total individual tool calls  
+  max_repeated_errors: 3              # Number of same errors before stopping
+  
+  # Timeout settings
+  max_timeout_in_seconds: 300         # Total timeout for entire operation
+  max_tool_timeout_in_seconds: 30     # Timeout per individual tool call
+  
+  # External MCP servers
+  servers:
+    - id: "github"
+      url: "https://api.github.com/mcp"
+      active: true    # Set to false to disable loading this server
+      auth:
+        token: "${{ user.credentials.github }}"
+    - id: "disabled-server"
+      url: "https://example.com/mcp"
+      active: false   # This server will be ignored during formation load
+```
+
 ### Granular Mode
 
 Control individual MCPs by specifying a list:
@@ -137,13 +169,61 @@ Check that:
 ```python
 # List registered MCP servers
 formation = Formation()
-formation.load("formation.yaml")
-overlord = formation.start_overlord()
+await formation.load("formation.yaml")
+overlord = await formation.start_overlord()
 
 # Check available MCPs
 mcp_servers = await overlord.list_mcp_servers()
 print(mcp_servers)
 ```
+
+## Server Management
+
+### Active/Inactive Servers
+
+Use the `active` field to control which MCP servers are loaded:
+
+```yaml
+# formation.yaml
+mcp:
+  servers:
+    - id: "production-server"
+      url: "https://api.example.com/mcp"
+      active: true     # This server will be loaded and used
+      
+    - id: "development-server"
+      url: "https://dev.example.com/mcp"
+      active: false    # This server will be ignored completely
+      
+    - id: "legacy-server"
+      url: "https://legacy.example.com/mcp"
+      # active defaults to true if not specified
+```
+
+**Benefits:**
+- **Memory efficiency**: Inactive servers are not loaded into memory
+- **Environment-specific configs**: Enable different servers per environment
+- **Gradual migration**: Disable old servers without removing configuration
+
+### Tool Chaining
+
+Agent tool chaining allows intelligent error recovery and is controlled by the MCP execution settings:
+
+```yaml
+mcp:
+  max_tool_iterations: 10      # Maximum execution loops
+  max_tool_calls: 50           # Maximum total tool calls
+  max_repeated_errors: 3       # Stop after N repeated errors
+```
+
+**How it works:**
+1. Agent calls an MCP tool
+2. If the tool fails, agent analyzes the error
+3. Agent attempts corrective actions (e.g., create missing directories)
+4. Agent retries the original operation
+5. Process repeats until success or max iterations reached
+
+**Note:** Tool chaining is always enabled and helps agents complete complex tasks without manual intervention.
 
 ### Viewing System Prompts
 

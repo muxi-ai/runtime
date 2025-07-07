@@ -19,7 +19,7 @@ from muxi.runtime.formation import Formation
 
 # Initialize and start formation
 formation = Formation()
-formation.load("formation.yaml")
+await formation.load("formation.yaml")
 overlord = await formation.start_overlord()
 
 # Now scheduler methods are available
@@ -361,7 +361,7 @@ try:
 except OverlordStateError as e:
     print(f"Overlord not running: {e}")
     # Start the overlord first
-    await formation.start_overlord()
+    overlord = await formation.start_overlord()
     jobs = await formation.get_active_jobs()
 ```
 

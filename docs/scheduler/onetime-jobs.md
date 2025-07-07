@@ -223,8 +223,8 @@ from muxi.runtime.formation import Formation
 async def demo_onetime_jobs():
     # Load formation with scheduler enabled
     formation = Formation()
-    formation.load("formation.yaml")
-    overlord = formation.start_overlord()
+    await formation.load("formation.yaml")
+    overlord = await formation.start_overlord()
     
     # Schedule one-time tasks using natural language
     response1 = await overlord.chat(
