@@ -83,22 +83,47 @@ class ModernProtocolFeatures:
                 meta_value = meta_attr
 
             # Extract content text if it's a structured content object
-            content = result.content
-            if isinstance(content, list) and len(content) > 0:
-                # Handle TextContent objects with type and text fields
-                first_content = content[0]
-                if hasattr(first_content, 'text'):
-                    content_text = first_content.text
-                elif hasattr(first_content, 'get') and callable(first_content.get):
-                    content_text = first_content.get('text', str(content))
+            content = getattr(result, "content", None)
+
+            # Default to string representation if content is None or empty
+            if not content:
+                content_text = str(content) if content is not None else ""
+            elif isinstance(content, list):
+                # Check if list is not empty before accessing elements
+                if len(content) > 0:
+                    # Handle TextContent objects with type and text fields
+                    first_content = content[0]
+
+                    # Try different methods to extract text content
+                    # Method 1: Direct text attribute
+                    content_text = getattr(first_content, "text", None)
+
+                    # Method 2: If no text attribute, try get method if it exists
+                    if content_text is None:
+                        get_method = getattr(first_content, "get", None)
+                        if get_method and callable(get_method):
+                            try:
+                                content_text = get_method("text")
+                            except (TypeError, KeyError):
+                                content_text = None
+
+                    # Method 3: Try dictionary-style access if it's dict-like
+                    if content_text is None and isinstance(first_content, dict):
+                        content_text = first_content.get("text")
+
+                    # Fallback: Convert to string if all else fails
+                    if content_text is None:
+                        content_text = str(first_content)
                 else:
-                    content_text = str(content)
+                    # Empty list
+                    content_text = ""
             else:
+                # Non-list content, convert to string
                 content_text = str(content)
 
             return {
                 "content": content_text,
-                "isError": result.isError,
+                "isError": getattr(result, "isError", False),
                 "links": getattr(result, "links", []),
                 "_meta": meta_value,
                 "type": "structured",

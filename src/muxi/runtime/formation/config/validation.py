@@ -2369,11 +2369,32 @@ def validate_user_credentials_requirements(
             return available_secrets
 
         try:
-            # Get available secrets
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            available_secrets = loop.run_until_complete(check_secrets())
-            loop.close()
+            # Get available secrets - handle both sync and async contexts
+            try:
+                # Check if there's already an event loop
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # We're in an async context, but this is a sync function
+                    # This is a problematic situation - log a warning
+                    import warnings
+
+                    warnings.warn(
+                        "validate_user_credentials_requirements called from async context. "
+                        "Consider using an async version of this function.",
+                        RuntimeWarning,
+                    )
+                    # Create a new loop in a thread to avoid conflicts
+                    import concurrent.futures
+
+                    with concurrent.futures.ThreadPoolExecutor() as executor:
+                        future = executor.submit(asyncio.run, check_secrets())
+                        available_secrets = future.result()
+                else:
+                    # Loop exists but not running, we can use it
+                    available_secrets = loop.run_until_complete(check_secrets())
+            except RuntimeError:
+                # No event loop exists, create a new one
+                available_secrets = asyncio.run(check_secrets())
 
             # Check each found credential
             missing_secrets = []

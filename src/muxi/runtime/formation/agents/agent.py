@@ -872,7 +872,7 @@ class Agent:
         # Process the message with the model, including tools if available
         if tools:
             try:
-                raw_response = await self.model.chat(self._messages, tools=tools)
+                raw_response = await self.model.chat_with_tools(self._messages, tools=tools)
             except Exception as e:
                 # Log error and fallback to no tools
                 observability.observe(
@@ -1187,7 +1187,7 @@ class Agent:
                     )
 
                 # Get next response from model
-                next_response = await self.model.chat(
+                next_response = await self.model.chat_with_tools(
                     self._messages, tools=tools if tools else None
                 )
 
@@ -1226,7 +1226,7 @@ class Agent:
                                 ),
                             }
                         )
-                        reconsider_response = await self.model.chat(
+                        reconsider_response = await self.model.chat_with_tools(
                             self._messages, tools=tools if tools else None
                         )
 

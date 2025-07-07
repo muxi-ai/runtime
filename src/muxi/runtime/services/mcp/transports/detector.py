@@ -258,6 +258,34 @@ class TransportDetector:
             return False
 
     @staticmethod
+    def _build_auth_headers(
+        credentials: Optional[Dict[str, Any]], base_headers: Optional[Dict[str, str]] = None
+    ) -> Dict[str, str]:
+        """
+        Build authentication headers from credentials.
+
+        Args:
+            credentials: Credential configuration with type and authentication details
+            base_headers: Base headers to extend (optional)
+
+        Returns:
+            Dictionary of headers including authentication if credentials provided
+        """
+        headers = base_headers.copy() if base_headers else {}
+
+        if credentials:
+            auth_type = credentials.get("type", "bearer").lower()
+            if auth_type == "bearer" and "token" in credentials:
+                headers["Authorization"] = f"Bearer {credentials['token']}"
+            elif auth_type == "api_key":
+                if "header_name" in credentials:
+                    headers[credentials["header_name"]] = credentials["key"]
+                else:
+                    headers["X-API-Key"] = credentials.get("key", "")
+
+        return headers
+
+    @staticmethod
     async def _test_streamable_http(
         url: str, timeout: int, credentials: Optional[Dict[str, Any]] = None
     ) -> bool:
@@ -292,16 +320,9 @@ class TransportDetector:
                 }
 
                 # Build headers with authentication if provided
-                headers = {"Content-Type": "application/json"}
-                if credentials:
-                    auth_type = credentials.get("type", "bearer").lower()
-                    if auth_type == "bearer" and "token" in credentials:
-                        headers["Authorization"] = f"Bearer {credentials['token']}"
-                    elif auth_type == "api_key":
-                        if "header_name" in credentials:
-                            headers[credentials["header_name"]] = credentials["key"]
-                        else:
-                            headers["X-API-Key"] = credentials.get("key", "")
+                headers = TransportDetector._build_auth_headers(
+                    credentials, base_headers={"Content-Type": "application/json"}
+                )
 
                 async with session.post(test_url, json=test_request, headers=headers) as response:
                     # Accept any response that's not a hard connection error
@@ -336,16 +357,9 @@ class TransportDetector:
                 timeout=aiohttp.ClientTimeout(total=timeout)
             ) as session:
                 # Build headers with authentication if provided
-                headers = {"Accept": "text/event-stream"}
-                if credentials:
-                    auth_type = credentials.get("type", "bearer").lower()
-                    if auth_type == "bearer" and "token" in credentials:
-                        headers["Authorization"] = f"Bearer {credentials['token']}"
-                    elif auth_type == "api_key":
-                        if "header_name" in credentials:
-                            headers[credentials["header_name"]] = credentials["key"]
-                        else:
-                            headers["X-API-Key"] = credentials.get("key", "")
+                headers = TransportDetector._build_auth_headers(
+                    credentials, base_headers={"Accept": "text/event-stream"}
+                )
 
                 # Test SSE endpoint with proper headers
                 async with session.get(test_url, headers=headers) as response:

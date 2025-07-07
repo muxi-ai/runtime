@@ -86,7 +86,7 @@ class CredentialClarificationHandler:
             if answer.get("id") == f"credential_{service}":
                 value = answer.get("answer", "").strip()
                 if value:
-                    field_name = self._determine_field_name(service, value)
+                    field_name = self._determine_field_name(service)
                     return {field_name: value}
 
         # If not found in structured response, check if it's in the raw text
@@ -94,21 +94,26 @@ class CredentialClarificationHandler:
         if hasattr(response, "raw_response") and response.raw_response:
             text = response.raw_response.strip()
             if text:
-                field_name = self._determine_field_name(service, text)
+                field_name = self._determine_field_name(service)
                 return {field_name: text}
 
         return None
 
-    def validate_credential_format(self, service: str, credential: str) -> bool:  # noqa: ARG002
+    def validate_credential_format(self, service: str, credential: str) -> bool:
         """
         Basic validation of credential format.
 
         Args:
-            service: The service name
+            service: The service name (reserved for future service-specific validation)
             credential: The credential string to validate
 
         Returns:
             True if format looks valid, False otherwise
+
+        Note:
+            The service parameter is kept for future enhancements where we might
+            implement service-specific validation rules (e.g., GitHub tokens start
+            with 'ghp_', OpenAI keys start with 'sk-', etc.)
         """
         if not credential or not isinstance(credential, str):
             return False
@@ -151,13 +156,12 @@ class CredentialClarificationHandler:
         # Default: capitalize each word
         return service.replace("_", " ").replace("-", " ").title()
 
-    def _determine_field_name(self, service: str, credential: str) -> str:  # noqa: ARG002
+    def _determine_field_name(self, service: str) -> str:
         """
         Determine the appropriate field name for the credential.
 
         Args:
             service: The service name
-            credential: The credential value
 
         Returns:
             Field name to use (e.g., 'token', 'api_key', 'key')

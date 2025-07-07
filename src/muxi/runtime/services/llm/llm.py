@@ -855,7 +855,7 @@ class LLM:
         files: Optional[List[Union[str, Path]]] = None,
         fusion_mode: Optional[str] = "adaptive",  # "basic", "adaptive", "advanced"
         **kwargs: Any,
-    ) -> Union[str, Any]:
+    ) -> str:
         """
         Enhanced chat with unified multimodal processing.
 
@@ -874,8 +874,7 @@ class LLM:
             **kwargs: Additional provider-specific parameters.
 
         Returns:
-            The generated text response as a string, or the full response object
-            when tool calls are detected (for agents to handle tool execution).
+            The generated text response as a string.
 
         Raises:
             LLMError: For various error conditions with appropriate classification.
@@ -917,9 +916,6 @@ class LLM:
                 stop=stop,
                 **kwargs,
             )
-            # Check if we need to return the full response for tool calls
-            if "tools" in kwargs and not isinstance(result, str):
-                return result
             return result
 
         # Handle multimodal conversations
@@ -1129,13 +1125,8 @@ Provide a helpful, conversational response that directly addresses what the user
             # Call OneLLM ChatCompletion using async method
             response = await ChatCompletion.acreate(**params)
 
-            # Check if response contains tool calls - if so, return the full response
-            # This violates the return type but is necessary for tool calling support
-            if hasattr(response, "choices") and response.choices:
-                message = response.choices[0].message
-                if isinstance(message, dict) and "tool_calls" in message and message["tool_calls"]:
-                    # Return the full response object for the agent to handle tool calls
-                    return response
+            # Extract content from response even if tool calls are present
+            # The chat() method always returns a string for consistency
 
             # Extract content from response
             if isinstance(response, dict) and "choices" in response:
@@ -1172,6 +1163,133 @@ Provide a helpful, conversational response that directly addresses what the user
             return content
 
         return await self._execute_with_resilience(_chat_request)
+
+    async def chat_with_tools(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        stop: Optional[Union[str, List[str]]] = None,
+        files: Optional[List[Union[str, Path]]] = None,
+        **kwargs: Any,
+    ) -> Any:
+        """
+        Enhanced chat that returns full response object when tools are present.
+
+        This method is specifically for agents that need to handle tool calls.
+        Unlike the regular chat() method which always returns a string, this
+        method returns the full response object when tool calls are detected.
+
+        Args:
+            Same as chat() method.
+
+        Returns:
+            The full response object if tool calls are present, otherwise a string.
+        """
+
+        # We need to create a modified version of _basic_chat_with_files that returns the raw response
+        async def _chat_request_with_tools():
+            # Process files if provided
+            processed_files = []
+            if files:
+                for file_path in files:
+                    try:
+                        # Validate file security
+                        if not await FileProcessor.validate_file_security(file_path):
+                            raise LLMError(
+                                f"File security validation failed: {file_path}",
+                                error_type=LLMErrorType.FILE_PROCESSING,
+                                provider=self._provider,
+                                retryable=False,
+                            )
+
+                        # Convert file to OneLLM format
+                        file_data = await FileProcessor.convert_file_for_onellm(file_path)
+                        processed_files.append(file_data)
+
+                    except LLMError:
+                        # Re-raise LLMErrors as-is
+                        raise
+                    except Exception as e:
+                        raise LLMError(
+                            f"Failed to process file {file_path}: {str(e)}",
+                            error_type=LLMErrorType.FILE_PROCESSING,
+                            provider=self._provider,
+                            retryable=False,
+                            original_error=e,
+                        )
+
+            # Prepare parameters
+            params = {
+                "model": self.model_name,  # Use full model name with provider prefix
+                "messages": messages,
+                "temperature": temperature or self.temperature,
+            }
+
+            # Add files to parameters if processed
+            if processed_files:
+                params["files"] = processed_files
+
+            # Add optional parameters if provided
+            if max_tokens is not None:
+                params["max_tokens"] = max_tokens
+            elif self.max_tokens is not None:
+                params["max_tokens"] = self.max_tokens
+
+            if top_p is not None:
+                params["top_p"] = top_p
+
+            if frequency_penalty is not None:
+                params["frequency_penalty"] = frequency_penalty
+
+            if presence_penalty is not None:
+                params["presence_penalty"] = presence_penalty
+
+            if stop is not None:
+                params["stop"] = stop
+
+            # Add any additional kwargs
+            params.update(kwargs)
+            params.update(self.additional_params)
+
+            # Call OneLLM ChatCompletion using async method
+            response = await ChatCompletion.acreate(**params)
+
+            # Check if response contains tool calls - if so, return the full response
+            if hasattr(response, "choices") and response.choices:
+                message = response.choices[0].message
+                if isinstance(message, dict) and "tool_calls" in message and message["tool_calls"]:
+                    # Return the full response object for the agent to handle tool calls
+                    return response
+                elif hasattr(message, "tool_calls") and message.tool_calls:
+                    # Return the full response object for the agent to handle tool calls
+                    return response
+
+            # Otherwise extract and return content as string
+            if isinstance(response, dict) and "choices" in response:
+                content = response["choices"][0]["message"]["content"] or ""
+            elif hasattr(response, "choices") and response.choices:
+                # Handle ChatCompletionResponse object
+                message = response.choices[0].message
+                if hasattr(message, "content"):
+                    content = message.content or ""
+                elif isinstance(message, dict):
+                    content = message.get("content", "")
+                else:
+                    content = str(message)
+            elif isinstance(response, str):
+                # If it's already a string, return it
+                content = response
+            else:
+                # Fallback
+                content = str(response)
+
+            return content
+
+        return await self._execute_with_resilience(_chat_request_with_tools)
 
     async def embed(self, text: str, **kwargs: Any) -> List[float]:
         """

@@ -318,7 +318,13 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
             from ..services.db import get_database_manager
 
             # Create database manager for SQLite (needed for credentials table)
-            db_manager = get_database_manager(f"sqlite:///{connection_string}")
+            # Check if connection string already has sqlite:// prefix
+            if connection_string.startswith("sqlite://"):
+                db_connection_string = connection_string
+            else:
+                db_connection_string = f"sqlite:///{connection_string}"
+
+            db_manager = get_database_manager(db_connection_string)
             formation._db_manager = db_manager
 
             formation._long_term_memory = SQLiteMemory(
