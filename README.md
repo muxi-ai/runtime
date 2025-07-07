@@ -14,23 +14,30 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 
 ## Recent Architecture Improvements
 
-### MCP SDK Migration & Tool Calling ✅ **PRODUCTION READY**
+### MCP SDK Migration & Authentication ✅ **PRODUCTION READY**
 - **Official SDK Integration**: Complete migration to MCP Python SDK with streamable HTTP and SSE transport support
-- **Authentication Fixed**: Resolved Linear MCP 401 errors with proper Bearer token authentication and GitHub Copilot MCP integration
+- **Authentication Resolution**: Fixed Linear MCP 401 errors with proper Bearer token authentication and GitHub Copilot MCP integration
 - **Auto-Fallback Transport**: Intelligent fallback from streamable HTTP to SSE with formation-lifetime caching
-- **Command-Based MCP Fix**: Fixed YAML command/args configuration issues for filesystem MCP servers
-- **MCP Tool Calling**: Agents now properly use MCP tools instead of just describing capabilities
-- **Thread Safety**: Added proper locking for SSE server cache and secure logging of sensitive data
-- **Code Quality**: Comprehensive improvements including logging, security enhancements, and code deduplication
-- **Production Ready**: All MCP server types working (HTTP, SSE, Command-line) with 22 Linear tools and 67 GitHub tools
+- **Initialization Credentials**: Fail-fast validation system for MCP tool discovery during formation startup
+- **User-Specific Credentials**: Dynamic user credential resolution (`${{ user.credentials.service }}`) with database storage
+- **Agent Tool Call Chaining**: Intelligent tool execution loop enabling agents to automatically recover from errors and complete complex multi-step operations
+- **Command-Based MCP Support**: Enhanced YAML command/args configuration for filesystem and local MCP servers
+- **Thread Safety**: Comprehensive locking mechanisms and secure credential handling
+- **Production Ready**: All MCP server types working (HTTP, SSE, Command-line) with 105+ tools across multiple servers
 
-### Async Formation API Migration ✅ **PRODUCTION READY**
-- **Complete Async Conversion**: All 208 tests migrated across Day 1-3 test suites to async patterns
-- **Formation Core Methods**: `Formation.load()`, `Formation.start_overlord()`, and `Formation.stop_overlord()` converted to async
-- **Test Migration Success**: 100% success rate with comprehensive async/await patterns implemented
-- **Event Loop Safety**: Fixed asyncio.run() safety with proper event loop management and atexit handling
-- **MCP Registration Tracking**: Enhanced MCP server registration with detailed success/failure tracking
-- **CodeRabbit Improvements**: All suggested improvements implemented including defensive programming and documentation
+### Async Performance & Architecture ✅ **PRODUCTION READY**
+- **Async SQLAlchemy Migration**: Complete migration achieving 3x database performance improvement with dual database support (PostgreSQL + SQLite)
+- **Formation API Async Conversion**: All 208 tests migrated to async patterns with Formation core methods converted to async
+- **Event Loop Safety**: Proper asyncio.run() management and atexit handling for reliable async operations
+- **Connection Pooling**: Production-optimized configuration (20 pool_size, 40 max_overflow) for high-throughput deployments
+- **Comprehensive Async Coverage**: All memory services, scheduler, and database operations using async patterns
+
+### Intelligent Agent Capabilities ✅ **PRODUCTION READY**
+- **Agent Tool Call Chaining**: Multi-iteration tool execution with intelligent error recovery, progress detection, and alternative approach exploration
+- **User Credential Management**: Runtime resolution of user-specific credentials with clarification flow for missing credentials
+- **MCP Authentication Patterns**: Support for formation-level and user-level credential isolation with automatic resolution
+- **Error Recovery Intelligence**: Agents can automatically create directories, search for files, try alternative locations, and explain limitations
+- **Safety Mechanisms**: Iteration limits, progress detection, retry prevention, and timeout protection prevent infinite loops
 
 ### File Generation MCP ✅ **PRODUCTION READY**
 - **Built-in MCP Server**: Comprehensive file generation capabilities through secure Python code execution
@@ -63,14 +70,6 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 - **Security Hardened**: All critical security vulnerabilities eliminated with comprehensive input validation and resource limits
 - **Performance Optimized**: Intelligent caching reduces LLM usage by 70%+, scales to 10,000+ jobs with constant memory usage
 - **Enterprise Features**: Complete audit trail system, Formation API exposure, comprehensive documentation
-
-### Async SQLAlchemy Migration ✅ **PRODUCTION READY**
-- **3x Database Performance**: Migrated from synchronous to async SQLAlchemy achieving ~3x database throughput improvement
-- **Database-Agnostic Support**: Maintains dual database support (PostgreSQL with asyncpg + SQLite with aiosqlite) with unified async interface
-- **Async Engine Management**: Complete migration to async engines (`create_async_engine`, `async_sessionmaker`) with proper connection pooling
-- **Backward Compatibility**: Seamless migration preserving all existing features (pgvector, JSONB, formation isolation) without breaking changes
-- **Production Optimized**: Enhanced connection pool configuration (20 pool_size, 40 max_overflow) for high-throughput deployments
-- **Comprehensive Coverage**: All memory services, scheduler, and database operations converted to async patterns with proper error handling
 
 ### Code Quality & Architecture Improvements ✅ **COMPLETED**
 - **Pydantic V2 Migration**: All configuration models migrated with modern validators, zero deprecation warnings
@@ -216,7 +215,7 @@ pip install -e .
 
 ## Usage
 
-### New Formation-Based Architecture
+### New Formation-Based Architecture with Latest Features
 
 ```python
 from muxi.runtime import Formation
@@ -224,91 +223,154 @@ from muxi.runtime import Formation
 # Create a formation to manage the operational lifecycle
 formation = Formation()
 
-# Load and validate formation configuration
-formation.load("my-formation.yaml")
+# Load and validate formation configuration (now async)
+await formation.load("my-formation.yaml")
 
-# Start the overlord with pre-configured services
-overlord = formation.start_overlord()
+# Start the overlord with pre-configured services (now async)
+overlord = await formation.start_overlord()
 
-# Interact with the intelligent system
-response = overlord.chat(
-    message="Hello, can you help me with a coding problem?",
-    user_id="user123",
+# Interact with the intelligent system with user-specific credentials
+response = await overlord.chat(
+    message="Create a GitHub repository for my project and add the files from /my/project",
+    user_id="user123",  # User credentials automatically resolved
     session_id="session_abc"
 )
 print(response)
 
-# Hot agent deployment during runtime
+# Agent automatically handles complex workflows:
+# 1. Attempts to create repository (using user's GitHub credentials)
+# 2. If permission error, tries alternative approach
+# 3. Searches for files if directory not found
+# 4. Creates directories if needed
+# 5. Explains limitations if operations fail
+
+# Hot agent deployment during runtime (now async)
 new_agent_id = await formation.add_agent({
+    "schema": "1.0.0",
     "id": "specialist_coder",
     "name": "Python Specialist",
-    "specialties": ["python", "debugging"],
-    "model": {"provider": "openai", "model": "gpt-4o"}
-})
-
-# Remove agents safely during runtime
-await formation.remove_agent("old_agent_id")
-
-# Graceful shutdown - finish conversations/tasks
-formation.stop_overlord()
-
-# Cleanup operational resources
-formation.stop()
-```
-
-### Runtime Formation Management ✅ **NEW**
-
-MUXI Runtime now supports dynamic addition and removal of agents and MCP servers at runtime, providing flexible component management for live formations:
-
-```python
-# Add agents dynamically using inline schema
-await formation.add_agent({
-    "schema": "1.0.0",
-    "id": "code_reviewer",
-    "name": "Code Review Assistant",
-    "description": "Specialized in code review and best practices",
-    "llm_models": [
-        {
-            "text": "anthropic/claude-3-opus",
-            "api_key": "${{ secrets.ANTHROPIC_API_KEY }}",
-            "settings": {"temperature": 0.1}
-        }
-    ],
+    "description": "Specialized in Python code review and debugging",
+    "llm_models": [{
+        "text": "anthropic/claude-3-opus",
+        "api_key": "${{ secrets.ANTHROPIC_API_KEY }}",
+        "settings": {"temperature": 0.1}
+    }],
     "role": "specialist",
-    "specialties": ["code_review", "best_practices"]
+    "specialties": ["python", "debugging", "code_review"]
 })
 
-# Add agents from YAML/JSON files
-await formation.add_agent("path/to/new_agent.yaml")
-
-# Add MCP servers dynamically
+# Add MCP servers dynamically (now async)
 await formation.add_mcp({
     "schema": "1.0.0",
-    "id": "weather-tools",
-    "description": "Weather information tools",
+    "id": "github-tools",
+    "description": "GitHub repository management tools",
     "type": "http",
-    "endpoint": "https://api.weather.com/mcp",
+    "endpoint": "https://api.githubcopilot.com/mcp",
     "auth": {
-        "type": "api_key",
-        "key": "${{ secrets.WEATHER_API_KEY }}"
+        "type": "bearer",
+        "token": "${{ user.credentials.github }}"  # User-specific credentials
     }
 })
 
-# Add MCP servers from configuration files
-await formation.add_mcp("configs/mcp/database-tools.yaml")
+# Graceful shutdown (now async)
+await formation.stop_overlord()
+formation.stop()
+```
 
-# List available components
-agents = formation.list_agents()
-mcp_servers = formation.list_mcp_servers()
+### User Credential Management ✅ **NEW**
 
-# Check MCP server status
-status = formation.get_mcp_status("weather-tools")
-print(f"Weather Tools Status: {status}")
+MUXI now supports dynamic user-specific credentials that are resolved at runtime:
 
-# Remove components when no longer needed
-await formation.remove_agent("code_reviewer")
-await formation.remove_mcp("weather-tools")
+```yaml
+# Formation configuration with user credentials
+mcp_servers:
+  - id: "github-mcp"
+    type: "http"
+    endpoint: "https://api.githubcopilot.com/mcp"
+    auth:
+      type: "bearer"
+      token: "${{ user.credentials.github }}"  # Resolved per-user at runtime
 
-# Remove MCP servers with immediate disconnection
-formation.remove_mcp_async("database-tools")  # Non-blocking removal
+  - id: "linear-mcp"
+    type: "http"
+    endpoint: "https://mcp.linear.app/sse"
+    auth:
+      type: "bearer"
+      token: "${{ secrets.LINEAR_MCP_TOKEN }}"  # Formation-level credential
+```
+
+```python
+# User without GitHub credentials gets clarification
+response = await overlord.chat(
+    "Create a GitHub repository",
+    user_id="new_user"
+)
+# Response: "I need your GitHub credentials to create a repository. Please provide your GitHub access token."
+
+# After user provides credentials, operation succeeds automatically
+# Credentials are stored securely in database and cached per session
+```
+
+### Agent Tool Call Chaining ✅ **NEW**
+
+Agents now intelligently recover from errors and complete complex operations:
+
+```python
+# Single prompt that triggers intelligent multi-step execution
+response = await overlord.chat(
+    "Create a file called 'report.txt' in the new-project directory with today's date",
+    user_id="user123"
+)
+
+# Agent automatically:
+# 1. Attempts: write_file("/path/to/new-project/report.txt", content)
+#    → Error: "Directory doesn't exist"
+# 2. Analyzes: "I need to create the directory first"
+# 3. Executes: create_directory("/path/to/new-project")
+#    → Success
+# 4. Retries: write_file("/path/to/new-project/report.txt", content)
+#    → Success
+# 5. Responds: "I've created the new-project directory and added report.txt with today's date"
+
+# Configurable limits prevent infinite loops:
+# - max_tool_iterations: 10 (execution loops)
+# - max_tool_calls: 50 (total tool calls)
+# - max_repeated_errors: 3 (same error threshold)
+```
+
+### Advanced MCP Configuration ✅ **ENHANCED**
+
+Support for multiple MCP transport types with auto-fallback:
+
+```yaml
+mcp:
+  # Global MCP settings
+  max_tool_iterations: 10      # Tool chaining loops
+  max_tool_calls: 50          # Total tool calls per request
+  max_repeated_errors: 3      # Error repetition threshold
+
+  servers:
+    # Command-based MCP (local tools)
+    - id: "filesystem-tools"
+      type: "command"
+      command: "npx"
+      args: ["@modelcontextprotocol/server-filesystem"]
+      env:
+        ALLOWED_DIRECTORIES: "/home/user/projects"
+
+    # HTTP with auto-fallback (tries streamable HTTP, falls back to SSE)
+    - id: "linear-mcp"
+      type: "http"
+      endpoint: "https://mcp.linear.app/sse"
+      auth:
+        type: "bearer"
+        token: "${{ secrets.LINEAR_MCP_TOKEN }}"
+
+    # User-specific MCP server
+    - id: "github-mcp"
+      type: "http"
+      endpoint: "https://api.githubcopilot.com/mcp"
+      auth:
+        type: "bearer"
+        token: "${{ user.credentials.github }}"
 ```
