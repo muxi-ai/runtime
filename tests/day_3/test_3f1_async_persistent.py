@@ -121,7 +121,7 @@ async def test_async_pdf_persistent():
 def main():
     """Main function to run the async test."""
     try:
-        asyncio.run(test_async_pdf_persistent())
+        await test_async_pdf_persistent()
     except KeyboardInterrupt:
         print("\n🛑 Test interrupted by user")
     except Exception as e:

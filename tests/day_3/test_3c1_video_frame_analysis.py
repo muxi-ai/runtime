@@ -21,25 +21,25 @@ def get_response(coro):
 
 
 @pytest.fixture
-def formation():
+async def formation():
     """Load multimodal test formation"""
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
     
     formation = Formation()
-    formation.load(str(formation_path))
+    await formation.load(str(formation_path))
     
     return formation
 
 
 @pytest.fixture
-def overlord(formation):
+async def overlord(formation):
     """Create overlord instance"""
-    overlord = formation.start_overlord()
+    overlord = await formation.start_overlord()
     
     yield overlord
     
     # Cleanup
-    formation.stop_overlord()
+    await formation.stop_overlord()
 
 
 def test_video_frame_analysis(overlord):
@@ -137,12 +137,12 @@ def test_video_scene_understanding(overlord):
 
 if __name__ == "__main__":
     # Run with ThreadPoolExecutor to avoid event loop issues
-    def run_test():
+    async def run_test():
         formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
         
         formation = Formation()
-        formation.load(str(formation_path))
-        overlord = formation.start_overlord()
+        await formation.load(str(formation_path))
+        overlord = await formation.start_overlord()
         
         try:
             test_video_frame_analysis(overlord)
@@ -151,8 +151,8 @@ if __name__ == "__main__":
             test_video_scene_understanding(overlord)
             print("\nAll tests passed!")
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
     
-    with ThreadPoolExecutor() as executor:
+    asyncio.run(run_test())
         future = executor.submit(run_test)
         future.result()

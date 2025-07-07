@@ -20,26 +20,26 @@ def get_response(coro):
 
 
 @pytest.fixture
-def formation():
+async def formation():
     """Load multimodal test formation"""
     # Load the directory, not the file, to enable agent auto-discovery
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
     
     formation = Formation()
-    formation.load(str(formation_path))
+    await formation.load(str(formation_path))
     
     return formation
 
 
 @pytest.fixture
-def overlord(formation):
+async def overlord(formation):
     """Create overlord instance"""
-    overlord = formation.start_overlord()
+    overlord = await formation.start_overlord()
     
     yield overlord
     
     # Cleanup
-    formation.stop_overlord()
+    await formation.stop_overlord()
 
 
 def test_meeting_transcription(overlord):

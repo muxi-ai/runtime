@@ -116,7 +116,7 @@ def main():
     print("Starting video content description accuracy test...")
     
     try:
-        asyncio.run(run_async_test())
+        await run_async_test()
     except KeyboardInterrupt:
         print("\n🛑 Test interrupted by user")
     except Exception as e:

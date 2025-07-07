@@ -17,7 +17,7 @@ from tests.day_3.test_utils import get_response_universal
 
 def get_response(coro):
     """Helper to get response from async chat"""
-    result = asyncio.run(coro)
+    result = await coro
 
     # Handle async generators
     if hasattr(result, "__aiter__"):
@@ -26,31 +26,31 @@ def get_response(coro):
             async for chunk in result:
                 chunks.append(chunk)
             return "".join(chunks)
-        return asyncio.run(collect())
+        return await collect()
 
     return result
 
 
 @pytest.fixture
-def formation():
+async def formation():
     """Load multimodal test formation"""
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
 
     formation = Formation()
-    formation.load(str(formation_path))
+    await formation.load(str(formation_path))
 
     return formation
 
 
 @pytest.fixture
-def overlord(formation):
+async def overlord(formation):
     """Create overlord instance"""
-    overlord = formation.start_overlord()
+    overlord = await formation.start_overlord()
 
     yield overlord
 
     # Cleanup
-    formation.stop_overlord()
+    await formation.stop_overlord()
 
 
 def test_video_audio_synchronization(overlord):
@@ -152,12 +152,12 @@ def test_multimodal_video_memory(overlord):
 
 if __name__ == "__main__":
     # Run with ThreadPoolExecutor to avoid event loop issues
-    def run_test():
+    async def run_test():
         formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
 
         formation = Formation()
-        formation.load(str(formation_path))
-        overlord = formation.start_overlord()
+        await formation.load(str(formation_path))
+        overlord = await formation.start_overlord()
 
         try:
             test_video_audio_synchronization(overlord)
@@ -166,8 +166,8 @@ if __name__ == "__main__":
             test_multimodal_video_memory(overlord)
             print("\nAll tests passed!")
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
-    with ThreadPoolExecutor() as executor:
+    asyncio.run(run_test())
         future = executor.submit(run_test)
         future.result()
