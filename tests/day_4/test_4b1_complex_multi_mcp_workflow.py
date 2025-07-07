@@ -20,8 +20,8 @@ def test_complex_multi_mcp_workflow():
             async def test_operations():
                 # Load formation with MCP enabled
                 formation = Formation()
-                formation.load("test-formations/formation-mcp")
-                overlord = formation.start_overlord()
+                await formation.load("test-formations/formation-mcp")
+                overlord = await formation.start_overlord()
                 
                 # Ensure overlord is started
                 await overlord.ensure_started()
@@ -32,13 +32,19 @@ def test_complex_multi_mcp_workflow():
                 print("   - Create GitHub gist with the stats")
                 print("   - Update Linear issue as completed with gist link")
                 
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Create a Linear issue asking to document system CPU usage. "
                     "The issue should request creating a GitHub gist with the current CPU stats. "
                     "After creating the gist, update the Linear issue as completed with a link to the gist.",
                     user_id="user1",
                     use_async=False
                 )
+                
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
+                    
                 print(f"\nWorkflow Response: {response}")
                 
                 # Verify the workflow components were executed
@@ -64,11 +70,17 @@ def test_complex_multi_mcp_workflow():
                 
                 print("\n2. Testing workflow error handling...")
                 # Test partial workflow failure handling
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Create a Linear issue to document disk usage, then try to create a gist in a non-existent repository",
                     user_id="user1",
                     use_async=False
                 )
+                
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
+                    
                 print(f"\nError Handling Response: {response}")
                 
                 # Should handle the error gracefully

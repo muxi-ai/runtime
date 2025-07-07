@@ -5,7 +5,7 @@ This document maps the Day 4 test plan requirements to actual test implementatio
 
 ## Test Groups and Files
 
-### Group 4A: Single MCP Server (2 tests + 3 tool chaining variants) 
+### Group 4A: Single MCP Server (2 tests + 3 tool chaining variants)
 1. **test_4a1_filesystem_mcp_operations.py** - Filesystem MCP CRUD operations
    - Create file operation
    - Read file operation
@@ -22,7 +22,22 @@ This document maps the Day 4 test plan requirements to actual test implementatio
    - Memory statistics
    - System resource information
 
-### Group 4B: Multi-MCP Integration (3 tests)
+### Group 4B: Multi-MCP Integration (3 tests + 3 pre-tests)
+
+**Pre-tests (Individual MCP validation):**
+1. **test_4b0_pre_linear.py** - Test Linear MCP in isolation
+   - Create a simple Linear issue
+   - Verify Linear MCP is working correctly
+
+2. **test_4b0_pre_github.py** - Test GitHub MCP in isolation
+   - Create a simple GitHub gist
+   - Verify GitHub MCP is working correctly
+
+3. **test_4b0_pre_system.py** - Test System MCP in isolation
+   - Get CPU usage statistics
+   - Verify System MCP is working correctly
+
+**Integration tests:**
 1. **test_4b1_complex_multi_mcp_workflow.py** - Linear → System → GitHub → Linear
    - Create Linear issue
    - Get system CPU usage

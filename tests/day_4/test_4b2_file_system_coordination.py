@@ -16,8 +16,11 @@ def test_file_system_coordination():
     print("\n=== Test 4B2: File + System Info Coordination ===")
     print("Goal: Test multi-MCP coordination between System and Filesystem MCPs")
     
-    # Create a temporary directory for testing
-    test_dir = Path(tempfile.mkdtemp(prefix="muxi_test_"))
+    # Create a test directory on Desktop (where filesystem MCP has access)
+    test_dir = Path("/Users/ran/Desktop/muxi_test_4b2")
+    if test_dir.exists():
+        shutil.rmtree(test_dir)
+    test_dir.mkdir(exist_ok=True)
     print(f"Using test directory: {test_dir}")
     
     try:
@@ -26,19 +29,24 @@ def test_file_system_coordination():
             async def test_operations():
                 # Load formation with MCP enabled
                 formation = Formation()
-                formation.load("test-formations/formation-mcp")
-                overlord = formation.start_overlord()
+                await formation.load("test-formations/formation-mcp")
+                overlord = await formation.start_overlord()
                 
                 # Ensure overlord is started
                 await overlord.ensure_started()
                 
                 print("\n1. Testing System → File coordination...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     f"Check the current system memory usage and create a file in {test_dir} "
                     f"called 'system_stats.txt' with the information",
                     user_id="user1",
                     use_async=False
                 )
+                
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Response: {response}")
                 
                 # Verify both MCPs were used
@@ -58,12 +66,17 @@ def test_file_system_coordination():
                 print("✓ System → File coordination successful")
                 
                 print("\n2. Testing comprehensive system report...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     f"Create a comprehensive system report in {test_dir}/full_report.txt "
                     f"including CPU usage, memory stats, disk space, and system uptime",
                     user_id="user1",
                     use_async=False
                 )
+                
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Response: {response}")
                 
                 # Verify comprehensive report creation
@@ -82,11 +95,16 @@ def test_file_system_coordination():
                 print("✓ Comprehensive system report created successfully")
                 
                 print("\n3. Testing JSON format system data export...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     f"Get current CPU and memory usage and save it as JSON in {test_dir}/stats.json",
                     user_id="user1",
                     use_async=False
                 )
+                
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Response: {response}")
                 
                 # Verify JSON file creation
@@ -108,16 +126,22 @@ def test_file_system_coordination():
                     print("✓ System data exported (non-JSON format)")
                 
                 print("\n4. Testing batch system monitoring...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     f"Monitor system resources 3 times with 1 second intervals and "
                     f"save each reading to separate files in {test_dir}/monitoring/",
                     user_id="user1",
                     use_async=False
                 )
+                
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Response: {response}")
                 
                 # Should create monitoring directory with files
                 monitoring_dir = test_dir / "monitoring"
+                response_lower = response.lower()
                 if monitoring_dir.exists():
                     files = list(monitoring_dir.glob("*"))
                     assert len(files) >= 1, "Should create at least one monitoring file"
@@ -127,6 +151,9 @@ def test_file_system_coordination():
                     assert any(term in response_lower for term in ["monitor", "saved", "recorded"]), \
                         "Response should indicate monitoring activity"
                     print("✓ Monitoring task acknowledged")
+                
+                # Stop the overlord
+                await formation.stop_overlord()
                 
                 return True
             

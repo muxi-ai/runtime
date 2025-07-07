@@ -22,11 +22,16 @@ async def test_system_info_mcp():
         await overlord.ensure_started()
         
         print("\n1. Testing CPU and memory usage retrieval...")
-        response = await overlord.chat(
+        response_gen = await overlord.chat(
             "What is the current CPU usage and available memory on this system?",
             user_id="user1",
             use_async=False
         )
+        
+        # Collect streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
         print(f"Response: {response}")
         
         # Verify response contains system stats
@@ -40,11 +45,16 @@ async def test_system_info_mcp():
         print("✓ CPU and memory stats retrieved successfully")
         
         print("\n2. Testing detailed system information...")
-        response = await overlord.chat(
+        response_gen = await overlord.chat(
             "Give me detailed system information including CPU cores, total memory, and disk usage",
             user_id="user1",
             use_async=False
         )
+        
+        # Collect streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
         print(f"Response: {response}")
         
         # Should have more detailed information
@@ -55,11 +65,16 @@ async def test_system_info_mcp():
         print("✓ Detailed system information retrieved successfully")
         
         print("\n3. Testing specific metric queries...")
-        response = await overlord.chat(
+        response_gen = await overlord.chat(
             "What percentage of memory is currently being used?",
             user_id="user1",
             use_async=False
         )
+        
+        # Collect streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
         print(f"Response: {response}")
         
         # Should have memory percentage
@@ -69,11 +84,16 @@ async def test_system_info_mcp():
         print("✓ Specific metric query successful")
         
         print("\n4. Testing system uptime information...")
-        response = await overlord.chat(
+        response_gen = await overlord.chat(
             "How long has this system been running (uptime)?",
             user_id="user1",
             use_async=False
         )
+        
+        # Collect streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
         print(f"Response: {response}")
         
         # Should have uptime information
@@ -84,11 +104,16 @@ async def test_system_info_mcp():
         print("✓ System uptime query successful")
         
         print("\n5. Testing disk space information...")
-        response = await overlord.chat(
+        response_gen = await overlord.chat(
             "Show me the available disk space on the main drive",
             user_id="user1",
             use_async=False
         )
+        
+        # Collect streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
         print(f"Response: {response}")
         
         # Should have disk space information
