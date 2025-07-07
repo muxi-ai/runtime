@@ -23,6 +23,9 @@ class MCPCoordinator:
     and better maintainability for Model Context Protocol operations.
     """
 
+    # Pattern to match user credential placeholders in configuration
+    USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+
     def __init__(self, overlord, config: Optional[MCPServiceSchema] = None):
         """
         Initialize the MCP coordinator with standardized configuration.
@@ -81,9 +84,6 @@ class MCPCoordinator:
         if not auth or not user_id or not self.overlord.credential_resolver:
             return auth
 
-        # Pattern to match user credential placeholders
-        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
-
         async def resolve_auth_recursive(data: Any) -> Any:
             """Recursively resolve credential placeholders in nested data structures."""
             if isinstance(data, dict):
@@ -97,7 +97,7 @@ class MCPCoordinator:
                 return [await resolve_auth_recursive(item) for item in data]
             elif isinstance(data, str):
                 # Check if this is a user credential placeholder
-                match = USER_CREDENTIAL_PATTERN.match(data)
+                match = self.USER_CREDENTIAL_PATTERN.match(data)
                 if match:
                     service = match.group(1).lower()  # Normalize to lowercase
 
@@ -189,9 +189,6 @@ class MCPCoordinator:
         if not auth_config:
             return auth_config
 
-        # Pattern to match user credential placeholders
-        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
-
         def transform_recursive(data: Any) -> Any:
             """Recursively transform credential placeholders in nested data structures."""
             if isinstance(data, dict):
@@ -205,7 +202,7 @@ class MCPCoordinator:
                 return [transform_recursive(item) for item in data]
             elif isinstance(data, str):
                 # Check if this is a user credential placeholder
-                match = USER_CREDENTIAL_PATTERN.match(data)
+                match = self.USER_CREDENTIAL_PATTERN.match(data)
                 if match:
                     service_name = match.group(1)
                     # Transform to initialization secret pattern

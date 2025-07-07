@@ -51,6 +51,10 @@ class Credential(Base):
 
     # Add indexes in the database migration
 
+    def __repr__(self) -> str:
+        """Return a string representation for debugging."""
+        return f"<Credential(user_id={self.user_id!r}, service={self.service!r}, formation_id={self.formation_id!r})>"
+
 
 class CredentialResolver:
     """
@@ -84,10 +88,10 @@ class CredentialResolver:
             service: The service name (will be normalized to lowercase)
 
         Returns:
-            The credential data if found, None otherwise
-
-        Raises:
-            MissingCredentialError: If credential is required but not found
+            The credential data if found, None otherwise.
+            Callers should check for None and handle missing credentials
+            appropriately (e.g., by raising MissingCredentialError or
+            triggering a clarification flow).
         """
         # Normalize service name to lowercase
         service = service.lower()
@@ -113,9 +117,8 @@ class CredentialResolver:
 
             if credential:
                 # Cache the result
-                if user_id not in self._cache:
-                    self._cache[user_id] = {}
-                self._cache[user_id][service] = credential.credentials
+                user_cache = self._cache.setdefault(user_id, {})
+                user_cache[service] = credential.credentials
                 return credential.credentials
 
             return None

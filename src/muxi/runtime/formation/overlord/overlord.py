@@ -599,8 +599,8 @@ class Overlord:
         self.request_timeout = request_timeout
 
         # Initialize clarification tracking with TTL
-        self._pending_clarifications: Dict[str, Dict[str, Any]] = {}
         self._clarification_ttl_seconds = 3600  # 1 hour TTL for pending clarifications
+        self._clarification_cleanup_interval_seconds = 300  # 5 minutes cleanup check interval
         self._clarification_cleanup_task: Optional[asyncio.Task] = None
 
         # ===================================================================
@@ -818,7 +818,7 @@ class Overlord:
                 level=observability.EventLevel.INFO,
                 data={
                     "ttl_seconds": self._clarification_ttl_seconds,
-                    "check_interval_seconds": 300,
+                    "check_interval_seconds": self._clarification_cleanup_interval_seconds,
                 },
                 description="Started clarification cleanup task",
             )
@@ -3795,10 +3795,29 @@ class Overlord:
                         credential_data = handler.parse_credential_response(response, service)
 
                         if credential_data and self.credential_resolver:
-                            # Store the credential
-                            await self.credential_resolver.store_credential(
-                                user_id=user_id, service=service, credentials=credential_data
-                            )
+                            # Validate credential data structure before storing
+                            if self._validate_credential_data(credential_data, service):
+                                # Store the credential
+                                await self.credential_resolver.store_credential(
+                                    user_id=user_id, service=service, credentials=credential_data
+                                )
+                            else:
+                                observability.observe(
+                                    event_type=observability.ErrorEvents.VALIDATION_FAILED,
+                                    level=observability.EventLevel.ERROR,
+                                    data={
+                                        "service": service,
+                                        "user_id": user_id,
+                                        "credential_keys": (
+                                            list(credential_data.keys())
+                                            if isinstance(credential_data, dict)
+                                            else "invalid_type"
+                                        ),
+                                        "validation_error": "invalid_credential_structure",
+                                    },
+                                    description=f"Invalid credential data structure for {service}",
+                                )
+                                return False
 
                             # Clean up pending clarification
                             del self._pending_clarifications[session_id]
@@ -3831,6 +3850,58 @@ class Overlord:
             )
             return False
 
+    def _validate_credential_data(self, credential_data: Any, service: str) -> bool:
+        """
+        Validate credential data structure before storing.
+
+        Args:
+            credential_data: The credential data to validate
+            service: The service the credential is for
+
+        Returns:
+            True if credential data is valid, False otherwise
+        """
+        # Must be a non-empty dictionary
+        if not isinstance(credential_data, dict):
+            return False
+
+        if not credential_data:
+            return False
+
+        # Validate that all keys are strings
+        for key in credential_data.keys():
+            if not isinstance(key, str) or not key.strip():
+                return False
+
+        # Validate that all values are non-empty strings
+        for value in credential_data.values():
+            if not isinstance(value, str) or not value.strip():
+                return False
+
+        # Service-specific validation
+        common_credential_fields = {
+            "token", "api_key", "key", "secret", "password",
+            "access_token", "auth_token", "bearer_token",
+            "client_id", "client_secret", "app_key", "app_secret"
+        }
+
+        # Ensure at least one field matches common credential patterns
+        has_valid_field = any(
+            key.lower().replace("_", "").replace("-", "") in
+            {field.replace("_", "").replace("-", "") for field in common_credential_fields}
+            for key in credential_data.keys()
+        )
+
+        if not has_valid_field:
+            return False
+
+        # Basic length validation - credentials should be reasonably long
+        for value in credential_data.values():
+            if len(value.strip()) < 8:  # Minimum reasonable credential length
+                return False
+
+        return True
+
     async def _cleanup_stale_clarifications(self) -> None:
         """
         Clean up stale pending clarifications based on TTL.
@@ -3841,8 +3912,8 @@ class Overlord:
         """
         while True:
             try:
-                # Sleep for cleanup interval (check every 5 minutes)
-                await asyncio.sleep(300)
+                # Sleep for cleanup interval
+                await asyncio.sleep(self._clarification_cleanup_interval_seconds)
 
                 current_time = time.time()
                 stale_sessions = []

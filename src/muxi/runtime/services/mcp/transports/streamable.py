@@ -42,14 +42,50 @@ class StreamableHTTPTransport(BaseTransport):
         self.client_context = None
         logger.debug(f"Initialized with URL: {url}")
         # Log auth config safely without exposing sensitive data
-        if auth and isinstance(auth, dict):
-            safe_auth = {
-                k: "******" if k.lower() in ["token", "password", "key", "secret"] else v
-                for k, v in auth.items()
-            }
-            logger.debug(f"Auth config: {safe_auth}")
+        safe_auth = self._mask_sensitive_data(auth)
+        logger.debug(f"Auth config: {safe_auth}")
+
+    def _mask_sensitive_data(self, data: Any) -> Any:
+        """
+        Recursively mask sensitive data in dictionaries and lists.
+
+        Args:
+            data: The data structure to mask (dict, list, or primitive value)
+
+        Returns:
+            The same data structure with sensitive values masked
+        """
+        if data is None:
+            return None
+
+        # Define sensitive field patterns (case-insensitive)
+        sensitive_patterns = {
+            "token", "password", "key", "secret", "auth", "credential",
+            "api_key", "access_token", "auth_token", "bearer_token",
+            "client_secret", "app_secret", "private_key", "jwt"
+        }
+
+        if isinstance(data, dict):
+            masked_dict = {}
+            for key, value in data.items():
+                # Check if the key itself indicates sensitive data
+                if isinstance(key, str) and any(
+                    pattern in key.lower() for pattern in sensitive_patterns
+                ):
+                    masked_dict[key] = "******"
+                else:
+                    # Recursively mask nested structures
+                    masked_dict[key] = self._mask_sensitive_data(value)
+            return masked_dict
+
+        elif isinstance(data, (list, tuple)):
+            # Recursively mask items in lists/tuples
+            masked_items = [self._mask_sensitive_data(item) for item in data]
+            return type(data)(masked_items)  # Preserve original type (list vs tuple)
+
         else:
-            logger.debug(f"Auth config: {auth}")
+            # Primitive values (str, int, bool, etc.) - return as-is
+            return data
 
     async def connect(self) -> bool:
         """Connect using MCP SDK streamablehttp_client."""
