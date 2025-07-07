@@ -1735,14 +1735,28 @@ class Formation:
                 return True
         return False
 
+    def _has_any_mcp_servers(self) -> bool:
+        """Check if any MCP servers are registered."""
+        if not hasattr(self, "_mcp_service") or not self._mcp_service:
+            return False
+
+        # Check if connections attribute exists before accessing it
+        if not hasattr(self._mcp_service, "connections"):
+            return False
+
+        # Return True if there are any connections
+        return len(self._mcp_service.connections) > 0
+
     def suppress_mcp_errors_on_exit(self) -> None:
         """
-        Register an atexit handler to suppress MCP stdio errors.
+        Register an atexit handler to suppress MCP async generator errors.
 
         This method registers a handler that will be called when Python exits,
         which uses os._exit() to skip the cleanup phase where MCP async generator
         errors occur. This is useful when you know your application will exit
         and you want to avoid seeing the errors.
+
+        This now handles ALL MCP server types (stdio, HTTP SSE, and streamable HTTP).
 
         Example:
             formation = Formation()
@@ -1759,8 +1773,8 @@ class Formation:
         self._exit_code = 0
 
         def _clean_exit_handler():
-            # Check if we have stdio MCP servers
-            if self._has_stdio_mcp_servers():
+            # Check if we have ANY MCP servers (not just stdio)
+            if self._has_any_mcp_servers():
                 # Flush outputs
                 sys.stdout.flush()
                 sys.stderr.flush()
@@ -1850,7 +1864,7 @@ class Formation:
 
                 # Add optional parameters
                 if "auth" in server_config:
-                    registration_params["auth"] = server_config["auth"]
+                    registration_params["credentials"] = server_config["auth"]
                 if "timeout_seconds" in server_config:
                     registration_params["request_timeout"] = server_config["timeout_seconds"]
                 if "transport_type" in server_config:
@@ -2004,13 +2018,16 @@ class Formation:
             # This ensures they're created in the same async context
             await self._register_mcp_servers()
 
-            # Note if we have stdio MCP servers that may cause exit errors
-            if self._has_stdio_mcp_servers():
+            # Note if we have MCP servers that may cause exit errors
+            if self._has_any_mcp_servers():
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
-                    data={"has_stdio_servers": True},
-                    description="Formation has stdio MCP servers - use aclean_exit() to avoid errors",
+                    data={"has_mcp_servers": True},
+                    description=(
+                        "Formation has MCP servers - call suppress_mcp_errors_on_exit() "
+                        "to avoid async cleanup errors"
+                    ),
                 )
 
             # Register built-in MCP servers if enabled
@@ -2103,9 +2120,9 @@ class Formation:
             timeout_seconds: Maximum time to wait for graceful shutdown before forcing termination
 
         Note:
-            If you're using stdio MCP servers and seeing async generator errors at exit,
-            use formation.aclean_exit() instead or call formation.suppress_mcp_errors()
-            before exiting your application.
+            If you're using MCP servers and seeing async generator errors at exit,
+            call formation.suppress_mcp_errors_on_exit() before loading the formation
+            to suppress these harmless cleanup errors.
         """
         if not self._is_running or not self._overlord:
             return  # Already stopped or never started

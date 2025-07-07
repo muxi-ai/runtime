@@ -60,9 +60,20 @@ class StreamableHTTPTransport(BaseTransport):
 
         # Define sensitive field patterns (case-insensitive)
         sensitive_patterns = {
-            "token", "password", "key", "secret", "auth", "credential",
-            "api_key", "access_token", "auth_token", "bearer_token",
-            "client_secret", "app_secret", "private_key", "jwt"
+            "token",
+            "password",
+            "key",
+            "secret",
+            "auth",
+            "credential",
+            "api_key",
+            "access_token",
+            "auth_token",
+            "bearer_token",
+            "client_secret",
+            "app_secret",
+            "private_key",
+            "jwt",
         }
 
         if isinstance(data, dict):
@@ -96,7 +107,7 @@ class StreamableHTTPTransport(BaseTransport):
             # Convert auth dict to httpx.Auth
             httpx_auth = create_httpx_auth(self.auth)
 
-            # Use SDK client
+            # Store the context manager itself (like command transport)
             self.client_context = streamablehttp_client(
                 url=self.url, auth=httpx_auth, timeout=self.request_timeout
             )
@@ -186,29 +197,31 @@ class StreamableHTTPTransport(BaseTransport):
             raise MCPRequestError(f"Request failed: {e}")
 
     async def _cleanup(self):
-        """Clean up resources even if not fully connected."""
+        """Proper cleanup in same async context."""
         try:
-            # Close session if it exists
+            # Close session first
             if self.session:
                 try:
                     await self.session.__aexit__(None, None, None)
                 except Exception:
                     pass
+                finally:
+                    self.session = None
 
-            # Close client context if it exists
+            # Then close client context
             if self.client_context:
                 try:
                     await self.client_context.__aexit__(None, None, None)
                 except Exception:
                     pass
+                finally:
+                    self.client_context = None
 
         finally:
             self.connected = False
-            self.session = None
             self.read_stream = None
             self.write_stream = None
             self.get_session_id = None
-            self.client_context = None
 
     async def disconnect(self) -> bool:
         """Disconnect from MCP server."""

@@ -279,18 +279,26 @@ class MCPServerClient:
 
         self.active_requests[tracking_id] = request_info
 
+        # Build observability data
+        obs_data = {
+            "server_name": self.name,
+            "server_id": self.name,  # Include server ID
+            "method": method,
+            "json_rpc_id": json_rpc_id,
+            "request_id": request_id,
+            "tracking_id": tracking_id,
+            "params": params,
+        }
+
+        # Add tool name if this is a tool call
+        if method == "tools/call" and params and "name" in params:
+            obs_data["tool_name"] = params["name"]
+
         observability.observe(
             event_type=observability.SystemEvents.MCP_MESSAGE_SENT,
             level=observability.EventLevel.DEBUG,
             description=f"Sending MCP message '{method}' to server '{self.name}'",
-            data={
-                "server_name": self.name,
-                "method": method,
-                "json_rpc_id": json_rpc_id,
-                "request_id": request_id,
-                "tracking_id": tracking_id,
-                "params": params,
-            },
+            data=obs_data,
         )
 
         try:
@@ -307,49 +315,73 @@ class MCPServerClient:
             response = await task
             self.last_activity = datetime.now()
 
+            # Build observability data for response
+            resp_data = {
+                "server_name": self.name,
+                "server_id": self.name,  # Include server ID
+                "method": method,
+                "json_rpc_id": json_rpc_id,
+                "request_id": request_id,
+                "tracking_id": tracking_id,
+                "response": response,
+            }
+
+            # Add tool name if this is a tool call
+            if method == "tools/call" and params and "name" in params:
+                resp_data["tool_name"] = params["name"]
+
             observability.observe(
                 event_type=observability.SystemEvents.MCP_MESSAGE_RECEIVED,
                 level=observability.EventLevel.DEBUG,
                 description=f"Received MCP response for '{method}' from server '{self.name}'",
-                data={
-                    "server_name": self.name,
-                    "method": method,
-                    "json_rpc_id": json_rpc_id,
-                    "request_id": request_id,
-                    "tracking_id": tracking_id,
-                    "response": response,
-                },
+                data=resp_data,
             )
 
             return response
 
         except asyncio.CancelledError:
+            # Build observability data for cancellation
+            cancel_data = {
+                "server_name": self.name,
+                "server_id": self.name,  # Include server ID
+                "method": method,
+                "json_rpc_id": json_rpc_id,
+                "request_id": request_id,
+                "tracking_id": tracking_id,
+            }
+
+            # Add tool name if this is a tool call
+            if method == "tools/call" and params and "name" in params:
+                cancel_data["tool_name"] = params["name"]
+
             observability.observe(
                 event_type=observability.SystemEvents.MCP_MESSAGE_CANCELLED,
                 level=observability.EventLevel.INFO,
                 description=f"MCP request '{method}' was cancelled for server '{self.name}'",
-                data={
-                    "server_name": self.name,
-                    "method": method,
-                    "json_rpc_id": json_rpc_id,
-                    "request_id": request_id,
-                    "tracking_id": tracking_id,
-                },
+                data=cancel_data,
             )
             raise
         except Exception as e:
+            # Build observability data for error
+            error_data = {
+                "server_name": self.name,
+                "server_id": self.name,  # Include server ID
+                "method": method,
+                "json_rpc_id": json_rpc_id,
+                "request_id": request_id,
+                "tracking_id": tracking_id,
+                "error": str(e),
+            }
+
+            # Add tool name if this is a tool call
+            if method == "tools/call" and params and "name" in params:
+                error_data["tool_name"] = params["name"]
+
             observability.observe(
                 event_type=observability.SystemEvents.MCP_MESSAGE_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"MCP message '{method}' failed for server '{self.name}': {str(e)}",
-                data={
-                    "server_name": self.name,
-                    "method": method,
-                    "json_rpc_id": json_rpc_id,
-                    "request_id": request_id,
-                    "tracking_id": tracking_id,
-                    "error": str(e),
-                },
+                data=error_data,
             )
             raise
         finally:
