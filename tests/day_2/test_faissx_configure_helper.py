@@ -2,11 +2,12 @@
 """Test FAISSx configure function and remote connection"""
 
 import sys
+import asyncio
 sys.path.insert(0, '.')
 import time
 import traceback
 
-def test_faissx_import():
+async def test_faissx_import():
     """Test basic faissx import and structure"""
     print("=== Testing FAISSx Import ===")
     try:
@@ -19,7 +20,7 @@ def test_faissx_import():
         print(f"❌ faissx import failed: {e}")
         return False
 
-def test_faissx_configure_no_auth():
+async def test_faissx_configure_no_auth():
     """Test faiss.configure with no-auth server"""
     print("\n=== Testing FAISSx Configure (No Auth) ===")
     try:
@@ -57,7 +58,7 @@ def test_faissx_configure_no_auth():
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
 
-def test_faissx_operations():
+async def test_faissx_operations():
     """Test actual add/search operations on remote index"""
     print("\n=== Testing FAISSx Remote Operations ===")
     try:
@@ -110,7 +111,7 @@ def test_faissx_operations():
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
 
-def test_faissx_local_vs_remote():
+async def test_faissx_local_vs_remote():
     """Compare local vs remote behavior"""
     print("\n=== Comparing Local vs Remote Behavior ===")
     

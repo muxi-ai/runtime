@@ -233,10 +233,10 @@ async def test_formation_configurations():
         print(f"\nTesting: {formation_config['name']}")
         print(f"Formation: {formation_config['path']}")
         
-        def load_formation(path):
+        async def load_formation(path):
             try:
                 formation = Formation()
-                formation.load(path)
+                await formation.load(path)
                 
                 # Extract memory config
                 memory_config = formation.config.get("memory", {})
@@ -256,10 +256,8 @@ async def test_formation_configurations():
                     "error": str(e)
                 }
         
-        # Run in thread
-        with ThreadPoolExecutor() as executor:
-            future = executor.submit(load_formation, formation_config["path"])
-            result = future.result()
+        # Run async function
+        result = await load_formation(formation_config["path"])
         
         if result["loaded"]:
             print(f"✓ Formation loaded successfully")

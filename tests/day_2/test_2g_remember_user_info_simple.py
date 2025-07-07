@@ -9,15 +9,15 @@ from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 from src.muxi.runtime.formation.formation import Formation  # noqa: E402
 
 
-def test_remember_user_info():
+async def test_remember_user_info():
     """Test remember_user_info functionality"""
     print("\n=== Testing remember_user_info ===")
 
-    def run_test():
+    async def run_test():
         formation = Formation()
         # Use a formation that works without long-term memory
-        formation.load("test-formations/formation-memory/formation-buffer-local-real.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-buffer-local-real.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             # Helper function to handle async generator responses
@@ -73,12 +73,10 @@ def test_remember_user_info():
             traceback.print_exc()
             return {"status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in thread to avoid event loop issues
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 
 if __name__ == "__main__":

@@ -82,9 +82,9 @@ async def test_formation_with_faissx():
         from src.muxi.runtime.formation.formation import Formation
         from concurrent.futures import ThreadPoolExecutor
         
-        def run_formation_test():
+        async def run_formation_test():
             formation = Formation()
-            formation.load("test-formations/formation-memory/formation-postgres-and-faissx.yaml")
+            await formation.load("test-formations/formation-memory/formation-postgres-and-faissx.yaml")
             print("✓ Formation loaded successfully")
             
             # Check memory configuration
