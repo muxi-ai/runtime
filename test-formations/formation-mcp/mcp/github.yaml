@@ -2,7 +2,7 @@
 schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "github-mcp"                    # Unique server name/id (required)
 description: "Github MCP"  # Human-readable description
-active: false                      # Disabled for testing (uses user credentials)
+active: true                      # Disabled for testing (uses user credentials)
 type: "http"                       # Server type: http (required)
 
 # Connection details
@@ -14,4 +14,4 @@ retry_attempts: 3                  # Number of retry attempts (overrides default
 # Authentication (optional)
 auth:
   type: "bearer"
-  token: "${{ user.credentials.github }}"
+  token: "${{ secrets.USER_CREDENTIALS_GITHUB }}"

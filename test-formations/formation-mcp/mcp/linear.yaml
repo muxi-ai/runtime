@@ -2,7 +2,7 @@
 schema: "1.0.0"                    # Schema version (Semantic Versioning)
 id: "linear-mcp"                    # Unique server name/id (required)
 description: "Linear MCP Server"  # Human-readable description
-active: false                      # Disabled to focus on filesystem test
+active: true                      # Disabled to focus on filesystem test
 type: "http"                       # Server type: http (required)
 
 # Connection details

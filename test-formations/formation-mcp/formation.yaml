@@ -50,6 +50,6 @@ logging:
     # File example
     - transport: "file"
       level: "debug"
-      format: "text"
+      format: "jsonl"
       destination: "/Users/ran/Desktop/mcp.log"
       events: ["*"]
