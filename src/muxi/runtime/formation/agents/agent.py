@@ -53,6 +53,7 @@ from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...services.intent import IntentDetectionService
 from ...services import observability
+from ...utils.id_generator import generate_nanoid
 
 
 class Agent:
@@ -968,7 +969,7 @@ class Agent:
         max_repeated_errors = mcp_config.get("max_repeated_errors", 3)
 
         # Generate unique chain ID for this tool execution sequence
-        chain_id = f"chain_{uuid.uuid4().hex[:12]}"
+        chain_id = f"chn_{generate_nanoid()}"
 
         # Initialize loop variables
         iteration = 0
