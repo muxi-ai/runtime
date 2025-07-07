@@ -956,26 +956,90 @@ class Agent:
                 user_id=user_id,
             )
 
-        # Check for tool calls in the response
-        tool_calls = None
-        if hasattr(raw_response, "choices") and raw_response.choices:
-            message = raw_response.choices[0].message
-            # Handle both dict and object message types
-            if isinstance(message, dict):
+        # Start intelligent tool execution loop
+        # Get MCP configuration settings
+        mcp_config = {}
+        if self.overlord and hasattr(self.overlord, "_config") and self.overlord._config:
+            mcp_config = self.overlord._config.get("mcp", {})
+
+        # Extract configuration with defaults
+        max_iterations = mcp_config.get("max_tool_iterations", 10)
+        max_total_calls = mcp_config.get("max_tool_calls", 50)
+        max_repeated_errors = mcp_config.get("max_repeated_errors", 3)
+
+        # Generate unique chain ID for this tool execution sequence
+        chain_id = f"chain_{uuid.uuid4().hex[:12]}"
+
+        # Initialize loop variables
+        iteration = 0
+        total_tool_calls = 0
+        error_history = []
+        current_raw_response = raw_response
+        current_content = content
+
+        # Tool execution loop
+        while iteration < max_iterations:
+            # Check for tool calls in the response
+            tool_calls = None
+            if hasattr(current_raw_response, "choices") and current_raw_response.choices:
+                message = current_raw_response.choices[0].message
+                # Handle both dict and object message types
+                if isinstance(message, dict):
+                    if "tool_calls" in message and message["tool_calls"]:
+                        tool_calls = message["tool_calls"]
+                else:
+                    if hasattr(message, "tool_calls") and message.tool_calls:
+                        tool_calls = message.tool_calls
+            elif isinstance(current_raw_response, dict) and "choices" in current_raw_response:
+                message = current_raw_response["choices"][0]["message"]
                 if "tool_calls" in message and message["tool_calls"]:
                     tool_calls = message["tool_calls"]
-            else:
-                if hasattr(message, "tool_calls") and message.tool_calls:
-                    tool_calls = message.tool_calls
-        elif isinstance(raw_response, dict) and "choices" in raw_response:
-            message = raw_response["choices"][0]["message"]
-            if "tool_calls" in message and message["tool_calls"]:
-                tool_calls = message["tool_calls"]
 
-        # Execute tool calls if present
-        if tool_calls:
+            # If no tool calls, break the loop
+            if not tool_calls:
+                break
+
+            # Emit tool chain iteration started event
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "chain_id": chain_id,
+                    "iteration": iteration + 1,
+                    "total_iterations": max_iterations,
+                    "tool_calls_count": len(tool_calls),
+                    "total_tool_calls_so_far": total_tool_calls,
+                    "has_previous_errors": len(error_history) > 0,
+                },
+                description=f"Tool chain iteration {iteration + 1} started with {len(tool_calls)} tool calls",
+            )
+
+            # Execute tool calls
             tool_results = []
+            current_errors = []
+
             for tool_call in tool_calls:
+                if total_tool_calls >= max_total_calls:
+                    # Add system message about limit
+                    tool_results.append(
+                        {
+                            "tool_call_id": (
+                                tool_call.id if hasattr(tool_call, "id") else tool_call["id"]
+                            ),
+                            "role": "tool",
+                            "content": json.dumps(
+                                {
+                                    "error": (
+                                        f"Maximum tool call limit ({max_total_calls}) reached. "
+                                        "Please summarize your findings."
+                                    )
+                                }
+                            ),
+                        }
+                    )
+                    break
+
                 try:
                     # Extract tool info
                     if hasattr(tool_call, "function"):
@@ -1003,6 +1067,20 @@ class Agent:
                         user_id=user_id,
                     )
 
+                    total_tool_calls += 1
+
+                    # Check if result is an error
+                    is_error = False
+                    if isinstance(result, dict) and "error" in result:
+                        is_error = True
+                        current_errors.append(
+                            {
+                                "tool": tool_name,
+                                "error": result.get("error", "Unknown error"),
+                                "iteration": iteration,
+                            }
+                        )
+
                     # Format tool result
                     tool_results.append(
                         {"tool_call_id": tool_id, "role": "tool", "content": json.dumps(result)}
@@ -1010,12 +1088,15 @@ class Agent:
 
                 except Exception as e:
                     import traceback
+
                     error_trace = traceback.format_exc()
                     observability.observe(
                         event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
                         level=observability.EventLevel.ERROR,
                         data={
                             "agent_id": self.agent_id,
+                            "chain_id": chain_id,
+                            "iteration": iteration + 1,
                             "tool_name": tool_name if "tool_name" in locals() else "unknown",
                             "error": str(e),
                             "error_trace": error_trace,
@@ -1030,14 +1111,22 @@ class Agent:
                             "content": json.dumps({"error": str(e)}),
                         }
                     )
+                    current_errors.append(
+                        {
+                            "tool": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
+                            "iteration": iteration,
+                        }
+                    )
+                    total_tool_calls += 1
 
-            # If we have tool results, we need to send them back to the model
+            # Add tool results to messages
             if tool_results:
                 # Add the assistant message with tool calls
                 self._messages.append(
                     {
                         "role": "assistant",
-                        "content": content or "",
+                        "content": current_content or "",
                         "tool_calls": [
                             {
                                 "id": tc.id if hasattr(tc, "id") else tc["id"],
@@ -1063,28 +1152,155 @@ class Agent:
                 # Add tool results
                 self._messages.extend(tool_results)
 
-                # Get final response from model after tool execution
-                final_response = await self.model.chat(self._messages)
+                # Add errors to history
+                if current_errors:
+                    error_history.extend(current_errors)
 
-                # Extract content from final response
-                if isinstance(final_response, str):
-                    content = final_response
-                elif hasattr(final_response, "choices") and final_response.choices:
-                    message = final_response.choices[0].message
+                    # Check if we're making no progress
+                    if self._is_making_no_progress(error_history, max_repeated_errors):
+                        # Add guidance about being stuck
+                        self._messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You seem to be encountering repeated errors. "
+                                    "Please either find an alternative approach or explain why "
+                                    "the task cannot be completed."
+                                ),
+                            }
+                        )
+
+                # Add guidance for error recovery if needed
+                if current_errors:
+                    self._messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "The previous tool call(s) resulted in errors. "
+                                "Analyze the errors carefully and determine if there are other "
+                                "tools available that could help you make progress on the task. "
+                                "Only make additional tool calls if they would genuinely help "
+                                "resolve the issue or complete the task through an alternative approach."
+                            ),
+                        }
+                    )
+
+                # Get next response from model
+                next_response = await self.model.chat(
+                    self._messages, tools=tools if tools else None
+                )
+
+                # Extract content from response
+                if isinstance(next_response, str):
+                    current_content = next_response
+                elif hasattr(next_response, "choices") and next_response.choices:
+                    message = next_response.choices[0].message
                     if isinstance(message, dict):
-                        content = message.get("content", "")
+                        current_content = message.get("content", "") or ""
                     else:
-                        content = getattr(message, "content", "")
-                elif isinstance(final_response, dict) and "choices" in final_response:
-                    content = final_response["choices"][0]["message"]["content"]
+                        current_content = getattr(message, "content", "") or ""
+                elif isinstance(next_response, dict) and "choices" in next_response:
+                    current_content = (
+                        next_response["choices"][0]["message"].get("content", "") or ""
+                    )
                 else:
-                    content = str(final_response)
+                    current_content = str(next_response)
 
-                # Update the response content
-                response.content = content
+                # Update for next iteration
+                current_raw_response = next_response
+                content = current_content  # Update the main content variable
 
-                # Add final response to context
-                self._messages.append({"role": "assistant", "content": content})
+                # Check if agent is about to retry the same failed operation
+                next_tool_calls = self._extract_tool_calls(next_response)
+                if current_errors and next_tool_calls:
+                    if self._is_repeating_failed_operation(next_tool_calls, error_history):
+                        # Give agent one chance to reconsider
+                        self._messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "Warning: You are about to retry an operation that just "
+                                    "failed with the same parameters. Please consider using a "
+                                    "different tool or approach to make progress."
+                                ),
+                            }
+                        )
+                        reconsider_response = await self.model.chat(
+                            self._messages, tools=tools if tools else None
+                        )
+
+                        # Update with reconsidered response
+                        if isinstance(reconsider_response, str):
+                            current_content = reconsider_response
+                        elif (
+                            hasattr(reconsider_response, "choices") and reconsider_response.choices
+                        ):
+                            message = reconsider_response.choices[0].message
+                            if isinstance(message, dict):
+                                current_content = message.get("content", "") or ""
+                            else:
+                                current_content = getattr(message, "content", "") or ""
+                        elif (
+                            isinstance(reconsider_response, dict)
+                            and "choices" in reconsider_response
+                        ):
+                            current_content = (
+                                reconsider_response["choices"][0]["message"].get("content", "")
+                                or ""
+                            )
+                        else:
+                            current_content = str(reconsider_response)
+
+                        current_raw_response = reconsider_response
+                        content = current_content
+
+            # Emit tool chain iteration completed event
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "chain_id": chain_id,
+                    "iteration": iteration + 1,
+                    "tool_calls_executed": len(tool_results),
+                    "errors_encountered": len(current_errors),
+                    "total_tool_calls": total_tool_calls,
+                    "continuing": bool(self._extract_tool_calls(current_raw_response)),
+                },
+                description=f"Tool chain iteration {iteration + 1} completed",
+            )
+
+            iteration += 1
+
+            # Check if we should stop due to limits
+            if total_tool_calls >= max_total_calls:
+                break
+
+        # Update the response content with final content
+        response.content = content
+
+        # Emit tool chain completed event
+        if iteration > 0:  # Only emit if we actually did tool chaining
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "chain_id": chain_id,
+                    "total_iterations": iteration,
+                    "total_tool_calls": total_tool_calls,
+                    "total_errors": len(error_history),
+                    "reached_iteration_limit": iteration >= max_iterations,
+                    "reached_call_limit": total_tool_calls >= max_total_calls,
+                    "stopped_due_to_repeated_errors": self._is_making_no_progress(
+                        error_history, max_repeated_errors
+                    ),
+                },
+                description=f"Tool chain completed after {iteration} iterations and {total_tool_calls} tool calls",
+            )
+
+        # Add final response to context
+        self._messages.append({"role": "assistant", "content": content})
 
         return response
 
@@ -1150,6 +1366,91 @@ class Agent:
             context_parts.append("")  # Empty line between docs
         context_parts.append("--- End Recently Uploaded Documents ---")
         return context_parts
+
+    def _is_making_no_progress(
+        self, error_history: List[Dict[str, Any]], max_repeated_errors: int
+    ) -> bool:
+        """
+        Check if similar errors occurred too many times.
+
+        Args:
+            error_history: List of error dictionaries with 'tool', 'error', and 'iteration'
+            max_repeated_errors: Maximum number of similar errors allowed
+
+        Returns:
+            True if making no progress, False otherwise
+        """
+        if len(error_history) < max_repeated_errors:
+            return False
+
+        # Group errors by pattern (ignoring tool name for similarity)
+        error_counts = {}
+        lookback_window = max_repeated_errors * 2  # Check recent errors
+        for error in error_history[-lookback_window:]:
+            # Use error message pattern as key (first 50 chars)
+            key = error["error"][:50].lower()
+            error_counts[key] = error_counts.get(key, 0) + 1
+            if error_counts[key] >= max_repeated_errors:
+                return True
+        return False
+
+    def _is_repeating_failed_operation(
+        self, new_calls: List[Any], error_history: List[Dict[str, Any]]
+    ) -> bool:
+        """
+        Check if agent is retrying exact same failed operation.
+
+        Args:
+            new_calls: List of new tool calls to be made
+            error_history: History of errors
+
+        Returns:
+            True if repeating a failed operation, False otherwise
+        """
+        if not error_history:
+            return False
+
+        last_error = error_history[-1]
+        for call in new_calls:
+            # Extract tool name from call
+            if hasattr(call, "function"):
+                tool_name = call.function.name
+            else:
+                tool_name = call["function"]["name"]
+
+            # Check if it's the same tool that just failed
+            if tool_name == last_error["tool"]:
+                # Could also check parameters for exact match
+                return True
+        return False
+
+    def _extract_tool_calls(self, response: Any) -> List[Any]:
+        """
+        Extract tool calls from a model response.
+
+        Args:
+            response: The raw response from the model
+
+        Returns:
+            List of tool calls, or empty list if none found
+        """
+        tool_calls = []
+
+        if hasattr(response, "choices") and response.choices:
+            message = response.choices[0].message
+            # Handle both dict and object message types
+            if isinstance(message, dict):
+                if "tool_calls" in message and message["tool_calls"]:
+                    tool_calls = message["tool_calls"]
+            else:
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    tool_calls = message.tool_calls
+        elif isinstance(response, dict) and "choices" in response:
+            message = response["choices"][0]["message"]
+            if "tool_calls" in message and message["tool_calls"]:
+                tool_calls = message["tool_calls"]
+
+        return tool_calls
 
     async def _check_agent_clarification_needs(
         self, agent_response: str, user_message: str

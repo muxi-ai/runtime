@@ -543,6 +543,16 @@ class ConversationEvents(Enum):
     AGENT_RESPONSE_GENERATED = "agent.response.generated"
     # When agent generates response
 
+    # Tool chaining events
+    AGENT_TOOL_CHAIN_ITERATION_STARTED = "agent.tool_chain.iteration_started"
+    # When agent begins a tool chaining iteration
+
+    AGENT_TOOL_CHAIN_ITERATION_COMPLETED = "agent.tool_chain.iteration_completed"
+    # When agent completes a tool chaining iteration
+
+    AGENT_TOOL_CHAIN_COMPLETED = "agent.tool_chain.completed"
+    # When agent completes entire tool chaining sequence
+
     # ===================================================================
     # MODEL OPERATIONS
     # ===================================================================
