@@ -120,6 +120,9 @@ class FormationLoader:
         # Filter inline agents by active field
         self._filter_inline_agents_by_active(config)
 
+        # Filter inline MCP servers by active field
+        self._filter_inline_mcp_servers_by_active(config)
+
         # Resolve knowledge paths relative to formation file directory
         formation_dir = os.path.dirname(os.path.abspath(file_path))
         config = self._resolve_knowledge_paths(config, formation_dir)
@@ -171,6 +174,9 @@ class FormationLoader:
 
         # Filter inline agents by active field before merging external agents
         self._filter_inline_agents_by_active(main_config)
+
+        # Filter inline MCP servers by active field before merging external servers
+        self._filter_inline_mcp_servers_by_active(main_config)
 
         # Auto-discover and merge component configurations
         await self._discover_and_merge_agents(main_config, formation_dir, secrets_manager)
@@ -230,7 +236,7 @@ class FormationLoader:
                     agent_config["id"] = agent_file.stem
 
                 # Check if agent is active (default to True)
-                is_active = agent_config.get('active', True)
+                is_active = agent_config.get("active", True)
 
                 if is_active:
                     config["agents"].append(agent_config)
@@ -269,7 +275,7 @@ class FormationLoader:
             if not isinstance(agent_config, dict):
                 continue
 
-            is_active = agent_config.get('active', True)
+            is_active = agent_config.get("active", True)
 
             if is_active:
                 filtered_agents.append(agent_config)
@@ -281,6 +287,38 @@ class FormationLoader:
                 _ = None  # remove this after implementing observability
 
         config["agents"] = filtered_agents
+
+    def _filter_inline_mcp_servers_by_active(self, config: Dict[str, Any]) -> None:
+        """
+        Filter inline MCP servers based on the active field.
+
+        Args:
+            config: Formation configuration to filter inline MCP servers in
+        """
+        if "mcp" not in config or "servers" not in config.get("mcp", {}):
+            return
+
+        servers = config["mcp"]["servers"]
+        if not isinstance(servers, list):
+            return
+
+        filtered_servers = []
+        for server_config in servers:
+            if not isinstance(server_config, dict):
+                continue
+
+            is_active = server_config.get("active", True)
+
+            if is_active:
+                filtered_servers.append(server_config)
+                #  MCP server loaded successfully - TODO: add observability
+                #  MCP_SERVER_CONNECTING
+            else:
+                #  MCP server disabled - TODO: add observability
+                #  MCP_SERVER_CONNECTING
+                _ = None  # remove this after implementing observability
+
+        config["mcp"]["servers"] = filtered_servers
 
     async def _discover_and_merge_mcp_servers(
         self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None
@@ -327,9 +365,17 @@ class FormationLoader:
                 if "id" not in mcp_config:
                     mcp_config["id"] = mcp_file.stem
 
-                config["mcp"]["servers"].append(mcp_config)
-                #  MCP server discovered - TODO: add observability
-                #  MCP_SERVER_CONNECTING
+                # Check if MCP server is active (default to True)
+                is_active = mcp_config.get("active", True)
+
+                if is_active:
+                    config["mcp"]["servers"].append(mcp_config)
+                    #  MCP server discovered - TODO: add observability
+                    #  MCP_SERVER_CONNECTING
+                else:
+                    #  MCP server disabled - TODO: add observability
+                    #  MCP_SERVER_CONNECTING
+                    _ = None  # remove this after implementing observability
 
             except Exception as e:
                 #  MCP config error - TODO: add observability
@@ -455,9 +501,7 @@ class FormationLoader:
         for source in sources:
             if isinstance(source, dict):
                 if "path" in source:
-                    source["path"] = self._resolve_single_path(
-                        source["path"], formation_dir
-                    )
+                    source["path"] = self._resolve_single_path(source["path"], formation_dir)
 
     def _resolve_single_path(self, path: str, formation_dir: str) -> str:
         """
