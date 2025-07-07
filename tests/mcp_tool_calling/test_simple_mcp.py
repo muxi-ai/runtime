@@ -13,37 +13,36 @@ from src.muxi.runtime.formation.formation import Formation  # noqa: E402
 async def run_test():
     """Run the test."""
     formation_path = Path("test-formations/formation-mcp")
-    
+
     # Load formation
     formation = Formation()
-    formation.load(str(formation_path))
-    overlord = formation.start_overlord()
-    
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
     # Wait for overlord to be ready
     await overlord.ensure_started()
-    
+
     # Get MCP service and list tools
     mcp_service = overlord.get_mcp_service()
     tools = await mcp_service.list_tools()
-    
-    print(f"\nAvailable MCP servers and tools:")
+
+    print("\nAvailable MCP servers and tools:")
     for server_id, server_tools in tools.items():
         print(f"\n{server_id}: {len(server_tools)} tools")
         for tool in server_tools[:3]:
             print(f"  - {tool['name']}: {tool.get('description', '')[:60]}...")
-    
+
     # Simple test
     print("\n\nTesting simple file operation...")
     response = await overlord.chat(
-        user_id="test_user", 
+        user_id="test_user",
         message="Please create a file at /Users/ran/Desktop/test_from_mcp.txt with the content 'Hello from MCP tools!'",
         use_async=False,
         stream=False,
     )
-    
+
     print(f"\nResponse type: {type(response)}")
     print(f"Response: {response}")
-    
+
     # Check if file was created
     test_file = Path("/Users/ran/Desktop/test_from_mcp.txt")
     if test_file.exists():
@@ -51,9 +50,9 @@ async def run_test():
         test_file.unlink()  # Clean up
     else:
         print("\n❌ File was not created")
-    
+
     # Stop overlord
-    formation.stop_overlord(10.0)
+    await formation.stop_overlord(10.0)
     print("\n✅ Test complete!")
 
 
