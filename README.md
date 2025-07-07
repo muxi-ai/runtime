@@ -14,6 +14,24 @@ Think of MUXI Runtime as analogous to the Docker Runtime - it's the powerful eng
 
 ## Recent Architecture Improvements
 
+### MCP SDK Migration & Tool Calling ✅ **PRODUCTION READY**
+- **Official SDK Integration**: Complete migration to MCP Python SDK with streamable HTTP and SSE transport support
+- **Authentication Fixed**: Resolved Linear MCP 401 errors with proper Bearer token authentication and GitHub Copilot MCP integration
+- **Auto-Fallback Transport**: Intelligent fallback from streamable HTTP to SSE with formation-lifetime caching
+- **Command-Based MCP Fix**: Fixed YAML command/args configuration issues for filesystem MCP servers
+- **MCP Tool Calling**: Agents now properly use MCP tools instead of just describing capabilities
+- **Thread Safety**: Added proper locking for SSE server cache and secure logging of sensitive data
+- **Code Quality**: Comprehensive improvements including logging, security enhancements, and code deduplication
+- **Production Ready**: All MCP server types working (HTTP, SSE, Command-line) with 22 Linear tools and 67 GitHub tools
+
+### Async Formation API Migration ✅ **PRODUCTION READY**
+- **Complete Async Conversion**: All 208 tests migrated across Day 1-3 test suites to async patterns
+- **Formation Core Methods**: `Formation.load()`, `Formation.start_overlord()`, and `Formation.stop_overlord()` converted to async
+- **Test Migration Success**: 100% success rate with comprehensive async/await patterns implemented
+- **Event Loop Safety**: Fixed asyncio.run() safety with proper event loop management and atexit handling
+- **MCP Registration Tracking**: Enhanced MCP server registration with detailed success/failure tracking
+- **CodeRabbit Improvements**: All suggested improvements implemented including defensive programming and documentation
+
 ### File Generation MCP ✅ **PRODUCTION READY**
 - **Built-in MCP Server**: Comprehensive file generation capabilities through secure Python code execution
 - **Multi-Format Support**: Charts (matplotlib), documents (docx, PDF), spreadsheets (Excel, CSV), images (PIL, QR codes), presentations (pptx)

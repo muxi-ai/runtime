@@ -1,3 +1,0 @@
-muxi
-setup
-tests
