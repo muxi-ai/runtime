@@ -802,7 +802,7 @@ class Overlord:
                 self.mcp_service = mcp_service
                 self.mcp_coordinator = mcp_service  # Alias for compatibility
                 observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_INITIALIZED,
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
                     level=observability.EventLevel.INFO,
                     data={"service": "mcp", "source": "formation"},
                     description="MCP service received from Formation",
