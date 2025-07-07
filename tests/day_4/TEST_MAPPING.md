@@ -5,12 +5,17 @@ This document maps the Day 4 test plan requirements to actual test implementatio
 
 ## Test Groups and Files
 
-### Group 4A: Single MCP Server (2 tests) 
+### Group 4A: Single MCP Server (2 tests + 3 tool chaining variants) 
 1. **test_4a1_filesystem_mcp_operations.py** - Filesystem MCP CRUD operations
    - Create file operation
    - Read file operation
    - Update file operation
    - Delete file operation
+
+   **Tool Chaining Variants (3 tests):**
+   - **test_4a1_variant_1_existing_dir.py** - File creation in existing directory
+   - **test_4a1_variant_2_missing_dir.py** - File creation with automatic directory creation
+   - **test_4a1_variant_3_explicit.py** - File creation with explicit directory instruction
 
 2. **test_4a2_system_info_mcp.py** - System information retrieval
    - CPU usage monitoring
@@ -84,8 +89,8 @@ This document maps the Day 4 test plan requirements to actual test implementatio
 
 ## Summary
 
-**Total Tests:** 15 MCP tests + credential flow validation
-- Single MCP Server: 2 tests
+**Total Tests:** 18 MCP tests + credential flow validation
+- Single MCP Server: 2 tests + 3 tool chaining variants
 - Multi-MCP Integration: 3 tests
 - Linear MCP (Formation Secrets): 3 tests
 - GitHub MCP (User Credentials): 4 tests
@@ -93,6 +98,7 @@ This document maps the Day 4 test plan requirements to actual test implementatio
 
 **Key Testing Areas:**
 - MCP tool discovery and invocation
+- Agent tool chaining and intelligent error recovery
 - Multi-server coordination
 - Formation-level secrets (Linear)
 - User-level credentials (GitHub)
