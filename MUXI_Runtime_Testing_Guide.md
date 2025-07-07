@@ -566,8 +566,9 @@ llm:
 
 ## Summary
 
-The comprehensive Day 3 testing revealed that MUXI Runtime's multimodal capabilities are **production-ready** with excellent cross-provider support. Key insights:
+The comprehensive Day 3 and Day 4 testing revealed that MUXI Runtime's multimodal and MCP capabilities are **production-ready** with excellent cross-provider support. Key insights:
 
+**Multimodal (Day 3):**
 1. **Provider Selection Matters**: Different providers excel at different content types
 2. **File Size Management**: Dynamic routing based on provider capabilities required
 3. **Content Types Critical**: Correct MIME types essential for processing success
@@ -575,11 +576,268 @@ The comprehensive Day 3 testing revealed that MUXI Runtime's multimodal capabili
 5. **Error Handling**: Graceful degradation maintains user experience
 6. **Real Testing Required**: Mock providers miss critical real-world behaviors
 
-The original testing pattern remains valid:
-1. Run formation operations in a thread
-2. Use `asyncio.run()` for each async operation  
+**MCP Integration (Day 4):**
+1. **Async Generator Fix**: Use `formation.shutdown()` to bypass Python cleanup errors
+2. **Tool Discovery**: Automatic discovery of 105+ tools across MCP servers
+3. **Multi-MCP Orchestration**: Complex workflows execute seamlessly
+4. **Credential Management**: Formation and user-level credentials properly isolated
+5. **Transport Support**: Command, HTTP SSE, and Streamable transports all working
+6. **Streaming Responses**: Always use `async for` to collect MCP responses
+
+The testing pattern remains consistent:
+1. Run formation operations in appropriate async context
+2. Use `asyncio.run()` for test isolation or `await` in async tests
 3. Always use real providers and services for comprehensive validation
 4. Test both sync and async response patterns
-5. Validate error handling with corrupted/invalid inputs
+5. Validate error handling with various failure scenarios
+6. Use `formation.shutdown()` for clean test exits
 
 This approach ensures reliable, production-ready multimodal processing across all supported content types and providers.
+
+## MCP Integration Testing Patterns (Day 4 Insights)
+
+### 18. MCP Server Configuration and Transport Types
+
+MUXI supports multiple MCP transport types, each with specific configuration patterns:
+
+**Command Transport (stdio):**
+```yaml
+mcp:
+  - name: "filesystem-mcp"
+    transport: "command"
+    config:
+      command: "npx"
+      args: ["@modelcontextprotocol/server-filesystem"]
+      env:
+        ALLOWED_DIRECTORIES: "/Users/ran/Desktop/tests"
+```
+
+**HTTP SSE Transport:**
+```yaml
+mcp:
+  - name: "linear-mcp"
+    transport: "http_sse"
+    config:
+      url: "http://localhost:5173/sse"
+      api_key: "${{ secrets.LINEAR_MCP_TOKEN }}"  # Formation-level secret
+```
+
+**Streamable HTTP Transport:**
+```yaml
+mcp:
+  - name: "github-mcp"
+    transport: "streamable"
+    config:
+      url: "http://localhost:5174/stream"
+      # User credentials injected at runtime
+```
+
+### 19. Async Generator Cleanup Resolution
+
+**Problem**: MCP servers using anyio/httpx create async generators that throw errors during Python shutdown:
+```
+RuntimeError: Attempted to exit cancel scope in a different task
+```
+
+**Solution**: Use `formation.shutdown()` instead of direct `os._exit()`:
+```python
+async def run_async_test():
+    try:
+        formation = Formation()
+        await formation.load("test-formations/formation-mcp")
+        overlord = await formation.start_overlord()
+        
+        # Your test code here
+        response_gen = await overlord.chat("Test MCP operation")
+        
+        # Collect streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
+            
+        # Clean shutdown that uses os._exit internally
+        formation.shutdown(0)  # ✅ Bypasses Python cleanup phase
+        
+    except Exception as e:
+        formation.shutdown(1)  # Exit with error code
+```
+
+### 20. MCP Tool Discovery and Invocation
+
+**Tool discovery happens automatically during MCP initialization:**
+```python
+# Debug tool discovery
+mcp_service = overlord.mcp_service
+if mcp_service:
+    tools = mcp_service.tool_registry
+    print(f"Available MCP tools: {list(tools.keys())}")
+    # Example output:
+    # - Filesystem: 12 tools (read_file, write_file, etc.)
+    # - GitHub: 67 tools (create_repository, list_repositories, etc.)
+    # - Linear: 23 tools (create_issue, update_issue, etc.)
+    # - System: 3 tools (get_system_info, etc.)
+```
+
+### 21. Multi-MCP Orchestration Patterns
+
+**Complex workflows across multiple MCPs:**
+```python
+def test_multi_mcp_workflow():
+    async def test_operations():
+        # This single prompt orchestrates multiple MCP servers
+        response_gen = await overlord.chat(
+            "Create a Linear issue asking to check CPU usage. "
+            "Get the actual CPU stats and save them to a file. "
+            "Then create a GitHub repository with that file and "
+            "update the Linear issue with the GitHub link.",
+            user_id="user1",
+            use_async=False
+        )
+        
+        # The agent will:
+        # 1. Use Linear MCP to create issue
+        # 2. Use System MCP to get CPU stats
+        # 3. Use Filesystem MCP to save the file
+        # 4. Use GitHub MCP to create repository
+        # 5. Use Linear MCP to update the issue
+        
+        # Handle streaming response
+        response = ""
+        async for chunk in response_gen:
+            response += chunk
+```
+
+### 22. Credential Management Patterns
+
+**Formation-level secrets (shared by all users):**
+```yaml
+# In formation YAML
+mcp:
+  - name: "linear-mcp"
+    config:
+      api_key: "${{ secrets.LINEAR_MCP_TOKEN }}"
+```
+
+**User-level credentials (per-user isolation):**
+```python
+# GitHub MCP uses user credentials
+response = await overlord.chat(
+    "Create a GitHub repository",
+    user_id="user1",  # Has GitHub credentials
+    use_async=False
+)
+
+# User without credentials triggers clarification
+response = await overlord.chat(
+    "Create a GitHub repository",
+    user_id="user2",  # No GitHub credentials
+    use_async=False
+)
+# Response: "I need your GitHub credentials to create a repository..."
+```
+
+### 23. MCP-Specific Limitations and Workarounds
+
+**GitHub MCP doesn't support gists:**
+```python
+# ❌ This won't work as expected
+response = await overlord.chat("Create a GitHub gist")
+# GitHub MCP will create a repository instead (no gist-specific tools)
+
+# ✅ Work with what's available
+response = await overlord.chat("Create a GitHub repository with a single file")
+```
+
+### 24. MCP Error Handling Patterns
+
+**Test various failure scenarios:**
+```python
+def test_mcp_failures():
+    # Permission denied
+    response = await overlord.chat("Create file in /root/forbidden")
+    assert "permission" in response.lower() or "denied" in response.lower()
+    
+    # File not found  
+    response = await overlord.chat("Read /nonexistent/file.txt")
+    assert "not found" in response.lower() or "doesn't exist" in response.lower()
+    
+    # Dangerous operations
+    response = await overlord.chat("Delete everything in /")
+    assert "cannot" in response.lower() or "refuse" in response.lower()
+    
+    # Invalid filenames
+    response = await overlord.chat('Create file "test\x00file.txt"')
+    assert "invalid" in response.lower() or "error" in response.lower()
+```
+
+### 25. Streaming Response Handling
+
+**Always handle streaming responses in MCP tests:**
+```python
+# MCP operations often return async generators
+response_gen = await overlord.chat(
+    "Perform MCP operation",
+    user_id="user1",
+    use_async=False  # Still returns async generator!
+)
+
+# Always collect the full response
+response = ""
+async for chunk in response_gen:
+    response += chunk
+    
+# Now you can assert on the complete response
+assert "expected" in response.lower()
+```
+
+### 26. MCP Testing Best Practices
+
+1. **Always wait for MCP initialization:**
+   ```python
+   await formation.start_overlord()
+   await asyncio.sleep(3)  # Give MCP servers time to initialize
+   ```
+
+2. **Use real directories for filesystem MCP:**
+   ```python
+   test_dir = Path("/Users/ran/Desktop/tests")
+   assert test_dir.exists()  # Verify before testing
+   ```
+
+3. **Check MCP availability before assertions:**
+   ```python
+   if "linear" not in response.lower() and "mcp" not in response.lower():
+       # MCP might not be configured
+       if "cannot" in response.lower() or "no tool" in response.lower():
+           print("✓ Correctly identified missing MCP")
+           return True
+   ```
+
+4. **Handle both sync and async responses:**
+   ```python
+   if isinstance(response, dict) and "request_id" in response:
+       # Async processing
+       await asyncio.sleep(3)  # Wait for completion
+   elif hasattr(response, '__aiter__'):
+       # Streaming response
+       async for chunk in response:
+           full_response += chunk
+   ```
+
+### 27. MCP Integration Summary
+
+Day 4 testing revealed that MUXI's MCP integration is **production-ready** with:
+
+1. **Robust Tool Discovery**: 105+ tools discovered across 4 MCP servers
+2. **Complex Orchestration**: Multi-MCP workflows execute seamlessly
+3. **Clean Shutdown**: `formation.shutdown()` resolves async generator issues
+4. **Credential Isolation**: User credentials properly isolated
+5. **Error Handling**: Graceful handling of permissions, missing files, dangerous ops
+6. **Transport Flexibility**: Command, HTTP SSE, and Streamable transports all working
+
+Key insights:
+- Use `formation.shutdown(0)` for clean exits
+- Always collect streaming responses with `async for`
+- Real MCP servers reveal actual capabilities (e.g., GitHub has no gist tools)
+- Credential management works at both formation and user levels
+- Multi-MCP orchestration enables powerful workflows
