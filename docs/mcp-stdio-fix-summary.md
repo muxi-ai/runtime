@@ -127,7 +127,7 @@ The async generator error only appears at process exit and doesn't affect functi
 ✅ No async generator errors during operation
 ✅ Chat functionality works with MCP tools
 
-## Recent Improvements (January 2025)
+## Recent Improvements
 
 ### Code Quality Enhancements
 1. **Removed unused code**: Deleted `_register_mcp_servers_from_formation()` method from Overlord
