@@ -2,6 +2,9 @@ schema: "1.0.0"
 id: "multi-agent-test"
 description: "Multiple agents for testing routing and collaboration"
 
+runtime:
+  built_in_mcps: false  # Disable built-in MCPs for faster test startup
+
 llm:
   settings:
     temperature: 0.7

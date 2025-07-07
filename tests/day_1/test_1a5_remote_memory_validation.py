@@ -9,8 +9,9 @@ import pytest
 from pathlib import Path
 import tempfile
 import yaml
+import asyncio
 
-def test_remote_memory_requires_url():
+async def test_remote_memory_requires_url():
     """Test that remote memory mode requires a URL"""
     formation_yaml = """
 schema: "1.0.0"
@@ -34,13 +35,13 @@ memory:
         formation = Formation()
         
         with pytest.raises(Exception) as exc_info:
-            formation.load(str(formation_path))
+            await formation.load(str(formation_path))
         
         error_msg = str(exc_info.value).lower()
         assert "url" in error_msg or "required" in error_msg, \
             f"Expected error about missing URL, got: {exc_info.value}"
 
-def test_remote_memory_requires_tenant():
+async def test_remote_memory_requires_tenant():
     """Test that remote memory mode requires a tenant"""
     formation_yaml = """
 schema: "1.0.0"
@@ -64,13 +65,13 @@ memory:
         formation = Formation()
         
         with pytest.raises(Exception) as exc_info:
-            formation.load(str(formation_path))
+            await formation.load(str(formation_path))
         
         error_msg = str(exc_info.value).lower()
         assert "tenant" in error_msg or "required" in error_msg, \
             f"Expected error about missing tenant, got: {exc_info.value}"
 
-def test_remote_memory_requires_explicit_max_memory():
+async def test_remote_memory_requires_explicit_max_memory():
     """Test that remote memory mode requires explicit max_memory_mb (not 'auto')"""
     formation_yaml = """
 schema: "1.0.0"
@@ -94,14 +95,14 @@ memory:
         formation = Formation()
         
         with pytest.raises(Exception) as exc_info:
-            formation.load(str(formation_path))
+            await formation.load(str(formation_path))
         
         error_msg = str(exc_info.value).lower()
         assert ("auto" in error_msg and "remote" in error_msg) or \
                ("max_memory_mb" in error_msg and "explicit" in error_msg), \
             f"Expected error about auto not allowed for remote, got: {exc_info.value}"
 
-def test_remote_memory_valid_configuration():
+async def test_remote_memory_valid_configuration():
     """Test that valid remote memory configuration loads successfully"""
     formation_yaml = """
 schema: "1.0.0"
@@ -130,7 +131,7 @@ memory:
         formation = Formation()
         
         # Should load without errors
-        formation.load(str(formation_path))
+        await formation.load(str(formation_path))
         
         # Verify configuration
         memory_config = formation.config.get("memory", {})
@@ -141,7 +142,7 @@ memory:
         assert working_config.get("remote", {}).get("url") == "tcp://localhost:45678"
         assert working_config.get("remote", {}).get("tenant") == "test-tenant"
 
-def test_local_memory_allows_auto():
+async def test_local_memory_allows_auto():
     """Test that local memory mode allows 'auto' for max_memory_mb"""
     formation_yaml = """
 schema: "1.0.0"
@@ -167,7 +168,7 @@ memory:
         formation = Formation()
         
         # Should load without errors
-        formation.load(str(formation_path))
+        await formation.load(str(formation_path))
         
         # Verify configuration
         memory_config = formation.config.get("memory", {})
@@ -176,7 +177,7 @@ memory:
         assert working_config.get("mode") == "local"
         assert working_config.get("max_memory_mb") == "auto"
 
-def test_remote_memory_with_auth():
+async def test_remote_memory_with_auth():
     """Test remote memory configuration with authentication"""
     formation_yaml = """
 schema: "1.0.0"
@@ -206,7 +207,7 @@ memory:
         formation = Formation()
         
         # Should load without errors
-        formation.load(str(formation_path))
+        await formation.load(str(formation_path))
         
         # Verify configuration
         memory_config = formation.config.get("memory", {})
@@ -221,38 +222,41 @@ memory:
 
 if __name__ == "__main__":
     # Run all tests
-    print("🧪 Testing Remote Memory Configuration Validation")
-    print("=" * 60)
+    async def run_tests():
+        print("🧪 Testing Remote Memory Configuration Validation")
+        print("=" * 60)
+        
+        tests = [
+            ("URL requirement", test_remote_memory_requires_url),
+            ("Tenant requirement", test_remote_memory_requires_tenant),
+            ("Explicit max_memory_mb", test_remote_memory_requires_explicit_max_memory),
+            ("Valid configuration", test_remote_memory_valid_configuration),
+            ("Local mode allows auto", test_local_memory_allows_auto),
+            ("Remote with auth", test_remote_memory_with_auth)
+        ]
+        
+        passed = 0
+        failed = 0
+        
+        for test_name, test_func in tests:
+            try:
+                await test_func()
+                print(f"✅ {test_name}")
+                passed += 1
+            except AssertionError as e:
+                print(f"❌ {test_name}: {e}")
+                failed += 1
+            except Exception as e:
+                print(f"❌ {test_name}: Unexpected error: {e}")
+                failed += 1
+        
+        print("\n" + "=" * 60)
+        print(f"Results: {passed} passed, {failed} failed")
+        
+        if failed == 0:
+            print("✅ All remote memory validation tests passed!")
+        else:
+            print("❌ Some tests failed")
+            exit(1)
     
-    tests = [
-        ("URL requirement", test_remote_memory_requires_url),
-        ("Tenant requirement", test_remote_memory_requires_tenant),
-        ("Explicit max_memory_mb", test_remote_memory_requires_explicit_max_memory),
-        ("Valid configuration", test_remote_memory_valid_configuration),
-        ("Local mode allows auto", test_local_memory_allows_auto),
-        ("Remote with auth", test_remote_memory_with_auth)
-    ]
-    
-    passed = 0
-    failed = 0
-    
-    for test_name, test_func in tests:
-        try:
-            test_func()
-            print(f"✅ {test_name}")
-            passed += 1
-        except AssertionError as e:
-            print(f"❌ {test_name}: {e}")
-            failed += 1
-        except Exception as e:
-            print(f"❌ {test_name}: Unexpected error: {e}")
-            failed += 1
-    
-    print("\n" + "=" * 60)
-    print(f"Results: {passed} passed, {failed} failed")
-    
-    if failed == 0:
-        print("✅ All remote memory validation tests passed!")
-    else:
-        print("❌ Some tests failed")
-        exit(1)
+    asyncio.run(run_tests())

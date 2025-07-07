@@ -23,4 +23,7 @@ logging:
       level: "info"
       format: "jsonl"
 
+runtime:
+  built_in_mcps: false  # Disable built-in MCPs for faster test startup
+
 # Agent will be auto-discovered from agents/ directory
