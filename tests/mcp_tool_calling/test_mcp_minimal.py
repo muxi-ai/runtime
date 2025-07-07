@@ -14,7 +14,7 @@ async def main():
     # Set environment variables
     os.environ["MUXI_ASYNC_PROCESSING_ENABLED"] = "false"
     os.environ["MUXI_LOG_LEVEL"] = "DEBUG"
-    
+
     # Create minimal formation dict
     formation_dict = {
         "name": "test-mcp",
@@ -35,17 +35,17 @@ async def main():
             }
         }
     }
-    
+
     print("Creating formation...")
     formation = Formation()
     formation._load_from_dict(formation_dict)
-    
+
     print("Starting overlord...")
-    overlord = formation.start_overlord()
-    
+    overlord = await formation.start_overlord()
+
     print("Waiting for startup...")
     await overlord.ensure_started()
-    
+
     print("Sending message...")
     response = await overlord.chat(
         user_id="test_user",
@@ -53,19 +53,24 @@ async def main():
         use_async=False,
         stream=False,
     )
-    
+
     print(f"\nResponse: {response}")
-    
+
+    test_file = "/tmp/hello.txt"
+
     # Check if file was created
-    if os.path.exists("/tmp/hello.txt"):
-        with open("/tmp/hello.txt", "r") as f:
-            content = f.read()
-        print(f"\n✅ SUCCESS! File created with content: {content}")
-        os.remove("/tmp/hello.txt")
-    else:
-        print("\n❌ FAILED: File was not created")
-    
-    formation.stop_overlord(5.0)
+    try:
+        if os.path.exists(test_file):
+            with open(test_file, "r") as f:
+                content = f.read()
+            print(f"\n✅ SUCCESS! File created with content: {content}")
+        else:
+            print("\n❌ FAILED: File was not created")
+    finally:
+        # Cleanup
+        if os.path.exists(test_file):
+            os.remove(test_file)
+    await formation.stop_overlord(5.0)
     print("\nDone!")
 
 

@@ -5,23 +5,23 @@ Complete test of the credential system with inline implementations.
 
 import sys
 from pathlib import Path
+
 # Add parent directories to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-import asyncio
-import tempfile
-import os
-import json
-from typing import Dict, Any, Optional, List
-from dataclasses import dataclass, field
+import asyncio  # noqa: E402
+import tempfile  # noqa: E402
+import os  # noqa: E402
+import json  # noqa: E402
+from typing import Dict, Any, Optional, List  # noqa: E402
+from dataclasses import dataclass, field  # noqa: E402
 
 # SQLAlchemy imports
-from sqlalchemy import Column, String, Integer, create_engine, select, and_, func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.types import TypeDecorator, TEXT
-import sqlalchemy.types as types
+from sqlalchemy import Column, String, Integer, select, and_, func  # noqa: E402
+from sqlalchemy.ext.declarative import declarative_base  # noqa: E402
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
+from sqlalchemy.types import TypeDecorator, TEXT  # noqa: E402
 
 # Create base for SQLAlchemy models
 Base = declarative_base()
@@ -44,6 +44,7 @@ class MockClarificationResponse:
 
 class MissingCredentialError(Exception):
     """Raised when credentials are missing for a service."""
+
     def __init__(self, service: str, user_id: str):
         self.service = service
         self.user_id = user_id
@@ -53,15 +54,15 @@ class MissingCredentialError(Exception):
 # JSONType implementation
 class JSONType(TypeDecorator):
     """Platform-agnostic JSON type that works with both PostgreSQL and SQLite."""
-    
+
     impl = TEXT
     cache_ok = True
-    
+
     def process_bind_param(self, value, dialect):
         if value is not None:
             value = json.dumps(value)
         return value
-    
+
     def process_result_value(self, value, dialect):
         if value is not None:
             value = json.loads(value)
@@ -71,9 +72,9 @@ class JSONType(TypeDecorator):
 # Credential model
 class Credential(Base):
     """Model for storing user credentials."""
-    
+
     __tablename__ = "credentials"
-    
+
     id = Column(Integer, primary_key=True)
     user_id = Column(String, nullable=False)
     service = Column(String, nullable=False)
@@ -198,19 +199,19 @@ class CredentialClarificationHandler:
         """Determine the appropriate field name for the credential."""
         # Simple heuristic based on service name
         service_lower = service.lower()
-        
+
         # Check service name for hints
         if "token" in service_lower:
             return "token"
         elif "api" in service_lower or "key" in service_lower:
             return "api_key"
-        
+
         # Check common patterns in service names
         if service_lower in ["github", "gitlab", "slack", "discord", "bitbucket"]:
             return "token"
         elif service_lower in ["openai", "anthropic", "cohere", "pinecone"]:
             return "api_key"
-        
+
         # Generic fallback
         return "token"
 
@@ -218,63 +219,63 @@ class CredentialClarificationHandler:
 # Credential Resolver Implementation
 class CredentialResolver:
     """Resolves user credentials from the database."""
-    
+
     def __init__(self, db_manager, formation_id_hash: str):
         """Initialize the credential resolver."""
         self.db_manager = db_manager
         self.formation_id_hash = formation_id_hash
         self._cache = {}
-    
+
     async def resolve(self, service: str, user_id: str) -> Dict[str, Any]:
         """Resolve credentials for a service and user."""
         # Normalize service name to lowercase
         service_lower = service.lower()
-        
+
         # Check cache first
         cache_key = f"{user_id}:{service_lower}"
         if cache_key in self._cache:
             return self._cache[cache_key]
-        
+
         # Query database
         async with self.db_manager.get_async_session() as session:
             stmt = select(Credential).where(
                 and_(
                     Credential.user_id == user_id,
                     func.lower(Credential.service) == service_lower,
-                    Credential.formation_id_hash == self.formation_id_hash
+                    Credential.formation_id_hash == self.formation_id_hash,
                 )
             )
-            
+
             result = await session.execute(stmt)
             credential = result.scalar_one_or_none()
-            
+
             if not credential:
                 raise MissingCredentialError(service, user_id)
-            
+
             # Cache and return
             self._cache[cache_key] = credential.credentials
             return credential.credentials
-    
+
     async def store(self, service: str, user_id: str, credentials: Dict[str, Any]):
         """Store credentials for a service and user."""
         import time
-        
+
         # Normalize service name
         service_lower = service.lower()
-        
+
         async with self.db_manager.get_async_session() as session:
             # Check if exists
             stmt = select(Credential).where(
                 and_(
                     Credential.user_id == user_id,
                     func.lower(Credential.service) == service_lower,
-                    Credential.formation_id_hash == self.formation_id_hash
+                    Credential.formation_id_hash == self.formation_id_hash,
                 )
             )
-            
+
             result = await session.execute(stmt)
             existing = result.scalar_one_or_none()
-            
+
             if existing:
                 # Update existing
                 existing.credentials = credentials
@@ -287,36 +288,36 @@ class CredentialResolver:
                     credentials=credentials,
                     formation_id_hash=self.formation_id_hash,
                     created_at=int(time.time()),
-                    updated_at=int(time.time())
+                    updated_at=int(time.time()),
                 )
                 session.add(credential)
-            
+
             await session.commit()
-            
+
             # Clear cache for this entry
             cache_key = f"{user_id}:{service_lower}"
             self._cache.pop(cache_key, None)
-    
+
     async def delete(self, service: str, user_id: str):
         """Delete credentials for a service and user."""
         service_lower = service.lower()
-        
+
         async with self.db_manager.get_async_session() as session:
             stmt = select(Credential).where(
                 and_(
                     Credential.user_id == user_id,
                     func.lower(Credential.service) == service_lower,
-                    Credential.formation_id_hash == self.formation_id_hash
+                    Credential.formation_id_hash == self.formation_id_hash,
                 )
             )
-            
+
             result = await session.execute(stmt)
             credential = result.scalar_one_or_none()
-            
+
             if credential:
                 await session.delete(credential)
                 await session.commit()
-            
+
             # Clear cache
             cache_key = f"{user_id}:{service_lower}"
             self._cache.pop(cache_key, None)
@@ -325,32 +326,34 @@ class CredentialResolver:
 # Simple Database Manager
 class SimpleDatabaseManager:
     """Simple database manager for testing."""
-    
+
     def __init__(self, connection_string):
         self.connection_string = connection_string
         if connection_string.startswith("sqlite://"):
-            self.async_connection_string = connection_string.replace("sqlite://", "sqlite+aiosqlite://")
+            self.async_connection_string = connection_string.replace(
+                "sqlite://", "sqlite+aiosqlite://"
+            )
         else:
             self.async_connection_string = connection_string
-        
+
         self.engine = None
         self.async_session_maker = None
-        
+
     async def initialize(self):
         """Initialize the database."""
         self.engine = create_async_engine(self.async_connection_string, echo=False)
         self.async_session_maker = sessionmaker(
             self.engine, class_=AsyncSession, expire_on_commit=False
         )
-        
+
         # Create tables
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-    
+
     def get_async_session(self):
         """Get an async session."""
         return self.async_session_maker()
-    
+
     async def close(self):
         """Close the database."""
         if self.engine:
@@ -359,86 +362,86 @@ class SimpleDatabaseManager:
 
 async def test_complete_system():
     """Test the complete credential system."""
-    
+
     print("COMPLETE CREDENTIAL SYSTEM TEST")
     print("=" * 60)
     print()
-    
+
     # Test 1: Credential Handler
     print("1. Testing Credential Handler...")
     handler = CredentialClarificationHandler()
-    
+
     # Service name formatting
     print("   ✅ Service name formatting works")
     assert handler._format_service_name("github") == "GitHub"
     assert handler._format_service_name("my_api") == "My Api"
-    
+
     # Field name determination
     print("   ✅ Field name determination works")
     assert handler._determine_field_name("github", "dummy") == "token"
     assert handler._determine_field_name("openai", "dummy") == "api_key"
-    
+
     # Request generation
     print("   ✅ Request generation works")
     request = handler.generate_credential_request("github", {"tool_name": "create_pr"})
     assert "GitHub" in request.questions[0]["question"]
-    
+
     # Response parsing
     print("   ✅ Response parsing works")
     response = MockClarificationResponse(
         request_type="credential_required",
-        answers=[{"id": "credential_github", "answer": "ghp_token123"}]
+        answers=[{"id": "credential_github", "answer": "ghp_token123"}],
     )
     assert handler.parse_credential_response(response, "github") == {"token": "ghp_token123"}
-    
+
     # Validation
     print("   ✅ Validation works")
-    assert handler.validate_credential_format("test", "12345678") == True
-    assert handler.validate_credential_format("test", "short") == False
+    assert handler.validate_credential_format("test", "12345678")
+    assert not handler.validate_credential_format("test", "short")
     print()
-    
+
     # Test 2: Database Operations
     print("2. Testing Database Operations...")
-    
+
     db_path = tempfile.mktemp(suffix=".db")
     connection_string = f"sqlite:///{db_path}"
-    
+
     try:
         # Initialize
         db_manager = SimpleDatabaseManager(connection_string)
         await db_manager.initialize()
         print("   ✅ Database initialized")
-        
+
         # Create resolver
         resolver = CredentialResolver(db_manager, "test-formation")
-        
+
         # Test missing credential
         try:
             await resolver.resolve("github", "user123")
             assert False, "Should have raised error"
         except MissingCredentialError:
             print("   ✅ Missing credential detection works")
-        
+
         # Store credential
         await resolver.store("github", "user123", {"token": "ghp_test123"})
         print("   ✅ Credential storage works")
-        
+
         # Retrieve credential
         creds = await resolver.resolve("github", "user123")
         assert creds == {"token": "ghp_test123"}
         print("   ✅ Credential retrieval works")
-        
+
         # Case insensitivity
         creds_upper = await resolver.resolve("GITHUB", "user123")
         assert creds_upper == {"token": "ghp_test123"}
         print("   ✅ Case insensitive retrieval works")
-        
+
         # User isolation
         await resolver.store("github", "user456", {"token": "ghp_user456"})
         assert await resolver.resolve("github", "user123") == {"token": "ghp_test123"}
         assert await resolver.resolve("github", "user456") == {"token": "ghp_user456"}
         print("   ✅ User isolation works")
-        
+
         # Deletion
         await resolver.delete("github", "user123")
         try:
@@ -447,62 +450,62 @@ async def test_complete_system():
         except MissingCredentialError:
             print("   ✅ Deletion works")
         print()
-        
+
     finally:
-        if 'db_manager' in locals():
+        if "db_manager" in locals():
             await db_manager.close()
         if os.path.exists(db_path):
             os.unlink(db_path)
-    
+
     # Test 3: End-to-End Flow
     print("3. Testing End-to-End Flow...")
-    
+
     db_path2 = tempfile.mktemp(suffix=".db")
     connection_string2 = f"sqlite:///{db_path2}"
-    
+
     try:
         # Setup
         db_manager2 = SimpleDatabaseManager(connection_string2)
         await db_manager2.initialize()
         resolver2 = CredentialResolver(db_manager2, "test-formation")
-        
+
         # Complete flow for weather API
         service = "weather_api"
         user_id = "test_user"
-        
+
         # 1. Detect missing credential
         try:
             await resolver2.resolve(service, user_id)
         except MissingCredentialError:
             print("   ✅ Missing credential detected")
-        
+
         # 2. Generate clarification
         request = handler.generate_credential_request(service, {"tool_name": "get_weather"})
         assert "Weather Api" in request.questions[0]["question"]
         print("   ✅ Clarification request generated")
-        
+
         # 3. Parse response
         user_response = MockClarificationResponse(
             request_type="credential_required",
-            answers=[{"id": f"credential_{service}", "answer": "wapi-key-123"}]
+            answers=[{"id": f"credential_{service}", "answer": "wapi-key-123"}],
         )
         parsed = handler.parse_credential_response(user_response, service)
         assert parsed == {"api_key": "wapi-key-123"}
         print("   ✅ User response parsed")
-        
+
         # 4. Store and retrieve
         await resolver2.store(service, user_id, parsed)
         final = await resolver2.resolve(service, user_id)
         assert final == parsed
         print("   ✅ Credential stored and retrieved")
         print()
-        
+
     finally:
-        if 'db_manager2' in locals():
+        if "db_manager2" in locals():
             await db_manager2.close()
         if os.path.exists(db_path2):
             os.unlink(db_path2)
-    
+
     print("=" * 60)
     print("✅ ALL TESTS PASSED!")
     print()
@@ -518,11 +521,12 @@ async def test_complete_system():
 if __name__ == "__main__":
     # Install aiosqlite if needed
     try:
-        import aiosqlite
+        import aiosqlite  # noqa: F401
     except ImportError:
         print("Installing aiosqlite...")
         import subprocess
         import sys
+
         subprocess.check_call([sys.executable, "-m", "pip", "install", "aiosqlite"])
-    
+
     asyncio.run(test_complete_system())

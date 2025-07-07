@@ -4,8 +4,6 @@
 import asyncio
 import sys
 from pathlib import Path
-import tempfile
-import shutil
 
 sys.path.insert(0, ".")
 

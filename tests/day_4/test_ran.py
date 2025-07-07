@@ -7,7 +7,7 @@ with the MCP Python SDK and does not affect functionality. See docs/known-issues
 for details.
 """
 
-import time
+import asyncio
 import sys
 sys.path.insert(0, ".")
 
@@ -15,15 +15,15 @@ from src.muxi.runtime import Formation  # noqa: E402
 from src.muxi.runtime.utils.clean_exit import clean_exit  # noqa: E402
 
 
-def test_mcp_integration():
+async def test_mcp_integration():
     """Test basic MCP server integration."""
     formation = Formation()
 
     # Load formation with MCP configuration
-    formation.load("test-formations/formation-mcp")
+    await formation.load("test-formations/formation-mcp")
 
     # Start the overlord (this initializes MCP servers)
-    overlord = formation.start_overlord()
+    overlord = await formation.start_overlord()
     print(f"✅ Overlord started: {overlord}")
 
     # In a real application, you would do work here:
@@ -32,7 +32,7 @@ def test_mcp_integration():
     print("✅ Test completed successfully!")
 
     print("Waiting for 10 seconds...")
-    time.sleep(10)
+    await asyncio.sleep(10)
     print("10 seconds passed")
 
     # Attempt graceful shutdown (this helps but doesn't prevent the error)

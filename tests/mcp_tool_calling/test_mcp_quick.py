@@ -14,21 +14,21 @@ async def main():
     # Set environment variables to reduce timeouts
     os.environ["MUXI_ASYNC_PROCESSING_ENABLED"] = "false"
     os.environ["MUXI_LOG_LEVEL"] = "DEBUG"
-    
+
     # Create test directory if needed
     test_dir = "/tmp/muxi_test_mcp"
     os.makedirs(test_dir, exist_ok=True)
-    
+
     print("Loading formation...")
     formation = Formation()
     formation.load("test-formations/formation-mcp")
-    
+
     print("Starting overlord...")
     overlord = formation.start_overlord()
-    
+
     print("Waiting for startup...")
     await overlord.ensure_started()
-    
+
     # Check what tools are available
     if hasattr(overlord, "mcp_service"):
         print("\nChecking MCP tools...")
@@ -38,7 +38,7 @@ async def main():
             print(f"\n{server}:")
             for tool_name in list(server_tools.keys())[:3]:
                 print(f"  - {tool_name}")
-    
+
     print("\nSending message...")
     response = await overlord.chat(
         user_id="test_user",
@@ -46,9 +46,9 @@ async def main():
         use_async=False,
         stream=False,
     )
-    
+
     print(f"\nResponse: {response}")
-    
+
     # Check if file was created
     test_file = f"{test_dir}/hello.txt"
     if os.path.exists(test_file):
@@ -58,7 +58,7 @@ async def main():
         os.remove(test_file)
     else:
         print("\n❌ FAILED: File was not created")
-    
+
     formation.stop_overlord(5.0)
     print("\nDone!")
 
