@@ -66,17 +66,24 @@ memory:
 ```python
 # Using the MUXI Runtime
 from muxi.runtime.formation import Formation
+import asyncio
 
-# Load formation with scheduler enabled
-formation = Formation()
-formation.load("formation.yaml")
-overlord = formation.start_overlord()
+async def main():
+    # Load formation with scheduler enabled
+    formation = Formation()
+    await formation.load("formation.yaml")  # Must await!
+    overlord = await formation.start_overlord()  # Must await!
 
-# Schedule a task using natural language
-response = await overlord.chat(
-    "Schedule a task to check my email every hour during business hours",
-    user_id="your_user_id"
-)
+    # Schedule a task using natural language
+    response = await overlord.chat(
+        "Schedule a task to check my email every hour during business hours",
+        user_id="your_user_id"
+    )
+    
+    await formation.stop_overlord()  # Must await!
+
+# Run the async function
+asyncio.run(main())
 ```
 
 ### 3. Verify Scheduled Jobs
