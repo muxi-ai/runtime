@@ -201,7 +201,9 @@ class Formation:
 
     async def load(self, config_path: str) -> None:
         """
-        Load and validate formation configuration.
+        Load and validate formation configuration (async).
+
+        This is an asynchronous coroutine that must be awaited when called.
 
         Loads a formation configuration from file or directory, validates the
         schema, and prepares all services for initialization. Does not start
@@ -215,6 +217,10 @@ class Formation:
             ConfigurationValidationError: If configuration is invalid
             ConfigurationLoadError: If configuration cannot be loaded
             DependencyValidationError: If required dependencies are missing
+
+        Example:
+            formation = Formation()
+            await formation.load("path/to/formation.yaml")  # Must await!
         """
         if self._is_running:
             raise OverlordStateError(
@@ -1719,6 +1725,10 @@ class Formation:
         if not hasattr(self, "_mcp_service") or not self._mcp_service:
             return False
 
+        # Check if connections attribute exists before accessing it
+        if not hasattr(self._mcp_service, "connections"):
+            return False
+
         # Check if any active connections use command transport
         for conn in self._mcp_service.connections.values():
             if conn.get("transport_type") == "command":
@@ -1741,6 +1751,12 @@ class Formation:
             # ... use formation normally ...
             # Errors will be suppressed when Python exits
         """
+        # Check if handler is already registered to avoid duplicates
+        if hasattr(self, "_atexit_handler_registered") and self._atexit_handler_registered:
+            return
+
+        # Store the original exit code
+        self._exit_code = 0
 
         def _clean_exit_handler():
             # Check if we have stdio MCP servers
@@ -1748,11 +1764,27 @@ class Formation:
                 # Flush outputs
                 sys.stdout.flush()
                 sys.stderr.flush()
-                # Skip Python cleanup
-                os._exit(0)
+                # Use stored exit code or current process exit code
+                exit_code = getattr(self, "_exit_code", 0)
+                if hasattr(sys, "_exitcode") and sys._exitcode is not None:
+                    exit_code = sys._exitcode
+                # Skip Python cleanup with proper exit code
+                os._exit(exit_code)
 
-        # Register the handler
-        atexit.register(_clean_exit_handler)
+        # Register the handler and store reference
+        self._atexit_handler = _clean_exit_handler
+        atexit.register(self._atexit_handler)
+        self._atexit_handler_registered = True
+
+    def remove_mcp_exit_handler(self) -> None:
+        """Remove the registered atexit handler if it exists."""
+        if hasattr(self, "_atexit_handler") and self._atexit_handler_registered:
+            try:
+                atexit.unregister(self._atexit_handler)
+                self._atexit_handler_registered = False
+            except ValueError:
+                # Handler was not registered, ignore
+                pass
 
     async def _register_mcp_servers(self) -> None:
         """Register MCP servers in Formation's event loop."""
@@ -1769,6 +1801,11 @@ class Formation:
             description=f"Registering {len(self._mcp_servers)} MCP servers in Formation",
         )
 
+        # Track failed registrations
+        failed_servers = []
+        successful_servers = []
+        skipped_servers = []
+
         # Register each server
         for server_config in self._mcp_servers:
             try:
@@ -1776,6 +1813,7 @@ class Formation:
 
                 # Skip inactive servers
                 if not server_config.get("active", True):
+                    skipped_servers.append(server_id)
                     continue
 
                 # Prepare registration parameters
@@ -1807,6 +1845,7 @@ class Formation:
                         },
                         description=f"Invalid MCP server config: {server_id}",
                     )
+                    failed_servers.append(server_id)
                     continue
 
                 # Add optional parameters
@@ -1829,38 +1868,69 @@ class Formation:
                     },
                     description=f"MCP server registered: {server_id}",
                 )
+                successful_servers.append(server_id)
 
             except (MCPConnectionError, MCPTimeoutError, MCPCancelledError) as e:
                 # These are recoverable errors - log and continue with other servers
+                server_id = server_config.get("id", "unknown")
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
-                        "server_id": server_config.get("id", "unknown"),
+                        "server_id": server_id,
                         "error": str(e),
                         "error_type": type(e).__name__,
                     },
                     description=f"Failed to register MCP server: {str(e)}",
                 )
+                failed_servers.append(server_id)
                 # Continue with other servers even if one fails
             except MCPRequestError as e:
                 # Configuration errors are also recoverable - log and continue
+                server_id = server_config.get("id", "unknown")
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
-                        "server_id": server_config.get("id", "unknown"),
+                        "server_id": server_id,
                         "error": str(e),
                         "error_type": "MCPRequestError",
                         "note": "Check server configuration",
                     },
                     description=f"Invalid MCP server configuration: {str(e)}",
                 )
+                failed_servers.append(server_id)
                 # Continue with other servers even if one has bad config
+
+        # Add summary event for failed registrations
+        if failed_servers or skipped_servers:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_SUMMARY,
+                level=(
+                    observability.EventLevel.WARNING
+                    if failed_servers
+                    else observability.EventLevel.INFO
+                ),
+                data={
+                    "total_servers": len(self._mcp_servers),
+                    "successful": len(successful_servers),
+                    "failed": len(failed_servers),
+                    "skipped": len(skipped_servers),
+                    "failed_server_ids": failed_servers,
+                    "skipped_server_ids": skipped_servers,
+                    "successful_server_ids": successful_servers,
+                },
+                description=(
+                    f"MCP server registration completed: {len(successful_servers)} successful, "
+                    f"{len(failed_servers)} failed, {len(skipped_servers)} skipped"
+                ),
+            )
 
     async def start_overlord(self):
         """
-        Start services and return configured overlord instance.
+        Start services and return configured overlord instance (async).
+
+        This is an asynchronous coroutine that must be awaited when called.
 
         Initializes all services based on the loaded configuration and creates
         a fully configured overlord instance. The overlord receives pre-configured
@@ -1876,6 +1946,11 @@ class Formation:
             OverlordStateError: If no configuration loaded
             OverlordImportError: If Overlord class cannot be imported
             OverlordStartupError: If overlord fails to start
+
+        Example:
+            formation = Formation()
+            await formation.load("path/to/formation.yaml")
+            overlord = await formation.start_overlord()  # Must await!
         """
         if not self.config:
             raise OverlordStateError(
@@ -2103,13 +2178,22 @@ class Formation:
             # Disconnect MCP servers immediately if present
             if hasattr(self, "_mcp_service") and self._mcp_service:
                 try:
-                    # Use asyncio.run to disconnect in a new event loop if needed
+                    # Check for existing event loop before creating a new one
                     import asyncio
 
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    loop.run_until_complete(self._mcp_service.disconnect_all())
-                    loop.close()
+                    try:
+                        # Try to get the running loop
+                        loop = asyncio.get_running_loop()
+                        # If we're in an async context, create a task
+                        asyncio.create_task(self._mcp_service.disconnect_all())
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(self._mcp_service.disconnect_all())
+                        finally:
+                            loop.close()
                 except Exception:
                     pass  # Ignore errors during emergency shutdown
 

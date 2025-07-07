@@ -2,9 +2,6 @@ schema: "1.0.0"
 id: "multimodal-test"
 description: "Simple formation for testing basic multimodal functionality"
 
-runtime:
-  built_in_mcps: false
-
 llm:
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"

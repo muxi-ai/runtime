@@ -38,19 +38,19 @@ async def overlord(formation):
 async def test_pdf_formula_extraction(overlord):
     """Test extraction of mathematical formulas from PDFs"""
     print("\n=== Test 3F1: PDF Formula Extraction ===")
-    
+
     # Test with a query about mathematical content
     response = await overlord.chat(
         user_id="test_user",
         message="If I have a PDF with the formula E=mc², what does each variable represent?"
     )
-    
+
     print(f"Formula explanation: {response[:200]}...")
-    
+
     # Verify response explains the formula
     assert response is not None
     assert len(response) > 50
-    
+
     # Check for formula components
     response_lower = response.lower()
     assert any(term in response_lower for term in ["energy", "mass", "speed of light", "einstein"]), \
@@ -60,18 +60,18 @@ async def test_pdf_formula_extraction(overlord):
 async def test_complex_formula_understanding(overlord):
     """Test understanding of more complex mathematical formulas"""
     print("\n=== Test: Complex Formula Understanding ===")
-    
+
     response = await overlord.chat(
         user_id="test_user",
         message="Explain the quadratic formula: x = (-b ± √(b²-4ac)) / 2a"
     )
-    
+
     print(f"Complex formula explanation: {response[:200]}...")
-    
+
     # Verify comprehensive explanation
     assert response is not None
     assert len(response) > 100
-    
+
     response_lower = response.lower()
     assert any(term in response_lower for term in ["quadratic", "equation", "roots", "discriminant"]), \
         "Response should explain quadratic formula concepts"
