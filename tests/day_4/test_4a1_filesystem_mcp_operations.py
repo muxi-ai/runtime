@@ -31,10 +31,9 @@ async def run_async_test():
         # Load formation
         formation = Formation()
 
-        # Run sync operations in executor to avoid blocking
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, formation.load, str(formation_path))
-        overlord = await loop.run_in_executor(None, formation.start_overlord)
+        # Use async API directly
+        await formation.load(str(formation_path))
+        overlord = await formation.start_overlord()
 
         # Give MCP servers time to fully initialize
         print("Waiting for MCP servers to initialize...")
@@ -213,7 +212,7 @@ async def run_async_test():
         print("✓ Nested file creation successful")
 
         print("\n🔚 Stopping overlord...")
-        await loop.run_in_executor(None, formation.stop_overlord, 10.0)
+        await formation.stop_overlord(10.0)
         print("✅ Test complete!")
 
         return True

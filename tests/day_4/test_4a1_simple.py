@@ -14,10 +14,10 @@ async def test():
         print("Loading formation...")
         
         formation = Formation()
-        formation.load("test-formations/formation-mcp")
+        await formation.load("test-formations/formation-mcp")
         
         print("Starting overlord...")
-        overlord = formation.start_overlord()
+        overlord = await formation.start_overlord()
         
         print("Overlord started successfully!")
         
@@ -31,7 +31,7 @@ async def test():
         
         print(f"Response: {response}")
         
-        formation.stop_overlord()
+        await formation.stop_overlord()
         print("Test completed!")
         
     except Exception as e:
