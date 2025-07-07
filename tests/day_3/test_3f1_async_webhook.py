@@ -109,7 +109,7 @@ def check_webhook_site(webhook_url):
         return {"received": False, "error": str(e)}
 
 
-def test_3f1_async_pdf_webhook():
+async def test_3f1_async_pdf_webhook():
     """Test async PDF processing with webhook verification."""
 
     print("TEST 3F1: Async PDF Processing with Webhook Notification")
@@ -119,8 +119,8 @@ def test_3f1_async_pdf_webhook():
     # Load formation
     formation_path = Path("test-formations/formation-multimodal")
     formation = Formation()
-    formation.load(str(formation_path))
-    overlord = formation.start_overlord()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
 
     # Get webhook URL from formation
     webhook_url = overlord.formation_config.get("async", {}).get("webhook_url")
@@ -149,21 +149,20 @@ def test_3f1_async_pdf_webhook():
                 pdf_content = f.read()
 
             # Send request with PDF attachment
-            response = asyncio.run(
-                overlord.chat(
-                    user_id="test_user",
-                    message=prompt,
-                    files=[
-                        {
-                            "filename": pdf_path.name,
-                            "content": pdf_content,
-                            "content_type": "application/pdf",
-                            "size": len(pdf_content),
-                        }
-                    ],
-                    use_async=True,  # Use async processing to test webhook
-                )
+            response = await overlord.chat(
+                user_id="test_user",
+                message=prompt,
+                files=[
+                    {
+                        "filename": pdf_path.name,
+                        "content": pdf_content,
+                        "content_type": "application/pdf",
+                        "size": len(pdf_content)
+                    }
+                ],
+                use_async=True,  # Use async processing to test webhook
             )
+
 
             # Handle async response
             if isinstance(response, dict) and "request_id" in response:
@@ -210,8 +209,8 @@ def test_3f1_async_pdf_webhook():
             import traceback
             traceback.print_exc()
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
 
 if __name__ == "__main__":
-    test_3f1_async_pdf_webhook()
+    asyncio.run(test_3f1_async_pdf_webhook())

@@ -2,6 +2,9 @@ schema: "1.0.0"
 id: "basic-memory-test"
 description: "Simple formation for testing basic buffer memory functionality"
 
+runtime:
+  built_in_mcps: false
+
 llm:
   settings:
     temperature: 0.7

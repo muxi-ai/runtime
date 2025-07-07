@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def test_remote_buffer_with_auth():
     """Test the remote buffer server with authentication configuration."""
 
-    def run_test():
+    async def run_test():
         logger.info("Starting test for remote buffer with authentication...")
 
         # Helper function to handle async generator responses
@@ -41,29 +41,29 @@ def test_remote_buffer_with_auth():
 
         try:
             formation = Formation()
-            formation.load(formation_path)
+            await formation.load(formation_path)
             logger.info("Formation loaded successfully")
 
             # Start the overlord
             logger.info("Starting overlord...")
-            overlord = formation.start_overlord()
+            overlord = await formation.start_overlord()
             logger.info("Overlord started successfully")
 
             # Test 1: Store some data
             logger.info("\n=== Test 1: Storing data with authentication ===")
             response1 = get_response(
-                overlord.chat("My name is Alice and I work at TechCorp as a senior engineer")
+                overlord.chat("My name is Alice and I work at TechCorp as a senior engineer", user_id="test_user")
             )
             logger.info(f"Response 1: {response1}")
 
             response2 = get_response(
-                overlord.chat("I specialize in distributed systems and cloud architecture")
+                overlord.chat("I specialize in distributed systems and cloud architecture", user_id="test_user")
             )
             logger.info(f"Response 2: {response2}")
 
             # Test 2: Test memory recall
             logger.info("\n=== Test 2: Testing memory recall ===")
-            response3 = get_response(overlord.chat("What's my name and what do I do?"))
+            response3 = get_response(overlord.chat("What's my name and what do I do?", user_id="test_user"))
             logger.info(f"Response 3: {response3}")
 
             # Check if the response contains the stored information
@@ -79,7 +79,7 @@ def test_remote_buffer_with_auth():
 
             # Test 3: Test vector search
             logger.info("\n=== Test 3: Testing vector search ===")
-            response4 = get_response(overlord.chat("What technical areas am I good at?"))
+            response4 = get_response(overlord.chat("What technical areas am I good at?", user_id="test_user"))
             logger.info(f"Response 4: {response4}")
 
             if "distributed" in response4.lower() or "cloud" in response4.lower():
@@ -91,11 +91,11 @@ def test_remote_buffer_with_auth():
             logger.info("\n=== Test 4: Testing buffer capacity with remote storage ===")
             for i in range(15):  # More than buffer size of 10
                 msg = f"Technical fact {i}: This is information about technology area {i}"
-                get_response(overlord.chat(msg))
+                get_response(overlord.chat(msg, user_id="test_user"))
                 logger.info(f"Stored message {i}")
 
             # Test if old messages are still accessible via remote storage
-            response5 = get_response(overlord.chat("What was technical fact 0?"))
+            response5 = get_response(overlord.chat("What was technical fact 0?", user_id="test_user"))
             logger.info(f"Response 5 (checking old message): {response5}")
 
             if "fact 0" in response5.lower() or "technology area 0" in response5.lower():
@@ -111,7 +111,7 @@ def test_remote_buffer_with_auth():
 
             # Clean up
             logger.info("\nStopping overlord...")
-            formation.stop_overlord()
+            await formation.stop_overlord()
             logger.info("Test completed successfully!")
 
         except Exception as e:

@@ -39,6 +39,8 @@ import re
 import copy
 import shlex
 import threading
+import atexit
+import sys
 
 
 # Configuration imports
@@ -48,6 +50,12 @@ from .config.formation_loader import FormationLoader
 # Service imports
 from ..services import observability
 from ..services.secrets.secrets_manager import SecretsManager
+from ..services.mcp.transports.base import (
+    MCPConnectionError,
+    MCPRequestError,
+    MCPTimeoutError,
+    MCPCancelledError,
+)
 
 # Validation imports
 from ..utils import DependencyValidator
@@ -191,9 +199,11 @@ class Formation:
             description="SecretsManager injected via dependency injection",
         )
 
-    def load(self, config_path: str) -> None:
+    async def load(self, config_path: str) -> None:
         """
-        Load and validate formation configuration.
+        Load and validate formation configuration (async).
+
+        This is an asynchronous coroutine that must be awaited when called.
 
         Loads a formation configuration from file or directory, validates the
         schema, and prepares all services for initialization. Does not start
@@ -207,6 +217,10 @@ class Formation:
             ConfigurationValidationError: If configuration is invalid
             ConfigurationLoadError: If configuration cannot be loaded
             DependencyValidationError: If required dependencies are missing
+
+        Example:
+            formation = Formation()
+            await formation.load("path/to/formation.yaml")  # Must await!
         """
         if self._is_running:
             raise OverlordStateError(
@@ -296,8 +310,8 @@ class Formation:
                     {"config_path": normalized_path, "type": "warnings"},
                 )
 
-            # Load configuration synchronously
-            self.config = self._load_config_sync(config_path, normalized_path)
+            # Load configuration asynchronously
+            self.config = await self._load_config(config_path, normalized_path)
 
             # Validate user credentials requirements (ensure database is configured if needed)
             try:
@@ -1010,6 +1024,7 @@ class Formation:
                 "document_chunker": getattr(self, "_document_chunker", None),
                 "db_manager": getattr(self, "_db_manager", None),
                 "is_multi_user": getattr(self, "_is_multi_user", False),
+                "mcp_service": getattr(self, "_mcp_service", None),
             }
         )
 
@@ -1705,9 +1720,217 @@ class Formation:
             )
             return config
 
-    def start_overlord(self):
+    def _has_stdio_mcp_servers(self) -> bool:
+        """Check if any registered MCP servers use stdio transport."""
+        if not hasattr(self, "_mcp_service") or not self._mcp_service:
+            return False
+
+        # Check if connections attribute exists before accessing it
+        if not hasattr(self._mcp_service, "connections"):
+            return False
+
+        # Check if any active connections use command transport
+        for conn in self._mcp_service.connections.values():
+            if conn.get("transport_type") == "command":
+                return True
+        return False
+
+    def suppress_mcp_errors_on_exit(self) -> None:
         """
-        Start services and return configured overlord instance.
+        Register an atexit handler to suppress MCP stdio errors.
+
+        This method registers a handler that will be called when Python exits,
+        which uses os._exit() to skip the cleanup phase where MCP async generator
+        errors occur. This is useful when you know your application will exit
+        and you want to avoid seeing the errors.
+
+        Example:
+            formation = Formation()
+            formation.suppress_mcp_errors_on_exit()  # Register handler
+            await formation.load("formation.yaml")
+            # ... use formation normally ...
+            # Errors will be suppressed when Python exits
+        """
+        # Check if handler is already registered to avoid duplicates
+        if hasattr(self, "_atexit_handler_registered") and self._atexit_handler_registered:
+            return
+
+        # Store the original exit code
+        self._exit_code = 0
+
+        def _clean_exit_handler():
+            # Check if we have stdio MCP servers
+            if self._has_stdio_mcp_servers():
+                # Flush outputs
+                sys.stdout.flush()
+                sys.stderr.flush()
+                # Use stored exit code or current process exit code
+                exit_code = getattr(self, "_exit_code", 0)
+                if hasattr(sys, "_exitcode") and sys._exitcode is not None:
+                    exit_code = sys._exitcode
+                # Skip Python cleanup with proper exit code
+                os._exit(exit_code)
+
+        # Register the handler and store reference
+        self._atexit_handler = _clean_exit_handler
+        atexit.register(self._atexit_handler)
+        self._atexit_handler_registered = True
+
+    def remove_mcp_exit_handler(self) -> None:
+        """Remove the registered atexit handler if it exists."""
+        if hasattr(self, "_atexit_handler") and self._atexit_handler_registered:
+            try:
+                atexit.unregister(self._atexit_handler)
+                self._atexit_handler_registered = False
+            except ValueError:
+                # Handler was not registered, ignore
+                pass
+
+    async def _register_mcp_servers(self) -> None:
+        """Register MCP servers in Formation's event loop."""
+        if not hasattr(self, "_mcp_service") or not self._mcp_service:
+            return
+
+        if not hasattr(self, "_mcp_servers") or not self._mcp_servers:
+            return
+
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"server_count": len(self._mcp_servers)},
+            description=f"Registering {len(self._mcp_servers)} MCP servers in Formation",
+        )
+
+        # Track failed registrations
+        failed_servers = []
+        successful_servers = []
+        skipped_servers = []
+
+        # Register each server
+        for server_config in self._mcp_servers:
+            try:
+                server_id = server_config.get("id", "unknown")
+
+                # Skip inactive servers
+                if not server_config.get("active", True):
+                    skipped_servers.append(server_id)
+                    continue
+
+                # Prepare registration parameters
+                registration_params = {
+                    "server_id": server_id,
+                }
+
+                # Determine server type and set appropriate parameter
+                if "command" in server_config:
+                    # Command-based server
+                    command = server_config["command"]
+                    # Pass args separately if provided
+                    if "args" in server_config:
+                        registration_params["args"] = server_config["args"]
+                    registration_params["command"] = command
+                elif "url" in server_config:
+                    # HTTP/SSE server
+                    registration_params["url"] = server_config["url"]
+                elif "endpoint" in server_config:
+                    # HTTP server with endpoint notation
+                    registration_params["url"] = server_config["endpoint"]
+                else:
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "server_id": server_id,
+                            "error": "No command or url specified",
+                        },
+                        description=f"Invalid MCP server config: {server_id}",
+                    )
+                    failed_servers.append(server_id)
+                    continue
+
+                # Add optional parameters
+                if "auth" in server_config:
+                    registration_params["auth"] = server_config["auth"]
+                if "timeout_seconds" in server_config:
+                    registration_params["request_timeout"] = server_config["timeout_seconds"]
+                if "transport_type" in server_config:
+                    registration_params["transport_type"] = server_config["transport_type"]
+
+                # Register the server via MCP service
+                await self._mcp_service.register_mcp_server(**registration_params)
+
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTERED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "server_id": server_id,
+                        "description": server_config.get("description", ""),
+                    },
+                    description=f"MCP server registered: {server_id}",
+                )
+                successful_servers.append(server_id)
+
+            except (MCPConnectionError, MCPTimeoutError, MCPCancelledError) as e:
+                # These are recoverable errors - log and continue with other servers
+                server_id = server_config.get("id", "unknown")
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Failed to register MCP server: {str(e)}",
+                )
+                failed_servers.append(server_id)
+                # Continue with other servers even if one fails
+            except MCPRequestError as e:
+                # Configuration errors are also recoverable - log and continue
+                server_id = server_config.get("id", "unknown")
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "server_id": server_id,
+                        "error": str(e),
+                        "error_type": "MCPRequestError",
+                        "note": "Check server configuration",
+                    },
+                    description=f"Invalid MCP server configuration: {str(e)}",
+                )
+                failed_servers.append(server_id)
+                # Continue with other servers even if one has bad config
+
+        # Add summary event for failed registrations
+        if failed_servers or skipped_servers:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_SUMMARY,
+                level=(
+                    observability.EventLevel.WARNING
+                    if failed_servers
+                    else observability.EventLevel.INFO
+                ),
+                data={
+                    "total_servers": len(self._mcp_servers),
+                    "successful": len(successful_servers),
+                    "failed": len(failed_servers),
+                    "skipped": len(skipped_servers),
+                    "failed_server_ids": failed_servers,
+                    "skipped_server_ids": skipped_servers,
+                    "successful_server_ids": successful_servers,
+                },
+                description=(
+                    f"MCP server registration completed: {len(successful_servers)} successful, "
+                    f"{len(failed_servers)} failed, {len(skipped_servers)} skipped"
+                ),
+            )
+
+    async def start_overlord(self):
+        """
+        Start services and return configured overlord instance (async).
+
+        This is an asynchronous coroutine that must be awaited when called.
 
         Initializes all services based on the loaded configuration and creates
         a fully configured overlord instance. The overlord receives pre-configured
@@ -1723,6 +1946,11 @@ class Formation:
             OverlordStateError: If no configuration loaded
             OverlordImportError: If Overlord class cannot be imported
             OverlordStartupError: If overlord fails to start
+
+        Example:
+            formation = Formation()
+            await formation.load("path/to/formation.yaml")
+            overlord = await formation.start_overlord()  # Must await!
         """
         if not self.config:
             raise OverlordStateError(
@@ -1769,31 +1997,21 @@ class Formation:
             self._is_running = True
 
             # Start the overlord (loads agents, initializes services)
-            self._overlord.start()
-            # Ensure startup is complete if we're in an async context
-            # This is critical for tests and async environments where agents
-            # need to be loaded before continuing
-            try:
-                loop = asyncio.get_running_loop()
-                # Check if we're in the event loop thread to avoid deadlock
-                # by attempting to run a simple coroutine
-                try:
-                    # This will work if we're in a different thread
-                    future = asyncio.run_coroutine_threadsafe(asyncio.sleep(0), loop)
-                    future.result(timeout=0.1)
+            # Since we're now async, we can directly await the startup
+            await self._overlord._async_startup()
 
-                    # If we got here, we're in a different thread - safe to wait
-                    asyncio.run_coroutine_threadsafe(self._overlord.ensure_started(), loop).result()
-                except RuntimeError:
-                    # We're likely in the event loop thread
-                    print("⚠️  Warning: start_overlord() called from event loop thread.")
-                    print("   Startup completion cannot be guaranteed synchronously.")
-                    print("   Consider using an async context or ensuring startup separately.")
-                    # Schedule the startup but don't wait for it
-                    asyncio.create_task(self._overlord.ensure_started())
-            except RuntimeError:
-                # No event loop running, startup was already synchronous
-                pass
+            # Register MCP servers in Formation's event loop
+            # This ensures they're created in the same async context
+            await self._register_mcp_servers()
+
+            # Note if we have stdio MCP servers that may cause exit errors
+            if self._has_stdio_mcp_servers():
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={"has_stdio_servers": True},
+                    description="Formation has stdio MCP servers - use aclean_exit() to avoid errors",
+                )
 
             # Register built-in MCP servers if enabled
             try:
@@ -1873,7 +2091,7 @@ class Formation:
                 },
             ) from e
 
-    def stop_overlord(self, timeout_seconds: float = 30.0) -> None:
+    async def stop_overlord(self, timeout_seconds: float = 30.0) -> None:
         """
         Gracefully stop overlord - finish conversations and cleanup.
 
@@ -1883,13 +2101,18 @@ class Formation:
 
         Args:
             timeout_seconds: Maximum time to wait for graceful shutdown before forcing termination
+
+        Note:
+            If you're using stdio MCP servers and seeing async generator errors at exit,
+            use formation.aclean_exit() instead or call formation.suppress_mcp_errors()
+            before exiting your application.
         """
         if not self._is_running or not self._overlord:
             return  # Already stopped or never started
 
         try:
             # Use the new graceful shutdown functionality
-            asyncio.run(self._overlord.active_agent_tracker.mark_overlord_for_shutdown())
+            await self._overlord.active_agent_tracker.mark_overlord_for_shutdown()
 
             # Wait for graceful shutdown with timeout
             start_time = asyncio.get_event_loop().time()
@@ -1904,12 +2127,30 @@ class Formation:
                         )
 
             try:
-                asyncio.run(wait_for_shutdown())
+                await wait_for_shutdown()
                 print("✅ Overlord shutdown gracefully - all agents finished their work")
             except TimeoutError:
                 print(
                     f"⚠️  Graceful shutdown timed out after {timeout_seconds}s - forcing termination"
                 )
+
+            # Disconnect MCP servers before cleanup
+            if hasattr(self, "_mcp_service") and self._mcp_service:
+                try:
+                    await self._mcp_service.disconnect_all()
+                    observability.observe(
+                        event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
+                        level=observability.EventLevel.INFO,
+                        data={"action": "disconnect_all"},
+                        description="All MCP servers disconnected during Formation shutdown",
+                    )
+                except Exception as mcp_error:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.MCP_SERVER_DISCONNECTION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(mcp_error)},
+                        description=f"Failed to disconnect MCP servers: {mcp_error}",
+                    )
 
             # Clean up references
             self._overlord = None
@@ -1934,6 +2175,28 @@ class Formation:
             return  # Already stopped or never started
 
         try:
+            # Disconnect MCP servers immediately if present
+            if hasattr(self, "_mcp_service") and self._mcp_service:
+                try:
+                    # Check for existing event loop before creating a new one
+                    import asyncio
+
+                    try:
+                        # Try to get the running loop
+                        loop = asyncio.get_running_loop()
+                        # If we're in an async context, create a task
+                        asyncio.create_task(self._mcp_service.disconnect_all())
+                    except RuntimeError:
+                        # No running loop, create a new one
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        try:
+                            loop.run_until_complete(self._mcp_service.disconnect_all())
+                        finally:
+                            loop.close()
+                except Exception:
+                    pass  # Ignore errors during emergency shutdown
+
             # Force immediate cleanup without waiting
             self._overlord = None
             self._is_running = False
@@ -1944,6 +2207,95 @@ class Formation:
             # Force cleanup regardless of errors
             self._overlord = None
             self._is_running = False
+
+    def shutdown(self, code: int = 0) -> None:
+        """
+        Immediately shutdown the formation and exit the process.
+
+        This method performs an IMMEDIATE shutdown:
+        - Kills the overlord without waiting for agents to finish
+        - Exits the process immediately
+        - No graceful cleanup or state saving
+
+        Use this when:
+        - You need to exit RIGHT NOW (emergency shutdown)
+        - In synchronous code where you can't use await
+        - In error handlers or signal handlers
+        - For simple scripts that don't need graceful shutdown
+
+        For graceful shutdown, use ashutdown() instead.
+
+        Args:
+            code: Exit code (default: 0 for success, non-zero for errors)
+
+        Example:
+            formation = Formation()
+            # ... some error occurs ...
+            formation.shutdown(1)  # Exit immediately with error code
+        """
+        import sys
+        import os
+
+        # Kill overlord immediately if running
+        if self._is_running:
+            self.kill_overlord()
+
+        # Flush output streams
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Use os._exit to skip Python cleanup (including async generator cleanup)
+        os._exit(code)
+
+    async def ashutdown(self, code: int = 0) -> None:
+        """
+        Gracefully shutdown the formation and exit the process.
+
+        This method performs a GRACEFUL shutdown:
+        - Waits for agents to finish their current work (up to 5 seconds)
+        - Properly disconnects from MCP servers
+        - Saves state and cleans up resources
+        - Then exits the process cleanly
+
+        Use this when:
+        - In production services for controlled shutdown
+        - You want agents to complete their current tasks
+        - You need to save state or close connections properly
+        - In async applications (most modern Python code)
+
+        For immediate shutdown without waiting, use shutdown() instead.
+
+        Args:
+            code: Exit code (default: 0 for success, non-zero for errors)
+
+        Example:
+            async def main():
+                formation = Formation()
+                await formation.load("formation.yaml")
+                overlord = await formation.start_overlord()
+
+                # ... use overlord ...
+
+                # Graceful shutdown - agents finish their work
+                await formation.ashutdown()
+        """
+        import sys
+        import os
+
+        # Try graceful async shutdown first
+        if self._is_running:
+            try:
+                await self.stop_overlord(timeout_seconds=5.0)
+            except Exception:
+                # Fall back to immediate termination
+                self.kill_overlord()
+
+        # Flush output streams
+        sys.stdout.flush()
+        sys.stderr.flush()
+
+        # Use os._exit to skip Python cleanup (including async generator cleanup)
+        os._exit(code)
 
     def stop(self) -> None:
         """
@@ -2110,9 +2462,6 @@ class Formation:
 
             except Exception as e:
                 raise ValueError(f"Failed to load {schema_type} schema from {schema}: {e}") from e
-
-        else:
-            raise TypeError(f"Schema must be dict or str, got {type(schema).__name__}")
 
     async def _check_agent_conflict(self, agent_schema: Dict[str, Any]) -> None:
         """

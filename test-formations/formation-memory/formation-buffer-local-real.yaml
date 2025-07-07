@@ -3,6 +3,9 @@ id: "buffer-memory-local-test"
 name: "buffer-memory-local-test"
 description: "Test formation for local buffer memory mode with real LLM"
 
+runtime:
+  built_in_mcps: false
+
 agents:
   - id: "memory-assistant"
     name: "Memory Test Assistant"

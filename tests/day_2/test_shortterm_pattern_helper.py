@@ -2,11 +2,12 @@
 """Test the exact pattern used by ShortTermMemory"""
 
 import sys
+import asyncio
 sys.path.insert(0, '.')
 import time
 import numpy as np
 
-def test_shorttermemory_exact_pattern():
+async def test_shorttermemory_exact_pattern():
     """Replicate the exact pattern used by ShortTermMemory"""
     print("=== Replicating ShortTermMemory Pattern ===")
     
@@ -79,7 +80,7 @@ def test_shorttermemory_exact_pattern():
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
 
-def test_multiple_configure_calls():
+async def test_multiple_configure_calls():
     """Test if multiple configure calls interfere with each other"""
     print("\n=== Testing Multiple Configure Calls ===")
     
@@ -109,7 +110,7 @@ def test_multiple_configure_calls():
         print(f"❌ Multiple configure test failed: {e}")
         return {"status": "failed", "error": str(e)}
 
-def test_with_actual_shorttermemory():
+async def test_with_actual_shorttermemory():
     """Test with actual ShortTermMemory class"""
     print("\n=== Testing Actual ShortTermMemory Class ===")
     

@@ -22,8 +22,8 @@ async def main():
     # Load formation
     formation_path = Path("test-formations/formation-multimodal")
     formation = Formation()
-    formation.load(str(formation_path))
-    overlord = formation.start_overlord()
+    await formation.load(str(formation_path))
+    overlord = await formation.start_overlord()
 
     # Prepare the PDF file
     pdf_path = Path("test-docs/sample.pdf")

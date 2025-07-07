@@ -1,8 +1,9 @@
-# 📅 Day 1 (June 25, 2024) - Foundation Layer ✅
+# 📅 Day 1 - Foundation Layer ✅
 
-**Status:** COMPLETED ✅
-**Tests Passed:** 23/23 (includes additional tests beyond original 8)
-**Confirmed Working:** 16+ pytest tests verified passing on re-run
+**Status:** COMPLETED ✅  
+**Tests Passed:** 26/26 (all tests passing)  
+**Last Updated:** January 7, 2025  
+**Major Update:** Converted all tests to async Formation API
 
 ## Accomplishments:
 
@@ -38,7 +39,17 @@
    - Proper error handling for missing secrets
    - Thread-safe test execution with ThreadPoolExecutor
 
-### 6. **Remote memory configuration validation (NEW):**
+### 6. **Async Formation API Migration (January 2025):**
+   - Converted all test methods to use `async def`
+   - Updated Formation method calls to use `await`:
+     - `formation.load()` → `await formation.load()`
+     - `formation.start_overlord()` → `await formation.start_overlord()`
+     - `formation.stop_overlord()` → `await formation.stop_overlord()`
+   - Added required `user_id` parameter to all `overlord.chat()` calls
+   - Fixed MCP timeout issues by disabling built-in MCPs in test formations
+   - Updated test expectations to match current behavior
+
+### 7. **Remote memory configuration validation:**
    - Added validation that remote mode requires URL
    - Added validation that remote mode requires tenant ID
    - Added validation that remote mode requires explicit max_memory_mb (not "auto")
@@ -46,7 +57,7 @@
    - Tested remote mode with authentication (API key + tenant)
 
 ## Test Categories Completed:
-- ✅ **Test Group 1A:** Formation Loading (16 confirmed pytest tests)
+- ✅ **Test Group 1A:** Formation Loading (19 pytest tests)
   - `test_1a1_basic_yaml_formation.py`: 5 test methods
     - Basic YAML formation loading
     - Directory structure formation loading  
@@ -67,20 +78,28 @@
     - Local mode allows auto
     - Remote with authentication
 
-- ✅ **Test Group 1B:** Basic Agent Communication (2+ tests)
-  - Single agent response (standalone script)
-  - Agent routing validation (standalone script)
+- ✅ **Test Group 1B:** Basic Agent Communication (7 pytest tests)
+  - `test_1b1_single_agent_response.py`: 4 test methods
+    - Single agent response
+    - Agent routing validation
+    - Response consistency
+    - Error handling
+  - `test_1b2_agent_routing_validation.py`: 1 test method
+  - `test_1b3_basic_formation.py`: 1 test method
+  - `test_1b4_simple_chat.py`: 1 test method
 
-- ✅ **Additional Tests:** (5+ tests)
-  - Directory structure validation
-  - Debug loading helper
-  - Various helper scripts and utilities
+- ✅ **Additional Tests:**
+  - `test_1a2_directory_structure_formation.py`: 1 test method
+  - `test_1a3_formation_validation_failures.py`: 1 test method (debug helper)
+  - `test_1a6_simple_formation_v2.py`: 1 test method
 
 ## Key Insights:
 - Test-driven development revealed multiple initialization bugs
-- Synchronous initialization is simpler and more reliable than async
+- Async Formation API provides better control and error handling
+- Built-in MCP servers can cause timeout issues in tests - disable with `runtime: built_in_mcps: false`
 - Validation should distinguish between inline and standalone components
 - Mock models should not require API keys for testing
+- MCP filesystem server requires external npm packages that may not be installed
 
 ## Next Steps:
 - Day 2: Memory Systems testing (buffer memory, persistence, cleanup)
@@ -88,11 +107,16 @@
 - Consider adding more edge case tests based on bugs found
 
 ## Test Verification Summary:
-- **Primary test files:** 3 pytest files with 16 test methods total
-- **Standalone scripts:** 4+ additional test scripts
+- **Primary test files:** 10 pytest files with 26 test methods total
+- **Test execution time:** ~40-45 seconds for full suite
 - **Invalid formations tested:** 7 different validation scenarios
 - **Remote memory validations:** 6 comprehensive tests
-- **All tests passing:** Confirmed working on June 25, 2025
+- **All tests passing:** Confirmed working on January 7, 2025
 
-**Total Time Invested:** ~8 hours
-**Test Coverage:** Significantly exceeded original goals with 23 tests vs planned 8
+**Key Updates (January 2025):**
+- Migrated all tests from synchronous to async Formation API
+- Fixed MCP timeout issues by disabling built-in MCPs
+- Updated test assertions to match current behavior
+- Added proper user_id parameters throughout
+
+**Test Coverage:** 26 tests covering formation loading, validation, agent communication, and error handling

@@ -2,10 +2,11 @@
 Debug test to understand formation loading issues.
 """
 import traceback
+import asyncio
 from muxi.runtime.formation import Formation
 
 
-def test_debug_loading():
+async def test_debug_loading():
     """Debug formation loading step by step"""
     print("\n=== Starting debug test ===")
     
@@ -14,7 +15,7 @@ def test_debug_loading():
         print("✓ Formation instance created")
         
         print("Loading formation...")
-        formation.load("test-formations/formation-basic/")
+        await formation.load("test-formations/formation-basic/")
         print("✓ Formation loaded successfully!")
         
         print(f"Formation ID: {formation.formation_id}")
@@ -33,4 +34,4 @@ def test_debug_loading():
 
 
 if __name__ == "__main__":
-    test_debug_loading()
+    asyncio.run(test_debug_loading())

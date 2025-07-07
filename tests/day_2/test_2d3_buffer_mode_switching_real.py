@@ -68,7 +68,7 @@ async def test_local_buffer_with_real_llm():
     """
     print("\n=== Testing Local Buffer with Real LLM ===")
 
-    def run_test():
+    async def run_test():
         """
         Runs a test to verify local buffer memory mode with a real LLM, checking context retention and vector search capabilities.
         
@@ -76,20 +76,20 @@ async def test_local_buffer_with_real_llm():
             dict: A dictionary indicating test status and boolean results for context retention and vector search.
         """
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-buffer-local-real.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-buffer-local-real.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             # Test basic context retention
             print("Testing local buffer memory with real LLM...")
 
             # Add context
-            response1 = asyncio.run(overlord.chat("My name is Bob and I'm a Python developer working on AI projects", user_id="bob"))
+            response1 = await overlord.chat("My name is Bob and I'm a Python developer working on AI projects", user_id="bob")
             response1_text = handle_response(response1)
             print(f"Context set: {response1_text[:100]}...")
 
             # Test recall
-            response2 = asyncio.run(overlord.chat("What's my name and what do I do?", user_id="bob"))
+            response2 = await overlord.chat("What's my name and what do I do?", user_id="bob")
             response2_text = handle_response(response2)
             print(f"Context recall: {response2_text[:200]}...")
 
@@ -106,12 +106,12 @@ async def test_local_buffer_with_real_llm():
             print("\nTesting vector search in local buffer...")
 
             # Add diverse content
-            asyncio.run(overlord.chat("I love machine learning and neural networks", user_id="bob"))
-            asyncio.run(overlord.chat("JavaScript is great for web development", user_id="bob"))
-            asyncio.run(overlord.chat("Database design is crucial for scalability", user_id="bob"))
+            await overlord.chat("I love machine learning and neural networks", user_id="bob")
+            await overlord.chat("JavaScript is great for web development", user_id="bob")
+            await overlord.chat("Database design is crucial for scalability", user_id="bob")
 
             # Search for ML-related content
-            response3 = asyncio.run(overlord.chat("What have I said about AI and machine learning?", user_id="bob"))
+            response3 = await overlord.chat("What have I said about AI and machine learning?", user_id="bob")
             response3_text = handle_response(response3)
             print(f"ML search result: {response3_text[:200]}...")
 
@@ -130,12 +130,10 @@ async def test_local_buffer_with_real_llm():
             traceback.print_exc()
             return {"status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in thread to avoid event loop issues
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 async def test_remote_buffer_with_real_llm():
     """
@@ -148,27 +146,27 @@ async def test_remote_buffer_with_real_llm():
     """
     print("\n=== Testing Remote Buffer with Real LLM ===")
 
-    def run_test():
+    async def run_test():
         """
         Runs a test to verify remote buffer memory and vector search functionality with a real LLM.
         
         The test checks if user context is retained and recalled correctly, and if technical content can be retrieved via vector search. Returns a dictionary indicating test status and results for context retention and remote search.
         """
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-buffer-remote-real.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-buffer-remote-real.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             # Test basic context retention
             print("Testing remote buffer memory with real LLM...")
 
             # Add context
-            response1 = asyncio.run(overlord.chat("I'm Carol, a data scientist specializing in NLP and computer vision", user_id="carol"))
+            response1 = await overlord.chat("I'm Carol, a data scientist specializing in NLP and computer vision", user_id="carol")
             response1_text = handle_response(response1)
             print(f"Context set: {response1_text[:100]}...")
 
             # Test recall
-            response2 = asyncio.run(overlord.chat("Tell me about my background", user_id="carol"))
+            response2 = await overlord.chat("Tell me about my background", user_id="carol")
             response2_text = handle_response(response2)
             print(f"Context recall: {response2_text[:200]}...")
 
@@ -185,12 +183,12 @@ async def test_remote_buffer_with_real_llm():
             print("\nTesting remote FAISSx vector search...")
 
             # Add technical content
-            asyncio.run(overlord.chat("I use transformers and BERT for text classification", user_id="carol"))
-            asyncio.run(overlord.chat("CNNs and YOLO are great for object detection", user_id="carol"))
-            asyncio.run(overlord.chat("I also enjoy hiking and photography", user_id="carol"))
+            await overlord.chat("I use transformers and BERT for text classification", user_id="carol")
+            await overlord.chat("CNNs and YOLO are great for object detection", user_id="carol")
+            await overlord.chat("I also enjoy hiking and photography", user_id="carol")
 
             # Search for technical content
-            response3 = asyncio.run(overlord.chat("What technical tools have I mentioned?", user_id="carol"))
+            response3 = await overlord.chat("What technical tools have I mentioned?", user_id="carol")
             response3_text = handle_response(response3)
             print(f"Technical search result: {response3_text[:200]}...")
 
@@ -209,12 +207,10 @@ async def test_remote_buffer_with_real_llm():
             traceback.print_exc()
             return {"status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in thread
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 async def test_mode_comparison():
     """

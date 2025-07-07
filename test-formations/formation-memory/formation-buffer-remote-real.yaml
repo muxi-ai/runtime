@@ -3,6 +3,9 @@ id: "buffer-memory-remote-test"
 name: "buffer-memory-remote-test"
 description: "Test formation for remote buffer memory mode with real LLM"
 
+runtime:
+  built_in_mcps: false
+
 agents:
   - id: "memory-assistant"
     name: "Memory Test Assistant"

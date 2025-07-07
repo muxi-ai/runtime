@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Debug agent loading for memory formation."""
+import asyncio
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
@@ -11,20 +12,20 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def test_agent_loading():
+async def test_agent_loading():
     """Test agent loading from formation."""
 
-    def run_test():
+    async def run_test():
         formation_path = (
             "test-formations/formation-memory/formation-postgres-and-faissx-with-auth.yaml"
         )
         logger.info(f"Loading formation from: {formation_path}")
 
         formation = Formation()
-        formation.load(formation_path)
+        await formation.load(formation_path)
         logger.info("Formation loaded")
 
-        overlord = formation.start_overlord()
+        overlord = await formation.start_overlord()
         logger.info("Overlord started")
 
         # Check what agents are available
@@ -46,7 +47,7 @@ def test_agent_loading():
                 f"Agent router available agents: {getattr(overlord.agent_router, '_agents', 'N/A')}"
             )
 
-        formation.stop_overlord()
+        await formation.stop_overlord()
         logger.info("Test completed")
 
     with ThreadPoolExecutor(max_workers=1) as executor:

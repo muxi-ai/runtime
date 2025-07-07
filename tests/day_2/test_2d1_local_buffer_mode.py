@@ -77,7 +77,7 @@ async def test_local_buffer_memory():
     """
     print("\n=== Testing Local Buffer Memory ===")
 
-    def run_test():
+    async def run_test():
         # Helper function to handle async generator responses
         """
         Runs a test to verify local buffer memory behavior in the chat system.
@@ -89,8 +89,8 @@ async def test_local_buffer_memory():
             return handle_response(result)
 
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-buffer-local.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-buffer-local.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             # Test basic context retention
@@ -135,12 +135,10 @@ async def test_local_buffer_memory():
             print(f"❌ Local buffer test failed: {e}")
             return {"mode": "local", "status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in ThreadPoolExecutor to avoid event loop conflicts
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 
 async def test_remote_buffer_memory():
@@ -151,7 +149,7 @@ async def test_remote_buffer_memory():
     """
     print("\n=== Testing Remote Buffer Memory ===")
 
-    def run_test():
+    async def run_test():
         # Helper function to handle async generator responses
         """
         Tests remote buffer memory mode by setting and recalling user context, verifying that the system retains user information across messages.
@@ -164,8 +162,8 @@ async def test_remote_buffer_memory():
             return handle_response(result)
 
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-buffer-remote.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-buffer-remote.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             print("Testing remote buffer memory context...")
@@ -199,12 +197,10 @@ async def test_remote_buffer_memory():
             print(f"❌ Remote buffer test failed: {e}")
             return {"mode": "remote", "status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in ThreadPoolExecutor to avoid event loop conflicts
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 
 async def test_buffer_mode_switching():

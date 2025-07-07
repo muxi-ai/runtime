@@ -65,8 +65,8 @@ from muxi.runtime.formation import Formation
 async def setup_scheduler():
     # Load formation with scheduler enabled
     formation = Formation()
-    formation.load("formation.yaml")
-    overlord = await formation.start_overlord()
+    await formation.load("formation.yaml")  # Must await!
+    overlord = await formation.start_overlord()  # Must await!
     
     # Schedule a daily reminder using natural language
     response = await overlord.chat(

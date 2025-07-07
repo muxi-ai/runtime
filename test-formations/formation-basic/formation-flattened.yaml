@@ -23,6 +23,9 @@ logging:
       level: "info"
       format: "jsonl"
 
+runtime:
+  built_in_mcps: false  # Disable built-in MCPs for faster test startup
+
 # Agent will be added manually here, but will also be auto-discovered from agents/ directory
 agents:
   - id: "inline-assistant"
@@ -46,15 +49,14 @@ mcp:
   # MCP server configuration
   # Optionally, initiate as an empty list or with an explicit list of servers.
   servers:
-    - id: "local-tools"                  # Unique server name/id (required)
-      description: "Local command tools" # Human-readable description
-      active: true                       # optional; true (exists for start/stop commands)
+    - id: "filesystem-mcp"
+      description: "Local filesystem tools"
+      active: true
 
-      type: "command"                    # Server type: command (required)
-      install: "npm install -g @modelcontextprotocol/server-json-rpc" # Optional: Command to install the server
-      # Command execution details
-      command: "npx"                     # Command to execute (required)
-      args: ["-y", "@modelcontextprotocol/server-json-rpc"]  # Command arguments (optional)
-      timeout_seconds: 60                # Command timeout (overrides default)
-      env:                               # Environment variables (optional)
-        DEBUG: "true"
+      type: "command"
+      install: "npm install -g @modelcontextprotocol/server-filesystem"
+
+      command: "npx"
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/Users/ran/Desktop/"]
+      timeout_seconds: 60
+

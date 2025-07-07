@@ -2,6 +2,9 @@ schema: "1.0.0"
 id: "memory-test-formation"
 description: "Formation for testing buffer and persistent memory systems"
 
+runtime:
+  built_in_mcps: false
+
 llm:
   settings:
     temperature: 0.7

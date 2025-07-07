@@ -14,23 +14,26 @@ async def test_basic_formation():
     
     # Create a minimal formation config
     formation_config = {
-        "formation": {
-            "id": "test-formation",
-            "name": "Test Formation",
-            "version": "1.0.0"
-        },
+        "schema": "1.0.0",
+        "id": "test-formation",
+        "description": "Test formation for basic functionality",
         "llm": {
+            "api_keys": {
+                "openai": "test-key-for-validation"
+            },
             "models": [
-                {
-                    "text": "openai/gpt-4o-mini",
-                    "embedding": "openai/text-embedding-3-small"
-                }
+                {"text": "openai/gpt-4o-mini"},
+                {"embedding": "openai/text-embedding-3-small"}
             ]
+        },
+        "runtime": {
+            "built_in_mcps": False  # Disable built-in MCPs for faster test startup
         },
         "agents": [
             {
                 "id": "assistant",
                 "name": "Test Assistant",
+                "description": "A helpful test assistant",
                 "system_message": "You are a helpful test assistant."
             }
         ]
@@ -47,7 +50,7 @@ async def test_basic_formation():
         temp_path = f.name
     
     formation = Formation()
-    formation.load(temp_path)
+    await formation.load(temp_path)
     print("✅ Formation loaded successfully")
     
     # Clean up temp file
@@ -56,7 +59,7 @@ async def test_basic_formation():
     
     # Test 2: Start overlord
     print("\n2. Starting overlord...")
-    overlord = formation.start_overlord()
+    overlord = await formation.start_overlord()
     print("✅ Overlord started successfully")
     
     # Test 3: Check agents loaded
@@ -84,7 +87,7 @@ async def test_basic_formation():
     
     # Test 5: Stop overlord
     print("\n5. Stopping overlord...")
-    formation.stop_overlord()
+    await formation.stop_overlord()
     print("✅ Overlord stopped successfully")
     
     print("\n✅ All basic formation tests passed!")

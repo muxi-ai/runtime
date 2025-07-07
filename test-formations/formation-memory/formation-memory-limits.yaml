@@ -2,6 +2,9 @@ schema: "1.0.0"
 id: "memory-limits-test"
 description: "Formation for testing memory size limits and FIFO cleanup"
 
+runtime:
+  built_in_mcps: false
+
 llm:
   settings:
     temperature: 0.7

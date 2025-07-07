@@ -151,7 +151,7 @@ async def test_automatic_context_extraction():
     """
     print("\n=== Testing Automatic Context Extraction ===")
 
-    def run_test():
+    async def run_test():
         # Load formation with context extraction
         """
         Tests automatic extraction and recall of user context from conversation history.
@@ -162,40 +162,39 @@ async def test_automatic_context_extraction():
             result (dict): Dictionary with test status and flags indicating if the user's name and project were successfully extracted and recalled.
         """
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-auto-extract.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-auto-extract.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             # Send messages with extractable context
             print("Sending messages with context...")
 
             # Message 1: User introduction
-            response1 = asyncio.run(
-                overlord.chat(
+            response1 = await overlord.chat(
+                user_id="alice",
+                message=(
                     "Hi, I'm Alice Johnson and I work as a software engineer at TechCorp. "
-                    "I'm currently working on a Python machine learning project.",
-                    user_id="alice",
+                    "I'm currently working on a Python machine learning project."
                 )
             )
             response1_text = handle_response(response1)
             print(f"Response 1: {response1_text[:100]}...")
 
             # Message 2: More context
-            response2 = asyncio.run(
-                overlord.chat(
+            response2 = await overlord.chat(
+                user_id="alice",
+                message=(
                     "My project involves natural language processing and I prefer using PyTorch. "
-                    "I usually work from 9 AM to 5 PM PST.",
-                    user_id="alice",
+                    "I usually work from 9 AM to 5 PM PST."
                 )
             )
             response2_text = handle_response(response2)
             print(f"Response 2: {response2_text[:100]}...")
 
             # Message 3: Test if context was extracted
-            response3 = asyncio.run(
-                overlord.chat(
-                    "Can you remind me what my name is and what I'm working on?", user_id="alice"
-                )
+            response3 = await overlord.chat(
+                user_id="alice",
+                message="Can you remind me what my name is and what I'm working on?"
             )
             response3_text = handle_response(response3)
             print(f"Response 3: {response3_text[:200]}...")
@@ -222,12 +221,10 @@ async def test_automatic_context_extraction():
             print(f"❌ Test failed: {e}")
             return {"status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in thread to avoid event loop issues
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 
 async def test_smart_buffer_vector_search():
@@ -323,7 +320,7 @@ async def test_automatic_context_usage():
     """
     print("\n=== Testing Automatic Context Usage ===")
 
-    def run_test():
+    async def run_test():
         # Load formation
         """
         Tests whether user preferences and project context are automatically applied in responses and persist across multiple queries.
@@ -332,37 +329,35 @@ async def test_automatic_context_usage():
             result (dict): Contains test status, flags for context usage, response conciseness, beginner-friendliness, and project relevance.
         """
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-basic.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-basic.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             # Establish context
             print("Establishing context...")
 
             # Set preferences
-            response1 = asyncio.run(
-                overlord.chat(
+            response1 = await overlord.chat(
+                user_id="bob",
+                message=(
                     "I prefer concise answers, no more than 2-3 sentences. "
-                    "Also, I'm a beginner in programming.",
-                    user_id="bob",
+                    "Also, I'm a beginner in programming."
                 )
             )
             response1_text = handle_response(response1)
             print(f"Preference set: {response1_text[:100]}...")
 
             # Set project context
-            response2 = asyncio.run(
-                overlord.chat(
-                    "I'm working on a weather app using Python and need help with API integration.",
-                    user_id="bob",
-                )
+            response2 = await overlord.chat(
+                user_id="bob",
+                message="I'm working on a weather app using Python and need help with API integration."
             )
             response2_text = handle_response(response2)
             print(f"Project context set: {response2_text[:100]}...")
 
             # Ask question without repeating context
             print("\nAsking question without repeating context...")
-            response3 = asyncio.run(overlord.chat("How do I handle errors?", user_id="bob"))
+            response3 = await overlord.chat("How do I handle errors?", user_id="bob")
 
             response3_text = handle_response(response3)
             print(f"Response: {response3_text}")
@@ -387,7 +382,7 @@ async def test_automatic_context_usage():
             print(f"  - Project-relevant: {'YES' if weather_related else 'NO'}")
 
             # Test context persistence
-            _ = asyncio.run(overlord.chat("What about authentication?", user_id="bob"))
+            _ = await overlord.chat("What about authentication?", user_id="bob")
 
             return {
                 "status": "success",
@@ -401,12 +396,10 @@ async def test_automatic_context_usage():
             print(f"❌ Test failed: {e}")
             return {"status": "failed", "error": str(e)}
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
     # Run in thread
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 
 async def test_preference_persistence():
@@ -417,7 +410,7 @@ async def test_preference_persistence():
     """
     print("\n=== Testing User Preference Persistence ===")
 
-    def run_test():
+    async def run_test():
         # First session: Learn preferences
         """
         Runs a two-session test to verify user preference persistence and application in a conversational AI system.
@@ -428,8 +421,8 @@ async def test_preference_persistence():
             dict: Test results including status, whether preferences were stored and loaded, if they match, and if they are correctly applied in responses.
         """
         formation = Formation()
-        formation.load("test-formations/formation-memory/formation-sqlite.yaml")
-        overlord = formation.start_overlord()
+        await formation.load("test-formations/formation-memory/formation-sqlite.yaml")
+        overlord = await formation.start_overlord()
 
         try:
             print("Session 1: Learning user preferences...")
@@ -470,10 +463,8 @@ async def test_preference_persistence():
 
             # Learn preferences
             preference_engine = overlord.user_preference_engine
-            preferences = asyncio.run(
-                preference_engine.analyze_user_preferences(
-                    user_id="developer_bob", conversation_history=messages, feedback_data=feedback
-                )
+            preferences = await preference_engine.analyze_user_preferences(
+                user_id="developer_bob", conversation_history=messages, feedback_data=feedback
             )
 
             print(
@@ -481,25 +472,25 @@ async def test_preference_persistence():
             )
 
             # Verify preferences were stored
-            stored_prefs = asyncio.run(preference_engine.get_stored_preferences("developer_bob"))
+            stored_prefs = await preference_engine.get_stored_preferences("developer_bob")
             session1_success = stored_prefs is not None
 
             print(f"Session 1 - Preferences stored: {'✅' if session1_success else '❌'}")
 
         finally:
-            formation.stop_overlord()
+            await formation.stop_overlord()
 
         # Second session: Verify persistence
         print("\nSession 2: Loading persisted preferences...")
         formation2 = Formation()
-        formation2.load("test-formations/formation-memory/formation-sqlite.yaml")
-        overlord2 = formation2.start_overlord()
+        await formation2.load("test-formations/formation-memory/formation-sqlite.yaml")
+        overlord2 = await formation2.start_overlord()
 
         try:
             preference_engine2 = overlord2.user_preference_engine
 
             # Load preferences from storage
-            loaded_prefs = asyncio.run(preference_engine2.get_stored_preferences("developer_bob"))
+            loaded_prefs = await preference_engine2.get_stored_preferences("developer_bob")
 
             if loaded_prefs:
                 print(
@@ -546,12 +537,10 @@ async def test_preference_persistence():
                 }
 
         finally:
-            formation2.stop_overlord()
+            await formation2.stop_overlord()
 
     # Run in thread to avoid event loop issues
-    with ThreadPoolExecutor() as executor:
-        future = executor.submit(run_test)
-        return future.result()
+    return await run_test()
 
 
 async def main():
