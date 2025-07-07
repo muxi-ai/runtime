@@ -1905,7 +1905,7 @@ class Formation:
         # Add summary event for failed registrations
         if failed_servers or skipped_servers:
             observability.observe(
-                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_SUMMARY,
+                event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                 level=(
                     observability.EventLevel.WARNING
                     if failed_servers
