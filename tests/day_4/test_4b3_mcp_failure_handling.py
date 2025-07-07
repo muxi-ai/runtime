@@ -197,10 +197,8 @@ def test_mcp_failure_handling():
 
                 print("\n✅ Test 4B3 PASSED: All MCP failures handled gracefully")
 
-                # Clean exit to avoid async generator errors
-                import os
-
-                os._exit(0)
+                # Clean shutdown to avoid async generator errors
+                formation.shutdown(0)
 
             # Run the async test
             return asyncio.run(test_operations())

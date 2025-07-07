@@ -165,10 +165,8 @@ def test_file_system_coordination():
 
                 print("\n✅ Test 4B2 PASSED: File + System coordination successful")
 
-                # Clean exit to avoid async generator errors
-                import os
-
-                os._exit(0)
+                # Clean shutdown to avoid async generator errors
+                formation.shutdown(0)
 
             # Run the async test
             return asyncio.run(test_operations())

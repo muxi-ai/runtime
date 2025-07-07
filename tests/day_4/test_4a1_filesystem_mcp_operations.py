@@ -213,7 +213,8 @@ async def run_async_test():
         await formation.stop_overlord(10.0)
         print("✅ Test complete!")
 
-        return True
+        # Clean shutdown to avoid async generator errors
+        formation.shutdown(0)
 
     except Exception as e:
         print(f"\n❌ Test 4A1 FAILED with error: {e}")

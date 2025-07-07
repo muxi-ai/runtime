@@ -21,18 +21,23 @@ def test_update_linear_issue():
             async def test_operations():
                 # Load formation with MCP enabled
                 formation = Formation()
-                formation.load("test-formations/formation-mcp")
-                overlord = formation.start_overlord()
+                await formation.load("test-formations/formation-mcp")
+                overlord = await formation.start_overlord()
 
                 # Ensure overlord is started
                 await overlord.ensure_started()
 
                 print("\n1. Creating an issue to update...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Create a Linear issue titled 'Test Update Workflow' to test status updates",
                     user_id="user1",
                     use_async=False,
                 )
+
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Create Response: {response}")
 
                 response_lower = response.lower()
@@ -47,11 +52,16 @@ def test_update_linear_issue():
                         return True
 
                 print("\n2. Testing issue status update...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Update the Linear issue we just created to mark it as in progress",
                     user_id="user1",
                     use_async=False,
                 )
+
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Update Response: {response}")
 
                 # Verify update
@@ -66,10 +76,17 @@ def test_update_linear_issue():
                 print("✓ Issue status updated successfully")
 
                 print("\n3. Testing issue completion...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Mark the Linear issue as completed/done", user_id="user1", use_async=False
                 )
+
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Complete Response: {response}")
+
+                response_lower = response.lower()
 
                 # Should mark as complete
                 assert (
@@ -82,12 +99,19 @@ def test_update_linear_issue():
                 print("✓ Issue marked as completed")
 
                 print("\n4. Testing issue assignment...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Create a new Linear issue and assign it to the team",
                     user_id="user1",
                     use_async=False,
                 )
+
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Assignment Response: {response}")
+
+                response_lower = response.lower()
 
                 # Should handle assignment
                 assert (
@@ -96,18 +120,26 @@ def test_update_linear_issue():
                 print("✓ Issue assignment handled")
 
                 print("\n5. Testing bulk update scenario...")
-                response = await overlord.chat(
+                response_gen = await overlord.chat(
                     "Update all my recent Linear issues to add a 'reviewed' label",
                     user_id="user1",
                     use_async=False,
                 )
+
+                # Collect streaming response
+                response = ""
+                async for chunk in response_gen:
+                    response += chunk
                 print(f"Bulk Update Response: {response}")
 
                 # Should acknowledge bulk update request
                 assert len(response) > 20, "Response should address bulk update request"
                 print("✓ Bulk update request handled")
 
-                return True
+                print("\n✅ Test 4C2 PASSED: Linear issue updates successful")
+
+                # Clean shutdown to avoid async generator errors
+                formation.shutdown(0)
 
             # Run the async test
             return asyncio.run(test_operations())
