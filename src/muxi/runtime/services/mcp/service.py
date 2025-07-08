@@ -99,6 +99,10 @@ class MCPService:
         # Dictionary to store locks for each handler
         self.locks = {}
 
+        # Dictionary to store user-specific credentials per server
+        # Structure: {server_id: {user_id: credentials}}
+        self.user_credentials = {}
+
         # Dictionary to store discovered tools
         self.tool_registry = {}
 
@@ -180,6 +184,7 @@ class MCPService:
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: int = 60,
+        original_credentials: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Register an MCP server with the service.
@@ -193,9 +198,11 @@ class MCPService:
             url: URL for HTTP/SSE MCP servers
             command: Command for command-line MCP servers
             args: Optional list of arguments for command-line MCP servers
-            transport_type: Transport type selection ("auto", "streamable_http", "http_sse", "command")
-            credentials: Optional credentials for authentication
+            transport_type: Transport type ('auto', 'streamable_http', 'http_sse', 'command')
+            credentials: Resolved credentials for initial connection
             model: Optional model to use for this MCP handler
+            request_timeout: Request timeout in seconds
+            original_credentials: Original credentials with user placeholders (if any)
             request_timeout: Timeout in seconds for requests to this server
 
         Returns:
@@ -225,7 +232,15 @@ class MCPService:
         # Handle command-line transport directly
         if command or transport_type == "command":
             return await self._connect_single_transport(
-                server_id, url, command, args, "command", credentials, model, request_timeout
+                server_id,
+                url,
+                command,
+                args,
+                "command",
+                credentials,
+                model,
+                request_timeout,
+                original_credentials,
             )
 
         # Enhanced auto-detection with caching for HTTP-based servers
@@ -270,6 +285,7 @@ class MCPService:
                     credentials,
                     model,
                     request_timeout,
+                    original_credentials,
                 )
 
             except MCPConnectionError as e:
@@ -301,7 +317,15 @@ class MCPService:
 
         # Proceed with explicitly specified transport type
         return await self._connect_single_transport(
-            server_id, url, command, args, transport_type, credentials, model, request_timeout
+            server_id,
+            url,
+            command,
+            args,
+            transport_type,
+            credentials,
+            model,
+            request_timeout,
+            original_credentials,
         )
 
     async def invoke_tool(
@@ -363,96 +387,84 @@ class MCPService:
         auth = self.connections[server_id].get("credentials", {})
         resolved_auth = auth
 
-        if user_id and credential_resolver and auth:
-            # Check if auth contains user credential placeholders
-            # Check if any auth value contains user credential placeholders
-            needs_resolution = False
-            for value in auth.values():
-                if isinstance(value, str) and USER_CREDENTIAL_PATTERN.search(value):
-                    needs_resolution = True
-                    break
+        # Check if this server requires user-specific credentials
+        if auth == "$MUXI_USER_CREDENTIALS$":
+            if not user_id:
+                raise ValueError(
+                    f"User ID required for MCP server '{server_id}' that uses user credentials"
+                )
 
-            if needs_resolution:
+            # Check if we have cached credentials for this user
+            if server_id not in self.user_credentials:
+                self.user_credentials[server_id] = {}
+
+            if user_id in self.user_credentials[server_id]:
+                # Use cached credentials
+                resolved_auth = self.user_credentials[server_id][user_id]
+            else:
+                # Need to resolve credentials from database
+                if not credential_resolver:
+                    raise ValueError(
+                        f"Credential resolver required for MCP server '{server_id}' that uses user credentials"
+                    )
+
                 try:
-                    # Use the MCP coordinator's resolution method if available
-                    if hasattr(credential_resolver, "resolve_mcp_auth_for_execution"):
-                        # This is an MCP coordinator
-                        resolved_auth = await credential_resolver.resolve_mcp_auth_for_execution(
-                            server_id=server_id, auth=auth, user_id=user_id
-                        )
-                    else:
-                        # Direct credential resolver - resolve manually
-                        resolved_auth = {}
-                        for key, value in auth.items():
-                            if isinstance(value, str):
-                                match = USER_CREDENTIAL_PATTERN.match(value)
-                                if match:
-                                    service = match.group(1).lower()
-                                    credentials = await credential_resolver.resolve(
-                                        user_id, service
-                                    )
-                                    if credentials is None:
-                                        raise MissingCredentialError(service, user_id)
-                                    # Extract appropriate credential field
-                                    if isinstance(credentials, dict):
-                                        for field in [
-                                            "token",
-                                            "api_key",
-                                            "access_token",
-                                            "key",
-                                            "password",
-                                        ]:
-                                            if field in credentials:
-                                                resolved_auth[key] = credentials[field]
-                                                break
-                                        else:
-                                            resolved_auth[key] = credentials
-                                    else:
-                                        resolved_auth[key] = credentials
-                                else:
-                                    resolved_auth[key] = value
-                            else:
-                                resolved_auth[key] = value
+                    # Get the original server config to know which service to resolve
+                    # For now, we'll use the server_id to determine the service
+                    # (e.g., "github-mcp" -> "github")
+                    service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
 
-                except Exception as e:
-                    # Re-raise MissingCredentialError to trigger clarification flow
-                    if isinstance(e, MissingCredentialError):
-                        raise
-                    # Log other credential resolution failures
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.ERROR,
-                        data={
-                            "server_id": server_id,
-                            "tool_name": tool_name,
-                            "error": str(e),
-                            "user_id": user_id,
-                        },
-                        description=f"Failed to resolve user credentials for MCP tool: {str(e)}",
-                    )
+                    # Resolve credentials from database
+                    credentials = await credential_resolver.resolve(user_id, service_name)
+
+                    if credentials is None:
+                        # Trigger clarification flow
+                        raise MissingCredentialError(service_name, user_id)
+
+                    # Format credentials for the MCP server
+                    # Assume bearer token format for now
+                    resolved_auth = {
+                        "type": "bearer",
+                        "token": (
+                            credentials.get("token")
+                            if isinstance(credentials, dict)
+                            else credentials
+                        ),
+                    }
+
+                    # Cache the credentials
+                    self.user_credentials[server_id][user_id] = resolved_auth
+
+                except MissingCredentialError:
+                    # Re-raise to trigger clarification flow
                     raise
-
-                # If credentials were resolved, we need to reconnect with the new auth
-                if resolved_auth != auth:
-                    # Store original connection info
-                    original_conn = self.connections[server_id].copy()
-                    url = original_conn.get("url")
-                    command = original_conn.get("command")
-                    # Get timeout from connection or use default
-                    conn_timeout = original_conn.get("request_timeout", 60)
-
-                    # Disconnect current connection
-                    await handler.disconnect_server(server_name)
-
-                    # Reconnect with resolved credentials
-                    await handler.connect_server(
-                        name=server_name,
-                        url=url,
-                        command=command,
-                        credentials=resolved_auth,
-                        request_timeout=conn_timeout,
-                        server_id=server_id,
+                except Exception as e:
+                    error_msg = (
+                        f"Failed to resolve user credentials for MCP server '{server_id}': {str(e)}"
                     )
+                    raise ValueError(error_msg) from e
+
+        # If credentials were resolved and different from current connection, reconnect
+        if resolved_auth != auth and auth == "$MUXI_USER_CREDENTIALS$":
+            # Store original connection info
+            original_conn = self.connections[server_id].copy()
+            url = original_conn.get("url")
+            command = original_conn.get("command")
+            # Get timeout from connection or use default
+            conn_timeout = original_conn.get("request_timeout", 60)
+
+            # Disconnect current connection
+            await handler.disconnect_server(server_name)
+
+            # Reconnect with resolved credentials
+            await handler.connect_server(
+                name=server_name,
+                url=url,
+                command=command,
+                credentials=resolved_auth,
+                request_timeout=conn_timeout,
+                server_id=server_id,
+            )
 
         # Acquire lock for this handler to prevent concurrent issues
         async with self.locks[server_id]:
@@ -475,12 +487,71 @@ class MCPService:
                         restore_timeout = True
 
                 # Enhanced tool execution with modern protocol support
-                result = await handler.execute_tool(
-                    server_name=server_name,
-                    tool_name=tool_name,
-                    params=parameters,
-                    cancellation_token=None,
-                )
+                try:
+                    result = await handler.execute_tool(
+                        server_name=server_name,
+                        tool_name=tool_name,
+                        params=parameters,
+                        cancellation_token=None,
+                    )
+                except Exception:
+                    # If we're using cached user credentials and the call failed,
+                    # check if the credentials have been updated in the database
+                    if (
+                        auth == "$MUXI_USER_CREDENTIALS$"
+                        and user_id
+                        and server_id in self.user_credentials
+                        and user_id in self.user_credentials[server_id]
+                        and credential_resolver
+                    ):
+
+                        # Clear the cached credentials for this user
+                        old_cached_creds = self.user_credentials[server_id].pop(user_id, None)
+
+                        # Try to get fresh credentials from the database
+                        service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
+                        fresh_credentials = await credential_resolver.resolve(user_id, service_name)
+
+                        if fresh_credentials and fresh_credentials != old_cached_creds:
+                            # We have new credentials, retry with them
+                            resolved_auth = {
+                                "type": "bearer",
+                                "token": (
+                                    fresh_credentials.get("token")
+                                    if isinstance(fresh_credentials, dict)
+                                    else fresh_credentials
+                                ),
+                            }
+
+                            # Cache the new credentials
+                            self.user_credentials[server_id][user_id] = resolved_auth
+
+                            # Reconnect with new credentials
+                            await handler.disconnect_server(server_name)
+                            await handler.connect_server(
+                                name=server_name,
+                                url=self.connections[server_id].get("url"),
+                                command=self.connections[server_id].get("command"),
+                                credentials=resolved_auth,
+                                request_timeout=self.connections[server_id].get(
+                                    "request_timeout", 60
+                                ),
+                                server_id=server_id,
+                            )
+
+                            # Retry the tool execution
+                            result = await handler.execute_tool(
+                                server_name=server_name,
+                                tool_name=tool_name,
+                                params=parameters,
+                                cancellation_token=None,
+                            )
+                        else:
+                            # No new credentials or credential resolution failed
+                            raise
+                    else:
+                        # Not a credential issue or can't retry
+                        raise
 
                 # First check if we have a parsed response from the message handler
                 if isinstance(result, dict):
@@ -504,7 +575,9 @@ class MCPService:
                                 "server_id": server_id,
                                 "tool_name": tool_name,
                                 "error": error_message,
-                                "error_code": error_info.get("code") if isinstance(error_info, dict) else None,
+                                "error_code": (
+                                    error_info.get("code") if isinstance(error_info, dict) else None
+                                ),
                             },
                             description=(f"MCP tool returned error: {tool_name} on {server_id}"),
                         )
@@ -573,6 +646,7 @@ class MCPService:
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: int = 60,
+        original_credentials: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Attempt connection with automatic fallback between transports.
@@ -593,7 +667,15 @@ class MCPService:
                 )
 
                 return await self._connect_single_transport(
-                    server_id, url, None, transport_type, credentials, model, request_timeout
+                    server_id,
+                    url,
+                    None,
+                    None,
+                    transport_type,
+                    credentials,
+                    model,
+                    request_timeout,
+                    original_credentials,
                 )
 
             except Exception as e:
@@ -628,6 +710,7 @@ class MCPService:
         credentials: Optional[Dict[str, Any]] = None,
         model: Optional[LLM] = None,
         request_timeout: int = 60,
+        original_credentials: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Connect using a specific transport type.
@@ -654,11 +737,21 @@ class MCPService:
 
                 # Store the handler
                 self.handlers[server_id] = handler
+
+                # Check if this server uses user-specific credentials
+                # If original_credentials were provided, it means user placeholders were detected
+                if original_credentials:
+                    # Mark this as requiring user-specific credentials at runtime
+                    stored_credentials = "$MUXI_USER_CREDENTIALS$"
+                else:
+                    # Regular credentials that don't need runtime resolution
+                    stored_credentials = credentials
+
                 self.connections[server_id] = {
                     "status": "connected",
                     "url": url,
                     "command": command,
-                    "credentials": credentials,
+                    "credentials": stored_credentials,
                     "server_name": server_name,
                     "transport_type": transport_type,
                     "request_timeout": request_timeout,
@@ -790,6 +883,10 @@ class MCPService:
                 if server_id in self.tool_registry:
                     del self.tool_registry[server_id]
 
+                # Clear cached user credentials for this server
+                if server_id in self.user_credentials:
+                    del self.user_credentials[server_id]
+
                 # Emit disconnection success event
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
@@ -808,6 +905,27 @@ class MCPService:
                     description=(f"Error disconnecting from MCP server {server_id}: {str(e)}"),
                 )
                 return False
+
+    def clear_user_credentials_cache(
+        self, server_id: Optional[str] = None, user_id: Optional[str] = None
+    ):
+        """
+        Clear cached user credentials.
+
+        Args:
+            server_id: If provided, clear only for this server
+            user_id: If provided, clear only for this user (requires server_id)
+        """
+        if server_id and user_id:
+            # Clear specific user's credentials for a specific server
+            if server_id in self.user_credentials:
+                self.user_credentials[server_id].pop(user_id, None)
+        elif server_id:
+            # Clear all users' credentials for a specific server
+            self.user_credentials.pop(server_id, None)
+        else:
+            # Clear all cached credentials
+            self.user_credentials.clear()
 
     # =============================
     # MCP Specification Features
@@ -1208,7 +1326,7 @@ class MCPService:
             "total_servers": len(self.handlers),
             "disconnected": 0,
             "failed": 0,
-            "servers": {}
+            "servers": {},
         }
 
         # Disconnect all handlers
@@ -1239,7 +1357,7 @@ class MCPService:
                     event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
                     level=observability.EventLevel.INFO,
                     data={"server_id": server_id},
-                    description=f"Disconnected MCP server during shutdown: {server_id}"
+                    description=f"Disconnected MCP server during shutdown: {server_id}",
                 )
 
             except Exception as e:
@@ -1250,7 +1368,7 @@ class MCPService:
                     event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={"server_id": server_id, "error": str(e)},
-                    description=f"Failed to disconnect MCP server during shutdown: {server_id}"
+                    description=f"Failed to disconnect MCP server during shutdown: {server_id}",
                 )
 
         # Clear all registries
@@ -1262,7 +1380,7 @@ class MCPService:
             event_type=observability.SystemEvents.MCP_SERVICE_SHUTDOWN,
             level=observability.EventLevel.INFO,
             data=results,
-            description="MCP service shutdown complete"
+            description="MCP service shutdown complete",
         )
 
         return results
