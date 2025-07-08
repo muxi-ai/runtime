@@ -1800,6 +1800,56 @@ class Formation:
                 # Handler was not registered, ignore
                 pass
 
+    def _resolve_initialization_credentials(self, auth_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Replace user.credentials.X with secrets.USER_CREDENTIALS_X for initialization.
+
+        This method transforms user credential placeholders to initialization secret patterns
+        that can be resolved during formation startup when there's no user context.
+
+        Args:
+            auth_config: Authentication configuration that may contain user credential placeholders
+
+        Returns:
+            Auth config with user credential patterns replaced by initialization secret patterns
+
+        Example:
+            Input:  {"token": "${{ user.credentials.github }}"}
+            Output: {"token": "${{ secrets.USER_CREDENTIALS_GITHUB }}"}
+        """
+        if not auth_config:
+            return auth_config
+
+        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+
+        def transform_recursive(data: Any) -> Any:
+            """Recursively transform credential placeholders in nested data structures."""
+            if isinstance(data, dict):
+                # Process dictionary recursively
+                transformed_dict = {}
+                for key, value in data.items():
+                    transformed_dict[key] = transform_recursive(value)
+                return transformed_dict
+            elif isinstance(data, list):
+                # Process list recursively
+                return [transform_recursive(item) for item in data]
+            elif isinstance(data, str):
+                # Check if this is a user credential placeholder
+                match = USER_CREDENTIAL_PATTERN.match(data)
+                if match:
+                    service_name = match.group(1)
+                    # Transform to initialization secret pattern
+                    # user.credentials.github -> secrets.USER_CREDENTIALS_GITHUB
+                    initialization_secret = f"USER_CREDENTIALS_{service_name.upper()}"
+                    return f"${{{{ secrets.{initialization_secret} }}}}"
+                else:
+                    return data
+            else:
+                # Non-string, non-dict, non-list values pass through
+                return data
+
+        return transform_recursive(auth_config)
+
     async def _register_mcp_servers(self) -> None:
         """Register MCP servers in Formation's event loop."""
         if not hasattr(self, "_mcp_service") or not self._mcp_service:
@@ -1864,7 +1914,30 @@ class Formation:
 
                 # Add optional parameters
                 if "auth" in server_config:
-                    registration_params["credentials"] = server_config["auth"]
+                    # Transform user credentials to initialization secrets
+                    original_auth = server_config["auth"]
+                    transformed_auth = self._resolve_initialization_credentials(original_auth)
+
+                    # Debug logging
+                    if original_auth != transformed_auth:
+                        observability.observe(
+                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "server_id": server_id,
+                                "original_auth": str(original_auth),
+                                "transformed_auth": str(transformed_auth),
+                            },
+                            description=f"Transformed user credentials for {server_id}",
+                        )
+
+                    # Interpolate secrets after transformation
+                    if hasattr(self, 'secrets_manager') and self.secrets_manager:
+                        # Use async interpolation since we're in an async method
+                        final_auth = await self.secrets_manager.interpolate_secrets(transformed_auth)
+                        registration_params["credentials"] = final_auth
+                    else:
+                        registration_params["credentials"] = transformed_auth
                 if "timeout_seconds" in server_config:
                     registration_params["request_timeout"] = server_config["timeout_seconds"]
                 if "transport_type" in server_config:
