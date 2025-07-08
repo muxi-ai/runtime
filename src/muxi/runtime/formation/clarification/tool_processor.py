@@ -5,11 +5,10 @@ This module provides enhanced tool call processing that integrates with the
 intelligent clarification system to handle incomplete or unclear tool calls.
 """
 
-
 from typing import Dict, List, Any, Optional, Tuple
 
 from ...services.mcp.parser import ToolParser, ToolCall
-from ...datatypes import ToolInformationAnalysis
+from ...datatypes.clarification import ToolInformationAnalysis
 
 
 class EnhancedToolProcessor:
@@ -37,10 +36,7 @@ class EnhancedToolProcessor:
         self.clarification_enricher = clarification_enricher
 
     async def process_tool_calls_with_clarification(
-        self,
-        text: str,
-        user_id: Any = None,
-        user_context: Optional[Dict[str, Any]] = None
+        self, text: str, user_id: Any = None, user_context: Optional[Dict[str, Any]] = None
     ) -> Tuple[str, List[ToolCall], Optional[str]]:
         """
         Process tool calls from text with clarification support.
@@ -92,18 +88,14 @@ class EnhancedToolProcessor:
                     enhanced_call = validation_result["enhanced_call"]
                     try:
                         result = await self.agent.invoke_tool(
-                            tool_name=enhanced_call.tool_name,
-                            parameters=enhanced_call.parameters
+                            tool_name=enhanced_call.tool_name, parameters=enhanced_call.parameters
                         )
                         enhanced_call.set_result(result)
                         processed_calls.append(enhanced_call)
                     except Exception as e:
                         #  Error - TODO: add observability
                         # Set error result
-                        enhanced_call.set_result({
-                            "error": str(e),
-                            "status": "failed"
-                        })
+                        enhanced_call.set_result({"error": str(e), "status": "failed"})
                         processed_calls.append(enhanced_call)
 
             if clarification_needed:
@@ -121,9 +113,7 @@ class EnhancedToolProcessor:
             return text, [], None
 
     async def _validate_and_enrich_tool_call(
-        self,
-        tool_call: ToolCall,
-        user_context: Dict[str, Any]
+        self, tool_call: ToolCall, user_context: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Validate and enrich a single tool call.
@@ -153,7 +143,7 @@ class EnhancedToolProcessor:
                     tool_name=tool_call.tool_name,
                     provided_params=tool_call.parameters,
                     available_tools=available_tools,
-                    user_context=user_context
+                    user_context=user_context,
                 )
 
             # If analysis shows we can proceed, enrich parameters
@@ -162,7 +152,7 @@ class EnhancedToolProcessor:
                 enriched_params = await self.clarification_enricher.enrich_parameters(
                     tool_name=tool_call.tool_name,
                     provided_params=tool_call.parameters,
-                    user_context=user_context
+                    user_context=user_context,
                 )
 
                 # Create enhanced tool call with enriched parameters
@@ -171,13 +161,13 @@ class EnhancedToolProcessor:
                     parameters=enriched_params,
                     full_text=tool_call.full_text,
                     start_pos=tool_call.start_pos,
-                    end_pos=tool_call.end_pos
+                    end_pos=tool_call.end_pos,
                 )
 
                 return {
                     "needs_clarification": False,
                     "clarification_question": None,
-                    "enhanced_call": enhanced_call
+                    "enhanced_call": enhanced_call,
                 }
             else:
                 # Missing information - generate clarification question
@@ -188,7 +178,7 @@ class EnhancedToolProcessor:
                 return {
                     "needs_clarification": True,
                     "clarification_question": clarification_question,
-                    "enhanced_call": None
+                    "enhanced_call": None,
                 }
 
         except Exception as e:
@@ -198,13 +188,11 @@ class EnhancedToolProcessor:
             return {
                 "needs_clarification": False,
                 "clarification_question": None,
-                "enhanced_call": tool_call
+                "enhanced_call": tool_call,
             }
 
     def _generate_tool_clarification_question(
-        self,
-        analysis: ToolInformationAnalysis,
-        tool_name: str
+        self, analysis: ToolInformationAnalysis, tool_name: str
     ) -> str:
         """
         Generate a clarification question for a tool call.
@@ -229,10 +217,7 @@ class EnhancedToolProcessor:
             return f"To use the {tool_name} tool, I need: {param_list}. Can you provide these?"
 
     async def validate_tool_response(
-        self,
-        tool_call: ToolCall,
-        response: Dict[str, Any],
-        user_id: Any = None
+        self, tool_call: ToolCall, response: Dict[str, Any], user_id: Any = None
     ) -> Optional[str]:
         """
         Validate a tool response and potentially ask for clarification.
@@ -254,9 +239,10 @@ class EnhancedToolProcessor:
                 error_msg = response["error"]
 
                 # Common errors that might need clarification
-                if any(keyword in error_msg.lower() for keyword in [
-                    "invalid", "missing", "required", "not found", "ambiguous"
-                ]):
+                if any(
+                    keyword in error_msg.lower()
+                    for keyword in ["invalid", "missing", "required", "not found", "ambiguous"]
+                ):
                     return (
                         f"The {tool_call.tool_name} tool encountered an issue: {error_msg}. "
                         "Could you provide more specific information?"
@@ -278,9 +264,7 @@ class EnhancedToolProcessor:
             return None
 
     async def handle_clarified_tool_execution(
-        self,
-        original_tool_call: ToolCall,
-        clarified_params: Dict[str, Any]
+        self, original_tool_call: ToolCall, clarified_params: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Execute a tool call with clarified parameters.
@@ -298,8 +282,7 @@ class EnhancedToolProcessor:
 
             # Execute the tool with complete parameters
             result = await self.agent.invoke_tool(
-                tool_name=original_tool_call.tool_name,
-                parameters=final_params
+                tool_name=original_tool_call.tool_name, parameters=final_params
             )
 
             # Update the original tool call with results
@@ -310,9 +293,6 @@ class EnhancedToolProcessor:
 
         except Exception as e:
             #  Error - TODO: add observability
-            error_result = {
-                "error": str(e),
-                "status": "failed"
-            }
+            error_result = {"error": str(e), "status": "failed"}
             original_tool_call.set_result(error_result)
             return error_result

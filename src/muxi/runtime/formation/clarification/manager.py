@@ -8,13 +8,13 @@ clarification process across multiple conversation turns.
 import time
 from typing import Dict, Optional, Any
 
-from ...datatypes import (
-    ClarificationRequest,
+from ...datatypes.clarification import (
+    ClarificationError,
     ClarificationResult,
     ClarificationResultStatus,
     ClarificationStatus,
     RequestType,
-    ClarificationError,
+    ClarificationRequest,
 )
 
 

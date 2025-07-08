@@ -12,7 +12,27 @@ import threading
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 from cryptography.fernet import Fernet
-from .. import observability
+
+# Import only what we need to avoid heavy dependencies
+try:
+    # Try to import from the already loaded observability module if available
+    from ..observability import observe, SystemEvents, EventLevel
+except ImportError:
+    # If observability is not available, define no-op versions
+    class SystemEvents:
+        SECRET_OPERATION_FAILED = "secret.operation.failed"
+        SECRET_OPERATION_COMPLETED = "secret.operation.completed"
+        SECRET_LISTING_FAILED = "secret.listing.failed"
+
+    class EventLevel:
+        ERROR = "error"
+        INFO = "info"
+        WARNING = "warning"
+        DEBUG = "debug"
+
+    def observe(*args, **kwargs):
+        # No-op when observability is not available
+        pass
 
 
 class SecretsManager:
@@ -50,41 +70,15 @@ class SecretsManager:
 
     async def initialize_encryption(self) -> None:
         """Initialize encryption for formation (creates master key if needed)."""
-        # Observability: Encryption initialization started
-        observability.observe(
-            event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
-            description="Starting secrets manager encryption initialization",
-            data={
-                "operation_type": "encryption",
-                "formation_dir": str(self.formation_dir),
-                "master_key_exists": self.master_key_path.exists(),
-                "secrets_file_exists": self.secrets_file_path.exists(),
-            },
-        )
-
         try:
             await self._ensure_formation_dir()
             await self._load_or_create_master_key()
 
-            # Observability: Encryption initialization completed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                level=observability.EventLevel.INFO,
-                description="Secrets manager encryption initialization completed",
-                data={
-                    "operation_type": "encryption",
-                    "formation_dir": str(self.formation_dir),
-                    "encryption_ready": self._fernet is not None,
-                    "success": True,
-                },
-            )
-
         except Exception as e:
             # Observability: Encryption initialization failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secrets manager encryption initialization failed: {str(e)}",
                 data={
                     "operation_type": "encryption",
@@ -168,71 +162,32 @@ class SecretsManager:
         """
         with self._sync_lock:
             try:
-                # Log the operation start
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.DEBUG,
-                    description=f"Starting synchronous secret retrieval for: {name}",
-                    data={
-                        "operation_type": "sync_retrieval",
-                        "secret_name": name,
-                    },
-                )
-
                 # Initialize encryption if needed
                 if not self._fernet:
                     if self.master_key_path.exists():
                         key_data = self.master_key_path.read_bytes()
                         self._fernet = Fernet(key_data)
                     else:
-                        observability.observe(
-                            event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                            level=observability.EventLevel.WARNING,
-                            description=f"Master key not found for sync secret retrieval: {name}",
-                            data={"operation_type": "sync_retrieval", "secret_name": name},
-                        )
                         return None
 
                 normalized_name = self._normalize_secret_name(name)
 
-                # Load secrets from file
-                if not self.secrets_file_path.exists():
-                    observability.observe(
-                        event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                        level=observability.EventLevel.DEBUG,
-                        description=f"Secrets file not found for: {name}",
-                        data={"operation_type": "sync_retrieval", "secret_name": name, "found": False},
-                    )
-                    return None
+                # Use cache if available, otherwise load from file
+                if self._secrets_cache is None:
+                    if not self.secrets_file_path.exists():
+                        return None
 
-                encrypted_data = self.secrets_file_path.read_bytes()
-                decrypted_data = self._fernet.decrypt(encrypted_data)
-                secrets = json.loads(decrypted_data.decode("utf-8"))
+                    encrypted_data = self.secrets_file_path.read_bytes()
+                    decrypted_data = self._fernet.decrypt(encrypted_data)
+                    self._secrets_cache = json.loads(decrypted_data.decode("utf-8"))
 
-                secret_value = secrets.get(normalized_name)
-                found = secret_value is not None
-
-                # Log the operation completion
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.DEBUG,
-                    description=f"Sync secret retrieval completed for {name}, found: {found}",
-                    data={
-                        "operation_type": "sync_retrieval",
-                        "secret_name": name,
-                        "normalized_name": normalized_name,
-                        "found": found,
-                        "value_type": type(secret_value).__name__ if found else None,
-                        "success": True,
-                    },
-                )
-
+                secret_value = self._secrets_cache.get(normalized_name)
                 return secret_value
 
             except Exception as e:
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                    level=observability.EventLevel.ERROR,
+                observe(
+                    event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                    level=EventLevel.ERROR,
                     description=f"Sync secret retrieval failed for {name}: {str(e)}",
                     data={
                         "operation_type": "sync_retrieval",
@@ -259,20 +214,6 @@ class SecretsManager:
             value: Secret value
             overwrite: Whether to overwrite existing secret
         """
-        # Observability: Secret storage started
-        observability.observe(
-            event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-            level=observability.EventLevel.INFO,
-            description=f"Starting secret storage for: {name}",
-            data={
-                "operation_type": "storage_started",
-                "secret_name": name,
-                "normalized_name": self._normalize_secret_name(name),
-                "overwrite": overwrite,
-                "value_type": type(value).__name__,
-            },
-        )
-
         try:
             if not self._fernet:
                 await self.initialize_encryption()
@@ -287,48 +228,17 @@ class SecretsManager:
                         f"Secret '{normalized_name}' already exists. "
                         f"Use overwrite=True to replace."
                     )
-
-                    # Observability: Secret storage failed (already exists)
-                    observability.observe(
-                        event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                        level=observability.EventLevel.ERROR,
-                        description=f"Secret storage failed for {name}: {error_msg}",
-                        data={
-                            "operation_type": "storage",
-                            "secret_name": name,
-                            "normalized_name": normalized_name,
-                            "error": error_msg,
-                            "error_type": "ValueError",
-                            "success": False,
-                        },
-                    )
-
                     raise ValueError(error_msg)
 
                 secrets[normalized_name] = value
                 await self._save_secrets_to_file(secrets)
                 self._secrets_cache = secrets
 
-                # Observability: Secret storage completed successfully
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    description=f"Secret storage completed for: {name}",
-                    data={
-                        "operation_type": "storage",
-                        "secret_name": name,
-                        "normalized_name": normalized_name,
-                        "overwrite": overwrite,
-                        "total_secrets": len(secrets),
-                        "success": True,
-                    },
-                )
-
         except Exception as e:
             # Observability: Secret storage failed with exception
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret storage failed for {name}: {str(e)}",
                 data={
                     "operation_type": "storage",
@@ -359,29 +269,12 @@ class SecretsManager:
             async with self._lock:
                 secrets = await self._get_secrets_cache()
                 secret_value = secrets.get(normalized_name)
-                found = secret_value is not None
-
-                # Observability: Secret retrieval completed
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.DEBUG,
-                    description=(f"Secret retrieval completed for {name}, " f"found: {found}"),
-                    data={
-                        "operation_type": "retrieval",
-                        "secret_name": name,
-                        "normalized_name": normalized_name,
-                        "found": found,
-                        "value_type": type(secret_value).__name__ if found else None,
-                        "success": True,
-                    },
-                )
-
                 return secret_value
 
         except Exception as e:
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret retrieval failed for {name}: {str(e)}",
                 data={
                     "operation_type": "retrieval",
@@ -413,48 +306,18 @@ class SecretsManager:
                 secrets = await self._get_secrets_cache()
 
                 if normalized_name not in secrets:
-                    observability.observe(
-                        event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                        level=observability.EventLevel.DEBUG,
-                        description=f"Secret deletion completed for {name}: not found",
-                        data={
-                            "operation_type": "deletion",
-                            "secret_name": name,
-                            "normalized_name": normalized_name,
-                            "found": False,
-                            "deleted": False,
-                            "success": True,
-                        },
-                    )
                     return False
 
                 del secrets[normalized_name]
                 await self._save_secrets_to_file(secrets)
                 self._secrets_cache = secrets
-
-                # Observability: Secret deletion completed successfully
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    description=f"Secret deletion completed for: {name}",
-                    data={
-                        "operation_type": "deletion",
-                        "secret_name": name,
-                        "normalized_name": normalized_name,
-                        "found": True,
-                        "deleted": True,
-                        "remaining_secrets": len(secrets),
-                        "success": True,
-                    },
-                )
-
                 return True
 
         except Exception as e:
             # Observability: Secret deletion failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret deletion failed for {name}: {str(e)}",
                 data={
                     "operation_type": "deletion",
@@ -480,26 +343,13 @@ class SecretsManager:
             async with self._lock:
                 secrets = await self._get_secrets_cache()
                 secret_names = list(secrets.keys())
-
-                # Observability: Secret listing completed
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_LISTING_COMPLETED,
-                    level=observability.EventLevel.DEBUG,
-                    description=f"Secret listing completed, found {len(secret_names)} secrets",
-                    data={
-                        "secret_count": len(secret_names),
-                        "secret_names": secret_names,
-                        "success": True,
-                    },
-                )
-
                 return secret_names
 
         except Exception as e:
             # Observability: Secret listing failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_LISTING_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_LISTING_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret listing failed: {str(e)}",
                 data={"error": str(e), "error_type": type(e).__name__, "success": False},
             )
@@ -530,27 +380,13 @@ class SecretsManager:
                 await self.initialize_encryption()
 
             result = await self._interpolate_recursive(value)
-
-            # Observability: Secret interpolation completed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                level=observability.EventLevel.DEBUG,
-                description="Secret interpolation completed successfully",
-                data={
-                    "operation_type": "interpolation",
-                    "value_type": type(value).__name__,
-                    "result_type": type(result).__name__,
-                    "success": True,
-                },
-            )
-
             return result
 
         except Exception as e:
             # Observability: Secret interpolation failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret interpolation failed: {str(e)}",
                 data={
                     "operation_type": "interpolation",
@@ -600,27 +436,14 @@ class SecretsManager:
                 await self.initialize_encryption()
 
             async with self._lock:
-                current_count = len(await self._get_secrets_cache())
                 await self._save_secrets_to_file({})
                 self._secrets_cache = {}
 
-                # Observability: Secret clearing completed
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.WARNING,
-                    description="All secrets cleared successfully",
-                    data={
-                        "operation_type": "clearing",
-                        "cleared_count": current_count,
-                        "success": True,
-                    },
-                )
-
         except Exception as e:
             # Observability: Secret clearing failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret clearing failed: {str(e)}",
                 data={
                     "operation_type": "clearing",
@@ -654,13 +477,9 @@ class SecretsManager:
                     errors.append({"name": name, "error": str(e)})
 
             # Observability: Secret import completed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                level=(
-                    observability.EventLevel.INFO
-                    if failed_count == 0
-                    else observability.EventLevel.WARNING
-                ),
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_COMPLETED,
+                level=(EventLevel.INFO if failed_count == 0 else EventLevel.WARNING),
                 description=(
                     f"Secret import completed: {imported_count} imported, " f"{failed_count} failed"
                 ),
@@ -679,9 +498,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret import failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret import failed: {str(e)}",
                 data={
                     "operation_type": "import",
@@ -707,27 +526,13 @@ class SecretsManager:
 
             async with self._lock:
                 secrets = await self._get_secrets_cache()
-
-                # Observability: Secret export completed
-                observability.observe(
-                    event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                    level=observability.EventLevel.INFO,
-                    description=f"Secret export completed, exported {len(secrets)} secrets",
-                    data={
-                        "operation_type": "export",
-                        "secret_count": len(secrets),
-                        "secret_names": list(secrets.keys()),
-                        "success": True,
-                    },
-                )
-
                 return secrets
 
         except Exception as e:
             # Observability: Secret export failed
-            observability.observe(
-                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
-                level=observability.EventLevel.ERROR,
+            observe(
+                event_type=SystemEvents.SECRET_OPERATION_FAILED,
+                level=EventLevel.ERROR,
                 description=f"Secret export failed: {str(e)}",
                 data={
                     "operation_type": "export",

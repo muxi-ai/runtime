@@ -671,6 +671,7 @@ class Formation:
         Returns:
             Configuration with secrets interpolated
         """
+        interpolated_secrets = set()
 
         def interpolate_value(value):
             """Recursively interpolate secrets in a value."""
@@ -688,6 +689,7 @@ class Formation:
                                 f"Please add it using: python -m muxi.runtime.utils.secrets add {secret_name}"
                             )
                         value = value.replace(f"${{{{ secrets.{secret_name} }}}}", secret_value)
+                        interpolated_secrets.add(secret_name)
                     except ValueError:
                         # Re-raise ValueError for missing secrets
                         raise
@@ -706,7 +708,23 @@ class Formation:
                 return value
 
         # Deep copy to avoid modifying original
-        return interpolate_value(copy.deepcopy(config))
+        result = interpolate_value(copy.deepcopy(config))
+
+        # Log final success only if we interpolated any secrets
+        if interpolated_secrets:
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                description="Secret interpolation completed successfully for formation configuration",
+                data={
+                    "operation_type": "formation_interpolation",
+                    "secret_count": len(interpolated_secrets),
+                    "secrets_interpolated": sorted(list(interpolated_secrets)),
+                    "success": True,
+                },
+            )
+
+        return result
 
     async def _load_config(self, config_path: str, normalized_config_path: str) -> Dict[str, Any]:
         """
@@ -1932,9 +1950,11 @@ class Formation:
                         )
 
                     # Interpolate secrets after transformation
-                    if hasattr(self, 'secrets_manager') and self.secrets_manager:
+                    if hasattr(self, "secrets_manager") and self.secrets_manager:
                         # Use async interpolation since we're in an async method
-                        final_auth = await self.secrets_manager.interpolate_secrets(transformed_auth)
+                        final_auth = await self.secrets_manager.interpolate_secrets(
+                            transformed_auth
+                        )
                         registration_params["credentials"] = final_auth
                     else:
                         registration_params["credentials"] = transformed_auth

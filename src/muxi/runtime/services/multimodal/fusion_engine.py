@@ -11,7 +11,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 from enum import Enum
-from ...datatypes import Workflow, SubTask
+from ...datatypes.workflow import Workflow, SubTask
 import re
 
 if TYPE_CHECKING:

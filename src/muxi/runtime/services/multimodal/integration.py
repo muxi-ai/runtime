@@ -13,7 +13,7 @@ from pathlib import Path
 import time
 from urllib.parse import urlparse
 
-from ...datatypes import Workflow, SubTask, TaskInput, TaskOutput
+from ...datatypes.workflow import SubTask, TaskInput, TaskOutput, Workflow
 from .fusion_engine import (
     MultiModalFusionEngine,
     MultiModalContent,

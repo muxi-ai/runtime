@@ -8,7 +8,7 @@ Converts raw data into structured options, trade-offs, and recommendations.
 import json
 from typing import Any, Dict, List
 
-from ...datatypes import (
+from ...datatypes.clarification import (
     ToolExecutionResult,
     WorkflowSynthesis,
     PlanningWorkflowType,

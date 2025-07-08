@@ -9,7 +9,7 @@ from typing import Dict, Any, List
 import importlib
 import os
 
-from ..datatypes import ServiceDependency, ValidationResult
+from ..datatypes.validation import ServiceDependency, ValidationResult
 
 
 class DependencyValidator:

@@ -2,7 +2,7 @@
 
 from .formation import Formation
 from ..utils import DependencyValidator
-from ..datatypes import ValidationResult
+from ..datatypes.validation import ValidationResult
 
 __all__ = [
     "Formation",

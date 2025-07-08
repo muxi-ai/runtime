@@ -3,224 +3,48 @@ Data types and structures for the MUXI runtime.
 
 This module provides the core data types and structures used throughout
 the MUXI framework.
+
+Submodules are not imported by default to avoid heavy dependencies.
+Import specific submodules as needed:
+
+    from muxi.runtime.datatypes.observability import EventLevel, SystemEvents
+    from muxi.runtime.datatypes.exceptions import FormationError
+    # etc.
+
+Available submodules:
+- async_operations: Async operation types and utilities
+- caching: Cache-related types
+- clarification: Clarification system types
+- exceptions: Runtime exceptions
+- intelligence: AI intelligence types
+- mcp: Model Context Protocol types
+- memory: Memory configuration types
+- observability: Observability event types
+- response: Response types
+- retry: Retry configuration and errors
+- schema: Service schema types
+- task_status: Task status types
+- validation: Validation types
+- workflow: Workflow types
 """
 
-from .async_operations import (
-    OperationStatus,
-    OperationTimeoutError,
-    OperationContext,
-    CancellationToken,
-    TimeoutConfig,
-)
-from .caching import (
-    CacheType,
-    CacheKey,
-    CachedResponse,
-    CacheStatistics,
-    MemoryStats,
-)
-from .clarification import (
-    ClarificationStatus,
-    RequestType,
-    ClarificationMode,
-    ClarificationRequest,
-    ClarificationResult,
-    ClarificationResultStatus,
-    ClarificationSession,
-    ClarificationResponse,
-    ClarificationError,
-    InformationAnalysisError,
-    QuestionGenerationError,
-    ParameterExtractionError,
-    ContextEnrichmentError,
-)
-from .exceptions import (
-    FormationError,
-    FormationConfigurationError,
-    ConfigurationLoadError,
-    ConfigurationValidationError,
-    OverlordStateError,
-    AgentNotFoundError,
-    DependencyError,
-    DependencyValidationError,
-    CircularDependencyError,
-    MissingDependencyError,
-)
-from .intelligence import (
-    PreferenceType,
-    AdaptationType,
-    UserPreferences,
-    ConversationContext,
-    AdaptedResponse,
-)
-from .mcp import (
-    FunctionCallModel,
-    ErrorCodes,
-    JSONRPCError,
-    JSONRPCBaseRequest,
-    JSONRPCRequest,
-    JSONRPCBaseResponse,
-    JSONRPCSuccessResponse,
-    JSONRPCErrorResponse,
-    JSONRPCResponse,
-    MCPToolCall,
-    MCPToolCallRequest,
-    MCPToolCallResponse,
-)
-from .response import (
-    MuxiFileContent,
-    MuxiContentItem,
-    MuxiErrorDetails,
-    MuxiUnifiedResponse,
-    MuxiMessageContent,
-    MuxiResponse,
-)
-from .retry import (
-    RetryConfig,
-    RetryResult,
-    RetryAttempt,
-    RetryStrategy,
-    TransientError,
-    NetworkTransientError,
-    ServiceTransientError,
-    RateLimitTransientError,
-    calculate_delay,
-    is_retryable_error,
-)
-from .validation import (
-    ServiceDependency,
-    ValidationResult,
-)
-from .task_status import (
-    TaskStatus,
-)
-from .workflow import (
-    WorkflowStatus,
-    ApprovalStatus,
-    TaskInput,
-    TaskOutput,
-    SubTask,
-    RequestAnalysis,
-    TaskResult,
-    Workflow,
-)
-from .schema import (
-    BaseServiceSchema,
-    LLMServiceSchema,
-    MemoryServiceSchema,
-    MCPServiceSchema,
-    A2AServiceSchema,
-    SchedulerServiceSchema,
-    FormationSchema,
-)
-from .memory import (
-    BufferMemoryConfig,
-    RemoteBufferConfig,
-    WorkingMemoryConfig,
-    PersistentMemoryConfig,
-    MemorySystemConfig,
-)
+# Do not import submodules by default to avoid heavy dependencies
+# This prevents loading ML libraries (spacy, nltk, torch) unnecessarily
 
 __all__ = [
-    # Async operations
-    "OperationStatus",
-    "OperationTimeoutError",
-    "OperationContext",
-    "CancellationToken",
-    "TimeoutConfig",
-    # Caching
-    "CacheType",
-    "CacheKey",
-    "CachedResponse",
-    "CacheStatistics",
-    "MemoryStats",
-    # Clarification
-    "ClarificationStatus",
-    "RequestType",
-    "ClarificationMode",
-    "ClarificationRequest",
-    "ClarificationResult",
-    "ClarificationResultStatus",
-    "ClarificationSession",
-    "ClarificationResponse",
-    "ClarificationError",
-    "InformationAnalysisError",
-    "QuestionGenerationError",
-    "ParameterExtractionError",
-    "ContextEnrichmentError",
-    # Exceptions
-    "FormationError",
-    "FormationConfigurationError",
-    "ConfigurationLoadError",
-    "ConfigurationValidationError",
-    "OverlordStateError",
-    "AgentNotFoundError",
-    "DependencyError",
-    "DependencyValidationError",
-    "CircularDependencyError",
-    "MissingDependencyError",
-    # Intelligence
-    "PreferenceType",
-    "AdaptationType",
-    "UserPreferences",
-    "ConversationContext",
-    "AdaptedResponse",
-    # MCP
-    "FunctionCallModel",
-    "ErrorCodes",
-    "JSONRPCError",
-    "JSONRPCBaseRequest",
-    "JSONRPCRequest",
-    "JSONRPCBaseResponse",
-    "JSONRPCSuccessResponse",
-    "JSONRPCErrorResponse",
-    "JSONRPCResponse",
-    "MCPToolCall",
-    "MCPToolCallRequest",
-    "MCPToolCallResponse",
-    # Response
-    "MuxiFileContent",
-    "MuxiContentItem",
-    "MuxiErrorDetails",
-    "MuxiUnifiedResponse",
-    "MuxiMessageContent",
-    "MuxiResponse",
-    # Retry
-    "RetryConfig",
-    "RetryResult",
-    "RetryAttempt",
-    "RetryStrategy",
-    "TransientError",
-    "NetworkTransientError",
-    "ServiceTransientError",
-    "RateLimitTransientError",
-    "calculate_delay",
-    "is_retryable_error",
-    # Validation
-    "ServiceDependency",
-    "ValidationResult",
-    # Workflow
-    "TaskStatus",
-    "WorkflowStatus",
-    "ApprovalStatus",
-    "TaskInput",
-    "TaskOutput",
-    "SubTask",
-    "RequestAnalysis",
-    "TaskResult",
-    "Workflow",
-    # Configuration
-    "BaseServiceSchema",
-    "LLMServiceSchema",
-    "MemoryServiceSchema",
-    "MCPServiceSchema",
-    "A2AServiceSchema",
-    "SchedulerServiceSchema",
-    "FormationSchema",
-    # Memory
-    "BufferMemoryConfig",
-    "RemoteBufferConfig",
-    "WorkingMemoryConfig",
-    "PersistentMemoryConfig",
-    "MemorySystemConfig",
+    # List submodule names for documentation
+    "async_operations",
+    "caching",
+    "clarification",
+    "exceptions",
+    "intelligence",
+    "mcp",
+    "memory",
+    "observability",
+    "response",
+    "retry",
+    "schema",
+    "task_status",
+    "validation",
+    "workflow",
 ]

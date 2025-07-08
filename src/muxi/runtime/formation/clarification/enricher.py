@@ -7,10 +7,7 @@ information where possible, reducing the need for clarifying questions.
 
 from typing import Dict, List, Optional, Any, Tuple
 
-from ...datatypes import (
-    ParameterMapping,
-    ContextEnrichmentError,
-)
+from ...datatypes.clarification import ContextEnrichmentError, ParameterMapping
 
 
 class ContextualParameterEnricher:
