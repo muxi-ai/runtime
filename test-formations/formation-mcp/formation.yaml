@@ -38,10 +38,7 @@ memory:
     vector_search: true
 
   persistent:
-    enabled: true
-    provider: "postgresql"
-    config:
-      connection_string: "${{ secrets.POSTGRES_URI }}"
+    connection_string: "sqlite:///test_muxi.db"
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
