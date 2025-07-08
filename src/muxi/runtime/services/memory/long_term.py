@@ -47,7 +47,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from ...datatypes.json_type import JSONType
-from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Note: No longer importing global config - values passed as parameters
@@ -98,8 +98,6 @@ class Memory(Base, AsyncModelMixin):
 
     id = Column(String(21), primary_key=True, default=get_default_nanoid)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    formation_id = Column(String(255), nullable=False)
-    formation_id_hash = Column(String(64), nullable=False, index=True)
     embedding = Column(Vector(1536))  # Default dimension for OpenAI embeddings
     text = Column(Text, nullable=False)
     meta_data = Column(JSONType, nullable=False, default={})
@@ -120,8 +118,6 @@ class Collection(Base, AsyncModelMixin):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    formation_id = Column(String(255), nullable=False)
-    formation_id_hash = Column(String(64), nullable=False, index=True)
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text)
     created_at = Column(DateTime, default=utc_now_naive)
@@ -148,8 +144,11 @@ class LongTermMemory:
     ):
         """
         Initialize a LongTermMemory instance for persistent semantic memory storage.
-        
-        Sets up database connections, determines multi-user mode, creates necessary tables, and ensures default user and collection exist in single-user mode. Supports configuration of vector dimension, default collection, and optional embedding model.
+
+        Sets up database connections, determines multi-user mode,
+        creates necessary tables, and ensures default user and collection
+        exist in single-user mode. Supports configuration of vector dimension,
+        default collection, and optional embedding model.
         """
         self.dimension = dimension
         self.default_collection = default_collection
@@ -258,7 +257,7 @@ class LongTermMemory:
             external_user_id_hash=user_hash,
             formation_id=self.formation_id,
             formation_id_hash=self.formation_id_hash,
-            created_at=utc_now(),
+            created_at=utc_now_naive(),
         )
         session.add(user)
         session.commit()
@@ -277,10 +276,11 @@ class LongTermMemory:
         # Check if default collection exists for this user
         collection = (
             session.query(Collection)
-            .filter_by(
-                user_id=user_id,
-                name=self.default_collection,
-                formation_id_hash=self.formation_id_hash,
+            .join(User, Collection.user_id == User.id)
+            .filter(
+                Collection.user_id == user_id,
+                Collection.name == self.default_collection,
+                User.formation_id_hash == self.formation_id_hash,
             )
             .first()
         )
@@ -291,8 +291,6 @@ class LongTermMemory:
                 user_id=user_id,
                 name=self.default_collection,
                 description="Default collection for memories",
-                formation_id=self.formation_id,
-                formation_id_hash=self.formation_id_hash,
             )
             session.add(collection)
             session.commit()
@@ -307,13 +305,15 @@ class LongTermMemory:
     ) -> str:
         """
         Asynchronously adds new content to long-term memory, generating an embedding if not provided.
-        
+
         Parameters:
             content (str): The text content to store.
             metadata (dict, optional): Additional metadata to associate with the content.
-            embedding (list[float] or np.ndarray, optional): Pre-computed embedding vector. If not provided, an embedding is generated.
-            external_user_id (str, optional): The external user identifier for multi-user environments.
-        
+            embedding (list[float] or np.ndarray, optional): Pre-computed embedding vector.
+            If not provided, an embedding is generated.
+            external_user_id (str, optional): The external user identifier for
+            multi-user environments.
+
         Returns:
             str: The unique ID of the newly created memory entry.
         """
@@ -364,15 +364,16 @@ class LongTermMemory:
         external_user_id: Optional[str] = None,
     ) -> str:
         """
-        Asynchronously adds a new memory entry to the database with the specified text, embedding, metadata, collection, and user context.
-        
+        Asynchronously adds a new memory entry to the database with the
+        specified text, embedding, metadata, collection, and user context.
+
         Parameters:
             text (str): The text content to store as memory.
             embedding (Union[List[float], np.ndarray]): The vector embedding representing the content.
             metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
-            collection (str, optional): The collection name to store the memory in. Defaults to the default collection if not specified.
+            collection (str, optional): The collection name to store the memory in. Defaults to the default collection.
             external_user_id (str, optional): The external user identifier for multi-user environments.
-        
+
         Returns:
             str: The unique ID of the newly created memory entry.
         """
@@ -404,8 +405,6 @@ class LongTermMemory:
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
-                formation_id=self.formation_id,
-                formation_id_hash=self.formation_id_hash,
             )
 
             # Return ID
@@ -421,14 +420,14 @@ class LongTermMemory:
     ) -> str:
         """
         Synchronously adds a new memory entry to the database with associated text, embedding, metadata, and collection.
-        
+
         Parameters:
             text (str): The text content to store.
             embedding (Union[List[float], np.ndarray]): The vector embedding representing the text.
             metadata (Dict[str, Any], optional): Additional metadata to associate with the memory.
             collection (str, optional): The collection name to store the memory in.
             external_user_id (str, optional): The external user identifier for multi-user environments.
-        
+
         Returns:
             str: The unique ID of the newly created memory entry.
         """
@@ -459,8 +458,6 @@ class LongTermMemory:
                 embedding=embedding,
                 meta_data=metadata,
                 collection=collection,
-                formation_id=self.formation_id,
-                formation_id_hash=self.formation_id_hash,
             )
 
             # Add to database
@@ -486,8 +483,11 @@ class LongTermMemory:
         """
         collection = (
             session.query(Collection)
-            .filter_by(
-                user_id=user_id, name=collection_name, formation_id_hash=self.formation_id_hash
+            .join(User, Collection.user_id == User.id)
+            .filter(
+                Collection.user_id == user_id,
+                Collection.name == collection_name,
+                User.formation_id_hash == self.formation_id_hash,
             )
             .first()
         )
@@ -497,8 +497,6 @@ class LongTermMemory:
                 user_id=user_id,
                 name=collection_name,
                 description=f"Collection: {collection_name}",
-                formation_id=self.formation_id,
-                formation_id_hash=self.formation_id_hash,
             )
             session.add(collection)
             session.flush()
@@ -514,19 +512,22 @@ class LongTermMemory:
     ) -> List[Dict[str, Any]]:
         """
         Asynchronously performs a semantic similarity search for memories matching a text query.
-        
-        If a query embedding is not provided, it is generated using the embedding model. Supports filtering by collection and metadata, and returns a list of the most relevant memories with similarity scores.
-        
+
+        If a query embedding is not provided, it is generated using the embedding model.
+        Supports filtering by collection and metadata, and returns a list of the most relevant
+        memories with similarity scores.
+
         Parameters:
             query (str): The text query to search for.
             limit (int): Maximum number of results to return.
-            query_embedding (Optional[Union[List[float], np.ndarray]]): Optional pre-computed embedding vector for the query.
-            collection (Optional[str]): The collection to search in. Defaults to the default collection if not specified.
+            query_embedding (Optional[Union[List[float], np.ndarray]]): Opt. pre-computed embedding vector for query.
+            collection (Optional[str]): The collection to search in. Defaults to the default collection.
             filter_metadata (Optional[Dict[str, Any]]): Optional metadata filters to apply.
             external_user_id (Optional[str]): The external user ID for multi-user environments.
-        
+
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores, ordered by relevance.
+            List[Dict[str, Any]]: A list of dictionaries containing memory IDs, text, metadata, and similarity scores,
+                                  ordered by relevance.
         """
         # Emit memory search started event
         observability.observe(
@@ -633,9 +634,12 @@ class LongTermMemory:
                     Memory,
                     func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
                 )
-                .filter(Memory.user_id == user.id)
-                .filter(Memory.formation_id_hash == self.formation_id_hash)
-                .filter(Memory.collection == collection)
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.user_id == user.id,
+                    User.formation_id_hash == self.formation_id_hash,
+                    Memory.collection == collection,
+                )
                 .order_by("distance")
                 .limit(k)
             )
@@ -682,7 +686,11 @@ class LongTermMemory:
         with self.Session() as session:
             memory = (
                 session.query(Memory)
-                .filter_by(id=memory_id, formation_id_hash=self.formation_id_hash)
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.id == memory_id,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
                 .first()
             )
 
@@ -737,7 +745,11 @@ class LongTermMemory:
         with self.Session() as session:
             memory = (
                 session.query(Memory)
-                .filter_by(id=memory_id, formation_id_hash=self.formation_id_hash)
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.id == memory_id,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
                 .first()
             )
 
@@ -808,7 +820,11 @@ class LongTermMemory:
         with self.Session() as session:
             memory = (
                 session.query(Memory)
-                .filter_by(id=memory_id, formation_id_hash=self.formation_id_hash)
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.id == memory_id,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
                 .first()
             )
 
@@ -851,7 +867,10 @@ class LongTermMemory:
         """
         with self.Session() as session:
             collections = (
-                session.query(Collection).filter_by(formation_id_hash=self.formation_id_hash).all()
+                session.query(Collection)
+                .join(User, Collection.user_id == User.id)
+                .filter(User.formation_id_hash == self.formation_id_hash)
+                .all()
             )
 
             return [
@@ -865,7 +884,9 @@ class LongTermMemory:
                 for c in collections
             ]
 
-    def create_collection(self, name: str, description: Optional[str] = None) -> str:
+    def create_collection(
+        self, name: str, description: Optional[str] = None, external_user_id: Optional[str] = None
+    ) -> str:
         """
         Create a new collection.
 
@@ -875,26 +896,43 @@ class LongTermMemory:
         Args:
             name: The name of the collection.
             description: Optional description of the collection.
+            external_user_id: Optional external user ID for multi-user mode.
 
         Returns:
             The ID of the newly created collection.
         """
         with self.Session() as session:
-            # Check if collection already exists
-            existing = session.query(Collection).filter_by(name=name).first()
+            # Get or create user
+            user = self._get_or_create_user(session, external_user_id)
+
+            # Check if collection already exists for this user
+            existing = (
+                session.query(Collection)
+                .join(User, Collection.user_id == User.id)
+                .filter(
+                    Collection.name == name,
+                    Collection.user_id == user.id,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
+                .first()
+            )
 
             if existing:
-                return existing.id
+                return str(existing.id)
 
             # Create new collection
-            collection = Collection(name=name, description=description or f"Collection: {name}")
+            collection = Collection(
+                user_id=user.id, name=name, description=description or f"Collection: {name}"
+            )
 
             session.add(collection)
             session.commit()
 
-            return collection.id
+            return str(collection.id)
 
-    def delete_collection(self, name: str, delete_memories: bool = False) -> bool:
+    def delete_collection(
+        self, name: str, delete_memories: bool = False, external_user_id: Optional[str] = None
+    ) -> bool:
         """
         Delete a collection.
 
@@ -905,6 +943,7 @@ class LongTermMemory:
             name: The name of the collection to delete.
             delete_memories: Whether to also delete all memories in the
                 collection.
+            external_user_id: Optional external user ID for multi-user mode.
 
         Returns:
             True if the collection was deleted, False if not found.
@@ -913,19 +952,34 @@ class LongTermMemory:
             raise ValueError("Cannot delete the default collection")
 
         with self.Session() as session:
-            collection = session.query(Collection).filter_by(name=name).first()
+            # Get user
+            user = self._get_or_create_user(session, external_user_id)
+
+            # Find collection with proper formation scoping
+            collection = (
+                session.query(Collection)
+                .join(User, Collection.user_id == User.id)
+                .filter(
+                    Collection.name == name,
+                    Collection.user_id == user.id,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
+                .first()
+            )
 
             if not collection:
                 return False
 
             if delete_memories:
-                # Delete all memories in the collection
-                session.query(Memory).filter_by(collection=name).delete()
+                # Delete all memories in the collection for this user
+                session.query(Memory).filter(
+                    Memory.collection == name, Memory.user_id == user.id
+                ).delete()
             else:
-                # Move memories to default collection
-                session.query(Memory).filter_by(collection=name).update(
-                    {"collection": self.default_collection}
-                )
+                # Move memories to default collection for this user
+                session.query(Memory).filter(
+                    Memory.collection == name, Memory.user_id == user.id
+                ).update({"collection": self.default_collection})
 
             # Delete the collection
             session.delete(collection)
@@ -938,20 +992,26 @@ class LongTermMemory:
     ) -> List[Dict[str, Any]]:
         """
         Retrieve the most recent memories from a specified or default collection, ordered by creation date.
-        
+
         Parameters:
             limit (int): Maximum number of memories to return.
-            collection (str, optional): Name of the collection to retrieve memories from. Uses the default collection if not specified.
-        
+            collection (str, optional): Name of the collection to retrieve memories from.
+                                        Uses the default collection if not specified.
+
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries containing memory details, including ID, text, metadata, timestamps, and collection name.
+            List[Dict[str, Any]]: A list of dictionaries containing memory details,
+                                  including ID, text, metadata, timestamps, and collection name.
         """
         collection_name = collection or self.default_collection
 
         with self.Session() as session:
             memories = (
                 session.query(Memory)
-                .filter_by(collection=collection_name, formation_id_hash=self.formation_id_hash)
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.collection == collection_name,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
                 .order_by(desc(Memory.created_at))
                 .limit(limit)
                 .all()
@@ -969,13 +1029,16 @@ class LongTermMemory:
                 for m in memories
             ]
 
-    async def _get_or_create_user_async(self, session: AsyncSession, external_user_id: Optional[str] = None) -> User:
+    async def _get_or_create_user_async(
+        self, session: AsyncSession, external_user_id: Optional[str] = None
+    ) -> User:
         """
-        Asynchronously retrieves an existing user or creates a new one based on the external user ID and formation scope.
-        
+        Asynchronously retrieves an existing user or creates a new one based on
+        the external user ID and formation scope.
+
         Raises:
             ValueError: If `external_user_id` is not provided in multi-user mode.
-        
+
         Returns:
             User: The retrieved or newly created user instance.
         """
@@ -1011,14 +1074,25 @@ class LongTermMemory:
         self, session: AsyncSession, collection_name: str, user_id: int
     ) -> None:
         """
-        Asynchronously ensures that a collection with the specified name exists for the given user and formation, creating it if it does not already exist.
+        Asynchronously ensures that a collection with the specified name
+        exists for the given user and formation, creating it if it does not already exist.
         """
-        collection = await Collection.get(
-            session,
-            user_id=user_id,
-            name=collection_name,
-            formation_id_hash=self.formation_id_hash,
+        # Build query to check if collection exists
+        from sqlalchemy import and_
+
+        stmt = (
+            select(Collection)
+            .join(User, Collection.user_id == User.id)
+            .where(
+                and_(
+                    Collection.user_id == user_id,
+                    Collection.name == collection_name,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
+            )
         )
+        result = await session.execute(stmt)
+        collection = result.scalar_one_or_none()
 
         if not collection:
             await Collection.create(
@@ -1026,8 +1100,6 @@ class LongTermMemory:
                 user_id=user_id,
                 name=collection_name,
                 description=f"Collection: {collection_name}",
-                formation_id=self.formation_id,
-                formation_id_hash=self.formation_id_hash,
             )
 
     async def _search_internal_async(
@@ -1040,16 +1112,17 @@ class LongTermMemory:
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
         Asynchronously searches for memories with embeddings most similar to the given query embedding.
-        
-        Performs a vector similarity search within the specified collection and user scope, optionally filtering by metadata. Returns up to `k` results as tuples of similarity score and memory data.
-         
+
+        Performs a vector similarity search within the specified collection and user scope,
+        optionally filtering by metadata. Returns up to `k` results as tuples of similarity score and memory data.
+
         Parameters:
             query_embedding: The embedding vector to search against.
             k: Maximum number of results to return.
             collection: Name of the collection to search in; defaults to the default collection if not specified.
             filter_metadata: Optional dictionary of metadata key-value pairs to filter results.
             external_user_id: External user identifier to scope the search.
-        
+
         Returns:
             A list of tuples, each containing a similarity score (float) and a dictionary with memory details.
         """
@@ -1080,9 +1153,12 @@ class LongTermMemory:
                     Memory,
                     func.l2_distance(Memory.embedding, query_embedding_vector).label("distance"),
                 )
-                .filter(Memory.user_id == user.id)
-                .filter(Memory.formation_id_hash == self.formation_id_hash)
-                .filter(Memory.collection == collection)
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.user_id == user.id,
+                    User.formation_id_hash == self.formation_id_hash,
+                    Memory.collection == collection,
+                )
                 .order_by("distance")
                 .limit(k)
             )

@@ -346,6 +346,9 @@ class Formation:
                 "formation_id", "default-formation"
             )
             set_formation_id(self.formation_id)
+            
+            # Ensure formation_id is in config for Overlord
+            self.config["formation_id"] = self.formation_id
 
             # Prepare services (but don't start them yet)
             self._prepare_services()

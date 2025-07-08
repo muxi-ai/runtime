@@ -106,7 +106,17 @@ class SchedulerService:
         else:
             # Fallback to creating own database manager
             self.db_manager = get_database_manager()
-        self.job_manager = JobManager(self.db_manager)
+        # Get formation_id and hash from overlord
+        formation_id = overlord.formation_id if overlord and hasattr(overlord, 'formation_id') else "default-formation"
+        formation_id_hash = None
+        if overlord and hasattr(overlord, 'formation_id_hash'):
+            formation_id_hash = overlord.formation_id_hash
+        elif overlord:
+            # Calculate hash if not available
+            import hashlib
+            formation_id_hash = hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
+
+        self.job_manager = JobManager(self.db_manager, formation_id=formation_id, formation_id_hash=formation_id_hash)
 
         # Performance optimization components
         scheduler_config = None
@@ -798,7 +808,6 @@ class SchedulerService:
     async def create_job(
         self,
         user_id: str,
-        formation_id: str,
         title: str,
         original_prompt: str,
         schedule: str,
@@ -809,7 +818,6 @@ class SchedulerService:
 
         Args:
             user_id: User ID who owns the job
-            formation_id: Formation ID for context
             title: Human-readable job title
             original_prompt: Original natural language request
             schedule: Natural language schedule description
@@ -834,7 +842,6 @@ class SchedulerService:
         # Create job
         job_id = await self.job_manager.create_job(
             user_id=user_id,
-            formation_id=formation_id,
             title=title,
             original_prompt=original_prompt,
             execution_prompt=execution_prompt,

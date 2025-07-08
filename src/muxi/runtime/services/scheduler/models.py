@@ -12,7 +12,7 @@ import json
 from ...utils.datetime_utils import utc_now_naive
 from typing import Any, Dict
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text
 
 from ..db import Base, AsyncModelMixin
 from ...datatypes.json_type import JSONType
@@ -53,9 +53,10 @@ class ScheduledJobAudit(Base, AsyncModelMixin):
     def to_dict(self) -> Dict[str, Any]:
         """
         Return a dictionary representation of the audit entry, parsing the `changes` field as JSON if possible.
-        
+
         Returns:
-            dict: Dictionary containing audit entry fields, with `changes` parsed as a dictionary if valid JSON, otherwise as a string.
+            dict: Dictionary containing audit entry fields, with `changes`
+            parsed as a dictionary if valid JSON, otherwise as a string.
         """
         result = {
             "id": self.id,
@@ -92,8 +93,8 @@ class ScheduledJob(Base, AsyncModelMixin):
 
     # Primary key and identification
     id = Column(String(255), primary_key=True)
-    user_id = Column(String(255), nullable=False, index=True)
-    formation_id = Column(String(255), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    external_user_id = Column(String(255), nullable=False)  # Store the original external user ID for reference
 
     # Job content
     title = Column(String(500), nullable=False)
@@ -144,7 +145,7 @@ class ScheduledJob(Base, AsyncModelMixin):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "formation_id": self.formation_id,
+            "external_user_id": self.external_user_id,
             "title": self.title,
             "original_prompt": self.original_prompt,
             "execution_prompt": self.execution_prompt,

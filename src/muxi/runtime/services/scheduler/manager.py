@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ...utils.datetime_utils import utc_now
 
-from sqlalchemy import and_, func
+from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
 
 from .. import observability
@@ -21,6 +21,7 @@ from ..llm import LLM
 from .models import ScheduledJob, ScheduledJobAudit
 from .validation import SchedulerInputValidator
 from .limits import get_limits_enforcer
+from ..memory.long_term import User  # Import User model for formation isolation
 
 
 class JobManager:
@@ -31,10 +32,12 @@ class JobManager:
     with full cross-database compatibility.
     """
 
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager, formation_id: str = None, formation_id_hash: str = None):
         """Initialize job manager with unified database manager."""
         self.db_manager = db_manager
         self._initialized = False
+        self.formation_id = formation_id or "default-formation"
+        self.formation_id_hash = formation_id_hash or self._hash_formation_id(self.formation_id)
 
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_MANAGER_INITIALIZED,
@@ -45,6 +48,49 @@ class JobManager:
             },
             description=f"Job manager initialized with {self.db_manager.database_type} database",
         )
+
+    def _hash_external_id(self, external_id: str) -> str:
+        """Generate SHA256 hash of external user ID."""
+        import hashlib
+        if external_id is None:
+            external_id = "0"
+        elif not isinstance(external_id, str):
+            external_id = str(external_id)
+        return hashlib.sha256(external_id.encode("utf-8")).hexdigest()
+
+    def _hash_formation_id(self, formation_id: str) -> str:
+        """Generate SHA256 hash of formation ID."""
+        import hashlib
+        if not isinstance(formation_id, str):
+            formation_id = str(formation_id)
+        return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
+
+    def _get_or_create_user(self, session, external_user_id: str) -> User:
+        """Get existing user or create new one."""
+        # Calculate hash
+        user_hash = self._hash_external_id(external_user_id)
+
+        # Try to find existing user with formation scope
+        user = (
+            session.query(User)
+            .filter_by(external_user_id_hash=user_hash, formation_id_hash=self.formation_id_hash)
+            .first()
+        )
+        if user:
+            return user
+
+        # Create new user
+        from ...utils.datetime_utils import utc_now_naive
+        user = User(
+            external_user_id=external_user_id,
+            external_user_id_hash=user_hash,
+            formation_id=self.formation_id,
+            formation_id_hash=self.formation_id_hash,
+            created_at=utc_now_naive(),
+        )
+        session.add(user)
+        session.commit()
+        return user
 
     async def initialize(self):
         """Initialize database schema using unified database manager."""
@@ -76,7 +122,6 @@ class JobManager:
     async def create_job(
         self,
         user_id: str,
-        formation_id: str,
         title: str,
         original_prompt: str,
         execution_prompt: str,
@@ -89,8 +134,7 @@ class JobManager:
         Create a new scheduled job (recurring or one-time).
 
         Args:
-            user_id: User who created the job
-            formation_id: Formation ID
+            user_id: External user ID who created the job
             title: Job title
             original_prompt: Original user prompt
             execution_prompt: Transformed prompt for execution
@@ -110,7 +154,7 @@ class JobManager:
         # SECURITY: Comprehensive input validation
         SchedulerInputValidator.validate_job_creation(
             user_id=user_id,
-            formation_id=formation_id,
+            formation_id=self.formation_id,  # Use formation_id from manager
             title=title,
             original_prompt=original_prompt,
             execution_prompt=execution_prompt,
@@ -128,10 +172,13 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
+                # Get or create user
+                user = self._get_or_create_user(session, user_id)
+
                 job = ScheduledJob(
                     id=job_id,
-                    user_id=user_id,
-                    formation_id=formation_id,
+                    user_id=user.id,  # Use internal user ID
+                    external_user_id=user_id,  # Store external user ID for reference
                     title=title,
                     original_prompt=original_prompt,
                     execution_prompt=execution_prompt,
@@ -191,7 +238,11 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 jobs = (
                     session.query(ScheduledJob)
-                    .filter(ScheduledJob.status == "ACTIVE")
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.status == "ACTIVE",
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
                     .order_by(ScheduledJob.created_at.asc())
                     .all()
                 )
@@ -215,7 +266,17 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                query = session.query(ScheduledJob).filter(ScheduledJob.user_id == user_id)
+                # Get internal user ID
+                user = self._get_or_create_user(session, user_id)
+
+                query = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.user_id == user.id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                )
 
                 if status:
                     query = query.filter(ScheduledJob.status == status)
@@ -245,13 +306,19 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                query = session.query(ScheduledJob)
+                query = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(User.formation_id_hash == self.formation_id_hash)
+                )
 
                 if status:
                     query = query.filter(ScheduledJob.status == status)
 
                 if user_id:
-                    query = query.filter(ScheduledJob.user_id == user_id)
+                    # Get internal user ID
+                    user = self._get_or_create_user(session, user_id)
+                    query = query.filter(ScheduledJob.user_id == user.id)
 
                 if is_recurring is not None:
                     query = query.filter(ScheduledJob.is_recurring == is_recurring)
@@ -290,7 +357,15 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                job = session.query(ScheduledJob).filter(ScheduledJob.id == job_id).first()
+                job = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
+                )
                 return job.to_dict() if job else None
 
         except SQLAlchemyError as e:
@@ -310,7 +385,11 @@ class JobManager:
             with self.db_manager.get_session() as session:
                 count = (
                     session.query(func.count(ScheduledJob.id))
-                    .filter(ScheduledJob.status == "ACTIVE")
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.status == "ACTIVE",
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
                     .scalar()
                 )
                 return count or 0
@@ -330,14 +409,24 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                updated = (
+                # First check if job exists and belongs to formation
+                job = (
                     session.query(ScheduledJob)
-                    .filter(and_(ScheduledJob.id == job_id, ScheduledJob.status == "ACTIVE"))
-                    .update({"status": "PAUSED"})
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        ScheduledJob.status == "ACTIVE",
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
                 )
 
-                session.commit()
-                success = updated > 0
+                if job:
+                    job.status = "PAUSED"
+                    session.commit()
+                    success = True
+                else:
+                    success = False
 
             if success:
                 # Audit the pause action
@@ -373,14 +462,25 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                updated = (
+                # First check if job exists and belongs to formation
+                job = (
                     session.query(ScheduledJob)
-                    .filter(and_(ScheduledJob.id == job_id, ScheduledJob.status == "PAUSED"))
-                    .update({"status": "ACTIVE", "consecutive_failures": 0})
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        ScheduledJob.status == "PAUSED",
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
                 )
 
-                session.commit()
-                success = updated > 0
+                if job:
+                    job.status = "ACTIVE"
+                    job.consecutive_failures = 0
+                    session.commit()
+                    success = True
+                else:
+                    success = False
 
             if success:
                 # Audit the resume action
@@ -422,20 +522,26 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                updated = (
+                # First check if job exists and belongs to formation
+                job = (
                     session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
-                        and_(
-                            ScheduledJob.id == job_id,
-                            ScheduledJob.is_recurring.is_(False),
-                            ScheduledJob.status == "ACTIVE",
-                        )
+                        ScheduledJob.id == job_id,
+                        ScheduledJob.is_recurring.is_(False),
+                        ScheduledJob.status == "ACTIVE",
+                        User.formation_id_hash == self.formation_id_hash,
                     )
-                    .update({"status": "COMPLETED", "updated_at": utc_now()})
+                    .first()
                 )
 
-                session.commit()
-                success = updated > 0
+                if job:
+                    job.status = "COMPLETED"
+                    job.updated_at = utc_now()
+                    session.commit()
+                    success = True
+                else:
+                    success = False
 
             if success:
                 observability.observe(
@@ -469,10 +575,23 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                deleted = session.query(ScheduledJob).filter(ScheduledJob.id == job_id).delete()
+                # First check if job exists and belongs to formation
+                job = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
+                )
 
-                session.commit()
-                success = deleted > 0
+                if job:
+                    session.delete(job)
+                    session.commit()
+                    success = True
+                else:
+                    success = False
 
             if success:
                 # Audit the deletion
@@ -503,13 +622,21 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(
-                    {
-                        "last_run_at": utc_now(),
-                        "last_run_status": None,
-                        "last_run_failure_message": None,
-                    }
+                # First check if job exists and belongs to formation
+                job = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
                 )
+
+                if job:
+                    job.last_run_at = utc_now()
+                    job.last_run_status = None
+                    job.last_run_failure_message = None
                 session.commit()
 
         except SQLAlchemyError as e:
@@ -527,15 +654,23 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(
-                    {
-                        "last_run_status": "success",
-                        "last_run_failure_message": None,
-                        "total_runs": ScheduledJob.total_runs + 1,
-                        "consecutive_failures": 0,
-                        "updated_at": utc_now(),
-                    }
+                # First check if job exists and belongs to formation
+                job = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
                 )
+
+                if job:
+                    job.last_run_status = "success"
+                    job.last_run_failure_message = None
+                    job.total_runs += 1
+                    job.consecutive_failures = 0
+                    job.updated_at = utc_now()
                 session.commit()
 
             observability.observe(
@@ -564,19 +699,24 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                # Update job statistics
-                session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(
-                    {
-                        "last_run_status": "failed",
-                        "last_run_failure_message": error_message[
-                            :1000
-                        ],  # Truncate to prevent overflow
-                        "total_runs": ScheduledJob.total_runs + 1,
-                        "total_failures": ScheduledJob.total_failures + 1,
-                        "consecutive_failures": ScheduledJob.consecutive_failures + 1,
-                        "updated_at": utc_now(),
-                    }
+                # First check if job exists and belongs to formation
+                job = (
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
                 )
+
+                if job:
+                    job.last_run_status = "failed"
+                    job.last_run_failure_message = error_message[:1000]  # Truncate to prevent overflow
+                    job.total_runs += 1
+                    job.total_failures += 1
+                    job.consecutive_failures += 1
+                    job.updated_at = utc_now()
                 session.commit()
 
             observability.observe(
@@ -606,8 +746,12 @@ class JobManager:
         try:
             with self.db_manager.get_session() as session:
                 job = (
-                    session.query(ScheduledJob.consecutive_failures)
-                    .filter(ScheduledJob.id == job_id)
+                    session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
                     .first()
                 )
                 return job.consecutive_failures if job else 0
@@ -627,14 +771,24 @@ class JobManager:
 
         try:
             with self.db_manager.get_session() as session:
-                updated = (
+                # First check if job exists and belongs to formation
+                job = (
                     session.query(ScheduledJob)
-                    .filter(ScheduledJob.id == job_id)
-                    .update({"metadata": metadata, "updated_at": utc_now()})
+                    .join(User, ScheduledJob.user_id == User.id)
+                    .filter(
+                        ScheduledJob.id == job_id,
+                        User.formation_id_hash == self.formation_id_hash,
+                    )
+                    .first()
                 )
 
-                session.commit()
-                return updated > 0
+                if job:
+                    job.job_metadata = metadata
+                    job.updated_at = utc_now()
+                    session.commit()
+                    return True
+                else:
+                    return False
 
         except SQLAlchemyError as e:
             observability.observe(
@@ -908,9 +1062,11 @@ class JobManager:
                 # Get old completed jobs
                 old_jobs = (
                     session.query(ScheduledJob)
+                    .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.status.in_(["COMPLETED", "FAILED"]),
                         ScheduledJob.last_run_at < cutoff_date,
+                        User.formation_id_hash == self.formation_id_hash,
                     )
                     .offset(offset)
                     .limit(limit)
@@ -981,7 +1137,6 @@ class JobManager:
                 # 1. Create new job with same schedule but new prompt
                 new_job_id = await self.create_job(
                     user_id=user_id,
-                    formation_id=current_job["formation_id"],
                     title=new_title or f"Updated: {current_job['title']}",
                     original_prompt=new_prompt,
                     execution_prompt=new_prompt,  # Will be rewritten by the rewriter
@@ -1011,12 +1166,23 @@ class JobManager:
 
         # Otherwise, do a normal update
         with self.db_manager.get_session() as session:
-            job = session.query(ScheduledJob).filter(ScheduledJob.id == job_id).first()
+            # Get user internal ID
+            user = self._get_or_create_user(session, user_id)
+
+            job = (
+                session.query(ScheduledJob)
+                .join(User, ScheduledJob.user_id == User.id)
+                .filter(
+                    ScheduledJob.id == job_id,
+                    User.formation_id_hash == self.formation_id_hash,
+                )
+                .first()
+            )
             if not job:
                 raise ValueError(f"Job {job_id} not found")
 
             # Validate user ownership
-            if job.user_id != user_id:
+            if job.user_id != user.id:
                 raise ValueError(f"User {user_id} does not have permission to update job {job_id}")
 
             # Build update dict
@@ -1068,7 +1234,8 @@ class JobManager:
 
             # Apply updates
             update_fields["updated_at"] = utc_now()
-            session.query(ScheduledJob).filter(ScheduledJob.id == job_id).update(update_fields)
+            for field, value in update_fields.items():
+                setattr(job, field, value)
             session.commit()
 
             # Audit the update

@@ -64,14 +64,12 @@ class Credential(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
-    formation_id = Column(String, nullable=False, default="default-formation")
-    formation_id_hash = Column(String, nullable=False)
 
     # Add indexes in the database migration
 
     def __repr__(self) -> str:
         """Return a string representation for debugging."""
-        return f"<Credential(user_id={self.user_id!r}, service={self.service!r}, formation_id={self.formation_id!r})>"
+        return f"<Credential(user_id={self.user_id!r}, service={self.service!r})>"
 
 
 class CredentialResolver:
@@ -145,7 +143,6 @@ class CredentialResolver:
                     User.external_user_id_hash == user_id_hash,
                     User.formation_id_hash == self.formation_id_hash,
                     Credential.service == service,
-                    Credential.formation_id_hash == self.formation_id_hash,
                 )
                 .limit(1)
             )
@@ -204,7 +201,6 @@ class CredentialResolver:
                 cred_stmt = select(Credential).where(
                     Credential.user_id == user.id,
                     Credential.service == service,
-                    Credential.formation_id_hash == self.formation_id_hash,
                 )
                 result = await session.execute(cred_stmt)
                 existing = result.scalar_one_or_none()
@@ -221,8 +217,6 @@ class CredentialResolver:
                         name=service,  # Can be customized later
                         service=service,
                         credentials=credentials,
-                        formation_id=self.formation_id,
-                        formation_id_hash=self.formation_id_hash,
                     )
                     session.add(new_cred)
 
@@ -275,7 +269,6 @@ class CredentialResolver:
                     User.external_user_id_hash == user_id_hash,
                     User.formation_id_hash == self.formation_id_hash,
                     Credential.service == service,
-                    Credential.formation_id_hash == self.formation_id_hash,
                 )
             )
             result = await session.execute(stmt)
@@ -313,7 +306,6 @@ class CredentialResolver:
                 .where(
                     User.external_user_id_hash == user_id_hash,
                     User.formation_id_hash == self.formation_id_hash,
-                    Credential.formation_id_hash == self.formation_id_hash,
                 )
             )
             result = await session.execute(stmt)

@@ -30,6 +30,7 @@
 # smaller deployments or environments where PostgreSQL is not available.
 # =============================================================================
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -64,7 +65,7 @@ class SQLiteMemory(BaseMemory):
     ):
         """
         Initialize a local SQLite-based vector memory store with support for persistent collections and embeddings.
-        
+
         Parameters:
             db_path (str): Path to the SQLite database file.
             formation_id (str): Identifier used to scope data within the database.
@@ -89,12 +90,54 @@ class SQLiteMemory(BaseMemory):
 
     def _hash_formation_id(self, formation_id: str) -> str:
         """Generate SHA256 hash of formation ID."""
-        import hashlib
-
         # Convert to string if not already
         if not isinstance(formation_id, str):
             formation_id = str(formation_id)
         return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
+
+    def _hash_user_id(self, user_id: str) -> str:
+        """Generate SHA256 hash of user ID."""
+        # Convert to string if not already
+        if not isinstance(user_id, str):
+            user_id = str(user_id)
+        return hashlib.sha256(user_id.encode("utf-8")).hexdigest()
+
+    async def get_or_create_user(self, external_user_id: str) -> int:
+        """
+        Get or create a user by external ID.
+
+        Args:
+            external_user_id: The external user identifier
+
+        Returns:
+            The internal database user ID
+        """
+        user_id_hash = self._hash_user_id(external_user_id)
+
+        # Check if user exists
+        cursor = self.conn.execute(
+            "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
+            (user_id_hash, self.formation_id_hash),
+        )
+        user_row = cursor.fetchone()
+
+        if user_row:
+            return user_row[0]
+
+        # Create new user
+        self.conn.execute(
+            "INSERT INTO users (external_user_id, external_user_id_hash, formation_id, formation_id_hash) "
+            "VALUES (?, ?, ?, ?)",
+            (external_user_id, user_id_hash, self.formation_id, self.formation_id_hash),
+        )
+        self.conn.commit()
+
+        # Get the newly created user ID
+        cursor = self.conn.execute(
+            "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
+            (user_id_hash, self.formation_id_hash),
+        )
+        return cursor.fetchone()[0]
 
     def _init_database(self) -> sqlite3.Connection:
         """
@@ -125,15 +168,30 @@ class SQLiteMemory(BaseMemory):
         # Create tables
         conn.execute(
             """
-            CREATE TABLE IF NOT EXISTS collections (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT,
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                external_user_id TEXT NOT NULL,
+                external_user_id_hash TEXT NOT NULL,
                 formation_id TEXT NOT NULL,
                 formation_id_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(name, formation_id_hash)
+                UNIQUE(external_user_id_hash, formation_id_hash)
+            )
+        """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS collections (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id),
+                UNIQUE(name, user_id)
             )
         """
         )
@@ -142,34 +200,69 @@ class SQLiteMemory(BaseMemory):
             """
             CREATE TABLE IF NOT EXISTS memories (
                 id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
                 collection TEXT NOT NULL,
                 text TEXT NOT NULL,
                 embedding BLOB NOT NULL,
                 metadata TEXT,
-                formation_id TEXT NOT NULL,
-                formation_id_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (collection) REFERENCES collections(name)
+                FOREIGN KEY (user_id) REFERENCES users(id)
             )
         """
         )
 
-        # Create default collection if it doesn't exist
-        conn.execute(
-            "INSERT OR IGNORE INTO collections "
-            "(id, name, description, formation_id, formation_id_hash) VALUES (?, ?, ?, ?, ?)",
-            (
-                self._generate_id(),
-                self.default_collection,
-                "Default collection for memories",
-                self.formation_id,
-                self.formation_id_hash,
-            ),
-        )
+        # Create default user and collection if they don't exist
+        self._ensure_default_user(conn)
 
         conn.commit()
         return conn
+
+    def _ensure_default_user(self, conn: sqlite3.Connection) -> None:
+        """
+        Ensure default user exists for single-user mode.
+        """
+        # Default user ID for single-user mode
+        default_user_id = "default_user"
+        user_id_hash = self._hash_user_id(default_user_id)
+
+        # Check if user exists
+        cursor = conn.execute(
+            "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
+            (user_id_hash, self.formation_id_hash),
+        )
+        user_row = cursor.fetchone()
+
+        if not user_row:
+            # Create default user
+            conn.execute(
+                "INSERT INTO users (external_user_id, external_user_id_hash, formation_id, formation_id_hash) "
+                "VALUES (?, ?, ?, ?)",
+                (default_user_id, user_id_hash, self.formation_id, self.formation_id_hash),
+            )
+            cursor = conn.execute(
+                "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
+                (user_id_hash, self.formation_id_hash),
+            )
+            user_row = cursor.fetchone()
+
+        self.default_user_id = user_row[0]
+
+        # Create default collection for this user
+        cursor = conn.execute(
+            "SELECT id FROM collections WHERE name = ? AND user_id = ?",
+            (self.default_collection, self.default_user_id),
+        )
+        if not cursor.fetchone():
+            conn.execute(
+                "INSERT INTO collections (id, user_id, name, description) VALUES (?, ?, ?, ?)",
+                (
+                    self._generate_id(),
+                    self.default_user_id,
+                    self.default_collection,
+                    "Default collection for memories",
+                ),
+            )
 
     def _generate_id(self, size: int = 21) -> str:
         """
@@ -187,7 +280,9 @@ class SQLiteMemory(BaseMemory):
 
         return nanoid.generate(size=size)
 
-    async def add(self, content: str, metadata: Optional[Dict[str, Any]] = None) -> None:
+    async def add(
+        self, content: str, metadata: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None
+    ) -> None:
         """
         Add content to memory.
 
@@ -208,8 +303,17 @@ class SQLiteMemory(BaseMemory):
             # Add timestamp to metadata
             metadata["timestamp"] = time.time()
 
+            # Get or create user if provided
+            internal_user_id = None
+            if user_id:
+                internal_user_id = await self.get_or_create_user(user_id)
+            else:
+                internal_user_id = self.default_user_id
+
             # Add to database
-            self._add_internal(content, embedding, metadata, self.default_collection)
+            self._add_internal(
+                content, embedding, metadata, self.default_collection, internal_user_id
+            )
 
     def _add_internal(
         self,
@@ -217,6 +321,7 @@ class SQLiteMemory(BaseMemory):
         embedding: Union[List[float], np.ndarray],
         metadata: Dict[str, Any] = None,
         collection: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> str:
         """
         Internal method to add a memory to the database.
@@ -239,8 +344,9 @@ class SQLiteMemory(BaseMemory):
         elif isinstance(embedding, list):
             embedding = np.array(embedding, dtype=np.float32).tobytes()
 
-        # Use default collection if none specified
+        # Use default collection and user if none specified
         collection = collection or self.default_collection
+        user_id = user_id or self.default_user_id
 
         # Generate memory ID
         memory_id = self._generate_id()
@@ -249,24 +355,25 @@ class SQLiteMemory(BaseMemory):
         self.conn.execute(
             """
             INSERT INTO memories
-            (id, collection, text, embedding, metadata, formation_id, formation_id_hash)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            (id, user_id, collection, text, embedding, metadata)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
             (
                 memory_id,
+                user_id,
                 collection,
                 text,
                 embedding,
                 metadata and json.dumps(metadata),
-                self.formation_id,
-                self.formation_id_hash,
             ),
         )
         self.conn.commit()
 
         return memory_id
 
-    async def search(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+    async def search(
+        self, query: str, limit: int = 5, user_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Search for similar content in memory.
 
@@ -286,8 +393,17 @@ class SQLiteMemory(BaseMemory):
 
         query_embedding = await self.embedding_provider.get_embedding(query)
 
+        # Get or create user if provided
+        internal_user_id = None
+        if user_id:
+            internal_user_id = await self.get_or_create_user(user_id)
+        else:
+            internal_user_id = self.default_user_id
+
         # Search with embedding
-        results = self._search_internal(query_embedding, limit, self.default_collection)
+        results = self._search_internal(
+            query_embedding, limit, self.default_collection, internal_user_id
+        )
 
         # Format results
         formatted_results = []
@@ -307,6 +423,7 @@ class SQLiteMemory(BaseMemory):
         query_embedding: Union[List[float], np.ndarray],
         k: int = 5,
         collection: Optional[str] = None,
+        user_id: Optional[int] = None,
     ) -> List[Tuple[float, Dict[str, Any]]]:
         """
         Internal method to search for similar content.
@@ -328,16 +445,23 @@ class SQLiteMemory(BaseMemory):
         elif isinstance(query_embedding, list):
             query_embedding = np.array(query_embedding, dtype=np.float32).tobytes()
 
-        # Build query
+        # Use defaults if not specified
+        collection = collection or self.default_collection
+        user_id = user_id or self.default_user_id
+
+        # Build query with JOIN to ensure formation isolation
         query = """
             SELECT
-                id,
-                text,
-                metadata,
-                created_at,
-                vec_distance_cosine(embedding, ?) as score
-            FROM memories
-            WHERE collection = ? AND formation_id_hash = ?
+                m.id,
+                m.text,
+                m.metadata,
+                m.created_at,
+                vec_distance_cosine(m.embedding, ?) as score
+            FROM memories m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.collection = ?
+                AND m.user_id = ?
+                AND u.formation_id_hash = ?
             ORDER BY score ASC
             LIMIT ?
         """
@@ -345,7 +469,7 @@ class SQLiteMemory(BaseMemory):
         # Execute search
         cursor = self.conn.execute(
             query,
-            (query_embedding, collection or self.default_collection, self.formation_id_hash, k),
+            (query_embedding, collection, user_id, self.formation_id_hash, k),
         )
 
         # Format results
@@ -368,7 +492,7 @@ class SQLiteMemory(BaseMemory):
 
         return results
 
-    def get(self, memory_id: str) -> Optional[Dict[str, Any]]:
+    def get(self, memory_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         Retrieve a specific memory by ID.
 
@@ -381,7 +505,12 @@ class SQLiteMemory(BaseMemory):
             The memory object if found, otherwise None
         """
         cursor = self.conn.execute(
-            "SELECT id, text, metadata, created_at FROM memories WHERE id = ? AND formation_id_hash = ?",
+            """
+            SELECT m.id, m.text, m.metadata, m.created_at
+            FROM memories m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.id = ? AND u.formation_id_hash = ?
+            """,
             (memory_id, self.formation_id_hash),
         )
 
@@ -397,7 +526,7 @@ class SQLiteMemory(BaseMemory):
         }
 
     def get_recent_memories(
-        self, limit: int = 10, collection: Optional[str] = None
+        self, limit: int = 10, collection: Optional[str] = None, user_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Get the most recent memories.
@@ -412,16 +541,35 @@ class SQLiteMemory(BaseMemory):
         Returns:
             List of memories in reverse chronological order (newest first)
         """
+        # Use defaults if not specified
+        collection = collection or self.default_collection
+
+        # Get internal user ID if external user ID provided
+        if user_id:
+            # Synchronous version of get_or_create_user
+            user_id_hash = self._hash_user_id(user_id)
+            cursor = self.conn.execute(
+                "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
+                (user_id_hash, self.formation_id_hash),
+            )
+            user_row = cursor.fetchone()
+            internal_user_id = user_row[0] if user_row else self.default_user_id
+        else:
+            internal_user_id = self.default_user_id
+
         # Ensure we're sorting by created_at in descending order (newest first)
         cursor = self.conn.execute(
             """
-            SELECT id, text, metadata, created_at
-            FROM memories
-            WHERE collection = ? AND formation_id_hash = ?
-            ORDER BY created_at DESC
+            SELECT m.id, m.text, m.metadata, m.created_at
+            FROM memories m
+            JOIN users u ON m.user_id = u.id
+            WHERE m.collection = ?
+                AND m.user_id = ?
+                AND u.formation_id_hash = ?
+            ORDER BY m.created_at DESC
             LIMIT ?
             """,
-            (collection or self.default_collection, self.formation_id_hash, limit),
+            (collection, internal_user_id, self.formation_id_hash, limit),
         )
 
         # Parse results
@@ -445,6 +593,75 @@ class SQLiteMemory(BaseMemory):
             )
 
         return results
+
+    async def create_collection(
+        self, name: str, description: Optional[str] = None, user_id: Optional[str] = None
+    ) -> str:
+        """
+        Create a new collection.
+
+        Args:
+            name: The collection name
+            description: Optional description
+            user_id: Optional external user ID
+
+        Returns:
+            The collection ID
+        """
+        # Get internal user ID
+        if user_id:
+            internal_user_id = await self.get_or_create_user(user_id)
+        else:
+            internal_user_id = self.default_user_id
+
+        collection_id = self._generate_id()
+
+        try:
+            self.conn.execute(
+                "INSERT INTO collections (id, user_id, name, description) VALUES (?, ?, ?, ?)",
+                (collection_id, internal_user_id, name, description),
+            )
+            self.conn.commit()
+            return collection_id
+        except sqlite3.IntegrityError:
+            # Collection already exists for this user
+            cursor = self.conn.execute(
+                "SELECT id FROM collections WHERE name = ? AND user_id = ?",
+                (name, internal_user_id),
+            )
+            return cursor.fetchone()[0]
+
+    async def list_collections(self, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        List all collections for a user.
+
+        Args:
+            user_id: Optional external user ID
+
+        Returns:
+            List of collection dictionaries
+        """
+        # Get internal user ID
+        if user_id:
+            internal_user_id = await self.get_or_create_user(user_id)
+        else:
+            internal_user_id = self.default_user_id
+
+        cursor = self.conn.execute(
+            """
+            SELECT c.id, c.name, c.description, c.created_at
+            FROM collections c
+            JOIN users u ON c.user_id = u.id
+            WHERE c.user_id = ? AND u.formation_id_hash = ?
+            ORDER BY c.name
+            """,
+            (internal_user_id, self.formation_id_hash),
+        )
+
+        return [
+            {"id": row[0], "name": row[1], "description": row[2], "created_at": row[3]}
+            for row in cursor.fetchall()
+        ]
 
     def __del__(self):
         """
