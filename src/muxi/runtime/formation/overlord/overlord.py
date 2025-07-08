@@ -379,16 +379,12 @@ class Overlord:
         self.credential_resolver = None
         if configured_services:
             db_manager = configured_services.get("db_manager")
-            if (
-                db_manager
-                and hasattr(db_manager, "async_session_maker")
-                and db_manager.async_session_maker
-            ):
+            if db_manager and hasattr(db_manager, "AsyncSession") and db_manager.AsyncSession:
                 # Calculate formation_id_hash (consistent with memory services)
                 formation_id_hash = hashlib.sha256(self.formation_id.encode()).hexdigest()
 
                 self.credential_resolver = CredentialResolver(
-                    async_session_maker=db_manager.async_session_maker,
+                    async_session_maker=db_manager.AsyncSession,
                     formation_id=self.formation_id,
                     formation_id_hash=formation_id_hash,
                 )
@@ -3722,7 +3718,7 @@ class Overlord:
 
             # Generate clarification request
             clarification_request = handler.generate_credential_request(
-                service=service, context=context
+                service=service, user_id=user_id, agent_id="system", context=context
             )
 
             # Store the clarification request for this user/session
@@ -3880,15 +3876,24 @@ class Overlord:
 
         # Service-specific validation
         common_credential_fields = {
-            "token", "api_key", "key", "secret", "password",
-            "access_token", "auth_token", "bearer_token",
-            "client_id", "client_secret", "app_key", "app_secret"
+            "token",
+            "api_key",
+            "key",
+            "secret",
+            "password",
+            "access_token",
+            "auth_token",
+            "bearer_token",
+            "client_id",
+            "client_secret",
+            "app_key",
+            "app_secret",
         }
 
         # Ensure at least one field matches common credential patterns
         has_valid_field = any(
-            key.lower().replace("_", "").replace("-", "") in
-            {field.replace("_", "").replace("-", "") for field in common_credential_fields}
+            key.lower().replace("_", "").replace("-", "")
+            in {field.replace("_", "").replace("-", "") for field in common_credential_fields}
             for key in credential_data.keys()
         )
 

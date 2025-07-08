@@ -1824,10 +1824,10 @@ class Agent:
                 description=f"Agent {self.agent_id} invoking tool {tool_name}",
             )
 
-            # Get credential resolver from overlord's MCP coordinator if available
+            # Get credential resolver from overlord if available
             credential_resolver = None
-            if self.overlord and hasattr(self.overlord, "mcp_coordinator"):
-                credential_resolver = self.overlord.mcp_coordinator
+            if self.overlord and hasattr(self.overlord, "credential_resolver"):
+                credential_resolver = self.overlord.credential_resolver
 
             if server_id:
                 result = await self._mcp_service.invoke_tool(

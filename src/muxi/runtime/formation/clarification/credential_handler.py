@@ -5,20 +5,32 @@ Handles clarification requests for missing user credentials.
 """
 
 from typing import Dict, Any, Optional
-from ...datatypes.clarification import ClarificationRequest, ClarificationResponse
+from ...datatypes.clarification import (
+    ClarificationRequest,
+    ClarificationResponse,
+    RequestType,
+    ClarificationQuestion,
+    QuestionStyle,
+)
 
 
 class CredentialClarificationHandler:
     """Handles clarification requests for missing user credentials."""
 
     def generate_credential_request(
-        self, service: str, context: Optional[Dict[str, Any]] = None
+        self,
+        service: str,
+        user_id: str,
+        agent_id: str = "system",
+        context: Optional[Dict[str, Any]] = None,
     ) -> ClarificationRequest:
         """
         Generate a clarification request for missing credentials.
 
         Args:
             service: The service name (lowercase)
+            user_id: The user ID requesting the credential
+            agent_id: The agent ID (defaults to "system")
             context: Optional context about why the credential is needed
 
         Returns:
@@ -43,21 +55,28 @@ class CredentialClarificationHandler:
 
         message = " ".join(message_parts)
 
+        # Create the clarification question
+        clarification_question = ClarificationQuestion(
+            question_id=f"credential_{service}",
+            question_text=message,
+            parameter_name="credential",
+            parameter_type="credential",
+            parameter_description=f"{display_name} credential",
+            required=True,
+            validation_rules={"min_length": 8},
+            context_hints=[f"This credential is needed for {display_name} integration"],
+            style=QuestionStyle.CONVERSATIONAL,
+        )
+
         # Create the clarification request
         return ClarificationRequest(
-            request_type="credential_required",
-            questions=[
-                {
-                    "id": f"credential_{service}",
-                    "question": message,
-                    "type": "credential",
-                    "metadata": {
-                        "service": service,
-                        "display_name": display_name,
-                        "secure": True,  # Indicates this should be handled securely
-                    },
-                }
-            ],
+            user_id=user_id,
+            agent_id=agent_id,
+            request_type=RequestType.TOOL_CALL,
+            tool_name=context.get("tool_name") if context else None,
+            intent=f"Request {service} credentials",
+            missing_info=[f"{service}_credential"],
+            clarification_plan=[clarification_question],
             context=(
                 {"reason": "missing_credential", "service": service, **context}
                 if context

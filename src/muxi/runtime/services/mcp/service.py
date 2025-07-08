@@ -409,10 +409,33 @@ class MCPService:
                     )
 
                 try:
-                    # Get the original server config to know which service to resolve
-                    # For now, we'll use the server_id to determine the service
-                    # (e.g., "github-mcp" -> "github")
-                    service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
+                    # Get the original credentials to determine which service to resolve
+                    original_creds = self.connections[server_id].get("original_credentials", {})
+
+                    # Extract service name from the user credential pattern
+                    service_name = None
+                    USER_CREDENTIAL_PATTERN = re.compile(
+                        r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
+                    )
+
+                    # Search for credential pattern in original_creds
+                    def find_service_name(data):
+                        if isinstance(data, dict):
+                            for value in data.values():
+                                result = find_service_name(value)
+                                if result:
+                                    return result
+                        elif isinstance(data, str):
+                            match = USER_CREDENTIAL_PATTERN.match(data)
+                            if match:
+                                return match.group(1).lower()
+                        return None
+
+                    service_name = find_service_name(original_creds)
+
+                    if not service_name:
+                        # Fallback: try to extract from server_id
+                        service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
 
                     # Resolve credentials from database
                     credentials = await credential_resolver.resolve(user_id, service_name)
@@ -421,16 +444,9 @@ class MCPService:
                         # Trigger clarification flow
                         raise MissingCredentialError(service_name, user_id)
 
-                    # Format credentials for the MCP server
-                    # Assume bearer token format for now
-                    resolved_auth = {
-                        "type": "bearer",
-                        "token": (
-                            credentials.get("token")
-                            if isinstance(credentials, dict)
-                            else credentials
-                        ),
-                    }
+                    # Format credentials based on original_creds structure
+                    # Replace the user credential placeholder with actual value
+                    resolved_auth = self._replace_credential_in_auth(original_creds, credentials)
 
                     # Cache the credentials
                     self.user_credentials[server_id][user_id] = resolved_auth
@@ -738,14 +754,13 @@ class MCPService:
                 # Store the handler
                 self.handlers[server_id] = handler
 
-                # Check if this server uses user-specific credentials
+                # Store connection info
                 # If original_credentials were provided, it means user placeholders were detected
-                if original_credentials:
-                    # Mark this as requiring user-specific credentials at runtime
-                    stored_credentials = "$MUXI_USER_CREDENTIALS$"
-                else:
-                    # Regular credentials that don't need runtime resolution
-                    stored_credentials = credentials
+                # In this case, we used formation secrets for initial connection but need to
+                # use user credentials at runtime
+                stored_credentials = (
+                    "$MUXI_USER_CREDENTIALS$" if original_credentials else credentials
+                )
 
                 self.connections[server_id] = {
                     "status": "connected",
@@ -756,6 +771,10 @@ class MCPService:
                     "transport_type": transport_type,
                     "request_timeout": request_timeout,
                 }
+
+                # Store original credentials if provided
+                if original_credentials:
+                    self.connections[server_id]["original_credentials"] = original_credentials
 
                 # Discover available tools with modern protocol features
                 try:
@@ -1384,3 +1403,51 @@ class MCPService:
         )
 
         return results
+
+    def _replace_credential_in_auth(
+        self, auth_config: Dict[str, Any], credential_value: Any
+    ) -> Dict[str, Any]:
+        """
+        Replace user credential placeholders in auth config with actual values.
+
+        Args:
+            auth_config: Original auth config with placeholders
+            credential_value: The actual credential value from database
+
+        Returns:
+            Auth config with placeholders replaced
+        """
+        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+
+        def replace_recursive(data: Any) -> Any:
+            if isinstance(data, dict):
+                # Process dictionary recursively
+                result = {}
+                for key, value in data.items():
+                    result[key] = replace_recursive(value)
+                return result
+            elif isinstance(data, list):
+                # Process list recursively
+                return [replace_recursive(item) for item in data]
+            elif isinstance(data, str):
+                # Check if this is a user credential placeholder
+                match = USER_CREDENTIAL_PATTERN.match(data)
+                if match:
+                    # Replace with actual credential
+                    if isinstance(credential_value, dict):
+                        # If credential is a dict, try to extract the token
+                        for field in ["token", "api_key", "access_token", "key", "password"]:
+                            if field in credential_value:
+                                return credential_value[field]
+                        # If no standard field found, return as is
+                        return credential_value
+                    else:
+                        # String or other type, use directly
+                        return credential_value
+                else:
+                    return data
+            else:
+                # Non-string, non-dict, non-list values pass through
+                return data
+
+        return replace_recursive(auth_config)

@@ -1932,32 +1932,65 @@ class Formation:
 
                 # Add optional parameters
                 if "auth" in server_config:
-                    # Transform user credentials to initialization secrets
+                    # Check if auth contains user credentials
                     original_auth = server_config["auth"]
-                    transformed_auth = self._resolve_initialization_credentials(original_auth)
+                    USER_CREDENTIAL_PATTERN = re.compile(
+                        r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
+                    )
 
-                    # Debug logging
-                    if original_auth != transformed_auth:
+                    # Helper function to check if auth contains user credentials
+                    def contains_user_credentials(data: Any) -> bool:
+                        if isinstance(data, dict):
+                            for value in data.values():
+                                if contains_user_credentials(value):
+                                    return True
+                        elif isinstance(data, list):
+                            for item in data:
+                                if contains_user_credentials(item):
+                                    return True
+                        elif isinstance(data, str):
+                            if USER_CREDENTIAL_PATTERN.search(data):
+                                return True
+                        return False
+
+                    # If auth contains user credentials, we need special handling
+                    if contains_user_credentials(original_auth):
+                        # Transform user credentials to formation secrets for initial connection
+                        # This allows MCP server to connect and discover tools
+                        transformed_auth = self._resolve_initialization_credentials(original_auth)
+
+                        # Interpolate the transformed secrets
+                        if hasattr(self, "secrets_manager") and self.secrets_manager:
+                            final_auth = await self.secrets_manager.interpolate_secrets(
+                                transformed_auth
+                            )
+                            registration_params["credentials"] = final_auth
+                        else:
+                            registration_params["credentials"] = transformed_auth
+
+                        # IMPORTANT: Store original auth config for runtime resolution
+                        registration_params["original_credentials"] = original_auth
+
                         observability.observe(
                             event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
                             level=observability.EventLevel.INFO,
                             data={
                                 "server_id": server_id,
-                                "original_auth": str(original_auth),
-                                "transformed_auth": str(transformed_auth),
+                                "uses_user_credentials": True,
+                                "description": "Using formation secrets for initial connection",
                             },
-                            description=f"Transformed user credentials for {server_id}",
+                            description=f"MCP server {server_id} configured with user credentials",
                         )
-
-                    # Interpolate secrets after transformation
-                    if hasattr(self, "secrets_manager") and self.secrets_manager:
-                        # Use async interpolation since we're in an async method
-                        final_auth = await self.secrets_manager.interpolate_secrets(
-                            transformed_auth
-                        )
-                        registration_params["credentials"] = final_auth
                     else:
-                        registration_params["credentials"] = transformed_auth
+                        # No user credentials, interpolate secrets normally
+                        if hasattr(self, "secrets_manager") and self.secrets_manager:
+                            # Use async interpolation since we're in an async method
+                            final_auth = await self.secrets_manager.interpolate_secrets(
+                                original_auth
+                            )
+                            registration_params["credentials"] = final_auth
+                        else:
+                            registration_params["credentials"] = original_auth
                 if "timeout_seconds" in server_config:
                     registration_params["request_timeout"] = server_config["timeout_seconds"]
                 if "transport_type" in server_config:

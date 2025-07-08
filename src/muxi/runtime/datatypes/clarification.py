@@ -232,7 +232,7 @@ class ClarificationResult:
 @dataclass
 class ClarificationResponse:
     """User's response to a clarification request"""
-    
+
     request_type: str = "credential_required"
     answers: List[Dict[str, Any]] = field(default_factory=list)
     raw_response: Optional[str] = None
@@ -252,6 +252,7 @@ class ParameterMapping:
 class ClarificationConfig:
     """Configuration for the clarification system"""
 
+    enabled: bool = True
     max_questions: int = 5
     style: QuestionStyle = QuestionStyle.CONVERSATIONAL
     persist_learned_info: bool = False
