@@ -2327,17 +2327,11 @@ def validate_user_credentials_requirements(
         memory_config = config.get("memory", {})
         persistent = memory_config.get("persistent", {})
 
-        if not persistent or not persistent.get("enabled", False):
+        # Check if persistent memory is configured using the current schema
+        if not persistent or not persistent.get("connection_string"):
             raise ValueError(
                 "User credentials (${{ user.credentials.* }}) require persistent database storage. "
-                "Please configure memory.persistent in your formation."
-            )
-
-        # Ensure we have a valid database configuration
-        if not persistent.get("provider") or not persistent.get("config"):
-            raise ValueError(
-                "User credentials require a properly configured database. "
-                "Please specify memory.persistent.provider and config."
+                "Please configure memory.persistent with a connection_string in your formation."
             )
 
     # Check MCP servers for user credentials that need initialization secrets
