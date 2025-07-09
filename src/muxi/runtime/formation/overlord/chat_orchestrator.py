@@ -95,6 +95,14 @@ class ChatOrchestrator:
         if not self.overlord.is_multi_user:
             user_id = "0"
 
+        # Validate that user_id is provided in multi-user mode
+        if self.overlord.is_multi_user and user_id is None:
+            from ...datatypes.exceptions import OverlordError
+            raise OverlordError(
+                "user_id is required when formation is running in multi-user mode. "
+                "Please provide a user_id parameter to identify the user making this request."
+            )
+
         # Generate unique request ID for all requests (for tracking and logging)
         request_id = f"req_{generate_nanoid()}"
         timestamp = time.time()
