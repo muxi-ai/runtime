@@ -75,6 +75,7 @@ import numpy as np
 import multitasking
 
 from .. import observability
+from ..llm import LLM
 
 # Set multitasking to thread mode for shared memory access
 multitasking.set_engine("thread")
@@ -157,10 +158,20 @@ class ShortTermMemory:
 
         # Vector search configuration
         self.dimension = dimension
-        self.model = model
         self.mode = mode
         self.remote = remote or {}
         self.has_vector_search = True
+
+        # Model can be either an LLM instance or a model name string
+        self._model = None
+        self._model_name = None
+        if model:
+            if isinstance(model, str):
+                # Model name provided - will create LLM instance lazily
+                self._model_name = model
+            else:
+                # Assume it's an LLM instance
+                self._model = model
 
         # Configure FAISS for remote mode (FAISSx-specific)
         if mode == "remote" and self.remote:
@@ -180,6 +191,30 @@ class ShortTermMemory:
 
         # Start the background FIFO cleanup task
         fifo_cleanup_task(self)
+
+    @property
+    def model(self):
+        """Get the model, creating it lazily if needed."""
+        if self._model is None and self._model_name:
+            # Create LLM instance lazily
+            # Note: This is synchronous creation, which should work for most cases
+            # If async is needed, the model creation should happen in add/search methods
+            try:
+                self._model = LLM(model=self._model_name)
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "model_name": self._model_name,
+                        "error": str(e),
+                    },
+                    description=f"Failed to create LLM instance for embeddings: {e}",
+                )
+                # Disable vector search if model creation fails
+                self._model_name = None
+                self.has_vector_search = False
+        return self._model
 
     async def add(
         self, text: str, metadata: Optional[Dict[str, Any]] = None, namespace: str = "buffer"

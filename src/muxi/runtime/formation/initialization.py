@@ -218,9 +218,8 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         if vector_search:
             embedding_model_name = _resolve_embedding_model_name(formation=formation)
             if embedding_model_name:
-                # For buffer memory, we need to pass the actual model object
-                # Since we can't create it here (async), we'll pass the model name
-                # and let ShortTermMemory handle it
+                # Pass the model name to ShortTermMemory
+                # It will create the LLM instance lazily when needed
                 embedding_model = embedding_model_name
             else:
                 # Disable vector search if no embedding model configured
