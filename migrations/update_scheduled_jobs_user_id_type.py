@@ -191,7 +191,7 @@ async def migrate_up(connection_string: str):
                     """))
                     print("✅ Added NOT NULL constraint to scheduled_jobs.user_id")
                 else:
-                    print(f"⚠️  Cannot add NOT NULL constraint to scheduled_jobs.user_id - {null_count} NULL values found")
+                    print(f"⚠️  Cannot add NOT NULL constraint to scheduled_jobs.user_id - {null_count} NULL found")
             else:
                 print("ℹ️  No rows in scheduled_jobs table - skipping NOT NULL constraint")
 
@@ -213,7 +213,7 @@ async def migrate_up(connection_string: str):
                     """))
                     print("✅ Added NOT NULL constraint to scheduled_job_audit.user_id")
                 else:
-                    print(f"⚠️  Cannot add NOT NULL constraint to scheduled_job_audit.user_id - {null_count} NULL values found")
+                    print(f"⚠️  Cannot add NOT NULL constraint to scheduled_job_audit.user_id - {null_count} NULL found")  # noqa: E501
             else:
                 print("ℹ️  No rows in scheduled_job_audit table - skipping NOT NULL constraint")
 
