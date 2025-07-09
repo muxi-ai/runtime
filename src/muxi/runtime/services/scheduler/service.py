@@ -106,17 +106,10 @@ class SchedulerService:
         else:
             # Fallback to creating own database manager
             self.db_manager = get_database_manager()
-        # Get formation_id and hash from overlord
+        # Get formation_id from overlord
         formation_id = overlord.formation_id if overlord and hasattr(overlord, 'formation_id') else "default-formation"
-        formation_id_hash = None
-        if overlord and hasattr(overlord, 'formation_id_hash'):
-            formation_id_hash = overlord.formation_id_hash
-        elif overlord:
-            # Calculate hash if not available
-            import hashlib
-            formation_id_hash = hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
 
-        self.job_manager = JobManager(self.db_manager, formation_id=formation_id, formation_id_hash=formation_id_hash)
+        self.job_manager = JobManager(self.db_manager, formation_id=formation_id)
 
         # Performance optimization components
         scheduler_config = None

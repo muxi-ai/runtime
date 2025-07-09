@@ -32,8 +32,8 @@ class ScheduledJobAudit(Base, AsyncModelMixin):
     id = Column(Integer, primary_key=True, autoincrement=True)
 
     # Job and user identification
-    job_id = Column(String(255), nullable=False, index=True)
-    user_id = Column(String(255), nullable=False, index=True)
+    job_id = Column(String(255), ForeignKey("scheduled_jobs.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # Audit information
     action = Column(
@@ -94,7 +94,6 @@ class ScheduledJob(Base, AsyncModelMixin):
     # Primary key and identification
     id = Column(String(255), primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    external_user_id = Column(String(255), nullable=False)  # Store the original external user ID for reference
 
     # Job content
     title = Column(String(500), nullable=False)

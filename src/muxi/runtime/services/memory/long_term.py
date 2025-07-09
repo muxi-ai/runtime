@@ -68,20 +68,16 @@ class User(Base, AsyncModelMixin):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
+    public_id = Column(String(21), nullable=False, unique=True, index=True)  # Nano ID for external exposure
     external_user_id = Column(String(255), nullable=False, index=True)
-    external_user_id_hash = Column(String(64), nullable=False, index=True)
-    formation_id = Column(String(255), nullable=False)
-    formation_id_hash = Column(String(64), nullable=False, index=True)
+    formation_id = Column(String(255), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
     updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     # Composite unique constraint to ensure uniqueness within each formation
     __table_args__ = (
         UniqueConstraint(
-            "external_user_id_hash", "formation_id_hash", name="uq_user_formation_external_id"
-        ),
-        UniqueConstraint(
-            "external_user_id", "formation_id", name="uq_user_formation_external_id_plain"
+            "external_user_id", "formation_id", name="uq_user_formation_external_id"
         ),
     )
 
@@ -154,7 +150,6 @@ class LongTermMemory:
         self.default_collection = default_collection
         self.embedding_model = embedding_model
         self.formation_id = formation_id
-        self.formation_id_hash = self._hash_formation_id(formation_id)
 
         # Use provided database manager
         self.db_manager = db_manager
@@ -211,25 +206,6 @@ class LongTermMemory:
             )
             raise
 
-    def _hash_external_id(self, external_id: str) -> str:
-        """Generate SHA256 hash of external user ID."""
-        import hashlib
-
-        # Convert to string if not already (handles int, None, etc.)
-        if external_id is None:
-            external_id = "0"
-        elif not isinstance(external_id, str):
-            external_id = str(external_id)
-        return hashlib.sha256(external_id.encode("utf-8")).hexdigest()
-
-    def _hash_formation_id(self, formation_id: str) -> str:
-        """Generate SHA256 hash of formation ID."""
-        import hashlib
-
-        # Convert to string if not already
-        if not isinstance(formation_id, str):
-            formation_id = str(formation_id)
-        return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
 
     def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
         """Get existing user or create new one."""
@@ -239,13 +215,11 @@ class LongTermMemory:
         elif external_user_id is None:
             raise ValueError("external_user_id is required in multi-user mode")
 
-        # Calculate hash
-        user_hash = self._hash_external_id(external_user_id)
 
         # Try to find existing user with formation scope
         user = (
             session.query(User)
-            .filter_by(external_user_id_hash=user_hash, formation_id_hash=self.formation_id_hash)
+            .filter_by(external_user_id=external_user_id, formation_id=self.formation_id)
             .first()
         )
         if user:
@@ -253,10 +227,9 @@ class LongTermMemory:
 
         # Create new user
         user = User(
+            public_id=get_default_nanoid()(),
             external_user_id=external_user_id,
-            external_user_id_hash=user_hash,
             formation_id=self.formation_id,
-            formation_id_hash=self.formation_id_hash,
             created_at=utc_now_naive(),
         )
         session.add(user)
@@ -280,7 +253,7 @@ class LongTermMemory:
             .filter(
                 Collection.user_id == user_id,
                 Collection.name == self.default_collection,
-                User.formation_id_hash == self.formation_id_hash,
+                User.formation_id == self.formation_id,
             )
             .first()
         )
@@ -487,7 +460,7 @@ class LongTermMemory:
             .filter(
                 Collection.user_id == user_id,
                 Collection.name == collection_name,
-                User.formation_id_hash == self.formation_id_hash,
+                User.formation_id == self.formation_id,
             )
             .first()
         )
@@ -637,7 +610,7 @@ class LongTermMemory:
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.user_id == user.id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                     Memory.collection == collection,
                 )
                 .order_by("distance")
@@ -689,7 +662,7 @@ class LongTermMemory:
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.id == memory_id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .first()
             )
@@ -748,7 +721,7 @@ class LongTermMemory:
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.id == memory_id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .first()
             )
@@ -823,7 +796,7 @@ class LongTermMemory:
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.id == memory_id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .first()
             )
@@ -869,7 +842,7 @@ class LongTermMemory:
             collections = (
                 session.query(Collection)
                 .join(User, Collection.user_id == User.id)
-                .filter(User.formation_id_hash == self.formation_id_hash)
+                .filter(User.formation_id == self.formation_id)
                 .all()
             )
 
@@ -912,7 +885,7 @@ class LongTermMemory:
                 .filter(
                     Collection.name == name,
                     Collection.user_id == user.id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .first()
             )
@@ -962,7 +935,7 @@ class LongTermMemory:
                 .filter(
                     Collection.name == name,
                     Collection.user_id == user.id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .first()
             )
@@ -1010,7 +983,7 @@ class LongTermMemory:
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.collection == collection_name,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .order_by(desc(Memory.created_at))
                 .limit(limit)
@@ -1048,24 +1021,20 @@ class LongTermMemory:
         elif external_user_id is None:
             raise ValueError("external_user_id is required in multi-user mode")
 
-        # Calculate hash
-        external_user_id_hash = self._hash_external_id(external_user_id)
-
         # Try to get existing user
         user = await User.get(
             session,
-            external_user_id_hash=external_user_id_hash,
-            formation_id_hash=self.formation_id_hash,
+            external_user_id=external_user_id,
+            formation_id=self.formation_id,
         )
 
         if not user:
             # Create new user
             user = await User.create(
                 session,
+                public_id=get_default_nanoid()(),
                 external_user_id=external_user_id,
-                external_user_id_hash=external_user_id_hash,
                 formation_id=self.formation_id,
-                formation_id_hash=self.formation_id_hash,
             )
 
         return user
@@ -1087,7 +1056,7 @@ class LongTermMemory:
                 and_(
                     Collection.user_id == user_id,
                     Collection.name == collection_name,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
             )
         )
@@ -1156,7 +1125,7 @@ class LongTermMemory:
                 .join(User, Memory.user_id == User.id)
                 .filter(
                     Memory.user_id == user.id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                     Memory.collection == collection,
                 )
                 .order_by("distance")

@@ -86,6 +86,10 @@ class ChatOrchestrator:
             arrive from the model. This preserves true streaming behavior and prevents
             memory issues from collecting all chunks before returning.
         """
+        # Normalize user_id - lowercase and strip whitespace
+        if user_id is not None:
+            user_id = str(user_id).lower().strip()
+
         # Override user_id to "0" for single-user mode (SQLite)
         # This ensures consistent user isolation in single-user deployments
         if not self.overlord.is_multi_user:

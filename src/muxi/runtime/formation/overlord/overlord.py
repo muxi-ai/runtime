@@ -380,13 +380,9 @@ class Overlord:
         if configured_services:
             db_manager = configured_services.get("db_manager")
             if db_manager and hasattr(db_manager, "AsyncSession") and db_manager.AsyncSession:
-                # Calculate formation_id_hash (consistent with memory services)
-                formation_id_hash = hashlib.sha256(self.formation_id.encode()).hexdigest()
-
                 self.credential_resolver = CredentialResolver(
                     async_session_maker=db_manager.AsyncSession,
                     formation_id=self.formation_id,
-                    formation_id_hash=formation_id_hash,
                 )
 
         # Accept pre-generated API keys from Formation

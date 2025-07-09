@@ -30,7 +30,6 @@
 # smaller deployments or environments where PostgreSQL is not available.
 # =============================================================================
 
-import hashlib
 import json
 import os
 import sqlite3
@@ -76,7 +75,7 @@ class SQLiteMemory(BaseMemory):
         """
         self.db_path = db_path
         self.formation_id = formation_id
-        self.formation_id_hash = self._hash_formation_id(formation_id)
+        self.formation_id = self._hash_formation_id(formation_id)
         self.dimension = dimension
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
@@ -88,19 +87,6 @@ class SQLiteMemory(BaseMemory):
         # Initialize database
         self.conn = self._init_database()
 
-    def _hash_formation_id(self, formation_id: str) -> str:
-        """Generate SHA256 hash of formation ID."""
-        # Convert to string if not already
-        if not isinstance(formation_id, str):
-            formation_id = str(formation_id)
-        return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
-
-    def _hash_user_id(self, user_id: str) -> str:
-        """Generate SHA256 hash of user ID."""
-        # Convert to string if not already
-        if not isinstance(user_id, str):
-            user_id = str(user_id)
-        return hashlib.sha256(user_id.encode("utf-8")).hexdigest()
 
     async def get_or_create_user(self, external_user_id: str) -> int:
         """
@@ -112,12 +98,12 @@ class SQLiteMemory(BaseMemory):
         Returns:
             The internal database user ID
         """
-        user_id_hash = self._hash_user_id(external_user_id)
+        # user_id is now just external_user_id
 
         # Check if user exists
         cursor = self.conn.execute(
-            "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
-            (user_id_hash, self.formation_id_hash),
+            "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+            (external_user_id, self.formation_id),
         )
         user_row = cursor.fetchone()
 
@@ -125,17 +111,18 @@ class SQLiteMemory(BaseMemory):
             return user_row[0]
 
         # Create new user
+        public_id = self._generate_id()
         self.conn.execute(
-            "INSERT INTO users (external_user_id, external_user_id_hash, formation_id, formation_id_hash) "
-            "VALUES (?, ?, ?, ?)",
-            (external_user_id, user_id_hash, self.formation_id, self.formation_id_hash),
+            "INSERT INTO users (public_id, external_user_id, formation_id) "
+            "VALUES (?, ?, ?)",
+            (public_id, external_user_id, self.formation_id),
         )
         self.conn.commit()
 
         # Get the newly created user ID
         cursor = self.conn.execute(
-            "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
-            (user_id_hash, self.formation_id_hash),
+            "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+            (external_user_id, self.formation_id),
         )
         return cursor.fetchone()[0]
 
@@ -170,13 +157,12 @@ class SQLiteMemory(BaseMemory):
             """
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                public_id TEXT NOT NULL UNIQUE,
                 external_user_id TEXT NOT NULL,
-                external_user_id_hash TEXT NOT NULL,
                 formation_id TEXT NOT NULL,
-                formation_id_hash TEXT NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(external_user_id_hash, formation_id_hash)
+                UNIQUE(external_user_id, formation_id)
             )
         """
         )
@@ -224,25 +210,24 @@ class SQLiteMemory(BaseMemory):
         """
         # Default user ID for single-user mode - use "0" to match orchestrator override
         default_user_id = "0"
-        user_id_hash = self._hash_user_id(default_user_id)
-
         # Check if user exists
         cursor = conn.execute(
-            "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
-            (user_id_hash, self.formation_id_hash),
+            "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+            (default_user_id, self.formation_id),
         )
         user_row = cursor.fetchone()
 
         if not user_row:
             # Create default user
+            public_id = self._generate_id()
             conn.execute(
-                "INSERT INTO users (external_user_id, external_user_id_hash, formation_id, formation_id_hash) "
-                "VALUES (?, ?, ?, ?)",
-                (default_user_id, user_id_hash, self.formation_id, self.formation_id_hash),
+                "INSERT INTO users (public_id, external_user_id, formation_id) "
+                "VALUES (?, ?, ?)",
+                (public_id, default_user_id, self.formation_id),
             )
             cursor = conn.execute(
-                "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
-                (user_id_hash, self.formation_id_hash),
+                "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+                (default_user_id, self.formation_id),
             )
             user_row = cursor.fetchone()
 
@@ -461,7 +446,7 @@ class SQLiteMemory(BaseMemory):
             JOIN users u ON m.user_id = u.id
             WHERE m.collection = ?
                 AND m.user_id = ?
-                AND u.formation_id_hash = ?
+                AND u.formation_id = ?
             ORDER BY score ASC
             LIMIT ?
         """
@@ -469,7 +454,7 @@ class SQLiteMemory(BaseMemory):
         # Execute search
         cursor = self.conn.execute(
             query,
-            (query_embedding, collection, user_id, self.formation_id_hash, k),
+            (query_embedding, collection, user_id, self.formation_id, k),
         )
 
         # Format results
@@ -509,9 +494,9 @@ class SQLiteMemory(BaseMemory):
             SELECT m.id, m.text, m.metadata, m.created_at
             FROM memories m
             JOIN users u ON m.user_id = u.id
-            WHERE m.id = ? AND u.formation_id_hash = ?
+            WHERE m.id = ? AND u.formation_id = ?
             """,
-            (memory_id, self.formation_id_hash),
+            (memory_id, self.formation_id),
         )
 
         row = cursor.fetchone()
@@ -547,10 +532,9 @@ class SQLiteMemory(BaseMemory):
         # Get internal user ID if external user ID provided
         if user_id:
             # Synchronous version of get_or_create_user
-            user_id_hash = self._hash_user_id(user_id)
             cursor = self.conn.execute(
-                "SELECT id FROM users WHERE external_user_id_hash = ? AND formation_id_hash = ?",
-                (user_id_hash, self.formation_id_hash),
+                "SELECT id FROM users WHERE external_user_id = ? AND formation_id = ?",
+                (user_id, self.formation_id),
             )
             user_row = cursor.fetchone()
             internal_user_id = user_row[0] if user_row else self.default_user_id
@@ -565,11 +549,11 @@ class SQLiteMemory(BaseMemory):
             JOIN users u ON m.user_id = u.id
             WHERE m.collection = ?
                 AND m.user_id = ?
-                AND u.formation_id_hash = ?
+                AND u.formation_id = ?
             ORDER BY m.created_at DESC
             LIMIT ?
             """,
-            (collection, internal_user_id, self.formation_id_hash, limit),
+            (collection, internal_user_id, self.formation_id, limit),
         )
 
         # Parse results
@@ -652,10 +636,10 @@ class SQLiteMemory(BaseMemory):
             SELECT c.id, c.name, c.description, c.created_at
             FROM collections c
             JOIN users u ON c.user_id = u.id
-            WHERE c.user_id = ? AND u.formation_id_hash = ?
+            WHERE c.user_id = ? AND u.formation_id = ?
             ORDER BY c.name
             """,
-            (internal_user_id, self.formation_id_hash),
+            (internal_user_id, self.formation_id),
         )
 
         return [

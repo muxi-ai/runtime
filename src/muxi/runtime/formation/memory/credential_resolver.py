@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 from sqlalchemy.orm import declarative_base
 import nanoid
-import hashlib
 
 from ...datatypes.json_type import JSONType
 from ...datatypes.exceptions import FormationError
@@ -36,11 +35,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    user_id = Column(String(21), nullable=False)  # Legacy column, kept for compatibility
+    public_id = Column(String(21), nullable=False, unique=True)  # Nano ID for external exposure
     external_user_id = Column(Text, nullable=False)  # The actual external user ID
-    external_user_id_hash = Column(String(64), nullable=False)  # SHA256 hash of external_user_id
     formation_id = Column(String, nullable=False, default="default-formation")
-    formation_id_hash = Column(String, nullable=False)
 
     def __repr__(self) -> str:
         """Return a string representation for debugging."""
@@ -81,34 +78,17 @@ class CredentialResolver:
     the JSONType abstraction.
     """
 
-    def __init__(self, async_session_maker, formation_id: str, formation_id_hash: str):
+    def __init__(self, async_session_maker, formation_id: str):
         """
         Initialize the credential resolver.
 
         Args:
             async_session_maker: Async SQLAlchemy session factory
-            formation_id: The formation ID (human-readable)
-            formation_id_hash: The hashed formation ID for database queries
+            formation_id: The formation ID (normalized)
         """
         self.async_session_maker = async_session_maker
         self.formation_id = formation_id
-        self.formation_id_hash = formation_id_hash
         self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
-
-    def _compute_user_id_hash(self, external_user_id: str) -> str:
-        """
-        Compute SHA256 hash of external user ID for database lookups.
-
-        Args:
-            external_user_id: The external user ID string
-
-        Returns:
-            SHA256 hash of the user ID
-        """
-        # Ensure external_user_id is a string
-        if not isinstance(external_user_id, str):
-            external_user_id = str(external_user_id)
-        return hashlib.sha256(external_user_id.encode("utf-8")).hexdigest()
 
     async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
         """
@@ -133,15 +113,12 @@ class CredentialResolver:
 
         # Query database using async session with proper JOIN
         async with self.async_session_maker() as session:
-            # Compute user ID hash for lookup
-            user_id_hash = self._compute_user_id_hash(user_id)
-
             stmt = (
                 select(Credential)
                 .join(User, Credential.user_id == User.id)
                 .where(
-                    User.external_user_id_hash == user_id_hash,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.external_user_id == user_id,
+                    User.formation_id == self.formation_id,
                     Credential.service == service,
                 )
                 .limit(1)
@@ -175,12 +152,10 @@ class CredentialResolver:
         async with self.async_session_maker() as session:
             try:
                 # First, find or create the user
-                user_id_hash = self._compute_user_id_hash(user_id)
-
                 # Look up the user
                 user_stmt = select(User).where(
-                    User.external_user_id_hash == user_id_hash,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.external_user_id == user_id,
+                    User.formation_id == self.formation_id,
                 )
                 user_result = await session.execute(user_stmt)
                 user = user_result.scalar_one_or_none()
@@ -188,11 +163,9 @@ class CredentialResolver:
                 if not user:
                     # Create the user if it doesn't exist
                     user = User(
-                        user_id=nanoid.generate(),  # Legacy field
+                        public_id=nanoid.generate(size=21),
                         external_user_id=user_id,
-                        external_user_id_hash=user_id_hash,
                         formation_id=self.formation_id,
-                        formation_id_hash=self.formation_id_hash,
                     )
                     session.add(user)
                     await session.flush()  # Flush to get the ID

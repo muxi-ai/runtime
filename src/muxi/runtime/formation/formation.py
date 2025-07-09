@@ -342,9 +342,11 @@ class Formation:
                 raise DependencyValidationError(dependency_result.errors, error_details)
 
             # Set formation ID (check both 'id' and 'formation_id' for compatibility)
-            self.formation_id = self.config.get("id") or self.config.get(
+            # Normalize to lowercase and strip whitespace
+            formation_id = self.config.get("id") or self.config.get(
                 "formation_id", "default-formation"
             )
+            self.formation_id = formation_id.lower().strip()
             set_formation_id(self.formation_id)
             
             # Ensure formation_id is in config for Overlord

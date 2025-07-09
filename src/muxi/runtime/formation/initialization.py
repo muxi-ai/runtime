@@ -348,6 +348,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
                 formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
+            formation._is_multi_user = True  # PostgreSQL/Memobase is multi-user mode
             memory_type = "Memobase"
 
         observability.observe(

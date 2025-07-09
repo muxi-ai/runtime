@@ -32,12 +32,11 @@ class JobManager:
     with full cross-database compatibility.
     """
 
-    def __init__(self, db_manager: DatabaseManager, formation_id: str = None, formation_id_hash: str = None):
+    def __init__(self, db_manager: DatabaseManager, formation_id: str = None):
         """Initialize job manager with unified database manager."""
         self.db_manager = db_manager
         self._initialized = False
         self.formation_id = formation_id or "default-formation"
-        self.formation_id_hash = formation_id_hash or self._hash_formation_id(self.formation_id)
 
         observability.observe(
             event_type=observability.SystemEvents.SCHEDULER_MANAGER_INITIALIZED,
@@ -49,31 +48,13 @@ class JobManager:
             description=f"Job manager initialized with {self.db_manager.database_type} database",
         )
 
-    def _hash_external_id(self, external_id: str) -> str:
-        """Generate SHA256 hash of external user ID."""
-        import hashlib
-        if external_id is None:
-            external_id = "0"
-        elif not isinstance(external_id, str):
-            external_id = str(external_id)
-        return hashlib.sha256(external_id.encode("utf-8")).hexdigest()
-
-    def _hash_formation_id(self, formation_id: str) -> str:
-        """Generate SHA256 hash of formation ID."""
-        import hashlib
-        if not isinstance(formation_id, str):
-            formation_id = str(formation_id)
-        return hashlib.sha256(formation_id.encode("utf-8")).hexdigest()
 
     def _get_or_create_user(self, session, external_user_id: str) -> User:
         """Get existing user or create new one."""
-        # Calculate hash
-        user_hash = self._hash_external_id(external_user_id)
-
         # Try to find existing user with formation scope
         user = (
             session.query(User)
-            .filter_by(external_user_id_hash=user_hash, formation_id_hash=self.formation_id_hash)
+            .filter_by(external_user_id=external_user_id, formation_id=self.formation_id)
             .first()
         )
         if user:
@@ -81,11 +62,11 @@ class JobManager:
 
         # Create new user
         from ...utils.datetime_utils import utc_now_naive
+        from ...utils.id_generator import get_default_nanoid
         user = User(
+            public_id=get_default_nanoid()(),
             external_user_id=external_user_id,
-            external_user_id_hash=user_hash,
             formation_id=self.formation_id,
-            formation_id_hash=self.formation_id_hash,
             created_at=utc_now_naive(),
         )
         session.add(user)
@@ -241,7 +222,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.status == "ACTIVE",
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .order_by(ScheduledJob.created_at.asc())
                     .all()
@@ -274,7 +255,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.user_id == user.id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                 )
 
@@ -309,7 +290,7 @@ class JobManager:
                 query = (
                     session.query(ScheduledJob)
                     .join(User, ScheduledJob.user_id == User.id)
-                    .filter(User.formation_id_hash == self.formation_id_hash)
+                    .filter(User.formation_id == self.formation_id)
                 )
 
                 if status:
@@ -362,7 +343,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -388,7 +369,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.status == "ACTIVE",
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .scalar()
                 )
@@ -416,7 +397,7 @@ class JobManager:
                     .filter(
                         ScheduledJob.id == job_id,
                         ScheduledJob.status == "ACTIVE",
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -469,7 +450,7 @@ class JobManager:
                     .filter(
                         ScheduledJob.id == job_id,
                         ScheduledJob.status == "PAUSED",
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -530,7 +511,7 @@ class JobManager:
                         ScheduledJob.id == job_id,
                         ScheduledJob.is_recurring.is_(False),
                         ScheduledJob.status == "ACTIVE",
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -581,7 +562,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -628,7 +609,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -660,7 +641,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -705,7 +686,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -750,7 +731,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -777,7 +758,7 @@ class JobManager:
                     .join(User, ScheduledJob.user_id == User.id)
                     .filter(
                         ScheduledJob.id == job_id,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .first()
                 )
@@ -1066,7 +1047,7 @@ class JobManager:
                     .filter(
                         ScheduledJob.status.in_(["COMPLETED", "FAILED"]),
                         ScheduledJob.last_run_at < cutoff_date,
-                        User.formation_id_hash == self.formation_id_hash,
+                        User.formation_id == self.formation_id,
                     )
                     .offset(offset)
                     .limit(limit)
@@ -1174,7 +1155,7 @@ class JobManager:
                 .join(User, ScheduledJob.user_id == User.id)
                 .filter(
                     ScheduledJob.id == job_id,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.formation_id == self.formation_id,
                 )
                 .first()
             )

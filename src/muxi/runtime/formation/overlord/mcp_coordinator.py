@@ -404,6 +404,7 @@ class MCPCoordinator:
                 args=args,
                 transport_type=transport_type,
                 credentials=final_auth,
+                original_credentials=auth,  # Pass original auth with user credential placeholders
                 model=model,
                 request_timeout=timeout,
             )
