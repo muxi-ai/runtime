@@ -1,6 +1,6 @@
 schema: "1.0.0"
 id: "test_formation"
-description: "Formation for testing mcp servers"
+description: "Formation for testing mcp servers with SQLite"
 
 llm:
   api_keys:
@@ -23,7 +23,7 @@ llm:
 
 runtime:
   built_in_mcps: false
-  mcp_server_startup_timeout: 30  # Increase timeout to 30 seconds
+  mcp_server_startup_timeout: 5  # Reduce timeout to 5 seconds
 
 memory:
   working:
@@ -38,7 +38,7 @@ memory:
     vector_search: true
 
   persistent:
-    connection_string: "${{ secrets.POSTGRES_URI }}"
+    connection_string: "sqlite:///test_muxi.db"
     embedding_model: "openai/text-embedding-3-small"
 
 logging:
