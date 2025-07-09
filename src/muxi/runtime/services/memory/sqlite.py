@@ -222,8 +222,8 @@ class SQLiteMemory(BaseMemory):
         """
         Ensure default user exists for single-user mode.
         """
-        # Default user ID for single-user mode
-        default_user_id = "default_user"
+        # Default user ID for single-user mode - use "0" to match orchestrator override
+        default_user_id = "0"
         user_id_hash = self._hash_user_id(default_user_id)
 
         # Check if user exists

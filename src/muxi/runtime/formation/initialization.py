@@ -331,6 +331,7 @@ def _initialize_persistent_memory(formation, persistent_config: Dict[str, Any]) 
                 formation_id=formation_id,
                 embedding_model=embedding_model_name,
             )
+            formation._is_multi_user = False  # SQLite is single-user mode
             memory_type = "SQLite"
 
         else:

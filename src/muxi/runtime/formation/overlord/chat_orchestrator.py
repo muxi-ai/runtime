@@ -86,6 +86,11 @@ class ChatOrchestrator:
             arrive from the model. This preserves true streaming behavior and prevents
             memory issues from collecting all chunks before returning.
         """
+        # Override user_id to "0" for single-user mode (SQLite)
+        # This ensures consistent user isolation in single-user deployments
+        if not self.overlord.is_multi_user:
+            user_id = "0"
+
         # Generate unique request ID for all requests (for tracking and logging)
         request_id = f"req_{generate_nanoid()}"
         timestamp = time.time()
