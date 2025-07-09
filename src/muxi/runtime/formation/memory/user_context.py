@@ -58,19 +58,12 @@ class UserContextManager:
         ):
             return {}
 
-        try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - TODO: add observability
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return {}
-
-        context = await self.overlord.long_term_memory.get_user_context(user_id=internal_user_id)
+        # Use external_user_id directly - no conversion needed
+        context = await self.overlord.long_term_memory.get_user_context(external_user_id=user_id)
 
         #  Info - TODO: add observability
         # ConversationEvents.MEMORY_LONG_TERM_RETRIEVED
-        # Retrieved user context memory for user: '{internal_user_id}'
+        # Retrieved user context memory for user: '{user_id}'
 
         return context
 
@@ -111,16 +104,9 @@ class UserContextManager:
         ):
             return []
 
-        try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - TODO: add observability
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return []
-
+        # Use external_user_id directly - no conversion needed
         context = await self.overlord.long_term_memory.add_user_context(
-            user_id=internal_user_id, knowledge=knowledge, source=source, importance=importance
+            external_user_id=user_id, knowledge=knowledge, source=source, importance=importance
         )
 
         #  Info - TODO: add observability
@@ -155,17 +141,9 @@ class UserContextManager:
         ):
             return False
 
-        # ENHANCE: Use flexible user ID conversion
-        try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - TODO: add observability
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return False
-
+        # Use external_user_id directly - no conversion needed
         context = await self.overlord.long_term_memory.clear_user_context(
-            user_id=internal_user_id, keys=keys
+            external_user_id=user_id, keys=keys
         )
 
         #  Info - TODO: add observability

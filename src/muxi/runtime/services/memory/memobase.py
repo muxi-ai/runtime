@@ -53,16 +53,16 @@ class Memobase:
     CONTEXT_MEMORY_COLLECTION = "context_memory"
     CONTEXT_MEMORY_TYPE = "context_memory"
 
-    def __init__(self, long_term_memory: LongTermMemory, default_user_id: int = 0):
+    def __init__(self, long_term_memory: LongTermMemory, default_external_user_id: str = "0"):
         """
         Initialize the Memobase memory manager.
 
         Args:
             long_term_memory: PostgreSQL/PGVector-based long-term memory.
-            default_user_id: The default user ID to use (0 for single-user
+            default_external_user_id: The default external user ID to use ("0" for single-user
                 mode).
         """
-        self.default_user_id = default_user_id
+        self.default_external_user_id = default_external_user_id
         self.long_term_memory = long_term_memory
 
         # Log initialization
@@ -71,7 +71,7 @@ class Memobase:
             level=observability.EventLevel.INFO,
             description="Memobase initialized",
             data={
-                "default_user_id": default_user_id,
+                "default_external_user_id": default_external_user_id,
                 "long_term_memory_type": type(long_term_memory).__name__,
             },
         )  # Don't let observability failures break initialization
@@ -81,10 +81,9 @@ class Memobase:
         content: str,
         embedding: Optional[List[float]] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        user_id: Optional[int] = None,
-        collection: Optional[str] = None,
         external_user_id: Optional[str] = None,
-    ) -> int:
+        collection: Optional[str] = None,
+    ) -> str:
         """
         Add content to memory for a specific user.
 
@@ -96,17 +95,17 @@ class Memobase:
             content: The content to add to memory.
             embedding: Optional pre-computed embedding for the content.
             metadata: Optional metadata to associate with the content.
-            user_id: The user ID to add memory for. If None, uses the default
-                user.
+            external_user_id: The external user ID for the user. If None, uses the default
+                external user ID.
             collection: Optional collection name to store the memory in.
                 If None, uses the default user collection.
-            external_user_id: The external user ID for multi-user support.
-                Required when using PostgreSQL with proper user isolation.
 
         Returns:
             The ID of the newly created memory entry.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log memory store start
         observability.observe(
@@ -114,7 +113,7 @@ class Memobase:
             level=observability.EventLevel.INFO,
             description="Starting memory store operation",
             data={
-                "user_id": user_id,
+                "external_user_id": external_user_id,
                 "content_length": len(content) if content else 0,
                 "has_embedding": embedding is not None,
                 "collection": collection,
@@ -122,42 +121,33 @@ class Memobase:
             },
         )
 
-        # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        # Skip memory operations for default/anonymous users
+        if external_user_id in ["default", "anonymous", "0"]:
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping memory store for anonymous user",
-                data={"user_id": user_id},
+                data={"external_user_id": external_user_id},
             )
             # Return dummy ID for anonymous users
-            return 0
+            return "0"
 
         metadata = metadata or {}
 
-        # Add user_id to metadata
-        metadata["user_id"] = user_id
+        # Add external_user_id to metadata
+        metadata["external_user_id"] = external_user_id
 
         # Add timestamp if not provided
         if "timestamp" not in metadata:
             metadata["timestamp"] = time.time()
 
-        # Create a collection name based on the user ID if not provided
+        # Create a collection name based on the external user ID if not provided
         if collection is None:
-            collection = f"user_{user_id}"
+            collection = f"user_{external_user_id}"
 
         try:
             # Add to long-term memory (it will handle collection creation internally)
-            # Handle external_user_id requirement more robustly
-            if external_user_id is None:
-                if user_id is not None and user_id != 0:
-                    # Convert user_id to string format for external_user_id
-                    external_user_id = str(user_id)
-                else:
-                    # Use default user for anonymous/system operations
-                    external_user_id = "default_user"
-
             memory_id = await self.long_term_memory.add(
                 content=content,
                 embedding=embedding,
@@ -171,7 +161,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="Memory store completed successfully",
                 data={
-                    "user_id": user_id,
+                    "external_user_id": external_user_id,
                     "memory_id": memory_id,
                     "collection": collection,
                     "content_length": len(content) if content else 0,
@@ -187,7 +177,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="Memory store operation failed",
                 data={
-                    "user_id": user_id,
+                    "external_user_id": external_user_id,
                     "collection": collection,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -200,7 +190,7 @@ class Memobase:
         query: str,
         query_embedding: Optional[List[float]] = None,
         limit: int = 5,
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         additional_filter: Optional[Dict[str, Any]] = None,
         collection: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
@@ -215,8 +205,8 @@ class Memobase:
             query: The text query to search for.
             query_embedding: Optional pre-computed embedding.
             limit: Maximum number of results to return.
-            user_id: The user ID to search memory for. If None, uses the
-                default user.
+            external_user_id: The external user ID to search memory for. If None, uses the
+                default external user ID.
             additional_filter: Optional additional metadata filter.
             collection: Optional collection name to search in. If None, uses
                 the default collection for the user.
@@ -224,7 +214,9 @@ class Memobase:
         Returns:
             A list of memory entries, ordered by relevance.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log memory retrieval start
         observability.observe(
@@ -232,7 +224,7 @@ class Memobase:
             level=observability.EventLevel.INFO,
             description="Starting memory search operation",
             data={
-                "user_id": user_id,
+                "external_user_id": external_user_id,
                 "query_length": len(query) if query else 0,
                 "limit": limit,
                 "collection": collection,
@@ -241,46 +233,47 @@ class Memobase:
             },
         )
 
-        # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        # Skip memory operations for anonymous users
+        if external_user_id in ["default", "anonymous", "0"]:
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping memory search for anonymous user",
-                data={"user_id": user_id},
+                data={"external_user_id": external_user_id},
             )
             # Return empty results for anonymous users
             return []
 
         additional_filter = additional_filter or {}
 
-        # Add user_id to filter
-        additional_filter["user_id"] = user_id
+        # Add external_user_id to filter
+        additional_filter["external_user_id"] = external_user_id
 
-        # Create a collection name based on the user ID if not provided
+        # Create a collection name based on the external user ID if not provided
         if collection is None:
-            collection = f"user_{user_id}"
+            collection = f"user_{external_user_id}"
 
         try:
             # Search long-term memory
-            search_results = await asyncio.to_thread(
-                self.long_term_memory.search,
+            search_results = await self.long_term_memory.search(
                 query=query,
                 query_embedding=query_embedding,
                 filter_metadata=additional_filter,
-                k=limit,
+                limit=limit,
                 collection=collection,
+                external_user_id=external_user_id,
             )
 
             # Convert results to standard format
             results = []
-            for distance, memory in search_results:
+            for memory in search_results:
                 results.append(
                     {
                         "content": memory.get("text", ""),
-                        "metadata": memory.get("meta_data", {}),
-                        "distance": distance,
+                        "metadata": memory.get("metadata", {}),
+                        "distance": 1.0
+                        - memory.get("score", 0.5),  # Convert similarity score to distance
                         "source": "memobase",
                         "id": memory.get("id"),
                         "created_at": memory.get("created_at"),
@@ -293,7 +286,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="Memory search completed successfully",
                 data={
-                    "user_id": user_id,
+                    "external_user_id": external_user_id,
                     "collection": collection,
                     "results_count": len(results),
                     "query_length": len(query) if query else 0,
@@ -309,7 +302,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="Memory search operation failed",
                 data={
-                    "user_id": user_id,
+                    "external_user_id": external_user_id,
                     "collection": collection,
                     "query": query,
                     "error": str(e),
@@ -320,8 +313,8 @@ class Memobase:
 
     async def delete(
         self,
-        memory_id: int,
-        user_id: Optional[int] = None,
+        memory_id: str,
+        external_user_id: Optional[str] = None,
     ) -> bool:
         """
         Delete a specific memory entry.
@@ -331,30 +324,32 @@ class Memobase:
 
         Args:
             memory_id: The ID of the memory to delete.
-            user_id: The user ID associated with this memory. If None, uses the
-                default user.
+            external_user_id: The external user ID associated with this memory. If None, uses the
+                default external user ID.
 
         Returns:
             True if deletion was successful, False otherwise.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log memory deletion start
         observability.observe(
             event_type=observability.ConversationEvents.REQUEST_PROCESSING,
             level=observability.EventLevel.INFO,
             description="Starting memory deletion operation",
-            data={"user_id": user_id, "memory_id": memory_id},
+            data={"user_id": external_user_id, "memory_id": memory_id},
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping memory deletion for anonymous user",
-                data={"user_id": user_id, "memory_id": memory_id},
+                data={"user_id": external_user_id, "memory_id": memory_id},
             )
             # Return success for anonymous users (no-op)
             return True
@@ -371,7 +366,7 @@ class Memobase:
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.INFO,
                 description="Memory deletion completed",
-                data={"user_id": user_id, "memory_id": memory_id, "success": success},
+                data={"user_id": external_user_id, "memory_id": memory_id, "success": success},
             )
 
             return success
@@ -383,7 +378,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="Memory deletion operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "memory_id": memory_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -391,7 +386,7 @@ class Memobase:
             )
             raise
 
-    def clear_user_memory(self, user_id: Optional[int] = None) -> None:
+    def clear_user_memory(self, external_user_id: Optional[str] = None) -> None:
         """
         Clear memory for a specific user by recreating their collection.
 
@@ -399,33 +394,35 @@ class Memobase:
         and recreating their collection.
 
         Args:
-            user_id: The user ID to clear memory for. If None, uses the
-                default user.
+            external_user_id: The external user ID to clear memory for. If None, uses the
+                default external user ID.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log memory clear start
         observability.observe(
             event_type=observability.SystemEvents.MEMORY_CLEAR,
             level=observability.EventLevel.INFO,
             description="Starting user memory clear operation",
-            data={"user_id": user_id},
+            data={"user_id": external_user_id},
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.SystemEvents.MEMORY_CLEAR,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping memory clear for anonymous user",
-                data={"user_id": user_id},
+                data={"user_id": external_user_id},
             )
             # No-op for anonymous users
             return
 
         # Create a collection name based on the user ID
-        collection = f"user_{user_id}"
+        collection = f"user_{external_user_id}"
 
         try:
             # Drop and recreate the collection
@@ -435,7 +432,7 @@ class Memobase:
                 pass  # Collection might not exist
 
             self.long_term_memory.create_collection(
-                collection, f"Memory collection for user {user_id}"
+                collection, f"Memory collection for user {external_user_id}"
             )
 
             # Log successful memory clear
@@ -443,7 +440,7 @@ class Memobase:
                 event_type=observability.SystemEvents.MEMORY_CLEAR,
                 level=observability.EventLevel.INFO,
                 description="User memory clear completed successfully",
-                data={"user_id": user_id, "collection": collection},
+                data={"user_id": external_user_id, "collection": collection},
             )
 
         except Exception as e:
@@ -453,7 +450,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User memory clear operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -463,7 +460,7 @@ class Memobase:
 
     def get_user_memories(
         self,
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
         sort_by: str = "created_at",
@@ -476,8 +473,8 @@ class Memobase:
         options for pagination and sorting.
 
         Args:
-            user_id: The user ID to get memories for. If None, uses the
-                default user.
+            external_user_id: The external user ID to get memories for. If None, uses the
+                default external user ID.
             limit: Maximum number of memories to return.
             offset: Number of memories to skip (for pagination).
             sort_by: Field to sort by (created_at, updated_at, id).
@@ -486,7 +483,9 @@ class Memobase:
         Returns:
             A list of memory entries.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log memory retrieval start
         observability.observe(
@@ -494,7 +493,7 @@ class Memobase:
             level=observability.EventLevel.INFO,
             description="Starting user memories retrieval",
             data={
-                "user_id": user_id,
+                "user_id": external_user_id,
                 "limit": limit,
                 "offset": offset,
                 "sort_by": sort_by,
@@ -503,19 +502,19 @@ class Memobase:
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.REQUEST_PROCESSING,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping user memories retrieval for anonymous user",
-                data={"user_id": user_id},
+                data={"user_id": external_user_id},
             )
             # Return empty list for anonymous users
             return []
 
         # Create a collection name based on the user ID
-        collection = f"user_{user_id}"
+        collection = f"user_{external_user_id}"
 
         try:
             # Get memories from the collection
@@ -538,7 +537,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="User memories retrieval completed successfully",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection,
                     "results_count": len(results),
                     "limit": limit,
@@ -554,7 +553,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User memories retrieval operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -564,7 +563,7 @@ class Memobase:
 
     async def add_user_context(
         self,
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         knowledge: Dict[str, Any] = None,
         source: str = "explicit_upload",
         importance: float = 0.9,
@@ -577,7 +576,7 @@ class Memobase:
         or other user-specific context.
 
         Args:
-            user_id: The user's ID. If None, uses the default user.
+            external_user_id: The external user ID. If None, uses the default external user ID.
             knowledge: Dictionary of knowledge items where keys are knowledge
                 categories and values are the corresponding information.
             source: Where this knowledge came from.
@@ -587,7 +586,9 @@ class Memobase:
         Returns:
             List of memory IDs for the added knowledge items.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log context memory addition start
         observability.observe(
@@ -595,7 +596,7 @@ class Memobase:
             level=observability.EventLevel.INFO,
             description="Starting user context memory addition",
             data={
-                "user_id": user_id,
+                "user_id": external_user_id,
                 "knowledge_keys": list(knowledge.keys()) if knowledge else [],
                 "source": source,
                 "importance": importance,
@@ -603,13 +604,13 @@ class Memobase:
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory addition for anonymous user",
-                data={"user_id": user_id},
+                data={"user_id": external_user_id},
             )
             # Return empty list for anonymous users
             return []
@@ -619,12 +620,12 @@ class Memobase:
 
         try:
             # Ensure context memory collection exists
-            collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
+            collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{external_user_id}"
             try:
                 self.long_term_memory._ensure_collection_exists(None, collection_name)
             except Exception:
                 self.long_term_memory.create_collection(
-                    collection_name, f"Context memory for user {user_id}"
+                    collection_name, f"Context memory for user {external_user_id}"
                 )
 
             # Process each knowledge item
@@ -644,14 +645,14 @@ class Memobase:
                     "key": key,
                     "source": source,
                     "importance": importance,
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                 }
 
                 # Add to memory
                 memory_id = await self.add(
                     content=content,
                     metadata=metadata,
-                    user_id=user_id,
+                    external_user_id=external_user_id,
                     collection=collection_name,
                 )
 
@@ -663,7 +664,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="User context memory addition completed successfully",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection_name,
                     "memory_ids": memory_ids,
                     "knowledge_count": len(knowledge),
@@ -679,7 +680,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User context memory addition operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "source": source,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -689,7 +690,7 @@ class Memobase:
 
     async def get_user_context(
         self,
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         keys: Optional[List[str]] = None,
         limit: int = 100,
     ) -> Dict[str, Any]:
@@ -700,7 +701,7 @@ class Memobase:
         stored with add_user_context, optionally filtering to specific keys.
 
         Args:
-            user_id: The user's ID. If None, uses the default user.
+            external_user_id: The external user ID. If None, uses the default external user ID.
             keys: Optional list of specific knowledge keys to retrieve.
                 If None, retrieves all context memory.
             limit: Maximum number of knowledge items to retrieve.
@@ -709,29 +710,31 @@ class Memobase:
             Dictionary of knowledge items where keys are knowledge categories
             and values are the corresponding information.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log context memory retrieval start
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory retrieval",
-            data={"user_id": user_id, "keys": keys, "limit": limit},
+            data={"user_id": external_user_id, "keys": keys, "limit": limit},
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory retrieval for anonymous user",
-                data={"user_id": user_id},
+                data={"user_id": external_user_id},
             )
             # Return empty dictionary for anonymous users
             return {}
 
-        collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
+        collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{external_user_id}"
 
         try:
             # Check if collection exists
@@ -743,14 +746,14 @@ class Memobase:
                     event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
                     level=observability.EventLevel.DEBUG,
                     description="Context memory collection does not exist",
-                    data={"user_id": user_id, "collection": collection_name},
+                    data={"user_id": external_user_id, "collection": collection_name},
                 )
                 return {}
 
             # Prepare filter
             filter_params = {
                 "type": self.CONTEXT_MEMORY_TYPE,
-                "user_id": user_id,
+                "user_id": external_user_id,
             }
 
             results = []
@@ -763,7 +766,7 @@ class Memobase:
 
                     key_results = await self.search(
                         query=key,  # Use key as query for better matching
-                        user_id=user_id,
+                        external_user_id=external_user_id,
                         additional_filter=key_filter,
                         collection=collection_name,
                         limit=1,  # Only need the most recent/relevant for each key
@@ -775,7 +778,7 @@ class Memobase:
                 # Use empty query to match all items
                 results = await self.search(
                     query="",
-                    user_id=user_id,
+                    external_user_id=external_user_id,
                     additional_filter=filter_params,
                     collection=collection_name,
                     limit=limit,
@@ -809,7 +812,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="User context memory retrieval completed successfully",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection_name,
                     "knowledge_keys": list(knowledge.keys()),
                     "results_count": len(results),
@@ -825,7 +828,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User context memory retrieval operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection_name,
                     "error": str(e),
                     "error_type": type(e).__name__,
@@ -836,7 +839,7 @@ class Memobase:
     async def import_user_context_memory(
         self,
         data_source: Union[str, Dict[str, Any]],
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         format: str = "json",
         source: str = "import",
         importance: float = 0.9,
@@ -849,7 +852,7 @@ class Memobase:
 
         Args:
             data_source: Path to file or data structure containing knowledge.
-            user_id: The user's ID. If None, uses the default user.
+            external_user_id: The external user ID. If None, uses the default external user ID.
             format: Format of the data ("json" or "dict").
             source: Source identifier for the imported knowledge.
             importance: Importance score for this knowledge (0.0 to 1.0).
@@ -860,7 +863,9 @@ class Memobase:
         Raises:
             ValueError: If the format is unsupported or the data cannot be parsed.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log context memory import start
         observability.observe(
@@ -868,7 +873,7 @@ class Memobase:
             level=observability.EventLevel.INFO,
             description="Starting user context memory import",
             data={
-                "user_id": user_id,
+                "user_id": external_user_id,
                 "data_source_type": type(data_source).__name__,
                 "format": format,
                 "source": source,
@@ -877,13 +882,13 @@ class Memobase:
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory import for anonymous user",
-                data={"user_id": user_id},
+                data={"user_id": external_user_id},
             )
             # Return empty list for anonymous users
             return []
@@ -903,7 +908,7 @@ class Memobase:
 
             # Add the knowledge
             memory_ids = await self.add_user_context(
-                user_id=user_id,
+                external_user_id=external_user_id,
                 knowledge=data,
                 source=source,
                 importance=importance,
@@ -915,7 +920,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="User context memory import completed successfully",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "memory_ids": memory_ids,
                     "knowledge_count": len(data) if isinstance(data, dict) else 0,
                     "format": format,
@@ -931,7 +936,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User context memory import operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "format": format,
                     "source": source,
                     "error": str(e),
@@ -942,7 +947,7 @@ class Memobase:
 
     async def clear_user_context(
         self,
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         keys: Optional[List[str]] = None,
     ) -> bool:
         """
@@ -952,36 +957,38 @@ class Memobase:
         or just specific keys, supporting data deletion requirements.
 
         Args:
-            user_id: The user's ID. If None, uses the default user.
+            external_user_id: The external user ID. If None, uses the default external user ID.
             keys: Optional list of specific knowledge keys to clear.
                 If None, clears all context memory.
 
         Returns:
             True if the operation was successful, False otherwise.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log context memory clear start
         observability.observe(
             event_type=observability.SystemEvents.MEMORY_CLEAR,
             level=observability.EventLevel.INFO,
             description="Starting user context memory clear",
-            data={"user_id": user_id, "keys": keys, "clear_all": keys is None},
+            data={"user_id": external_user_id, "keys": keys, "clear_all": keys is None},
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.SystemEvents.MEMORY_CLEAR,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory clear for anonymous user",
-                data={"user_id": user_id},
+                data={"user_id": external_user_id},
             )
             # Return success for anonymous users (no-op)
             return True
 
-        collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{user_id}"
+        collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{external_user_id}"
 
         try:
             if keys:
@@ -991,12 +998,12 @@ class Memobase:
                     filter_params = {
                         "type": self.CONTEXT_MEMORY_TYPE,
                         "key": key,
-                        "user_id": user_id,
+                        "user_id": external_user_id,
                     }
 
                     results = await self.search(
                         query="",
-                        user_id=user_id,
+                        external_user_id=external_user_id,
                         additional_filter=filter_params,
                         collection=collection_name,
                         limit=100,  # Set a reasonable limit
@@ -1014,7 +1021,7 @@ class Memobase:
                 try:
                     self.long_term_memory.delete_collection(collection_name)
                     self.long_term_memory.create_collection(
-                        collection_name, f"Context memory for user {user_id}"
+                        collection_name, f"Context memory for user {external_user_id}"
                     )
                 except Exception:
                     # Log successful context memory clear
@@ -1022,7 +1029,7 @@ class Memobase:
                         event_type=observability.SystemEvents.MEMORY_CLEAR,
                         level=observability.EventLevel.ERROR,
                         description="Failed to clear context memory collection",
-                        data={"user_id": user_id, "collection": collection_name},
+                        data={"user_id": external_user_id, "collection": collection_name},
                     )
                     return False
 
@@ -1032,7 +1039,7 @@ class Memobase:
                 level=observability.EventLevel.INFO,
                 description="User context memory clear completed successfully",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection_name,
                     "keys": keys,
                     "clear_all": keys is None,
@@ -1048,7 +1055,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User context memory clear operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "collection": collection_name,
                     "keys": keys,
                     "error": str(e),
@@ -1059,7 +1066,7 @@ class Memobase:
 
     async def update_user_context_memory(
         self,
-        user_id: Optional[int] = None,
+        external_user_id: Optional[str] = None,
         key: str = None,
         value: Any = None,
         source: str = "update",
@@ -1073,7 +1080,7 @@ class Memobase:
         and then adding the new value.
 
         Args:
-            user_id: The user's ID. If None, uses the default user.
+            external_user_id: The external user ID. If None, uses the default external user ID.
             key: The key to update.
             value: The new value for the key.
             source: Source identifier for this update.
@@ -1082,24 +1089,26 @@ class Memobase:
         Returns:
             The memory ID of the updated item, or 0 if update failed.
         """
-        user_id = user_id if user_id is not None else self.default_user_id
+        external_user_id = (
+            external_user_id if external_user_id is not None else self.default_external_user_id
+        )
 
         # Log context memory update start
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory update",
-            data={"user_id": user_id, "key": key, "source": source, "importance": importance},
+            data={"user_id": external_user_id, "key": key, "source": source, "importance": importance},
         )
 
         # Skip memory operations for anonymous users (user_id=0)
-        if user_id == 0:
+        if external_user_id == "0":
             # Log anonymous user skip
             observability.observe(
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.DEBUG,
                 description="Skipping context memory update for anonymous user",
-                data={"user_id": user_id, "key": key},
+                data={"user_id": external_user_id, "key": key},
             )
             # Return 0 for anonymous users
             return 0
@@ -1109,11 +1118,11 @@ class Memobase:
 
         try:
             # First clear the existing key if it exists
-            await self.clear_user_context(user_id=user_id, keys=[key])
+            await self.clear_user_context(external_user_id=external_user_id, keys=[key])
 
             # Then add the new value
             memory_ids = await self.add_user_context(
-                user_id=user_id,
+                external_user_id=external_user_id,
                 knowledge={key: value},
                 source=source,
                 importance=importance,
@@ -1126,7 +1135,7 @@ class Memobase:
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 description="User context memory update completed successfully",
-                data={"user_id": user_id, "key": key, "memory_id": memory_id, "source": source},
+                data={"user_id": external_user_id, "key": key, "memory_id": memory_id, "source": source},
             )
 
             return memory_id
@@ -1138,7 +1147,7 @@ class Memobase:
                 level=observability.EventLevel.ERROR,
                 description="User context memory update operation failed",
                 data={
-                    "user_id": user_id,
+                    "user_id": external_user_id,
                     "key": key,
                     "source": source,
                     "error": str(e),

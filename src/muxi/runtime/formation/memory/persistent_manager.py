@@ -69,12 +69,12 @@ class PersistentMemoryManager:
         # Handle multi-user case with Memobase
         if self.overlord.is_multi_user and user_id is not None:
             try:
-                internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
+                # Use external user ID directly - no conversion needed
                 memory_id = await self.overlord.long_term_memory.add(
                     content=content,
                     metadata=full_metadata,
                     embedding=embedding,
-                    user_id=internal_user_id,
+                    user_id=user_id,
                 )
 
                 # Emit memory storage completed event
@@ -183,10 +183,9 @@ class PersistentMemoryManager:
 
             # Handle multi-user case with Memobase
             if self.overlord.is_multi_user and user_id is not None:
-                # ENHANCE: Use flexible user ID conversion
-                internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
+                # Use external user_id directly for database queries
                 lt_results = await self.overlord.long_term_memory.search(
-                    query=query, limit=k, user_id=internal_user_id, filter_metadata=full_filter
+                    query=query, limit=k, user_id=user_id, filter_metadata=full_filter
                 )
             # Standard long-term memory case
             else:
@@ -249,11 +248,9 @@ class PersistentMemoryManager:
 
         try:
             if self.overlord.is_multi_user and user_id is not None:
-                # ENHANCE: Use flexible user ID conversion
-                internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
-                # For multi-user with Memobase
+                # For multi-user with Memobase - use external user_id directly
                 await self.overlord.long_term_memory.clear(
-                    user_id=internal_user_id,
+                    user_id=user_id,
                     filter_metadata=filter_metadata if filter_metadata else None,
                 )
             else:
@@ -290,16 +287,8 @@ class PersistentMemoryManager:
         if not self.overlord.long_term_memory or not self.overlord.is_multi_user or user_id is None:
             return None
 
-        try:
-            internal_user_id = await self.overlord._enhance_existing_user_id_conversion(user_id)
-        except Exception as e:
-            #  Error - TODO: add observability
-            # ErrorEvents.INTERNAL_ERROR
-            _ = e  # remove this after implementing observability
-            return None
-
         # Skip for anonymous users
-        if internal_user_id == 0:
+        if user_id == "0" or user_id == "anonymous":
             return None
 
         metadata = {"role": role, "timestamp": timestamp, "agent_id": agent_id}
@@ -307,8 +296,8 @@ class PersistentMemoryManager:
         # Enhanced message with user context if this is a user message
         if role == "user":
             try:
-                # Get user context memory
-                context_memory = await self.overlord.get_user_context(user_id=internal_user_id)
+                # Get user context memory - uses external user ID
+                context_memory = await self.overlord.get_user_context(user_id=user_id)
 
                 # If context is available, enhance the message before storing
                 if context_memory:
@@ -329,12 +318,12 @@ class PersistentMemoryManager:
                     metadata["original_content"] = content
 
                     return await self.overlord.long_term_memory.add(
-                        content=enhanced_content, metadata=metadata, user_id=internal_user_id
+                        content=enhanced_content, metadata=metadata, user_id=user_id
                     )
                 else:
                     # Store the original content
                     return await self.overlord.long_term_memory.add(
-                        content=content, metadata=metadata, user_id=internal_user_id
+                        content=content, metadata=metadata, user_id=user_id
                     )
             except Exception as e:
                 # Log error and fall back to original message
@@ -342,10 +331,10 @@ class PersistentMemoryManager:
                 # ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED
                 _ = e  # remove this after implementing observability
                 return await self.overlord.long_term_memory.add(
-                    content=content, metadata=metadata, user_id=internal_user_id
+                    content=content, metadata=metadata, user_id=user_id
                 )
         else:
             # For non-user messages, just store directly
             return await self.overlord.long_term_memory.add(
-                content=content, metadata=metadata, user_id=internal_user_id
+                content=content, metadata=metadata, user_id=user_id
             )

@@ -68,7 +68,9 @@ class User(Base, AsyncModelMixin):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    public_id = Column(String(21), nullable=False, unique=True, index=True)  # Nano ID for external exposure
+    public_id = Column(
+        String(21), nullable=False, unique=True, index=True
+    )  # Nano ID for external exposure
     external_user_id = Column(String(255), nullable=False, index=True)
     formation_id = Column(String(255), nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=utc_now_naive)
@@ -76,9 +78,7 @@ class User(Base, AsyncModelMixin):
 
     # Composite unique constraint to ensure uniqueness within each formation
     __table_args__ = (
-        UniqueConstraint(
-            "external_user_id", "formation_id", name="uq_user_formation_external_id"
-        ),
+        UniqueConstraint("external_user_id", "formation_id", name="uq_user_formation_external_id"),
     )
 
 
@@ -136,7 +136,7 @@ class LongTermMemory:
         formation_id: str,
         dimension: int = 1536,  # Default dimension for OpenAI embeddings
         default_collection: str = "default",
-        embedding_model: Optional[LLM] = None,
+        embedding_model: Optional[Union[LLM, str]] = None,
     ):
         """
         Initialize a LongTermMemory instance for persistent semantic memory storage.
@@ -148,8 +148,18 @@ class LongTermMemory:
         """
         self.dimension = dimension
         self.default_collection = default_collection
-        self.embedding_model = embedding_model
         self.formation_id = formation_id
+
+        # Model can be either an LLM instance or a model name string (lazy loading)
+        self._embedding_model = None
+        self._embedding_model_name = None
+        if embedding_model:
+            if isinstance(embedding_model, str):
+                # Model name provided - will create LLM instance lazily
+                self._embedding_model_name = embedding_model
+            else:
+                # Assume it's an LLM instance
+                self._embedding_model = embedding_model
 
         # Use provided database manager
         self.db_manager = db_manager
@@ -166,6 +176,39 @@ class LongTermMemory:
         # Create default user and collection for single-user mode
         if not self.is_multi_user:
             self._ensure_default_user()
+
+    @property
+    def embedding_model(self):
+        """Get the embedding model, creating it lazily if needed."""
+        if self._embedding_model is None and self._embedding_model_name:
+            # Create LLM instance lazily
+            try:
+                from ..llm import LLM as LLMClass
+
+                self._embedding_model = LLMClass(model=self._embedding_model_name)
+                observability.observe(
+                    event_type=observability.SystemEvents.INITIALIZING,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "model_name": self._embedding_model_name,
+                        "service": "long_term_memory_embedding",
+                    },
+                    description=f"Lazily initialized embedding model: {self._embedding_model_name}",
+                )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.LLM_INITIALIZATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "model_name": self._embedding_model_name,
+                        "error": str(e),
+                    },
+                    description=f"Failed to create LLM instance for embeddings: {e}",
+                )
+                # Clear the model name to prevent repeated initialization attempts
+                self._embedding_model_name = None
+                raise ValueError(f"Failed to initialize embedding model: {e}")
+        return self._embedding_model
 
     def _create_tables(self) -> None:
         """
@@ -206,7 +249,6 @@ class LongTermMemory:
             )
             raise
 
-
     def _get_or_create_user(self, session: Session, external_user_id: Optional[str] = None) -> User:
         """Get existing user or create new one."""
         # Handle single-user mode
@@ -214,7 +256,6 @@ class LongTermMemory:
             external_user_id = "0"
         elif external_user_id is None:
             raise ValueError("external_user_id is required in multi-user mode")
-
 
         # Try to find existing user with formation scope
         user = (
@@ -308,6 +349,8 @@ class LongTermMemory:
 
         # Generate embedding if not provided
         if embedding is None:
+            if not self.embedding_model:
+                raise ValueError("No embedding model available for generating embeddings")
             embedding = await self.embedding_model.embed(content)
 
         # Insert into database using async method
@@ -518,6 +561,8 @@ class LongTermMemory:
 
         # Generate embedding if not provided
         if query_embedding is None:
+            if not self.embedding_model:
+                raise ValueError("No embedding model available for generating embeddings")
             query_embedding = await self.embedding_model.embed(query)
 
         # Use default collection if not specified
