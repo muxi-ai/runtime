@@ -113,11 +113,14 @@ def test_async_audio_request(overlord):
     
     print(f"Async Audio Response: {response}")
     
-    # For async requests, we should get a request ID
+    # For async requests, we should get a request ID or async processing message
     if isinstance(response, dict) and 'request_id' in response:
         print(f"✓ Received async response with request ID: {response['request_id']}")
         assert response['status'] == 'processing', "Status should indicate async processing"
         assert 'message' in response, "Should have status message"
+    elif isinstance(response, str) and "async request" in response and "webhook" in response:
+        print("✓ Received async processing confirmation message")
+        assert "req_" in response, "Should contain request ID in the message"
     else:
         # If not async, it's still a valid response (but should be detailed)
         print("Note: Response was synchronous despite async request")

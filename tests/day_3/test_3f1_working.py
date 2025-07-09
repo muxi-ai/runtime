@@ -123,7 +123,7 @@ async def run_async_test():
     print("✅ Test complete!")
 
 
-def main():
+async def main():
     """Main entry point."""
     print("Starting test with persistent event loop...")
 
@@ -139,4 +139,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

@@ -160,5 +160,3 @@ if __name__ == "__main__":
             await formation.stop_overlord()
     
     asyncio.run(run_test())
-        future = executor.submit(run_test)
-        future.result()

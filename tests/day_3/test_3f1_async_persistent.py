@@ -118,7 +118,7 @@ async def test_async_pdf_persistent():
     print("✅ Test complete!")
 
 
-def main():
+async def main():
     """Main function to run the async test."""
     try:
         await test_async_pdf_persistent()
@@ -132,4 +132,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

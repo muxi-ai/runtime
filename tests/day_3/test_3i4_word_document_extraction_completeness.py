@@ -128,7 +128,7 @@ async def run_async_test():
     print("✅ Test complete!")
 
 
-def main():
+async def main():
     """Main entry point."""
     print("Starting Word document extraction completeness test...")
     
@@ -143,4 +143,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

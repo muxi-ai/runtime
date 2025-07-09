@@ -18,7 +18,8 @@ from tests.day_3.test_utils import get_response_universal
 def get_response(coro):
     """Helper to get response from async chat"""
     try:
-        result = await coro
+        # Use asyncio.run to execute the coroutine
+        result = asyncio.run(coro)
     except Exception as e:
         print(f"Error getting response: {e}")
         return ""
@@ -34,7 +35,7 @@ def get_response(coro):
                 print(f"Error collecting chunks: {e}")
             return "".join(chunks)
         try:
-            return await collect()
+            return asyncio.run(collect())
         except Exception as e:
             print(f"Error running collector: {e}")
             return ""
@@ -56,13 +57,12 @@ async def formation():
 @pytest.fixture
 async def overlord(formation):
     """Create overlord instance"""
-    import asyncio
-# REMOVED:     overlord = await await formation.start_overlord()
+    overlord = await formation.start_overlord()
 
     yield overlord
 
     # Cleanup
-# REMOVED:     await await formation.stop_overlord()
+    await formation.stop_overlord()
 
 
 def test_report_chart_alignment(overlord):
@@ -199,5 +199,3 @@ if __name__ == "__main__":
             await formation.stop_overlord()
 
     asyncio.run(run_test())
-        future = executor.submit(run_test)
-        future.result()

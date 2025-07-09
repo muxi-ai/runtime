@@ -25,7 +25,8 @@ from tests.day_3.test_utils import get_response_universal
 
 def get_response(coro):
     """Helper to get response from async chat"""
-    result = await coro
+    # Use asyncio.run to execute the coroutine
+    result = asyncio.run(coro)
 
     # Handle async generators
     if hasattr(result, "__aiter__"):
@@ -36,7 +37,7 @@ def get_response(coro):
                 chunks.append(chunk)
             return "".join(chunks)
 
-        return await collect()
+        return asyncio.run(collect())
 
     return result
 
@@ -274,5 +275,3 @@ if __name__ == "__main__":
             await formation.stop_overlord()
 
     asyncio.run(run_test())
-        future = executor.submit(run_test)
-        future.result()
