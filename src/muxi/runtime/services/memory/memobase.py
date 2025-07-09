@@ -621,12 +621,7 @@ class Memobase:
         try:
             # Ensure context memory collection exists
             collection_name = f"{self.CONTEXT_MEMORY_COLLECTION}_{external_user_id}"
-            try:
-                self.long_term_memory._ensure_collection_exists(None, collection_name)
-            except Exception:
-                self.long_term_memory.create_collection(
-                    collection_name, f"Context memory for user {external_user_id}"
-                )
+            # Collection will be created automatically by LongTermMemory when needed
 
             # Process each knowledge item
             for key, value in knowledge.items():
@@ -738,17 +733,8 @@ class Memobase:
 
         try:
             # Check if collection exists
-            try:
-                self.long_term_memory._ensure_collection_exists(None, collection_name)
-            except Exception:
-                # Collection doesn't exist, return empty dict
-                observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_LONG_TERM_RETRIEVED,
-                    level=observability.EventLevel.DEBUG,
-                    description="Context memory collection does not exist",
-                    data={"user_id": external_user_id, "collection": collection_name},
-                )
-                return {}
+            # Collection will be created automatically by LongTermMemory when needed
+            # If it doesn't exist, search will return empty results
 
             # Prepare filter
             filter_params = {
@@ -1098,7 +1084,12 @@ class Memobase:
             event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
             level=observability.EventLevel.INFO,
             description="Starting user context memory update",
-            data={"user_id": external_user_id, "key": key, "source": source, "importance": importance},
+            data={
+                "user_id": external_user_id,
+                "key": key,
+                "source": source,
+                "importance": importance,
+            },
         )
 
         # Skip memory operations for anonymous users (user_id=0)
@@ -1135,7 +1126,12 @@ class Memobase:
                 event_type=observability.ConversationEvents.MEMORY_LONG_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 description="User context memory update completed successfully",
-                data={"user_id": external_user_id, "key": key, "memory_id": memory_id, "source": source},
+                data={
+                    "user_id": external_user_id,
+                    "key": key,
+                    "memory_id": memory_id,
+                    "source": source,
+                },
             )
 
             return memory_id
