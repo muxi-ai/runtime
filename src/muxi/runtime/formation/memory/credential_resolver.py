@@ -6,7 +6,7 @@ and other components that need to access services on behalf of users.
 """
 
 from typing import Optional, Dict, Any
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 from sqlalchemy.orm import declarative_base
 import nanoid
@@ -55,11 +55,11 @@ class Credential(Base):
     name = Column(String, nullable=False)
     service = Column(String, nullable=False)  # Always lowercase
     credentials = Column(JSONType, nullable=False, default={})  # Works with both DBs
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.utcnow())
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.utcnow(),
+        onupdate=lambda: datetime.utcnow(),
     )
 
     # Add indexes in the database migration
@@ -181,7 +181,7 @@ class CredentialResolver:
                 if existing:
                     # Update existing credential
                     existing.credentials = credentials
-                    existing.updated_at = datetime.now(timezone.utc)
+                    existing.updated_at = datetime.utcnow()
                 else:
                     # Create new credential
                     new_cred = Credential(

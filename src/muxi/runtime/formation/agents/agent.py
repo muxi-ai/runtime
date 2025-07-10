@@ -1109,6 +1109,13 @@ class Agent:
                     )
 
                 except Exception as e:
+                    # Check if this is a MissingCredentialError that needs to bubble up
+                    from ..memory.credential_resolver import MissingCredentialError
+
+                    if isinstance(e, MissingCredentialError):
+                        # Re-raise to let overlord handle the clarification
+                        raise
+
                     import traceback
 
                     error_trace = traceback.format_exc()

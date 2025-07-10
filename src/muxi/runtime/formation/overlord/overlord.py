@@ -121,9 +121,7 @@ from ..workflow import (
 )
 
 # Utility functions
-from ..utils import (
-    generate_api_key
-)
+from ..utils import generate_api_key
 
 # Configuration Management
 from .secrets_manager import SecretsInterpolator
@@ -3347,6 +3345,94 @@ class Overlord:
 
         ENHANCED: Now detects and handles agent clarification requests.
         """
+        # Check if this might be a credential response (e.g., GitHub token)
+        contains_token = await self._looks_like_credential_token(message) if session_id else False
+
+        if session_id and contains_token:
+            # Check if we have a pending credential request for this session
+            if session_id in self._pending_clarifications:
+                clarification_info = self._pending_clarifications[session_id]
+                if clarification_info.get("type") == "credential":
+                    service = clarification_info.get("service")
+                    # Store the credential
+                    if self.credential_resolver:
+                        try:
+                            # Import MuxiResponse here
+                            from ...datatypes.response import MuxiResponse
+
+                            # Store the credential using the correct method
+                            # Store as-is: string credentials remain strings, JSON remains JSON
+                            # First try to extract token from text
+                            extracted_token = await self._extract_token_from_text(message)
+                            if extracted_token:
+                                cleaned_message = extracted_token
+                            else:
+                                cleaned_message = message.strip().strip('"').strip("'")
+
+                            # Check if it looks like JSON
+                            try:
+                                import json
+
+                                # Try to parse as JSON
+                                parsed = json.loads(cleaned_message)
+                                # If it's already a dict/list, use it as-is
+                                if isinstance(parsed, (dict, list)):
+                                    credential_value = parsed
+                                else:
+                                    # If it parsed to a primitive (string, number, bool), use the original string
+                                    credential_value = cleaned_message
+                            except (json.JSONDecodeError, ValueError):
+                                # Not JSON, store as plain string
+                                credential_value = cleaned_message
+
+                            await self.credential_resolver.store_credential(
+                                user_id=user_id,
+                                service=service,
+                                credentials=credential_value,
+                            )
+
+                            # Get the original message that triggered the clarification
+                            original_message = clarification_info.get("original_message")
+
+                            # Clean up pending clarification
+                            del self._pending_clarifications[session_id]
+
+                            # If we have the original message, retry it now with credentials stored
+                            if original_message:
+                                # Recursively call _process_sync_chat with the original message
+                                return await self._process_sync_chat(
+                                    message=original_message,
+                                    user_id=user_id,
+                                    session_id=session_id,
+                                    request_id=request_id,
+                                    agent_name=agent_name,
+                                )
+                            else:
+                                # Fallback if no original message stored
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=(
+                                        f"Thank you! I've saved your {service.capitalize()} credentials. "
+                                        "You can now retry your request."
+                                    ),
+                                )
+                        except Exception as e:
+                            from ...datatypes.response import MuxiResponse
+
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.ERROR,
+                                data={"error": str(e), "service": service},
+                                description=f"Failed to store credential: {str(e)}",
+                            )
+                            return MuxiResponse(
+                                role="assistant",
+                                content=(
+                                    "I encountered an error saving your credentials. "
+                                    "Please try again or contact support if the issue persists."
+                                ),
+                            )
+
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
             # Emit agent selection started event
@@ -3391,9 +3477,46 @@ class Overlord:
             # Mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)
 
-        except Exception:
+        except Exception as e:
             # On error, still mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)
+
+            # Check if this is a MissingCredentialError that needs clarification
+            from ..memory.credential_resolver import MissingCredentialError
+
+            if isinstance(e, MissingCredentialError):
+                # Store pending clarification if we have a session
+                if session_id:
+                    self._pending_clarifications[session_id] = {
+                        "type": "credential",
+                        "service": e.service,
+                        "user_id": e.user_id,
+                        "timestamp": time.time(),
+                        "original_message": message,
+                    }
+
+                # Return a simple response asking for credentials
+                from ...datatypes.response import MuxiResponse
+
+                service_display = e.service.capitalize()
+                if e.service == "github":
+                    service_display = "GitHub"
+
+                return MuxiResponse(
+                    role="assistant",
+                    content=(
+                        f"I need access to your {service_display} credentials to complete this task. "
+                        f"Could you please provide your {service_display} personal access token?"
+                    ),
+                    metadata={
+                        "clarification_requested": True,
+                        "clarification_type": "missing_credential",
+                        "service": e.service,
+                        "user_id": e.user_id,
+                        "session_id": session_id,
+                    },
+                )
+
             raise
         finally:
             # Clean up request-specific exclusions
@@ -3862,6 +3985,158 @@ class Overlord:
                 return False
 
         return True
+
+    async def _looks_like_credential_token(self, message: str) -> bool:
+        """
+        Check if a message contains a credential token using LLM intelligence.
+
+        Args:
+            message: The message to check
+
+        Returns:
+            True if the message appears to contain a credential token
+        """
+        if not message or not isinstance(message, str):
+            return False
+
+        # Use a simple heuristic for very short messages
+        if len(message.strip()) < 10:
+            return False
+
+        # First check with simple heuristics (faster)
+        import re
+
+        # Common token patterns
+        token_patterns = [
+            r"ghp_[A-Za-z0-9]{36}",  # GitHub personal access tokens
+            r"github_pat_[A-Za-z0-9_]+",  # New GitHub format
+            r"ghs_[A-Za-z0-9]{36}",  # GitHub server tokens
+            r"glpat-[A-Za-z0-9\-_]+",  # GitLab tokens
+            r"sk-[A-Za-z0-9]+",  # OpenAI and similar
+        ]
+
+        for pattern in token_patterns:
+            if re.search(pattern, message):
+                return True
+
+        # If no pattern matched, use LLM as fallback
+        try:
+            prompt = f"""Does this message contain an API token or credential? Reply YES or NO only.
+
+Message: {message[:200]}"""
+
+            # Use the routing model for this quick check
+            response = await self.routing_model.achat(prompt, max_tokens=10, temperature=0)
+            response_text = response.content.strip().upper()
+
+            return "YES" in response_text
+
+        except Exception:
+            # Final fallback: check if it's just a token by itself
+            stripped = message.strip()
+            # Basic heuristic: no spaces and reasonable length
+            if " " not in stripped and 20 <= len(stripped) <= 200:
+                return True
+            return False
+
+    async def _extract_token_from_text(self, message: str) -> Optional[str]:
+        """
+        Extract a credential token from a message using regex and LLM.
+
+        Args:
+            message: The message that may contain a token
+
+        Returns:
+            The extracted token if found, None otherwise
+        """
+        if not message or not isinstance(message, str):
+            return None
+
+        import re
+
+        # First try regex patterns (faster and more reliable)
+        token_patterns = [
+            (r"(ghp_[A-Za-z0-9]{36})", "github"),
+            (r"(github_pat_[A-Za-z0-9_]+)", "github"),
+            (r"(ghs_[A-Za-z0-9]{36})", "github"),
+            (r"(glpat-[A-Za-z0-9\-_]+)", "gitlab"),
+            (r"(sk-[A-Za-z0-9]+)", "openai"),
+        ]
+
+        for pattern, service in token_patterns:
+            match = re.search(pattern, message)
+            if match:
+                return match.group(1)
+
+        # If no regex match, try LLM extraction
+        try:
+            prompt = f"""Extract ONLY the API token from this message. If there's no token, reply NONE.
+
+Message: {message[:300]}
+
+Token:"""
+
+            # Use the routing model for extraction
+            response = await self.routing_model.achat(prompt, max_tokens=100, temperature=0)
+            extracted = response.content.strip()
+
+            # Check if the LLM found a token
+            if extracted and extracted.upper() != "NONE" and len(extracted) >= 10:
+                # Clean up common surrounding characters
+                cleaned = extracted.strip().strip('"').strip("'").strip("`").strip(":")
+                # Verify it looks like a token
+                if " " not in cleaned and len(cleaned) >= 20:
+                    return cleaned
+
+        except Exception as e:
+            # Log error but don't fail
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.DEBUG,
+                data={"error": str(e)},
+                description=f"Failed to extract token using LLM: {str(e)}",
+            )
+
+        return None
+
+    def _is_token_string(self, token: str) -> bool:
+        """Check if a string is itself a token (no surrounding text)."""
+        # Check length - tokens are usually at least 20 characters
+        if len(token) < 20:
+            return False
+
+        # Check for common token patterns
+        # GitHub personal access tokens
+        if token.startswith(("ghp_", "github_pat_", "ghs_")):
+            return True
+
+        # GitLab tokens
+        if token.startswith(("glpat-", "gldt-", "glrt-")):
+            return True
+
+        # Generic API key patterns
+        if token.startswith(("sk-", "pk-", "api-", "key-")):
+            return True
+
+        # Check if it looks like a base64 or hex encoded string
+        import re
+
+        # Base64 pattern
+        if re.match(r"^[A-Za-z0-9+/]{20,}={0,2}$", token):
+            return True
+        # Hex pattern
+        if re.match(r"^[A-Fa-f0-9]{32,}$", token):
+            return True
+
+        # Check if it has no spaces and reasonable length (likely a token)
+        if " " not in token and 20 <= len(token) <= 200:
+            # Additional heuristic: has mix of letters and numbers
+            has_letter = any(c.isalpha() for c in token)
+            has_digit = any(c.isdigit() for c in token)
+            if has_letter and has_digit:
+                return True
+
+        return False
 
     async def _cleanup_stale_clarifications(self) -> None:
         """
