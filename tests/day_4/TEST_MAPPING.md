@@ -71,25 +71,38 @@ This document maps the Day 4 test plan requirements to actual test implementatio
    - Test pagination/filtering
 
 ### Group 4D: GitHub MCP with User Credentials (4 tests)
-1. **test_4d1_user1_github_credentials.py** - User with existing credentials
-   - Create GitHub gist successfully
-   - Use stored user credentials
-   - Verify gist creation
+1. **test_4d1_user_credential_exists.py** - User with existing credentials
+   - User has GitHub credentials in database
+   - System uses them directly without clarification
+   - Verify credential usage from DB
 
-2. **test_4d2_user2_credential_flow.py** - User without credentials
-   - Trigger clarification flow
-   - Request credential input
-   - Handle missing credentials gracefully
+2. **test_4d2_user_credential_missing.py** - User without credentials
+   - User lacks credentials in database
+   - Trigger clarification flow to request them
+   - Save provided credentials to database
+   
+   **Variants:**
+   - **test_4d2_user_credential_missing_full.py** - Complete flow with token extraction
+     - Tests intelligent token extraction from natural language
+     - User provides token embedded in text: "Here is my GitHub token: ghp_XXX - please use it carefully!"
+     - System extracts token using LLM intelligence (not regex)
+     - Successfully lists repositories after extraction
+   
+   - **test_4d2_user_help_request.py** - User asks for help getting a token
+     - User responds with "I don't know how to get a token"
+     - System provides comprehensive GitHub token creation instructions
+     - User then provides token after receiving help
+     - Complete flow: request → need credentials → help request → instructions → provide token → list repos
 
-3. **test_4d3_list_user_gists.py** - List user's GitHub gists
-   - Retrieve user1's gists
-   - Verify gist listing
-   - Use user-specific credentials
+3. **test_4d3_multiple_credentials.py** - Multiple credentials for same service
+   - User has multiple GitHub accounts (personal/work)
+   - System picks the right one based on context
+   - Handle ambiguous requests with clarification
 
-4. **test_4d4_create_github_issue.py** - Create GitHub repository issue
-   - Create issue in piepilot org
-   - Use user credentials for auth
-   - Verify issue creation
+4. **test_4d4_multiuser_isolation.py** - Multi-user credential isolation
+   - Multiple users with their own credentials
+   - Ensure users cannot access each other's credentials
+   - Verify strict user isolation
 
 ### Group 4E: User Credential Isolation (2 tests)
 1. **test_4e1_verify_user_isolation.py** - Cross-user credential protection
@@ -104,11 +117,11 @@ This document maps the Day 4 test plan requirements to actual test implementatio
 
 ## Summary
 
-**Total Tests:** 18 MCP tests + credential flow validation
+**Total Tests:** 20 MCP tests + credential flow validation
 - Single MCP Server: 2 tests + 3 tool chaining variants
 - Multi-MCP Integration: 3 tests
 - Linear MCP (Formation Secrets): 3 tests
-- GitHub MCP (User Credentials): 4 tests
+- GitHub MCP (User Credentials): 4 tests + 2 variants
 - User Credential Isolation: 2 tests
 
 **Key Testing Areas:**

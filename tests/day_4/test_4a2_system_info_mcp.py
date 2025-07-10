@@ -22,102 +22,93 @@ async def test_system_info_mcp():
         await overlord.ensure_started()
         
         print("\n1. Testing CPU and memory usage retrieval...")
-        response_gen = await overlord.chat(
+        response = await overlord.chat(
             "What is the current CPU usage and available memory on this system?",
             user_id="user1",
-            use_async=False
+            use_async=False,
+            stream=False
         )
         
-        # Collect streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
         print(f"Response: {response}")
         
         # Verify response contains system stats
-        response_lower = response.lower()
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_lower = response_text.lower()
         assert any(term in response_lower for term in ["cpu", "processor"]), \
             "Response should mention CPU"
         assert any(term in response_lower for term in ["memory", "ram", "gb", "mb"]), \
             "Response should mention memory"
-        assert any(char in response for char in ["%", "percent"]) or "usage" in response_lower, \
+        assert any(char in response_text for char in ["%", "percent"]) or "usage" in response_lower, \
             "Response should include usage statistics"
         print("✓ CPU and memory stats retrieved successfully")
         
         print("\n2. Testing detailed system information...")
-        response_gen = await overlord.chat(
+        response = await overlord.chat(
             "Give me detailed system information including CPU cores, total memory, and disk usage",
             user_id="user1",
-            use_async=False
+            use_async=False,
+            stream=False
         )
         
-        # Collect streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
         print(f"Response: {response}")
         
         # Should have more detailed information
-        response_lower = response.lower()
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_lower = response_text.lower()
         assert any(term in response_lower for term in ["core", "thread", "processor"]), \
             "Response should mention CPU cores/threads"
-        assert len(response) > 100, "Detailed response should be substantial"
+        assert len(response_text) > 100, "Detailed response should be substantial"
         print("✓ Detailed system information retrieved successfully")
         
         print("\n3. Testing specific metric queries...")
-        response_gen = await overlord.chat(
+        response = await overlord.chat(
             "What percentage of memory is currently being used?",
             user_id="user1",
-            use_async=False
+            use_async=False,
+            stream=False
         )
         
-        # Collect streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
         print(f"Response: {response}")
         
         # Should have memory percentage
-        assert any(char in response for char in ["%", "percent"]) or \
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_lower = response_text.lower()
+        assert any(char in response_text for char in ["%", "percent"]) or \
                any(term in response_lower for term in ["memory", "ram"]), \
             "Response should include memory percentage"
         print("✓ Specific metric query successful")
         
         print("\n4. Testing system uptime information...")
-        response_gen = await overlord.chat(
+        response = await overlord.chat(
             "How long has this system been running (uptime)?",
             user_id="user1",
-            use_async=False
+            use_async=False,
+            stream=False
         )
         
-        # Collect streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
         print(f"Response: {response}")
         
         # Should have uptime information
-        response_lower = response.lower()
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_lower = response_text.lower()
         assert any(term in response_lower for term in 
                   ["uptime", "running", "hours", "days", "minutes", "boot", "started"]), \
             "Response should include uptime information"
         print("✓ System uptime query successful")
         
         print("\n5. Testing disk space information...")
-        response_gen = await overlord.chat(
+        response = await overlord.chat(
             "Show me the available disk space on the main drive",
             user_id="user1",
-            use_async=False
+            use_async=False,
+            stream=False
         )
         
-        # Collect streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
         print(f"Response: {response}")
         
         # Should have disk space information
-        response_lower = response.lower()
+        response_text = response.content if hasattr(response, 'content') else str(response)
+        response_lower = response_text.lower()
         assert any(term in response_lower for term in 
                   ["disk", "space", "storage", "gb", "tb", "available", "free"]), \
             "Response should include disk space information"

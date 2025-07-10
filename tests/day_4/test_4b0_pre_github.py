@@ -25,9 +25,9 @@ def test_github_mcp_isolation():
                 # Ensure overlord is started
                 await overlord.ensure_started()
                 
-                print("\n1. Testing GitHub create_gist tool...")
+                print("\n1. Testing GitHub create_issue tool...")
                 response_gen = await overlord.chat(
-                    "Create a GitHub gist with filename 'test.txt' and content 'Hello from MUXI MCP test'",
+                    "Create a GitHub issue in the repo 'testing' on 'lilyautomaze' with title 'Test Issue from MUXI' and body 'Hello from MUXI MCP test'",
                     user_id="user1",
                     use_async=False
                 )
@@ -39,10 +39,10 @@ def test_github_mcp_isolation():
                     
                 print(f"\nGitHub Response: {response}")
                 
-                # Verify the response mentions gist creation
+                # Verify the response mentions issue creation
                 response_lower = response.lower()
-                assert any(term in response_lower for term in ["gist", "github", "created", "file"]), \
-                    "Response should mention GitHub gist creation"
+                assert any(term in response_lower for term in ["issue", "github", "created"]), \
+                    "Response should mention GitHub issue creation"
                 
                 print("✓ GitHub MCP tool executed successfully")
                 

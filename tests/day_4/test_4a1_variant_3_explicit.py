@@ -16,9 +16,7 @@ async def test():
         print("\n=== Variant 3: Explicit Directory Creation Instruction ===")
 
         # Ensure directory does NOT exist
-        # Ensure directory does NOT exist
-        import tempfile
-        test_dir = Path(tempfile.gettempdir()) / "test_variant_3_explicit"
+        test_dir = Path("/Users/ran/Desktop/test_variant_3_explicit")
         if test_dir.exists():
             shutil.rmtree(test_dir)
         print(f"✓ Ensured directory does NOT exist: {test_dir}")

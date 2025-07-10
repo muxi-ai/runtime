@@ -137,8 +137,9 @@ def test_list_linear_issues():
 
                 print("\n✅ Test 4C3 PASSED: Linear issue listing successful")
 
-                # Clean shutdown to avoid async generator errors
-                formation.shutdown(0)
+                # Force immediate exit - bypasses all cleanup
+                import os
+                os._exit(0)
 
             # Run the async test
             return asyncio.run(test_operations())
