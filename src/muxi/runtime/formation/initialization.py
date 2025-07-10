@@ -410,14 +410,15 @@ def initialize_document_processing(formation) -> None:
         )
 
 
-def initialize_mcp_services(formation) -> None:
+async def initialize_mcp_services(formation) -> None:
     """
     Initialize MCP service and register configured MCP servers.
 
     This function:
     1. Gets the singleton MCP service instance
     2. Stores the MCP servers for later registration by overlord
-    3. Emits observability events for tracking
+    3. Registers MCP servers immediately so agents can see which use user credentials
+    4. Emits observability events for tracking
     """
     try:
         from ..services.mcp import MCPService
@@ -454,6 +455,9 @@ def initialize_mcp_services(formation) -> None:
                 },
                 description=f"Found {len(servers)} MCP servers to configure",
             )
+
+            # Register MCP servers immediately so agents can see which use user credentials
+            await formation._register_mcp_servers()
 
     except Exception as e:
         observability.observe(

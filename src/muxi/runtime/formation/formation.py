@@ -356,7 +356,7 @@ class Formation:
             self._prepare_services()
 
             # Initialize all services (observability first!)
-            self._initialize_services()
+            await self._initialize_services()
 
         except (
             ConfigurationNotFoundError,
@@ -994,7 +994,7 @@ class Formation:
             }
         )
 
-    def _initialize_services(self) -> None:
+    async def _initialize_services(self) -> None:
         """
         Initializes all core and auxiliary services required for the Formation
         runtime after configuration is loaded.
@@ -1022,8 +1022,8 @@ class Formation:
         # 5. Initialize background services
         initialize_background_services(self)
 
-        # 6. Initialize MCP services
-        initialize_mcp_services(self)
+        # 6. Initialize MCP services (now async to register servers immediately)
+        await initialize_mcp_services(self)
 
         # 7. Initialize clarification configuration
         initialize_clarification_config(self)
@@ -2150,9 +2150,7 @@ class Formation:
             # Since we're now async, we can directly await the startup
             await self._overlord._async_startup()
 
-            # Register MCP servers in Formation's event loop
-            # This ensures they're created in the same async context
-            await self._register_mcp_servers()
+            # MCP servers are already registered during _initialize_services()
 
             # Note if we have MCP servers that may cause exit errors
             if self._has_any_mcp_servers():

@@ -140,7 +140,28 @@ class Agent:
         # Initialize the context with system message
         self._messages = []
         if self.system_message:
-            self._messages.append({"role": "system", "content": self.system_message})
+            # Check if any MCP servers use user credentials
+            user_cred_servers = []
+            if self._mcp_service:
+                user_cred_servers = self._mcp_service.get_user_credential_servers()
+
+            if user_cred_servers:
+                # Build explicit list
+                server_list = ", ".join(f"'{server}'" for server in user_cred_servers)
+
+                # Add instruction to the agent's system message
+                auth_instruction = (
+                    f"\n\nImportant MCP Authentication Guidance: "
+                    f"The following MCP servers authenticate using user-specific credentials: {server_list}. "
+                    f"When using tools from these servers, you MUST first use an identity discovery tool "
+                    f"(such as get_me, whoami, get_authenticated_user, or similar) to identify who you are "
+                    f"authenticated as before calling any other tools on that server. "
+                    f"This ensures you understand the context and permissions of your actions."
+                )
+                enhanced_system_message = self.system_message + auth_instruction
+                self._messages.append({"role": "system", "content": enhanced_system_message})
+            else:
+                self._messages.append({"role": "system", "content": self.system_message})
 
         # Emit agent initialization event
         observability.observe(

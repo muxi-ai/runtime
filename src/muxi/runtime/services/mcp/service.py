@@ -400,8 +400,25 @@ class MCPService:
         config = self.server_configs[server_id]
         resolved_auth = None
 
+        # Check if this server requires user-specific credentials by looking for the pattern
+        stored_creds = config.get("stored_credentials", {})
+        has_user_placeholder = False
+
+        # Check if stored credentials contain user credential placeholders
+        def contains_user_placeholder(data):
+            if isinstance(data, dict):
+                for value in data.values():
+                    if contains_user_placeholder(value):
+                        return True
+            elif isinstance(data, str):
+                if USER_CREDENTIAL_PATTERN.search(data):
+                    return True
+            return False
+
+        has_user_placeholder = contains_user_placeholder(stored_creds)
+
         # Check if this server requires user-specific credentials
-        if config.get("stored_credentials") == "$MUXI_USER_CREDENTIALS$":
+        if has_user_placeholder:
             if not user_id:
                 raise ValueError(
                     f"User ID required for MCP server '{server_id}' that uses user credentials"
@@ -422,16 +439,10 @@ class MCPService:
                     )
 
                 try:
-                    # Get the original credentials to determine which service to resolve
-                    original_creds = config.get("original_credentials", {})
-
-                    # Extract service name from the user credential pattern
+                    # Extract service name from the user credential pattern in stored credentials
                     service_name = None
-                    USER_CREDENTIAL_PATTERN = re.compile(
-                        r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
-                    )
 
-                    # Search for credential pattern in original_creds
+                    # Search for credential pattern in stored_creds
                     def find_service_name(data):
                         if isinstance(data, dict):
                             for value in data.values():
@@ -444,7 +455,7 @@ class MCPService:
                                 return match.group(1).lower()
                         return None
 
-                    service_name = find_service_name(original_creds)
+                    service_name = find_service_name(stored_creds)
 
                     if not service_name:
                         # Fallback: try to extract from server_id
@@ -457,9 +468,9 @@ class MCPService:
                         # Trigger clarification flow
                         raise MissingCredentialError(service_name, user_id)
 
-                    # Format credentials based on original_creds structure
+                    # Format credentials based on stored_creds structure
                     # Replace the user credential placeholder with actual value
-                    resolved_auth = self._replace_credential_in_auth(original_creds, credentials)
+                    resolved_auth = self._replace_credential_in_auth(stored_creds, credentials)
 
                     # Cache the credentials
                     self.user_credentials[server_id][user_id] = resolved_auth
@@ -475,6 +486,20 @@ class MCPService:
         else:
             # Not using user credentials, use the stored credentials
             resolved_auth = config.get("stored_credentials")
+
+        observability.observe(
+            event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
+            level=observability.EventLevel.DEBUG,
+            data={
+                "server_id": server_id,
+                "tool_name": tool_name,
+                "has_user_credentials": resolved_auth is not None,
+                "auth_type": (
+                    resolved_auth.get("type") if isinstance(resolved_auth, dict) else "string"
+                ),
+                "description": f"Executing tool with user credentials for {server_id}",
+            },
+        )
 
         try:
             # Execute tool using ephemeral connection
@@ -772,11 +797,13 @@ class MCPService:
                     "transport_type": transport_type,
                     "request_timeout": request_timeout,
                     "original_credentials": original_credentials,
-                    # For ephemeral connections, always store the untransformed credentials
-                    # The handler will transform them as needed during connection
+                    # For ephemeral connections, store the original credentials
+                    # which contain the user placeholders for runtime resolution
                     "stored_credentials": (
                         original_credentials if original_credentials else credentials
                     ),
+                    # Flag to indicate if this server uses user-specific credentials
+                    "uses_user_credentials": bool(original_credentials),
                 }
 
                 # Store the resolved transport type in cache
@@ -1434,7 +1461,7 @@ class MCPService:
         """
         USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
-        def replace_recursive(data: Any) -> Any:
+        def replace_recursive(data: Any, cred_val: Any = credential_value) -> Any:
             if isinstance(data, dict):
                 # Process dictionary recursively
                 result = {}
@@ -1449,16 +1476,23 @@ class MCPService:
                 match = USER_CREDENTIAL_PATTERN.match(data)
                 if match:
                     # Replace with actual credential
-                    if isinstance(credential_value, dict):
+                    if isinstance(cred_val, dict):
                         # If credential is a dict, try to extract the token
                         for field in ["token", "api_key", "access_token", "key", "password"]:
-                            if field in credential_value:
-                                return credential_value[field]
+                            if field in cred_val:
+                                token_value = cred_val[field]
+                                # Strip quotes if present
+                                if isinstance(token_value, str):
+                                    token_value = token_value.strip().strip('"').strip("'")
+                                return token_value
                         # If no standard field found, return as is
-                        return credential_value
+                        return cred_val
                     else:
                         # String or other type, use directly
-                        return credential_value
+                        # Strip quotes if it's a string
+                        if isinstance(cred_val, str):
+                            cred_val = cred_val.strip().strip('"').strip("'")
+                        return cred_val
                 else:
                     return data
             else:
@@ -1466,3 +1500,16 @@ class MCPService:
                 return data
 
         return replace_recursive(auth_config)
+
+    def get_user_credential_servers(self) -> List[str]:
+        """
+        Get list of MCP servers that use user credentials.
+
+        Returns:
+            List of server IDs that authenticate using user-specific credentials
+        """
+        return [
+            server_id
+            for server_id, config in self.server_configs.items()
+            if config.get("uses_user_credentials", False)
+        ]
