@@ -348,7 +348,7 @@ class Formation:
             )
             self.formation_id = formation_id.lower().strip()
             set_formation_id(self.formation_id)
-            
+
             # Ensure formation_id is in config for Overlord
             self.config["formation_id"] = self.formation_id
 
@@ -1996,6 +1996,7 @@ class Formation:
                             registration_params["credentials"] = final_auth
                         else:
                             registration_params["credentials"] = original_auth
+
                 if "timeout_seconds" in server_config:
                     registration_params["request_timeout"] = server_config["timeout_seconds"]
                 if "transport_type" in server_config:
@@ -2016,7 +2017,7 @@ class Formation:
                 successful_servers.append(server_id)
 
             except (MCPConnectionError, MCPTimeoutError, MCPCancelledError) as e:
-                # These are recoverable errors - log and continue with other servers
+                # MCP registration failures are fatal - fail fast
                 server_id = server_config.get("id", "unknown")
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
@@ -2028,10 +2029,12 @@ class Formation:
                     },
                     description=f"Failed to register MCP server: {str(e)}",
                 )
-                failed_servers.append(server_id)
-                # Continue with other servers even if one fails
+                # Re-raise to fail the formation
+                raise ConfigurationLoadError(
+                    f"Failed to register MCP server '{server_id}': {str(e)}"
+                ) from e
             except MCPRequestError as e:
-                # Configuration errors are also recoverable - log and continue
+                # Configuration errors are also fatal
                 server_id = server_config.get("id", "unknown")
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
@@ -2044,8 +2047,10 @@ class Formation:
                     },
                     description=f"Invalid MCP server configuration: {str(e)}",
                 )
-                failed_servers.append(server_id)
-                # Continue with other servers even if one has bad config
+                # Re-raise to fail the formation
+                raise ConfigurationLoadError(
+                    f"Invalid MCP server configuration for '{server_id}': {str(e)}"
+                ) from e
 
         # Add summary event for failed registrations
         if failed_servers or skipped_servers:

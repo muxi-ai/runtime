@@ -106,6 +106,13 @@ class MCPService:
         # Dictionary to store discovered tools
         self.tool_registry = {}
 
+        # Dictionary to store server configurations for ephemeral connections
+        self.server_configs = {}
+
+        # Transport cache to remember which transport worked for each server
+        # Maps server_id to resolved transport type: "command", "streamable_http", or "http_sse"
+        self.transport_cache = {}
+
         # Initialize MCP specification feature handlers
         self.resource_discovery = MCPResourceDiscovery()
         self.prompt_discovery = MCPPromptDiscovery()
@@ -315,6 +322,17 @@ class MCPService:
                     },
                 )
 
+        # Handle generic "http" transport type with fallback
+        if transport_type == "http" and url:
+            return await self._connect_with_fallback(
+                server_id,
+                url,
+                credentials,
+                model,
+                request_timeout,
+                original_credentials,
+            )
+
         # Proceed with explicitly specified transport type
         return await self._connect_single_transport(
             server_id,
@@ -338,12 +356,11 @@ class MCPService:
         credential_resolver: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
-        Invoke a tool on an MCP server.
+        Invoke a tool on an MCP server using ephemeral connection.
 
         This method executes a tool on the specified MCP server with the given
-        parameters, handling locking to prevent concurrent issues and managing
-        timeouts. It also handles runtime credential resolution for user-specific
-        authentication.
+        parameters, using ephemeral connections for better security and isolation.
+        It handles runtime credential resolution for user-specific authentication.
 
         Args:
             server_id: The ID of the server to use
@@ -360,12 +377,11 @@ class MCPService:
             ValueError: If the server ID is not valid
             MissingCredentialError: If required user credentials are not found
         """
-        if server_id not in self.handlers:
+        if server_id not in self.server_configs:
             raise ValueError(f"Unknown MCP server: {server_id}")
 
         # Emit MCP tool invocation started event
         try:
-
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.INFO,
@@ -380,15 +396,12 @@ class MCPService:
         except Exception:
             pass  # Don't let observability errors break the flow
 
-        handler = self.handlers[server_id]
-        server_name = self.connections[server_id]["server_name"]
-
-        # Check if we need to resolve user credentials at runtime
-        auth = self.connections[server_id].get("credentials", {})
-        resolved_auth = auth
+        # Get server configuration
+        config = self.server_configs[server_id]
+        resolved_auth = None
 
         # Check if this server requires user-specific credentials
-        if auth == "$MUXI_USER_CREDENTIALS$":
+        if config.get("stored_credentials") == "$MUXI_USER_CREDENTIALS$":
             if not user_id:
                 raise ValueError(
                     f"User ID required for MCP server '{server_id}' that uses user credentials"
@@ -410,7 +423,7 @@ class MCPService:
 
                 try:
                     # Get the original credentials to determine which service to resolve
-                    original_creds = self.connections[server_id].get("original_credentials", {})
+                    original_creds = config.get("original_credentials", {})
 
                     # Extract service name from the user credential pattern
                     service_name = None
@@ -459,151 +472,55 @@ class MCPService:
                         f"Failed to resolve user credentials for MCP server '{server_id}': {str(e)}"
                     )
                     raise ValueError(error_msg) from e
+        else:
+            # Not using user credentials, use the stored credentials
+            resolved_auth = config.get("stored_credentials")
 
-        # If credentials were resolved and different from current connection, reconnect
-        if resolved_auth != auth and auth == "$MUXI_USER_CREDENTIALS$":
-            # Store original connection info
-            original_conn = self.connections[server_id].copy()
-            url = original_conn.get("url")
-            command = original_conn.get("command")
-            # Get timeout from connection or use default
-            conn_timeout = original_conn.get("request_timeout", 60)
-
-            # Disconnect current connection
-            await handler.disconnect_server(server_name)
-
-            # Reconnect with resolved credentials
-            await handler.connect_server(
-                name=server_name,
-                url=url,
-                command=command,
-                credentials=resolved_auth,
-                request_timeout=conn_timeout,
+        try:
+            # Execute tool using ephemeral connection
+            result = await self._execute_tool_ephemeral(
                 server_id=server_id,
+                tool_name=tool_name,
+                params=parameters,
+                user_credentials=resolved_auth,
+                request_timeout=request_timeout,
             )
 
-        # Acquire lock for this handler to prevent concurrent issues
-        async with self.locks[server_id]:
-            try:
-                # Use request timeout from parameters,
-                # or fall back to the one saved during server registration
-                default_timeout = self.connections[server_id].get("request_timeout", 60)
-                timeout = request_timeout if request_timeout is not None else default_timeout
-
-                # Check if we need to temporarily modify the timeout
-                restore_timeout = False
-                original_timeout = None
-
-                if request_timeout is not None and server_name in handler.active_connections:
-                    client = handler.active_connections[server_name]
-                    if client.request_timeout != request_timeout:
-                        # Store original timeout to restore later
-                        original_timeout = client.request_timeout
-                        client.request_timeout = timeout
-                        restore_timeout = True
-
-                # Enhanced tool execution with modern protocol support
-                try:
-                    result = await handler.execute_tool(
-                        server_name=server_name,
-                        tool_name=tool_name,
-                        params=parameters,
-                        cancellation_token=None,
-                    )
-                except Exception:
-                    # If we're using cached user credentials and the call failed,
-                    # check if the credentials have been updated in the database
-                    if (
-                        auth == "$MUXI_USER_CREDENTIALS$"
-                        and user_id
-                        and server_id in self.user_credentials
-                        and user_id in self.user_credentials[server_id]
-                        and credential_resolver
-                    ):
-
-                        # Clear the cached credentials for this user
-                        old_cached_creds = self.user_credentials[server_id].pop(user_id, None)
-
-                        # Try to get fresh credentials from the database
-                        service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
-                        fresh_credentials = await credential_resolver.resolve(user_id, service_name)
-
-                        if fresh_credentials and fresh_credentials != old_cached_creds:
-                            # We have new credentials, retry with them
-                            resolved_auth = {
-                                "type": "bearer",
-                                "token": (
-                                    fresh_credentials.get("token")
-                                    if isinstance(fresh_credentials, dict)
-                                    else fresh_credentials
-                                ),
-                            }
-
-                            # Cache the new credentials
-                            self.user_credentials[server_id][user_id] = resolved_auth
-
-                            # Reconnect with new credentials
-                            await handler.disconnect_server(server_name)
-                            await handler.connect_server(
-                                name=server_name,
-                                url=self.connections[server_id].get("url"),
-                                command=self.connections[server_id].get("command"),
-                                credentials=resolved_auth,
-                                request_timeout=self.connections[server_id].get(
-                                    "request_timeout", 60
-                                ),
-                                server_id=server_id,
-                            )
-
-                            # Retry the tool execution
-                            result = await handler.execute_tool(
-                                server_name=server_name,
-                                tool_name=tool_name,
-                                params=parameters,
-                                cancellation_token=None,
-                            )
-                        else:
-                            # No new credentials or credential resolution failed
-                            raise
+            # First check if we have a parsed response from the message handler
+            if isinstance(result, dict):
+                # Check for JSON-RPC error structure from message handler
+                if result.get("status") == "error":
+                    # Extract the error message from the JSON-RPC error structure
+                    error_info = result.get("error", {})
+                    if isinstance(error_info, dict):
+                        error_message = error_info.get("message", "Unknown error")
+                        error_data = error_info.get("data")
+                        if error_data:
+                            error_message = f"{error_message}: {error_data}"
                     else:
-                        # Not a credential issue or can't retry
-                        raise
+                        error_message = str(error_info) if error_info else "Unknown error"
 
-                # First check if we have a parsed response from the message handler
-                if isinstance(result, dict):
-                    # Check for JSON-RPC error structure from message handler
-                    if result.get("status") == "error":
-                        # Extract the error message from the JSON-RPC error structure
-                        error_info = result.get("error", {})
-                        if isinstance(error_info, dict):
-                            error_message = error_info.get("message", "Unknown error")
-                            error_data = error_info.get("data")
-                            if error_data:
-                                error_message = f"{error_message}: {error_data}"
-                        else:
-                            error_message = str(error_info) if error_info else "Unknown error"
+                    # Emit error event
+                    observability.observe(
+                        event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "server_id": server_id,
+                            "tool_name": tool_name,
+                            "error": error_message,
+                            "error_code": (
+                                error_info.get("code") if isinstance(error_info, dict) else None
+                            ),
+                        },
+                        description=(f"MCP tool returned error: {tool_name} on {server_id}"),
+                    )
 
-                        # Emit error event
-                        observability.observe(
-                            event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
-                            level=observability.EventLevel.ERROR,
-                            data={
-                                "server_id": server_id,
-                                "tool_name": tool_name,
-                                "error": error_message,
-                                "error_code": (
-                                    error_info.get("code") if isinstance(error_info, dict) else None
-                                ),
-                            },
-                            description=(f"MCP tool returned error: {tool_name} on {server_id}"),
-                        )
+                    return {"error": error_message, "status": "error"}
 
-                        return {"error": error_message, "status": "error"}
-
-                    # Check if it's a successful parsed response with a nested result
-                    if result.get("status") == "success" and "result" in result:
-                        # Extract the actual result from the parsed response
-                        result = result["result"]
+                # Check if it's a successful parsed response with a nested result
+                if result.get("status") == "success" and "result" in result:
+                    # Extract the actual result from the parsed response
+                    result = result["result"]
 
                 # Process result using modern protocol features
                 # This handles structured output with isError field
@@ -633,27 +550,22 @@ class MCPService:
                     "status": "success" if not processed_result["isError"] else "error",
                 }
 
-            except Exception as e:
-                # Emit MCP tool invocation failed event
-                observability.observe(
-                    event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "server_id": server_id,
-                        "tool_name": tool_name,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
-                )
+        except Exception as e:
+            # Emit MCP tool invocation failed event
+            observability.observe(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "server_id": server_id,
+                    "tool_name": tool_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+                description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
+            )
 
-                # Error event already emitted above
-                return {"error": str(e), "status": "error"}
-            finally:
-                # Restore the original timeout if we changed it
-                if restore_timeout and server_name in handler.active_connections:
-                    client = handler.active_connections[server_name]
-                    client.request_timeout = original_timeout
+            # Error event already emitted above
+            return {"error": str(e), "status": "error"}
 
     async def _connect_with_fallback(
         self,
@@ -668,6 +580,7 @@ class MCPService:
         Attempt connection with automatic fallback between transports.
         """
         transports_to_try = ["streamable_http", "http_sse"]
+        errors = {}
 
         for transport_type in transports_to_try:
             try:
@@ -682,7 +595,7 @@ class MCPService:
                     description=f"Attempting {transport_type} transport for {server_id}",
                 )
 
-                return await self._connect_single_transport(
+                result = await self._connect_single_transport(
                     server_id,
                     url,
                     None,
@@ -694,7 +607,12 @@ class MCPService:
                     original_credentials,
                 )
 
+                # Success - the transport type is already stored in cache by _connect_single_transport
+                return result
+
             except Exception as e:
+                errors[transport_type] = str(e)
+
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_TRANSPORT_FAILED,
                     level=observability.EventLevel.WARNING,
@@ -708,10 +626,19 @@ class MCPService:
                 )
 
                 if transport_type == transports_to_try[-1]:
-                    # Last transport failed
+                    # Both transports failed - create detailed error message
+                    error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
+
                     raise MCPConnectionError(
-                        f"Unable to connect to {server_id} with any transport",
-                        {"tried_transports": transports_to_try, "last_error": str(e)},
+                        f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
+                        f"Tried:\n{error_details}\n"
+                        f"Check: URL accessibility, credentials, server status",
+                        {
+                            "server_id": server_id,
+                            "url": url,
+                            "tried_transports": transports_to_try,
+                            "errors": errors,
+                        },
                     )
 
                 continue  # Try next transport
@@ -836,6 +763,31 @@ class MCPService:
                     )
                     self.tool_registry[server_id] = {}
 
+                # Store server configuration for ephemeral connections
+                # IMPORTANT: Store the original credentials format, not the transformed one
+                self.server_configs[server_id] = {
+                    "url": url,
+                    "command": command,
+                    "args": args,
+                    "transport_type": transport_type,
+                    "request_timeout": request_timeout,
+                    "original_credentials": original_credentials,
+                    # For ephemeral connections, always store the untransformed credentials
+                    # The handler will transform them as needed during connection
+                    "stored_credentials": (
+                        original_credentials if original_credentials else credentials
+                    ),
+                }
+
+                # Store the resolved transport type in cache
+                self.transport_cache[server_id] = transport_type
+
+                # Disconnect after tool discovery (Phase 1 of ephemeral connections)
+                await handler.disconnect_server(server_name)
+
+                # Remove the persistent handler but keep the configuration
+                del self.handlers[server_id]
+
                 # Emit MCP server registration completed event
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
@@ -844,9 +796,9 @@ class MCPService:
                         "server_id": server_id,
                         "transport_type": transport_type,
                         "tools_discovered": len(self.tool_registry.get(server_id, {})),
-                        "connection_status": "connected",
+                        "connection_status": "disconnected",  # Changed to disconnected
                     },
-                    description=f"MCP server registration completed: {server_id}",
+                    description=f"MCP server registration completed (tools discovered, connection closed): {server_id}",
                 )
 
                 return server_id
@@ -871,59 +823,122 @@ class MCPService:
                     del self.locks[server_id]
                 raise
 
+    async def _execute_tool_ephemeral(
+        self,
+        server_id: str,
+        tool_name: str,
+        params: Dict[str, Any],
+        user_credentials: Optional[Dict[str, Any]] = None,
+        request_timeout: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute a tool using ephemeral connection.
+
+        Creates a fresh connection with user credentials, executes the tool,
+        then immediately disconnects.
+
+        Args:
+            server_id: The ID of the server
+            tool_name: The name of the tool to execute
+            params: Parameters for the tool
+            user_credentials: User-specific credentials to use
+            request_timeout: Optional timeout for this request
+
+        Returns:
+            The tool execution result
+        """
+        if server_id not in self.server_configs:
+            raise ValueError(f"Unknown MCP server: {server_id}")
+
+        # Get server configuration
+        config = self.server_configs[server_id]
+        server_name = server_id.replace("-", "_").lower()
+
+        # Ensure lock exists for ephemeral connections
+        if server_id not in self.locks:
+            self.locks[server_id] = asyncio.Lock()
+
+        # Create fresh MCPHandler instance
+        handler = MCPHandler(model=None, tool_registry=self.tool_registry)
+
+        try:
+            # Connect with user credentials using stored configuration
+            await handler.connect_server(
+                name=server_name,
+                url=config.get("url"),
+                command=config.get("command"),
+                args=config.get("args"),
+                credentials=user_credentials,
+                request_timeout=request_timeout or config.get("request_timeout", 60),
+                server_id=server_id,
+            )
+
+            # Execute the tool
+            result = await handler.execute_tool(
+                server_name=server_name,
+                tool_name=tool_name,
+                params=params,
+                cancellation_token=None,
+            )
+
+            return result
+
+        finally:
+            # Always disconnect, even if tool execution failed
+            try:
+                await handler.disconnect_server(server_name)
+            except Exception:
+                pass  # Ignore disconnect errors
+
     async def disconnect_server(self, server_id: str) -> bool:
         """
-        Disconnect from an MCP server.
+        Disconnect from an MCP server (cleans up registration).
 
-        This method closes the connection to an MCP server and cleans up
-        all associated resources and registry entries.
+        Since we use ephemeral connections, this method just cleans up
+        the server registration and cached data.
 
         Args:
             server_id: The ID of the server to disconnect
 
         Returns:
-            True if disconnection was successful, False otherwise
+            True if cleanup was successful, False otherwise
         """
-        if server_id not in self.handlers:
+        if server_id not in self.server_configs:
             return False
 
-        async with self.locks[server_id]:
-            try:
-                handler = self.handlers[server_id]
-                server_name = self.connections[server_id]["server_name"]
-
-                # Disconnect from the server
-                await handler.disconnect_server(server_name)
-
-                # Remove from registry
-                del self.handlers[server_id]
+        try:
+            # Remove from registries
+            if server_id in self.server_configs:
+                del self.server_configs[server_id]
+            if server_id in self.connections:
                 del self.connections[server_id]
+            if server_id in self.locks:
                 del self.locks[server_id]
-                if server_id in self.tool_registry:
-                    del self.tool_registry[server_id]
+            if server_id in self.tool_registry:
+                del self.tool_registry[server_id]
 
-                # Clear cached user credentials for this server
-                if server_id in self.user_credentials:
-                    del self.user_credentials[server_id]
+            # Clear cached user credentials for this server
+            if server_id in self.user_credentials:
+                del self.user_credentials[server_id]
 
-                # Emit disconnection success event
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
-                    level=observability.EventLevel.INFO,
-                    data={"server_id": server_id},
-                    description=f"Disconnected from MCP server: {server_id}",
-                )
-                return True
+            # Emit disconnection success event
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
+                level=observability.EventLevel.INFO,
+                data={"server_id": server_id},
+                description=f"Unregistered MCP server: {server_id}",
+            )
+            return True
 
-            except Exception as e:
-                # Emit disconnection error event
-                observability.observe(
-                    event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
-                    level=observability.EventLevel.ERROR,
-                    data={"server_id": server_id, "error": str(e)},
-                    description=(f"Error disconnecting from MCP server {server_id}: {str(e)}"),
-                )
-                return False
+        except Exception as e:
+            # Emit disconnection error event
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_DISCONNECTED,
+                level=observability.EventLevel.ERROR,
+                data={"server_id": server_id, "error": str(e)},
+                description=(f"Error unregistering MCP server {server_id}: {str(e)}"),
+            )
+            return False
 
     def clear_user_credentials_cache(
         self, server_id: Optional[str] = None, user_id: Optional[str] = None
@@ -1396,9 +1411,9 @@ class MCPService:
         self.tool_registry.clear()
 
         observability.observe(
-            event_type=observability.SystemEvents.MCP_SERVICE_SHUTDOWN,
+            event_type=observability.SystemEvents.SERVICE_STARTED,  # Using SERVICE_STARTED as there's no STOPPED event
             level=observability.EventLevel.INFO,
-            data=results,
+            data={"service": "mcp", "action": "shutdown", **results},
             description="MCP service shutdown complete",
         )
 
