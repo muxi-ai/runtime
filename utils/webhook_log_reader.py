@@ -19,6 +19,17 @@ class WebhookLogReader:
 
     def get_all_webhooks(self) -> List[Dict[str, Any]]:
         """Get all webhook entries from the log"""
+        # First try the webhook server API
+        try:
+            import requests
+            response = requests.get("http://127.0.0.1:8765/logs", timeout=1)
+            if response.ok:
+                data = response.json()
+                return data.get('logs', [])
+        except:
+            pass
+        
+        # Fall back to file if server not available
         if not self.log_file.exists():
             return []
 
@@ -36,11 +47,18 @@ class WebhookLogReader:
         for webhook in webhooks:
             body = webhook.get("body", {})
             if isinstance(body, dict):
-                # Check in body
+                # Check multiple possible locations for request ID
+                # 1. Direct request_id field
                 if body.get("request_id") == request_id:
                     matching.append(webhook)
-                # Check in nested result
+                # 2. ID field (some webhooks use 'id' instead of 'request_id')
+                elif body.get("id") == request_id:
+                    matching.append(webhook)
+                # 3. In nested result
                 elif body.get("result", {}).get("request_id") == request_id:
+                    matching.append(webhook)
+                # 4. In nested response metadata
+                elif body.get("response_metadata", {}).get("request_id") == request_id:
                     matching.append(webhook)
             elif isinstance(body, str) and request_id in body:
                 # Check in text body
@@ -68,6 +86,16 @@ class WebhookLogReader:
 
     def clear_logs(self):
         """Clear all webhook logs"""
+        # First try the webhook server API
+        try:
+            import requests
+            response = requests.delete("http://127.0.0.1:8765/logs", timeout=1)
+            if response.ok:
+                return
+        except:
+            pass
+            
+        # Fall back to file if server not available
         if self.log_file.exists():
             self.log_file.unlink()
 
@@ -91,7 +119,7 @@ class WebhookLogReader:
             webhooks = self.get_webhooks_by_request_id(request_id)
             if webhooks:
                 return webhooks[0]
-            time.sleep(0.5)  # Poll every 500ms
+            time.sleep(1.0)  # Poll every second
 
         return None
 
