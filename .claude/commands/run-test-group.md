@@ -11,3 +11,6 @@ Do not use mock services for anything ever.
 Do not move on to the next test until the current test is complete.
 
 If the test fails, consider checking if the test is structured correctly before deciding we need to refactor the codebase.
+
+Please consult this guide for more information on how to run the tests:
+MUXI_Runtime_Testing_Guide.md
