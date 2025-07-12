@@ -744,18 +744,8 @@ class Agent:
             description=f"Agent {self.agent_id} processing message",
         )
 
-        # Let overlord handle memory management
-        timestamp = datetime.datetime.now().timestamp()
-        if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
-            await self.overlord.add_message_to_memory(
-                content=content,
-                role="user",
-                timestamp=timestamp,
-                agent_id=self.agent_id,
-                user_id=user_id,
-                session_id=session_id,
-                request_id=request_id,
-            )
+        # Memory storage is handled by chat orchestrator - agent should not store messages
+        # This prevents duplicate storage of enhanced messages
 
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
@@ -967,16 +957,8 @@ class Agent:
             description=f"Agent {self.agent_id} generated response",
         )
 
-        # Store response in memory
-        if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
-            timestamp = datetime.datetime.now().timestamp()
-            await self.overlord.add_message_to_memory(
-                content=response.content,
-                role="assistant",
-                timestamp=timestamp,
-                agent_id=self.agent_id,
-                user_id=user_id,
-            )
+        # Response storage is handled by chat orchestrator - agent should not store responses
+        # The agent is just an executor, not the brain
 
         # Start intelligent tool execution loop
         # Get MCP configuration settings
@@ -1857,6 +1839,27 @@ class Agent:
             if self.overlord and hasattr(self.overlord, "credential_resolver"):
                 credential_resolver = self.overlord.credential_resolver
 
+            # Get recent conversation context for credential selection
+            conversation_context = None
+            if user_id:
+                try:
+                    # Use current conversation messages from this agent's memory
+                    # Look at recent messages for account preferences
+                    conversation_context = []
+
+                    # Extract text from recent messages that might contain account preferences
+                    for msg in self._messages[-10:]:  # Last 10 messages
+                        if hasattr(msg, "content") and msg.content:
+                            content = msg.content.lower()
+                            if any(
+                                keyword in content
+                                for keyword in ["lily", "account", "use my", "ranaroussi"]
+                            ):
+                                conversation_context.append(msg.content)
+
+                except Exception as e:
+                    print(f"Failed to get conversation context for credential selection: {e}")
+
             if server_id:
                 result = await self._mcp_service.invoke_tool(
                     server_id,
@@ -1865,6 +1868,7 @@ class Agent:
                     request_timeout=self.request_timeout,
                     user_id=user_id,
                     credential_resolver=credential_resolver,
+                    conversation_context=conversation_context,
                 )
             else:
                 # Try to find the tool in any available server
@@ -1879,6 +1883,7 @@ class Agent:
                             request_timeout=self.request_timeout,
                             user_id=user_id,
                             credential_resolver=credential_resolver,
+                            conversation_context=conversation_context,
                         )
                         break
                     except Exception:

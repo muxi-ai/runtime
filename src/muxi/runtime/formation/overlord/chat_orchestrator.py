@@ -5,6 +5,7 @@ This module handles the main chat orchestration logic, including async/sync deci
 streaming support, and workflow coordination.
 """
 
+import asyncio
 import time
 from typing import Optional, Any, Union, Dict, AsyncGenerator, List
 from ..background.request_tracker import RequestStatus, RequestState
@@ -86,18 +87,14 @@ class ChatOrchestrator:
             arrive from the model. This preserves true streaming behavior and prevents
             memory issues from collecting all chunks before returning.
         """
-        # Normalize user_id - lowercase and strip whitespace
-        if user_id is not None:
-            user_id = str(user_id).lower().strip()
-
-        # Override user_id to "0" for single-user mode (SQLite)
-        # This ensures consistent user isolation in single-user deployments
-        if not self.overlord.is_multi_user:
-            user_id = "0"
+        # User ID normalization and single-user mode conversion is now done
+        # in the overlord's chat method before we get here, ensuring consistency
+        # throughout the entire request lifecycle
 
         # Validate that user_id is provided in multi-user mode
         if self.overlord.is_multi_user and user_id is None:
             from ...datatypes.exceptions import OverlordError
+
             raise OverlordError(
                 "user_id is required when formation is running in multi-user mode. "
                 "Please provide a user_id parameter to identify the user making this request."
@@ -130,7 +127,8 @@ class ChatOrchestrator:
                 description=f"Request {request_id} validated",
             )
 
-            # Process files if provided and incorporate into message
+            # Process files if provided
+            file_results = None
             if files:
                 try:
                     # Process documents but don't return early - continue with normal flow
@@ -144,8 +142,7 @@ class ChatOrchestrator:
                         context=context,
                         user_id=user_id,
                     )
-                    # Update message to include file processing result for webhook/async handling
-                    message = f"{message}\n\n[File Processing Result]: {doc_result}"
+                    file_results = f"[File Processing Result]: {doc_result}"
                 except Exception as e:
                     # Log error and continue with original message
                     observability.observe(
@@ -154,10 +151,45 @@ class ChatOrchestrator:
                         data={"error": str(e), "file_count": len(files)},
                         description=f"File processing failed for request {request_id}",
                     )
-                    # Optionally, you might want to include a failure notice in the message
-                    message = (
-                        f"{message}\n\n[File Processing]: Failed to process {len(files)} file(s)"
+                    file_results = f"[File Processing]: Failed to process {len(files)} file(s)"
+
+            # Store ORIGINAL user message in buffer memory (fire-and-forget)
+            asyncio.create_task(
+                self._store_user_message_async(
+                    message=message,  # Store original message, not enhanced
+                    timestamp=timestamp,
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
+            )
+
+            # Enhance message with conversation context (memories + buffer)
+            enhanced_message = await self._enhance_message_with_context(
+                message=message,
+                user_id=user_id,
+                session_id=session_id,
+                file_results=file_results,
+            )
+
+            # Extract user information from enhanced message (fire-and-forget)
+            # Only if persistent memory is configured
+            if (
+                self.overlord.long_term_memory
+                and user_id
+                and user_id != "0"
+                and self.overlord.auto_extract_user_info
+            ):
+                asyncio.create_task(
+                    self._extract_user_information_async(
+                        user_message=message,  # Original message for storage
+                        agent_response="",  # No response yet
+                        user_id=user_id,
+                        agent_id=agent_name or "overlord",
+                        enhanced_message=enhanced_message,  # Enhanced message for context
                     )
+                )
 
             # Use provided values or formation defaults
             webhook_url = webhook_url or getattr(self.overlord, "async_webhook_url", None)
@@ -167,13 +199,13 @@ class ChatOrchestrator:
 
             # Smart async/sync decision making
             should_use_async = await self._determine_async_mode(
-                message, agent_name, use_async, threshold_seconds
+                enhanced_message, agent_name, use_async, threshold_seconds
             )
 
             if should_use_async:
                 # Execute async request
                 return await self._execute_async_request(
-                    message=message,
+                    message=enhanced_message,
                     agent_name=agent_name,
                     user_id=user_id,
                     session_id=session_id,
@@ -191,19 +223,21 @@ class ChatOrchestrator:
             if use_streaming:
                 # Return async generator directly for streaming behavior
                 return self._process_streaming_chat(
-                    message=message,
+                    message=enhanced_message,
                     agent_name=agent_name,
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
+                    original_message=message,  # Pass original for extraction
                 )
             else:
                 return await self._process_sync_chat(
-                    message=message,
+                    message=enhanced_message,
                     agent_name=agent_name,
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
+                    original_message=message,  # Pass original for extraction
                 )
 
     async def _determine_async_mode(
@@ -376,6 +410,7 @@ class ChatOrchestrator:
         user_id: Any,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        original_message: Optional[str] = None,
     ) -> str:
         """
         Process a chat request synchronously.
@@ -389,13 +424,30 @@ class ChatOrchestrator:
             The response string
         """
         # Delegate to overlord's sync processing method
-        return await self.overlord._process_sync_chat(
+        result = await self.overlord._process_sync_chat(
             message=message,
             agent_name=agent_name,
             user_id=user_id,
             session_id=session_id,
             request_id=request_id,
         )
+
+        # Store overlord's final response in buffer memory (fire-and-forget)
+        if result and hasattr(result, "content") and result.content:
+            asyncio.create_task(
+                self._store_assistant_response_async(
+                    content=result.content,
+                    timestamp=time.time(),
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
+            )
+
+            # Post-response extraction removed - now happens before processing
+
+        return result
 
     async def _process_streaming_chat(
         self,
@@ -404,6 +456,7 @@ class ChatOrchestrator:
         user_id: Any,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        original_message: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
         """
         Process a chat request with streaming.
@@ -418,6 +471,9 @@ class ChatOrchestrator:
         Yields:
             Stream of response chunks
         """
+        # Collect chunks for extraction while streaming
+        full_response = []
+
         # Delegate to overlord's streaming processing method
         async for chunk in self.overlord._process_streaming_chat(
             message=message,
@@ -426,4 +482,311 @@ class ChatOrchestrator:
             session_id=session_id,
             request_id=request_id,
         ):
+            full_response.append(chunk)
             yield chunk
+
+        # Store the complete response in buffer memory after streaming
+        if full_response:
+            complete_response = "".join(full_response)
+            asyncio.create_task(
+                self._store_assistant_response_async(
+                    content=complete_response,
+                    timestamp=time.time(),
+                    agent_name=agent_name,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
+            )
+
+    async def _store_user_message_async(
+        self,
+        message: str,
+        timestamp: float,
+        agent_name: Optional[str],
+        user_id: Any,
+        session_id: Optional[str],
+        request_id: Optional[str],
+    ) -> None:
+        """Store user message in buffer memory without blocking."""
+        print(
+            f"[ChatOrchestrator] _store_user_message_async called: message='{message[:50]}...', user_id={user_id}"
+        )
+        try:
+            await self.overlord.add_message_to_memory(
+                content=message,
+                role="user",
+                timestamp=timestamp,
+                agent_id=agent_name or "overlord",
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+            )
+            print("[ChatOrchestrator] User message stored successfully")
+            # User message stored in buffer memory successfully
+
+            # NOTE: We do NOT store raw user messages in long-term memory
+            # Only extracted facts should be in long-term memory
+            # Extraction happens separately in _extract_user_information_async
+        except Exception as e:
+            print(f"[ChatOrchestrator] Failed to store user message: {e}")
+            # Failed to store user message in buffer memory
+            pass
+
+    async def _store_assistant_response_async(
+        self,
+        content: str,
+        timestamp: float,
+        agent_name: Optional[str],
+        user_id: Any,
+        session_id: Optional[str],
+        request_id: Optional[str],
+    ) -> None:
+        """Store assistant response in buffer memory without blocking."""
+        try:
+            await self.overlord.add_message_to_memory(
+                content=content,
+                role="assistant",
+                timestamp=timestamp,
+                agent_id=agent_name or "overlord",
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+            )
+            # Assistant response stored in buffer memory successfully
+
+            # NOTE: We do NOT store assistant responses in long-term memory
+            # Only user messages and extracted facts should be in long-term memory
+        except Exception:
+            # Failed to store assistant response in buffer memory
+            pass
+
+    async def _enhance_message_with_context(
+        self,
+        message: str,
+        user_id: Any,
+        session_id: Optional[str],
+        file_results: Optional[str] = None,
+    ) -> str:
+        """
+        Enhance user message with conversation context.
+
+        Uses formation buffer configuration to retrieve and format context.
+        Implements priority ordering: current request → file results → conversation context.
+
+        Args:
+            message: The current user message
+            user_id: User identifier for filtering
+            session_id: Optional session identifier for filtering
+            file_results: Optional file processing results to include
+
+        Returns:
+            Enhanced message with context in priority order
+        """
+        # Get configuration from formation
+        buffer_config = self.overlord.formation_config.get("memory", {}).get("buffer", {})
+        buffer_size = buffer_config.get("size", 10)
+        vector_search = buffer_config.get("vector_search", True)
+
+        # 1. Get user profile from long-term memory (if available)
+        user_profile_text = ""
+        if self.overlord.is_multi_user and user_id and user_id != "0":
+            try:
+                user_context = await self.overlord.get_user_context(user_id=user_id)
+                if user_context:
+                    # Format user profile
+                    profile_parts = []
+                    for key, value in user_context.items():
+                        if isinstance(value, dict) and "value" in value:
+                            actual_value = value["value"]
+                            profile_parts.append(f"- {key}: {actual_value}")
+                        else:
+                            profile_parts.append(f"- {key}: {value}")
+                    if profile_parts:
+                        user_profile_text = "\n".join(profile_parts)
+            except Exception:
+                # Continue without user profile
+                pass
+
+        # 2. Search for relevant long-term memories
+        long_term_memories = ""
+        if self.overlord.long_term_memory and user_id and user_id != "0":
+            try:
+                # Search long-term memory using current message as query
+                # Search specific collections that are commonly used
+                collections_to_search = [
+                    "activities",
+                    "preferences",
+                    "user_identity",
+                    "relationships",
+                    "work_projects",
+                    "conversations",
+                    "default",
+                ]
+                lt_results = await self.overlord.persistent_memory_manager.search_long_term_memory(
+                    query=message,
+                    k=5,  # Get top 5 relevant memories
+                    user_id=user_id,
+                    collections=collections_to_search,
+                )
+                if lt_results:
+                    # Format long-term memories
+                    memory_parts = []
+                    for mem in lt_results:
+                        content = mem.get("text", "")
+                        if content:
+                            # Truncate very long memories
+                            if len(content) > 200:
+                                content = content[:197] + "..."
+                            memory_parts.append(f"- {content}")
+                    if memory_parts:
+                        long_term_memories = "\n".join(memory_parts[:3])  # Limit to top 3
+            except Exception:
+                # Continue without long-term memories
+                pass
+
+        # 3. Search for recent conversation context (buffer memory)
+        context_text = ""
+        if self.overlord.buffer_memory_manager:
+            try:
+                # Build metadata filter
+                metadata_filter = {"user_id": user_id}
+                if session_id:
+                    metadata_filter["session_id"] = session_id
+
+                # Retrieve context based on vector_search setting
+                if vector_search:
+                    # Semantic search using current message as query
+                    context_messages_list = (
+                        await self.overlord.buffer_memory_manager.search_buffer_memory(
+                            query=message,  # Use current message for semantic search
+                            k=buffer_size,
+                            filter_metadata=metadata_filter,
+                        )
+                    )
+                else:
+                    # Chronological retrieval
+                    context_messages_list = (
+                        await self.overlord.buffer_memory_manager.search_buffer_memory(
+                            query="",  # Empty query for chronological order
+                            k=buffer_size,
+                            filter_metadata=metadata_filter,
+                        )
+                    )
+
+                if context_messages_list:
+                    # Format context with timestamps in REVERSE order (most recent first)
+                    context_parts = []
+                    for msg in reversed(context_messages_list):  # Reverse for most recent first
+                        role = msg.get("metadata", {}).get("role", "unknown")
+                        timestamp = msg.get("metadata", {}).get("timestamp", "")
+                        content = msg.get("text", "")
+
+                        if timestamp:
+                            # Format timestamp for readability
+                            import datetime
+
+                            dt = datetime.datetime.fromtimestamp(timestamp)
+                            time_str = dt.strftime("%H:%M")
+                            context_parts.append(f"[{time_str}] {role.capitalize()}: {content}")
+                        else:
+                            context_parts.append(f"{role.capitalize()}: {content}")
+
+                    context_text = "\n".join(context_parts)
+                    # Note: No truncation needed - LLM will naturally truncate oldest messages
+
+            except Exception:
+                # Log error but continue without context
+                # Failed to retrieve conversation context - continue without it
+                pass
+
+        # Build enhanced message with priority ordering (most important first)
+        enhanced_parts = []
+
+        # 1. Current request (highest priority - always preserved)
+        enhanced_parts.append("=== CURRENT REQUEST ===")
+        enhanced_parts.append(f"User: {message}")
+        enhanced_parts.append("")
+
+        # 2. User profile (high priority - provides context about the user)
+        if user_profile_text:
+            enhanced_parts.append("=== USER PROFILE ===")
+            enhanced_parts.append(user_profile_text)
+            enhanced_parts.append("")
+
+        # 3. File processing results (high priority)
+        if file_results:
+            enhanced_parts.append("=== FILE PROCESSING RESULTS ===")
+            enhanced_parts.append(file_results)
+            enhanced_parts.append("")
+
+        # 4. Relevant long-term memories (medium priority)
+        if long_term_memories:
+            enhanced_parts.append("=== RELEVANT MEMORIES ===")
+            enhanced_parts.append(long_term_memories)
+            enhanced_parts.append("")
+
+        # 5. Conversation context (lowest priority - truncated first if needed)
+        if context_text:
+            enhanced_parts.append("=== CONVERSATION CONTEXT (Most Recent First) ===")
+            enhanced_parts.append(context_text)
+
+        enhanced_message = "\n".join(enhanced_parts)
+
+        return enhanced_message
+
+    async def _extract_user_information_async(
+        self,
+        user_message: str,
+        agent_response: str,
+        user_id: Any,
+        agent_id: str,
+        enhanced_message: str = None,
+    ) -> None:
+        """Extract user information from conversation without blocking."""
+        try:
+            # Use enhanced message for extraction if provided, otherwise use original
+            extraction_message = enhanced_message if enhanced_message else user_message
+
+            await self.overlord.extract_user_information(
+                user_message=extraction_message,  # Use enhanced for better context
+                agent_response=agent_response,
+                user_id=user_id,
+                agent_id=agent_id,
+                original_message=user_message,  # Pass original for storage
+            )
+            # User information extraction completed
+        except Exception as e:
+            import traceback
+
+            print(f"[ChatOrchestrator] Failed to extract user information: {e}")
+            traceback.print_exc()
+            # Failed to extract user information
+            pass
+
+    async def _store_to_long_term_memory_async(
+        self,
+        content: str,
+        role: str,
+        timestamp: float,
+        agent_id: str,
+        user_id: Any,
+    ) -> None:
+        """Store message to long-term memory without blocking."""
+        try:
+            if (
+                hasattr(self.overlord, "persistent_memory_manager")
+                and self.overlord.persistent_memory_manager
+            ):
+                await self.overlord.persistent_memory_manager.add_message_to_long_term(
+                    content=content,
+                    role=role,
+                    timestamp=timestamp,
+                    agent_id=agent_id,
+                    user_id=user_id,
+                    collection="conversations",  # Add this line
+                )
+            # Message stored in long-term memory successfully
+        except Exception:
+            # Failed to store message in long-term memory
+            pass

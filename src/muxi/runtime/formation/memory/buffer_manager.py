@@ -53,7 +53,8 @@ class BufferMemoryManager:
             True if added successfully, False if buffer_memory is not available
             or an error occurred during addition.
         """
-        if not self.overlord.buffer_memory:
+        if self.overlord.buffer_memory is None:
+            print("[BufferManager] No buffer memory available, returning False")
             return False
 
         # Add agent_id to metadata for context if provided
@@ -63,11 +64,12 @@ class BufferMemoryManager:
 
         # Add to buffer memory (now async)
         try:
-            await self.overlord.buffer_memory.add(message, metadata=full_metadata)
+            await self.overlord.buffer_memory.add(text=message, metadata=full_metadata)
             #  Info - TODO: add observability
             # ConversationEvents.MEMORY_SHORT_TERM_UPDATED
             return True
         except Exception as e:
+            print(f"[BufferManager] Error adding to buffer: {e}")
             #  Warning - TODO: add observability
             # ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED
             _ = e  # remove this after implementing observability
@@ -92,7 +94,7 @@ class BufferMemoryManager:
         Returns:
             List of relevant memory items from buffer memory
         """
-        if not self.overlord.buffer_memory:
+        if self.overlord.buffer_memory is None:
             return []
 
         # Prepare metadata filter
@@ -134,11 +136,15 @@ class BufferMemoryManager:
             # Convert to standard format
             results = []
             for item in buffer_results:
+                # Handle both vector search (with score) and recency search (without score)
+                score = item.get("score", 1.0)  # Default to 1.0 for recency search
                 results.append(
                     {
-                        "text": item["content"],
-                        "metadata": item["metadata"],
-                        "distance": 1.0 - item["score"],  # Convert score to distance
+                        "text": item.get(
+                            "text", ""
+                        ),  # ShortTermMemory returns 'text' not 'content'
+                        "metadata": item.get("metadata", {}),
+                        "distance": 1.0 - score,  # Convert score to distance
                         "source": "buffer",
                     }
                 )
@@ -162,7 +168,7 @@ class BufferMemoryManager:
             agent_id: Optional agent ID to filter by.
                 Only clears memories associated with this specific agent.
         """
-        if not self.overlord.buffer_memory:
+        if self.overlord.buffer_memory is None:
             return
 
         filter_metadata = {}
@@ -194,6 +200,6 @@ class BufferMemoryManager:
             timestamp: The timestamp of the message as a float (unix timestamp)
             agent_id: The ID of the agent involved in the conversation
         """
-        if self.overlord.buffer_memory:
+        if self.overlord.buffer_memory is not None:
             metadata = {"role": role, "timestamp": timestamp, "agent_id": agent_id}
             await self.overlord.buffer_memory.add(content, metadata=metadata)

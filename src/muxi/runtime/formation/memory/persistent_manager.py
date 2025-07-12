@@ -74,7 +74,7 @@ class PersistentMemoryManager:
                     content=content,
                     metadata=full_metadata,
                     embedding=embedding,
-                    user_id=user_id,
+                    external_user_id=user_id,
                 )
 
                 # Emit memory storage completed event
@@ -144,6 +144,7 @@ class PersistentMemoryManager:
         k: int = 5,
         user_id: Any = None,
         filter_metadata: Optional[Dict[str, Any]] = None,
+        collections: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search long-term memory for relevant information.
@@ -154,6 +155,7 @@ class PersistentMemoryManager:
             k: The number of results to return
             user_id: Optional user ID for multi-user support
             filter_metadata: Additional metadata filters to apply
+            collections: Optional list of collections to search. If None, searches all collections.
 
         Returns:
             List of relevant memory items from long-term memory
@@ -177,21 +179,69 @@ class PersistentMemoryManager:
                     "k": k,
                     "agent_id": agent_id,
                     "user_id": str(user_id) if user_id is not None else None,
+                    "collections": collections,
                 },
                 description="Starting long-term memory search",
             )
 
-            # Handle multi-user case with Memobase
-            if self.overlord.is_multi_user and user_id is not None:
-                # Use external user_id directly for database queries
-                lt_results = await self.overlord.long_term_memory.search(
-                    query=query, limit=k, user_id=user_id, filter_metadata=full_filter
-                )
-            # Standard long-term memory case
+            # Helper function to call the appropriate search method with correct parameters
+            async def search_collection(collection=None):
+                memory_backend = self.overlord.long_term_memory
+                backend_name = type(memory_backend).__name__
+
+                # Build search parameters based on backend type
+                search_params = {"query": query}
+
+                if backend_name == "Memobase":
+                    # Memobase uses 'limit', 'additional_filter', and supports 'collection'
+                    search_params["limit"] = k
+                    if self.overlord.is_multi_user and user_id is not None:
+                        search_params["external_user_id"] = user_id
+                    search_params["additional_filter"] = full_filter
+                    if collection:
+                        search_params["collection"] = collection
+
+                elif backend_name == "LongTermMemory":
+                    # LongTermMemory uses 'limit', 'filter_metadata', and supports 'collection'
+                    search_params["limit"] = k
+                    if self.overlord.is_multi_user and user_id is not None:
+                        search_params["external_user_id"] = user_id
+                    search_params["filter_metadata"] = full_filter
+                    if collection:
+                        search_params["collection"] = collection
+
+                elif backend_name == "SQLiteMemory":
+                    # SQLiteMemory uses 'limit' and 'user_id' (not external_user_id)
+                    search_params["limit"] = k
+                    if user_id is not None:
+                        search_params["user_id"] = user_id
+                    # SQLiteMemory doesn't support collection parameter in public API
+                    # It will search all collections
+
+                else:
+                    # Default case - try standard parameters
+                    search_params["k"] = k
+                    if full_filter:
+                        search_params["filter_metadata"] = full_filter
+                    if collection:
+                        search_params["collection"] = collection
+
+                return await memory_backend.search(**search_params)
+
+            # If collections are specified, search each one and merge results
+            if collections:
+                all_results = []
+
+                for collection in collections:
+                    collection_results = await search_collection(collection)
+                    all_results.extend(collection_results)
+
+                # Sort merged results by relevance score (distance) and take top k
+                all_results.sort(key=lambda x: x[0])
+                lt_results = all_results[:k]
             else:
-                lt_results = await self.overlord.long_term_memory.search(
-                    query=query, k=k, filter_metadata=full_filter
-                )
+                # No collections specified, search all collections
+                lt_results = await search_collection()
 
             # Emit memory search completed event
             observability.observe(
@@ -201,6 +251,7 @@ class PersistentMemoryManager:
                     "query": query[:100],
                     "memory_type": "long_term",
                     "results_count": len(lt_results),
+                    "collections_searched": collections if collections else "all",
                 },
                 description=(f"Long-term memory search completed: " f"{len(lt_results)} results"),
             )
@@ -250,7 +301,7 @@ class PersistentMemoryManager:
             if self.overlord.is_multi_user and user_id is not None:
                 # For multi-user with Memobase - use external user_id directly
                 await self.overlord.long_term_memory.clear(
-                    user_id=user_id,
+                    external_user_id=user_id,
                     filter_metadata=filter_metadata if filter_metadata else None,
                 )
             else:
@@ -270,6 +321,7 @@ class PersistentMemoryManager:
         timestamp: float,
         agent_id: str,
         user_id: Any = None,
+        collection: str = "conversations",
     ) -> Optional[str]:
         """
         Add a message to long-term memory with standard metadata.
@@ -280,6 +332,7 @@ class PersistentMemoryManager:
             timestamp: The timestamp of the message as a float (unix timestamp)
             agent_id: The ID of the agent involved in the conversation
             user_id: Optional user ID for multi-user support
+            collection: The collection to store the message in (default: "conversations")
 
         Returns:
             The ID of the newly created memory entry if successful, None otherwise
@@ -293,48 +346,11 @@ class PersistentMemoryManager:
 
         metadata = {"role": role, "timestamp": timestamp, "agent_id": agent_id}
 
-        # Enhanced message with user context if this is a user message
-        if role == "user":
-            try:
-                # Get user context memory - uses external user ID
-                context_memory = await self.overlord.get_user_context(user_id=user_id)
-
-                # If context is available, enhance the message before storing
-                if context_memory:
-                    # Format context memory for storage with the message
-                    context_str = "User Context:\n"
-                    for key, value in context_memory.items():
-                        if isinstance(value, dict) and "value" in value:
-                            # Handle structured context memory format
-                            actual_value = value["value"]
-                            context_str += f"- {key}: {actual_value}\n"
-                        else:
-                            # Handle simple format
-                            context_str += f"- {key}: {value}\n"
-
-                    # Store the enhanced content
-                    enhanced_content = f"{context_str}\n\nUser Message: {content}"
-                    metadata["enhanced"] = True
-                    metadata["original_content"] = content
-
-                    return await self.overlord.long_term_memory.add(
-                        content=enhanced_content, metadata=metadata, user_id=user_id
-                    )
-                else:
-                    # Store the original content
-                    return await self.overlord.long_term_memory.add(
-                        content=content, metadata=metadata, user_id=user_id
-                    )
-            except Exception as e:
-                # Log error and fall back to original message
-                #  Error - TODO: add observability
-                # ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED
-                _ = e  # remove this after implementing observability
-                return await self.overlord.long_term_memory.add(
-                    content=content, metadata=metadata, user_id=user_id
-                )
-        else:
-            # For non-user messages, just store directly
-            return await self.overlord.long_term_memory.add(
-                content=content, metadata=metadata, user_id=user_id
-            )
+        # IMPORTANT: Always store the ORIGINAL message, never enhanced
+        # Enhancement should only happen during retrieval for context
+        return await self.overlord.long_term_memory.add(
+            content=content,  # Always store original content
+            metadata=metadata,
+            external_user_id=user_id,
+            collection=collection,
+        )

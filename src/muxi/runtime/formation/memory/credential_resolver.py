@@ -121,17 +121,24 @@ class CredentialResolver:
                     User.formation_id == self.formation_id,
                     Credential.service == service,
                 )
-                .limit(1)
             )
 
             result = await session.execute(stmt)
-            credential = result.scalar_one_or_none()
+            credentials = result.scalars().all()
 
-            if credential:
-                # Cache the result
-                user_cache = self._cache.setdefault(user_id, {})
-                user_cache[service] = credential.credentials
-                return credential.credentials
+            if credentials:
+                if len(credentials) == 1:
+                    # Single credential - return it directly
+                    credential_data = credentials[0].credentials
+                    user_cache = self._cache.setdefault(user_id, {})
+                    user_cache[service] = credential_data
+                    return credential_data
+                else:
+                    # Multiple credentials - return them as a list with names
+                    credential_list = [
+                        {"name": cred.name, "credentials": cred.credentials} for cred in credentials
+                    ]
+                    return credential_list
 
             return None
 

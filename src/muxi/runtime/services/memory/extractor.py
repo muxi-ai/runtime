@@ -240,15 +240,39 @@ class MemoryExtractor:
         prompt = self._create_extraction_prompt(conversation)
 
         # Generate extraction results
-        extraction_response = await model.generate(prompt)
+        print("[DEBUG Extractor] Sending extraction prompt to model...")
+        try:
+            extraction_response = await model.generate_text(prompt)
+            print(f"[DEBUG Extractor] Got extraction response: {extraction_response[:200]}...")
+        except Exception as e:
+            print(f"[DEBUG Extractor] ERROR generating response: {e}")
+            import traceback
+
+            traceback.print_exc()
+            return {"extracted_info": []}
 
         # Parse results into structured format
         try:
+            # Remove markdown code blocks if present
+            clean_response = extraction_response.strip()
+            if clean_response.startswith("```"):
+                # Find the end of the first line (json marker)
+                first_newline = clean_response.find("\n")
+                if first_newline > 0:
+                    clean_response = clean_response[first_newline + 1:]
+                # Remove the closing ```
+                if clean_response.endswith("```"):
+                    clean_response = clean_response[:-3].strip()
+
             # Parse JSON response (primary approach)
-            extraction_results = json.loads(extraction_response)
+            extraction_results = json.loads(clean_response)
+            print(f"[DEBUG Extractor] Parsed extraction results: {extraction_results}")
         except json.JSONDecodeError:
+            print("[DEBUG Extractor] JSON decode failed, using fallback parsing")
+            print(f"[DEBUG Extractor] Full response: {extraction_response}")
             # Fallback parsing if LLM doesn't return valid JSON
             extraction_results = self._parse_fallback_extraction(extraction_response)
+            print(f"[DEBUG Extractor] Fallback parsing result: {extraction_results}")
 
         return extraction_results
 
@@ -274,28 +298,67 @@ class MemoryExtractor:
             "- Prefer general categories over specific identifiers\n\n"
         )
 
+        # Get current year for age conversion
+        import datetime
+
+        current_year = datetime.datetime.now().year
+
+        age_conversion_guidelines = (
+            "AGE CONVERSION RULE:\n"
+            f"- Current year is {current_year}\n"
+            "- When extracting age information, ALWAYS convert it to year of birth\n"
+            "- For example: if someone says they are 25 years old, write:\n"
+            f'  "memory": "Was born in {current_year - 25}"\n'
+            "- NOT: 'Is 25 years old' or 'year_of_birth: 2000'\n"
+            "- This ensures the information stays accurate over time\n\n"
+        )
+
+        collection_guidelines = (
+            "COLLECTION SELECTION:\n"
+            "For each extracted fact, assign it to the most appropriate collection:\n"
+            "- conversations: Raw chat history and full message exchanges\n"
+            "- user_identity: Personal information like name, age, location, occupation, contact details\n"
+            "- preferences: Likes, dislikes, favorites, preferences, opinions\n"
+            "- relationships: Family, friends, colleagues, social connections\n"
+            "- activities: Hobbies, interests, routines, habits, regular activities\n"
+            "- goals: Aspirations, plans, objectives, desires, future intentions\n"
+            "- history: Past experiences, stories, achievements, background\n"
+            "- context: General knowledge, facts, observations, miscellaneous info\n\n"
+        )
+
         return (
             "Based on the following conversation, extract important information about the user "
             "that should be remembered for future interactions. For each piece of information, "
             "include:\n"
             "1. The specific information (value)\n"
-            "2. The category/key it belongs to (e.g., name, location, preference)\n"
+            "2. The fact type (e.g., name, location, preference)\n"
             "3. A confidence score (0.0-1.0) indicating how certain you are\n"
-            "4. An importance score (0.0-1.0) indicating how important this is to remember\n\n"
+            "4. An importance score (0.0-1.0) indicating how important this is to remember\n"
+            "5. The collection it should be stored in (see collection guidelines below)\n\n"
             "Format your response as a JSON object with the following structure:\n"
             "{\n"
             '  "extracted_info": [\n'
             "    {\n"
-            '      "key": "category name",\n'
-            '      "value": "the extracted information",\n'
+            '      "memory": "The user\'s name is John Doe",\n'
             '      "confidence": 0.95,\n'
-            '      "importance": 0.8\n'
+            '      "importance": 0.9,\n'
+            '      "collection": "user_identity"\n'
             "    },\n"
             "    ...\n"
             "  ]\n"
-            "}\n\n" + privacy_guidelines + f"Conversation:\n{conversation}\n\n"
+            "}\n\n"
+            "IMPORTANT: Write memories as natural, complete sentences like:\n"
+            "- 'The user works at TechCorp as a software engineer'\n"
+            "- 'Enjoys hiking on weekends'\n"
+            "- 'Has a sister who lives in Boston'\n"
+            "- 'Was born in 1995' (not 'year_of_birth: 1995')\n\n"
+            + privacy_guidelines
+            + age_conversion_guidelines
+            + collection_guidelines
+            + f"Conversation:\n{conversation}\n\n"
             "If there is no relevant information to extract, return an empty array for "
-            "extracted_info."
+            "extracted_info.\n\n"
+            "IMPORTANT: Always follow the age conversion rule above when dealing with age information."
         )
 
     async def _process_extraction_results(self, extraction_results, user_id):
@@ -310,50 +373,91 @@ class MemoryExtractor:
             extraction_results: Dictionary of extracted information
             user_id: The user's ID
         """
+        print(f"[DEBUG Extractor] Processing extraction results for user {user_id}")
         if not extraction_results or "extracted_info" not in extraction_results:
+            print("[DEBUG Extractor] No extraction results or missing 'extracted_info' key")
             return
 
-        # Get existing user context memory
-        existing_context = await self.overlord.get_user_context(user_id=user_id)
-
         # Process each extracted item
-        knowledge_updates = {}
+        memories_to_store = []
         for item in extraction_results["extracted_info"]:
             # Skip items below confidence threshold
             if item["confidence"] < self.confidence_threshold:
                 continue
 
-            key = item["key"]
-            value = item["value"]
-            importance = item["importance"]
-
-            # Skip extraction of sensitive information
-            if self._is_sensitive_information(key, value):
-                continue
-
-            # Handle conflicts with existing information
-            if key in existing_context:
-                # Determine if we should update based on confidence and importance
-                if not self._should_update_existing(key, value, existing_context[key], importance):
+            # Get the memory sentence
+            memory = item.get("memory")
+            if not memory:
+                # Backwards compatibility: try to construct from fact_type and value
+                fact_type = item.get("fact_type", item.get("key"))
+                value = item.get("value")
+                if fact_type and value:
+                    memory = f"{fact_type}: {value}"
+                else:
                     continue
 
-            # Add to updates with metadata
-            knowledge_updates[key] = {
-                "value": value,
-                "importance": importance,
-                "source": "automatic_extraction",
-                "timestamp": time.time(),
-                "confidence": item["confidence"],
-            }
+            importance = item["importance"]
+            collection = item.get("collection", "context")
 
-        # Store updates in context memory if any exist
-        if knowledge_updates:
-            await self.overlord.add_user_context(
-                user_id=user_id,
-                knowledge=knowledge_updates,
-                source="automatic_extraction",
-                importance=0.85,  # Default importance for automatic extraction
+            # Skip extraction of sensitive information
+            if self._is_sensitive_information_sentence(memory):
+                continue
+
+            # Add to memories to store
+            memories_to_store.append(
+                {
+                    "memory": memory,
+                    "importance": importance,
+                    "confidence": item["confidence"],
+                    "collection": collection,
+                    "timestamp": time.time(),
+                }
             )
+
+        # Store memories in long-term memory if any exist
+        if (
+            memories_to_store
+            and hasattr(self.overlord, "long_term_memory")
+            and self.overlord.long_term_memory
+        ):
+            print(
+                f"[DEBUG Extractor] Storing {len(memories_to_store)} memories in long-term memory"
+            )
+
+            # Handle multi-user mode
+            external_user_id = user_id if self.overlord.is_multi_user else None
+
+            for memory_data in memories_to_store:
+                memory_content = memory_data["memory"]
+                collection = memory_data["collection"]
+
+                # Create metadata
+                memory_metadata = {
+                    "confidence": memory_data["confidence"],
+                    "importance": memory_data["importance"],
+                    "extracted_at": memory_data["timestamp"],
+                    "source": "extraction",
+                    "user_id": str(user_id),
+                    "agent_id": getattr(self.overlord, "current_agent", None) or "overlord",
+                    "collection": collection,  # Keep in metadata for reference
+                }
+
+                print(
+                    f"[DEBUG Extractor] Storing memory: '{memory_content}' (collection: {collection})"
+                )
+                try:
+                    result = await self.overlord.long_term_memory.add(
+                        content=memory_content,
+                        metadata=memory_metadata,
+                        external_user_id=external_user_id,
+                        collection=collection,
+                    )
+                    print(f"[DEBUG Extractor] Stored memory with ID: {result}")
+                except Exception as e:
+                    print(f"[DEBUG Extractor] ERROR storing memory: {e}")
+                    import traceback
+
+                    traceback.print_exc()
 
     def _is_sensitive_information(self, key: str, value: Any) -> bool:
         """
@@ -422,6 +526,35 @@ class MemoryExtractor:
         # Default to updating
         return True
 
+    def _is_sensitive_information_sentence(self, sentence: str) -> bool:
+        """
+        Check if the sentence contains sensitive information.
+
+        Args:
+            sentence: The memory sentence to check
+
+        Returns:
+            True if sensitive, False otherwise
+        """
+        sentence_lower = sentence.lower()
+
+        # Check for sensitive patterns in the sentence
+        for pattern in self._sensitive_key_patterns:
+            if pattern in sentence_lower:
+                return True
+
+        # Check for credit card patterns
+        if any(len("".join(c for c in word if c.isdigit())) >= 15 for word in sentence.split()):
+            return True
+
+        # Check for SSN patterns (XXX-XX-XXXX)
+        import re
+
+        if re.search(r"\b\d{3}-\d{2}-\d{4}\b", sentence):
+            return True
+
+        return False
+
     def _parse_fallback_extraction(self, text):
         """
         Parse extraction results from text if JSON parsing fails.
@@ -444,12 +577,22 @@ class MemoryExtractor:
         for line in lines:
             line = line.strip()
             if not line:
-                if current_item and "key" in current_item and "value" in current_item:
+                if (
+                    current_item
+                    and ("fact_type" in current_item or "key" in current_item)
+                    and "value" in current_item
+                ):
+                    # Normalize 'key' to 'fact_type' for consistency
+                    if "key" in current_item and "fact_type" not in current_item:
+                        current_item["fact_type"] = current_item["key"]
+                        del current_item["key"]
                     # Add default values if missing
                     if "confidence" not in current_item:
                         current_item["confidence"] = 0.7
                     if "importance" not in current_item:
                         current_item["importance"] = 0.5
+                    if "collection" not in current_item:
+                        current_item["collection"] = "context"
                     extracted_info.append(current_item)
                 current_item = {}
             elif ":" in line:
@@ -457,8 +600,8 @@ class MemoryExtractor:
                 key = key.strip().lower()
                 value = value.strip()
 
-                if key in ["key", "category"]:
-                    current_item["key"] = value
+                if key in ["key", "category", "fact_type"]:
+                    current_item["fact_type"] = value
                 elif key in ["value", "information"]:
                     current_item["value"] = value
                 elif key == "confidence":
@@ -471,14 +614,26 @@ class MemoryExtractor:
                         current_item["importance"] = float(value)
                     except ValueError:
                         current_item["importance"] = 0.5
+                elif key == "collection":
+                    current_item["collection"] = value
 
         # Add the last item if it exists
-        if current_item and "key" in current_item and "value" in current_item:
+        if (
+            current_item
+            and ("fact_type" in current_item or "key" in current_item)
+            and "value" in current_item
+        ):
+            # Normalize 'key' to 'fact_type' for consistency
+            if "key" in current_item and "fact_type" not in current_item:
+                current_item["fact_type"] = current_item["key"]
+                del current_item["key"]
             # Add default values if missing
             if "confidence" not in current_item:
                 current_item["confidence"] = 0.7
             if "importance" not in current_item:
                 current_item["importance"] = 0.5
+            if "collection" not in current_item:
+                current_item["collection"] = "context"
             extracted_info.append(current_item)
 
         return {"extracted_info": extracted_info}

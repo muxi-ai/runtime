@@ -34,6 +34,7 @@ class ExtractionCoordinator:
         user_id: Any,
         agent_id: str,
         extraction_model=None,
+        original_message: str = None,
     ) -> None:
         """
         Handle user information extraction from a conversation turn.
@@ -42,11 +43,12 @@ class ExtractionCoordinator:
         managing the extraction process and delegating to the appropriate extractor.
 
         Args:
-            user_message: The user's message content
+            user_message: The message to analyze (may be enhanced with context)
             agent_response: The agent's response content
             user_id: The user's ID (extraction skipped for user_id=0)
             agent_id: The agent's ID that handled the conversation
             extraction_model: Optional model to use for extraction
+            original_message: The original user message (without enhancement)
         """
         # Skip extraction for anonymous users
         if user_id == 0:
@@ -67,6 +69,7 @@ class ExtractionCoordinator:
             user_id=user_id,
             agent_id=agent_id,
             extraction_model=extraction_model,
+            original_message=original_message,
         )
 
     async def _run_extraction(
@@ -76,6 +79,7 @@ class ExtractionCoordinator:
         user_id: Any,
         agent_id: str,
         extraction_model=None,
+        original_message: str = None,
     ) -> None:
         """
         Run the actual extraction process.
@@ -84,11 +88,12 @@ class ExtractionCoordinator:
         separated for better error handling and testing.
 
         Args:
-            user_message: The user's message content
+            user_message: The message to analyze (may be enhanced with context)
             agent_response: The agent's response content
             user_id: The user's ID
             agent_id: The agent's ID that handled the conversation
             extraction_model: Optional model to use for extraction
+            original_message: The original user message (without enhancement)
         """
         try:
             # Use the provided extraction model or fall back to the overlord's default
@@ -101,17 +106,25 @@ class ExtractionCoordinator:
                 # Create a temporary extractor for this extraction
                 extractor = MemoryExtractor(
                     overlord=self.overlord,
-                    model=model_to_use,
+                    extraction_model=model_to_use,
                     auto_extract=True,
                 )
 
-            # Perform the extraction
+            # Store the original message in the overlord context for the extractor to use
+            if original_message:
+                self.overlord._extraction_original_message = original_message
+
+            # Perform the extraction using the enhanced message for better context
             await extractor.process_conversation_turn(
-                user_message=user_message,
+                user_message=user_message,  # Enhanced message for context
                 agent_response=agent_response,
                 user_id=user_id,
                 message_count=1,  # We don't track message count here
             )
+
+            # Clean up the temporary storage
+            if hasattr(self.overlord, "_extraction_original_message"):
+                delattr(self.overlord, "_extraction_original_message")
 
         except Exception as e:
             # Log the error but don't let it break the conversation flow
@@ -127,6 +140,7 @@ class ExtractionCoordinator:
         user_id: Any,
         agent_id: str,
         extraction_model=None,
+        original_message: str = None,
     ) -> None:
         """
         Extract user information from a conversation turn.
@@ -135,11 +149,12 @@ class ExtractionCoordinator:
         to the internal extraction handling logic.
 
         Args:
-            user_message: The user's message content
+            user_message: The message to analyze (may be enhanced with context)
             agent_response: The agent's response content
             user_id: The user's ID (extraction skipped for user_id=0)
             agent_id: The agent's ID that handled the conversation
             extraction_model: Optional model to use for extraction
+            original_message: The original user message (without enhancement)
         """
         await self.handle_user_information_extraction(
             user_message=user_message,
@@ -147,4 +162,5 @@ class ExtractionCoordinator:
             user_id=user_id,
             agent_id=agent_id,
             extraction_model=extraction_model,
+            original_message=original_message,
         )

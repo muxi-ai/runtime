@@ -75,7 +75,6 @@ class SQLiteMemory(BaseMemory):
         """
         self.db_path = db_path
         self.formation_id = formation_id
-        self.formation_id = self._hash_formation_id(formation_id)
         self.dimension = dimension
         self.default_collection = default_collection
         self.extensions_dir = extensions_dir
@@ -86,7 +85,6 @@ class SQLiteMemory(BaseMemory):
 
         # Initialize database
         self.conn = self._init_database()
-
 
     async def get_or_create_user(self, external_user_id: str) -> int:
         """
@@ -113,8 +111,7 @@ class SQLiteMemory(BaseMemory):
         # Create new user
         public_id = self._generate_id()
         self.conn.execute(
-            "INSERT INTO users (public_id, external_user_id, formation_id) "
-            "VALUES (?, ?, ?)",
+            "INSERT INTO users (public_id, external_user_id, formation_id) " "VALUES (?, ?, ?)",
             (public_id, external_user_id, self.formation_id),
         )
         self.conn.commit()
@@ -221,8 +218,7 @@ class SQLiteMemory(BaseMemory):
             # Create default user
             public_id = self._generate_id()
             conn.execute(
-                "INSERT INTO users (public_id, external_user_id, formation_id) "
-                "VALUES (?, ?, ?)",
+                "INSERT INTO users (public_id, external_user_id, formation_id) " "VALUES (?, ?, ?)",
                 (public_id, default_user_id, self.formation_id),
             )
             cursor = conn.execute(

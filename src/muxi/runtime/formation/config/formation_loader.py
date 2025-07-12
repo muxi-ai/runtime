@@ -125,6 +125,14 @@ class FormationLoader:
 
         # Resolve knowledge paths relative to formation file directory
         formation_dir = os.path.dirname(os.path.abspath(file_path))
+        formation_dir_path = Path(formation_dir)
+
+        # Auto-discover and merge component configurations if available
+        # This allows flattened formations to also benefit from auto-discovery
+        await self._discover_and_merge_agents(config, formation_dir_path, secrets_manager)
+        await self._discover_and_merge_mcp_servers(config, formation_dir_path, secrets_manager)
+        await self._discover_and_merge_a2a_services(config, formation_dir_path, secrets_manager)
+
         config = self._resolve_knowledge_paths(config, formation_dir)
 
         #  Formation loaded successfully - TODO: add observability
@@ -252,7 +260,6 @@ class FormationLoader:
                 #  AGENT_MESSAGE_FAILED
                 _ = e  # remove this after implementing observability
                 continue
-
         #  Agent discovery complete - TODO: add observability
         #  AGENT_MESSAGE_PROCESSING
 

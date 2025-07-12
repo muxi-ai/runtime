@@ -205,6 +205,16 @@ from markitdown import MarkItDown
 _MARKITDOWN_INSTANCE = None
 _MARKITDOWN_LOCK = threading.Lock()
 
+# Memory collections that should be created for each user/formation
+MEMORY_COLLECTIONS = {
+    "conversations": "Stores conversation history and context",
+    "user_info": "Stores extracted user information and preferences",
+    "tools": "Stores tool usage patterns and results",
+    "feedback": "Stores user feedback and ratings",
+    "documents": "Stores document content and metadata",
+    "workflows": "Stores workflow execution history and patterns",
+}
+
 
 class Overlord:
     """
@@ -408,8 +418,48 @@ class Overlord:
 
         # Configure extraction settings (intelligence concerns)
         self.auto_extract_user_info = auto_extract_user_info
+
+        # Set extraction_model from formation config if not explicitly provided
+        if extraction_model is None and self.formation_config:
+            # Check for extraction_model in features section of formation config
+            extraction_model = self.formation_config.get("features", {}).get(
+                "extraction_model", None
+            )
+
+            # If still None, check if we should use the overlord's default LLM model
+            if extraction_model is None:
+                # Try to get the default model from overlord config
+                overlord_config = self.formation_config.get("overlord", {})
+                llm_config = overlord_config.get("llm", {})
+                default_model = llm_config.get("model")
+                if default_model:
+                    # We'll create this model later during async initialization
+                    # For now, just store the config
+                    extraction_model = default_model
+                else:
+                    # If no overlord config, try to use the first text model from llm.models
+                    llm_models = self.formation_config.get("llm", {}).get("models", [])
+                    for model_config in llm_models:
+                        if isinstance(model_config, dict) and "text" in model_config:
+                            extraction_model = model_config["text"]
+                            break
+
         self.extraction_model = extraction_model
         self.memory_extractor = None  # Will be initialized later
+
+        # Initialize extractor if auto-extraction is enabled
+        if self.auto_extract_user_info:
+            from ...services.memory.extractor import MemoryExtractor
+
+            # Store default model for extractor fallback
+            self.default_model = None  # Will be set during async initialization
+            self.extractor = MemoryExtractor(
+                overlord=self,
+                extraction_model=None,  # Will use default_model fallback
+                auto_extract=True,
+            )
+        else:
+            self.extractor = None
 
         # Multi-user mode configuration from Formation
         self.is_multi_user = (
@@ -750,6 +800,9 @@ class Overlord:
 
         # Initialize the routing model (async) - now that LLM config is ready
         await self._initialize_routing_model()
+
+        # Initialize the extraction model (async) if configured
+        await self._initialize_extraction_model()
 
         # Cache manager is already started by Formation
         # No need to start it again
@@ -1244,6 +1297,96 @@ class Overlord:
             # ErrorEvents.FAILED_INITIALIZATION (overlord routing)
             _ = e  # remove this after implementing observability
             raise RuntimeError("Failed to initialize routing model from overlord.llm config") from e
+
+    async def _initialize_extraction_model(self):
+        """Initialize the extraction model as an LLM object if needed."""
+        try:
+            # Only initialize if extraction_model is a string (model name)
+            if self.extraction_model and isinstance(self.extraction_model, str):
+                # Get overlord configuration for default settings
+                overlord_config = self.formation_config.get("overlord", {})
+                llm_config = overlord_config.get("llm", {})
+
+                # Create the extraction model with appropriate settings
+                self.extraction_model = await self.create_model(
+                    model=self.extraction_model,
+                    temperature=llm_config.get("settings", {}).get("temperature", 0.2),
+                    max_tokens=llm_config.get("settings", {}).get("max_tokens", 2000),
+                    api_key=llm_config.get("api_key"),
+                )
+
+                # Re-initialize components that use the extraction model
+                if hasattr(self, "request_analyzer"):
+                    self.request_analyzer.llm = self.extraction_model
+                if hasattr(self, "task_decomposer"):
+                    self.task_decomposer.llm = self.extraction_model
+                if hasattr(self, "multimodal_fusion_engine"):
+                    self.multimodal_fusion_engine.llm = self.extraction_model
+                if hasattr(self, "quality_assessor"):
+                    self.quality_assessor.llm = self.extraction_model
+                if hasattr(self, "context_aware_response_generator"):
+                    self.context_aware_response_generator.llm = self.extraction_model
+
+                # Update the extractor's model if it exists
+                if hasattr(self, "extractor") and self.extractor and self.auto_extract_user_info:
+                    self.extractor.extraction_model = self.extraction_model
+
+                # Also set default_model for fallback
+                self.default_model = self.extraction_model
+
+        except Exception as e:
+            # If initialization fails, log error but don't fail completely
+            # The extraction model is optional
+            _ = e  # remove this after implementing observability
+            # Just keep the extraction_model as None or string
+            pass
+
+    async def _initialize_collections(self):
+        """Ensure required collections exist in long-term memory."""
+        if self.long_term_memory:
+            # Use the predefined collections with their descriptions
+            for collection_name, description in MEMORY_COLLECTIONS.items():
+                try:
+                    # Check if this is a Memobase instance (wraps LongTermMemory)
+                    if hasattr(self.long_term_memory, "long_term_memory"):
+                        # Access the underlying LongTermMemory instance
+                        ltm = self.long_term_memory.long_term_memory
+
+                        # The LongTermMemory class ensures collections exist when adding memories
+                        # For PostgreSQL/SQLite backends, collections are created on first use
+                        # We'll log the intended collections for visibility
+                        observability.observe(
+                            event_type=observability.SystemEvents.INITIALIZING,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "collection_name": collection_name,
+                                "description": description,
+                                "memory_type": "long_term",
+                                "backend": type(ltm).__name__,
+                            },
+                            description=f"Collection '{collection_name}' registered: {description}",
+                        )
+                    else:
+                        # Direct LongTermMemory instance (SQLite)
+                        observability.observe(
+                            event_type=observability.SystemEvents.INITIALIZING,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "collection_name": collection_name,
+                                "description": description,
+                                "memory_type": "sqlite",
+                                "backend": type(self.long_term_memory).__name__,
+                            },
+                            description=f"Collection '{collection_name}' registered: {description}",
+                        )
+
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"collection_name": collection_name, "error": str(e)},
+                        description=f"Failed to register collection '{collection_name}': {str(e)}",
+                    )
 
     async def create_model(
         self,
@@ -1828,6 +1971,7 @@ class Overlord:
         user_id: Any,
         agent_id: str,
         extraction_model: Optional[LLM] = None,
+        original_message: str = None,
     ) -> None:
         """
         Handle the process of extracting user information from a conversation turn.
@@ -1840,8 +1984,7 @@ class Overlord:
         and uses message counting to throttle extraction frequency.
 
         Args:
-            user_message: The latest message from the user. This is analyzed
-                for information about the user.
+            user_message: The message to analyze (may be enhanced with context).
             agent_response: The agent's response to the user. This provides
                 context for understanding the user's message.
             user_id: The user's ID. Required for storing extracted information.
@@ -1850,9 +1993,25 @@ class Overlord:
                 Used for metadata and context.
             extraction_model: Optional model to use for extraction.
                 If provided, overrides the default extraction model.
+            original_message: The original user message (without enhancement).
+                This is what gets stored in memory.
         """
         await self.extraction_coordinator.handle_user_information_extraction(
-            user_message, agent_response, user_id, agent_id, extraction_model
+            user_message, agent_response, user_id, agent_id, extraction_model, original_message
+        )
+
+    async def extract_user_information(
+        self,
+        user_message: str,
+        agent_response: str,
+        user_id: Any,
+        agent_id: str,
+        extraction_model=None,
+        original_message: str = None,
+    ) -> None:
+        """Extract user information from conversation (delegates to handle method)."""
+        await self.handle_user_information_extraction(
+            user_message, agent_response, user_id, agent_id, extraction_model, original_message
         )
 
     async def get_user_context(
@@ -2007,8 +2166,17 @@ class Overlord:
             user_id: Optional user ID for multi-user support.
                 Required for user context enhancement in multi-user mode.
         """
+        # Normalize user_id - lowercase and strip whitespace
+        if user_id is not None:
+            user_id = str(user_id).lower().strip()
+
+        # Override user_id to "0" for single-user mode (SQLite)
+        # This ensures consistent user isolation in single-user deployments
+        if not self.is_multi_user:
+            user_id = "0"
+
         # Always add to buffer memory regardless of user context
-        if self.buffer_memory:
+        if self.buffer_memory_manager:
             metadata = {
                 "role": role,
                 "timestamp": timestamp,
@@ -2017,75 +2185,11 @@ class Overlord:
                 "session_id": session_id,
                 "request_id": request_id,
             }
+            await self.buffer_memory_manager.add_to_buffer_memory(content, metadata, agent_id)
 
-            self.buffer_memory.add(content, metadata=metadata)
-
-        # Add to long-term memory if we have a valid user_id and multi-user support
-        if self.is_multi_user and user_id is not None and self.long_term_memory:
-            # Skip for anonymous users
-            if str(user_id) == "0":
-                return
-
-            metadata = {"role": role, "timestamp": timestamp, "agent_id": agent_id}
-
-            # Enhanced message with user context if this is a user message
-            if role == "user":
-                try:
-                    # Get user context memory
-                    context_memory = await self.get_user_context(user_id=user_id)
-
-                    # If context is available, enhance the message before storing
-                    if context_memory:
-                        # Format context memory for storage with the message
-                        context_str = "User Context:\n"
-                        for key, value in context_memory.items():
-                            if isinstance(value, dict) and "value" in value:
-                                # Handle structured context memory format
-                                actual_value = value["value"]
-                                context_str += f"- {key}: {actual_value}\n"
-                            else:
-                                # Handle simple format
-                                context_str += f"- {key}: {value}\n"
-
-                        # Store the enhanced content
-                        enhanced_content = f"{context_str}\n\nUser Message: {content}"
-                        metadata["enhanced"] = True
-                        metadata["original_content"] = content
-
-                        # Store the enhanced content using helper method
-                        await self._add_to_long_term_memory(
-                            content=enhanced_content,
-                            metadata=metadata,
-                            user_id=user_id,
-                        )
-                    else:
-                        # Store the original content using helper method
-                        await self._add_to_long_term_memory(
-                            content=content,
-                            metadata=metadata,
-                            user_id=user_id,
-                        )
-                except Exception as e:
-                    # Log error and fall back to original message
-                    #  Error - TODO: add observability
-                    # ConversationEvents.MEMORY_LONG_TERM_ENHANCEMENT_FAILED
-                    _ = e  # remove this after implementing observability
-                    # Fallback to original content using helper method
-                    await self._add_to_long_term_memory(
-                        content=content,
-                        metadata=metadata,
-                        user_id=user_id,
-                    )
-            else:
-                # For non-user messages, just store directly using helper method
-                await self._add_to_long_term_memory(
-                    content=content,
-                    metadata=metadata,
-                    user_id=user_id,
-                )
-
-            #  Info - TODO: add observability
-            # ConversationEvents.MEMORY_LONG_TERM_ENHANCED
+        # NOTE: We do NOT store raw messages in long-term memory
+        # Only extracted facts should be in long-term memory
+        # Raw messages are stored in buffer memory only
 
     # ===================================================================
     # DOCUMENT PROCESSING ORCHESTRATION
@@ -3083,6 +3187,15 @@ class Overlord:
                 AsyncGenerator if streaming
             For async processing: Dict with request_id, status, and processing info
         """
+        # Override user_id to "0" for single-user mode (SQLite)
+        # This ensures consistent user isolation in single-user deployments
+        # Do this EARLY before any other processing
+        if not self.is_multi_user:
+            user_id = "0"
+        elif user_id is not None:
+            # Normalize user_id - lowercase and strip whitespace
+            user_id = str(user_id).lower().strip()
+
         return await self.chat_orchestrator.chat(
             message=message,
             agent_name=agent_name,
@@ -3153,6 +3266,21 @@ class Overlord:
                 # Send clarification question via webhook
                 webhook_url = await self._get_webhook_url_for_request(request_id)
                 if webhook_url:
+                    # Store clarification question in buffer memory before sending webhook
+                    try:
+                        await self.add_message_to_memory(
+                            content=clarification_question,
+                            role="assistant",
+                            timestamp=time.time(),
+                            agent_id="overlord",
+                            user_id=user_id,
+                            session_id=session_id,
+                            request_id=request_id,
+                        )
+                    except Exception as e:
+                        # Log but don't fail on memory storage error
+                        print(f"Failed to store clarification question in buffer memory: {e}")
+
                     success = await self.webhook_manager.deliver_clarification(
                         webhook_url=webhook_url,
                         request_id=request_id,
@@ -3193,6 +3321,41 @@ class Overlord:
 
             # Extract result content
             result_content = result.content if hasattr(result, "content") else str(result)
+
+            # Store assistant response in buffer memory (fire-and-forget)
+            try:
+                await self.add_message_to_memory(
+                    content=result_content,
+                    role="assistant",
+                    timestamp=time.time(),
+                    agent_id=agent_name or "overlord",
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
+                observability.observe(
+                    event_type=observability.ConversationEvents.MEMORY_STORED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "request_id": request_id,
+                        "role": "assistant",
+                        "async_response": True,
+                    },
+                    description=f"Stored async response in buffer memory for request {request_id}",
+                )
+            except Exception as e:
+                # Log error but don't fail the async request
+                observability.observe(
+                    event_type=observability.ConversationEvents.MEMORY_STORE_FAILED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "request_id": request_id,
+                        "error": str(e),
+                        "role": "assistant",
+                    },
+                    description=f"Failed to store async response in buffer memory: {e}",
+                )
+
             await self.request_tracker.update_request(
                 request_id, RequestStatus.COMPLETED, result=result_content
             )
@@ -4515,6 +4678,21 @@ Token:"""
                 # ConversationEvents.CLARIFICATION_FAILED
                 return False
 
+            # Store user's clarification response in buffer memory
+            try:
+                await self.add_message_to_memory(
+                    content=clarification_response,
+                    role="user",
+                    timestamp=time.time(),
+                    agent_id="overlord",
+                    user_id=request_state.user_id,
+                    session_id=request_state.session_id,
+                    request_id=request_id,
+                )
+            except Exception as e:
+                # Log but don't fail on memory storage error
+                print(f"Failed to store clarification response in buffer memory: {e}")
+
             # Process the clarification response
             if request_state.clarification_request_id:
                 from ..clarification import ClarificationManager
@@ -4555,6 +4733,22 @@ Token:"""
                 elif result.status == ClarificationResultStatus.CONTINUE:
                     # Update stored clarification question
                     request_state.clarification_question = result.next_question
+
+                    # Store follow-up clarification question in buffer memory
+                    try:
+                        await self.add_message_to_memory(
+                            content=result.next_question,
+                            role="assistant",
+                            timestamp=time.time(),
+                            agent_id="overlord",
+                            user_id=request_state.user_id,
+                            session_id=request_state.session_id,
+                            request_id=request_id,
+                        )
+                    except Exception as e:
+                        print(
+                            f"Failed to store follow-up clarification question in buffer memory: {e}"
+                        )
 
                     # Send new clarification via webhook
                     webhook_url = await self._get_webhook_url_for_request(request_id)

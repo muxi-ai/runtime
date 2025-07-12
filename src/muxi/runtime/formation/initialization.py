@@ -880,6 +880,9 @@ async def initialize_persistent_memory(
             formation._long_term_memory = memobase
             overlord.long_term_memory = memobase
 
+            # Initialize required collections
+            await overlord._initialize_collections()
+
         elif connection_string.startswith("sqlite://") or connection_string.endswith(".db"):
             observability.observe(
                 event_type=observability.SystemEvents.INITIALIZING,
@@ -913,6 +916,9 @@ async def initialize_persistent_memory(
             # Set the embedding provider after initialization
             if embedding_model:
                 sqlite_memory.embedding_provider = embedding_model
+
+            # Initialize required collections
+            await overlord._initialize_collections()
 
     except Exception as e:
         observability.observe(

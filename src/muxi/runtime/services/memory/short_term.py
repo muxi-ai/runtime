@@ -394,6 +394,7 @@ class ShortTermMemory:
         filter_metadata: Optional[Dict[str, Any]] = None,
         use_entire_buffer: bool = True,
         namespace: str = None,
+        session_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Search the buffer based on recency only.
@@ -418,10 +419,10 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size:]
+            recent_items = list(self.buffer)[-self.max_size :]
 
         # Apply filtering if specified
-        if filter_metadata or namespace:
+        if filter_metadata or namespace or session_id:
             results = []
             for item in reversed(recent_items):  # Reverse to get most recent first
                 # Apply namespace filter if provided
@@ -430,6 +431,10 @@ class ShortTermMemory:
 
                 # Check formation_id match (always filter by formation)
                 if item.get("metadata", {}).get("formation_id") != self.formation_id:
+                    continue
+
+                # Apply session_id filter if provided
+                if session_id and item.get("metadata", {}).get("session_id") != session_id:
                     continue
 
                 # Check if all metadata filter criteria match
@@ -492,6 +497,12 @@ class ShortTermMemory:
             similarity and recency. Each item includes the original text, metadata,
             and a score field indicating the match quality.
         """
+        # Extract session_id from filter_metadata if not provided separately
+        if session_id is None and filter_metadata and "session_id" in filter_metadata:
+            session_id = filter_metadata["session_id"]
+            # Create a copy of filter_metadata without session_id to avoid double filtering
+            filter_metadata = {k: v for k, v in filter_metadata.items() if k != "session_id"}
+
         # Emit memory retrieval started event
         observability.observe(
             event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
@@ -514,7 +525,11 @@ class ShortTermMemory:
         if not self.model:
             #  Recency search fallback - TODO: add observability
             recency_results = self._recency_search(
-                limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+                limit,
+                filter_metadata,
+                use_entire_buffer=True,
+                namespace=namespace,
+                session_id=session_id,
             )
 
             # Emit memory retrieval completed event for recency-only search
@@ -555,7 +570,11 @@ class ShortTermMemory:
                 #  Query embedding error - TODO: add observability
                 # Fallback to recency search if embedding generation fails
                 embedding_fallback_results = self._recency_search(
-                    limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+                    limit,
+                    filter_metadata,
+                    use_entire_buffer=True,
+                    namespace=namespace,
+                    session_id=session_id,
                 )
 
                 # Emit memory retrieval completed event for embedding failure fallback
@@ -579,7 +598,11 @@ class ShortTermMemory:
         # If we have no embeddings in the index, use recency search
         if self.index_count == 0:
             return self._recency_search(
-                limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+                limit,
+                filter_metadata,
+                use_entire_buffer=True,
+                namespace=namespace,
+                session_id=session_id,
             )
 
         try:
@@ -619,6 +642,10 @@ class ShortTermMemory:
                 if item.get("metadata", {}).get("formation_id") != self.formation_id:
                     continue
 
+                # Apply session_id filter as a hard filter if provided
+                if session_id and item.get("metadata", {}).get("session_id") != session_id:
+                    continue
+
                 # Apply metadata filters if provided
                 if filter_metadata and not all(
                     key in item["metadata"] and item["metadata"][key] == value
@@ -626,40 +653,14 @@ class ShortTermMemory:
                 ):
                     continue
 
-                # Calculate session match score
-                session_match_score = 0.0
-                if session_id and item.get("metadata", {}).get("session_id") == session_id:
-                    session_match_score = 1.0
-
-                # Calculate combined score with session weighting
-                # If session weighting is enabled, use the formula:
-                # final_score = (semantic * 0.3) + (recency * 0.2) + (session * 0.5)
+                # Calculate combined score without session weighting
+                # (session_id is now a hard filter applied above)
                 semantic_score = 1.0 / (1.0 + float(distances[0][i]))
                 recency_score = 1.0 - (buffer_idx / len(self.buffer))
 
-                if session_id and session_bias > 0 and session_match_score > 0:
-                    # Apply session-aware weighting only when we have a session match
-                    semantic_weight = 0.3
-                    recency_weight = 0.2
-                    session_weight = session_bias  # Default 0.5
-
-                    # Normalize weights to sum to 1.0
-                    total_weight = semantic_weight + recency_weight + session_weight
-                    semantic_weight /= total_weight
-                    recency_weight /= total_weight
-                    session_weight /= total_weight
-
-                    combined_score = (
-                        semantic_weight * semantic_score
-                        + recency_weight * recency_score
-                        + session_weight * session_match_score
-                    )
-                else:
-                    # Fall back to original recency bias formula
-                    # This preserves perfect scores for exact matches
-                    combined_score = (
-                        1 - recency_bias
-                    ) * semantic_score + recency_bias * recency_score
+                # Use original recency bias formula
+                # This preserves perfect scores for exact matches
+                combined_score = (1 - recency_bias) * semantic_score + recency_bias * recency_score
 
                 # Add score to the item
                 item["score"] = combined_score
@@ -672,7 +673,11 @@ class ShortTermMemory:
             # If we don't have enough results, try recency search
             if not results:
                 return self._recency_search(
-                    limit, filter_metadata, use_entire_buffer=True, namespace=namespace
+                    limit,
+                    filter_metadata,
+                    use_entire_buffer=True,
+                    namespace=namespace,
+                    session_id=session_id,
                 )
 
             # Sort by combined score (descending)

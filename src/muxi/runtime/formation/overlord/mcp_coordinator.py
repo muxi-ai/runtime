@@ -108,6 +108,11 @@ class MCPCoordinator:
                         # Trigger clarification flow by raising error
                         raise MissingCredentialError(service, user_id)
 
+                    # If we got multiple credentials, use the first one for now
+                    # (MCP coordinator doesn't have access to user message context)
+                    if isinstance(credentials, list):
+                        credentials = credentials[0]["credentials"]
+
                     # Replace placeholder with actual credential
                     # If credentials is a dict, extract the appropriate field
                     if isinstance(credentials, dict):

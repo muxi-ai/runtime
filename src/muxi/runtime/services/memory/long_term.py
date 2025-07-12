@@ -58,6 +58,19 @@ from .. import observability
 from ..db import DatabaseManager, Base, AsyncModelMixin
 
 
+# Memory collection definitions for organizing long-term storage
+MEMORY_COLLECTIONS = {
+    "conversations": "Raw chat history and full message exchanges",
+    "user_identity": "Personal information like name, age, location, occupation, contact details",
+    "preferences": "Likes, dislikes, favorites, preferences, opinions",
+    "relationships": "Family, friends, colleagues, social connections",
+    "activities": "Hobbies, interests, routines, habits, regular activities",
+    "goals": "Aspirations, plans, objectives, desires, future intentions",
+    "history": "Past experiences, stories, achievements, background",
+    "context": "General knowledge, facts, observations, miscellaneous info",
+}
+
+
 class User(Base, AsyncModelMixin):
     """
     User table for multi-user support.
@@ -102,22 +115,8 @@ class Memory(Base, AsyncModelMixin):
     collection = Column(String(255), nullable=False, index=True)
 
 
-class Collection(Base, AsyncModelMixin):
-    """
-    Collection table for organizing memories.
-
-    This SQLAlchemy model defines the structure for organizing memories into
-    collections, allowing logical grouping of related memories.
-    """
-
-    __tablename__ = "collections"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False, index=True)
-    description = Column(Text)
-    created_at = Column(DateTime, default=utc_now_naive)
-    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
+# Note: Collection table has been removed.
+# Memories now use a simple 'collection' column for categorization.
 
 
 class LongTermMemory:
@@ -268,7 +267,7 @@ class LongTermMemory:
 
         # Create new user
         user = User(
-            public_id=get_default_nanoid()(),
+            public_id=get_default_nanoid(),
             external_user_id=external_user_id,
             formation_id=self.formation_id,
             created_at=utc_now_naive(),
@@ -281,34 +280,9 @@ class LongTermMemory:
     def _ensure_default_user(self) -> None:
         """Ensure default user exists for single-user mode."""
         with self.Session() as session:
-            user = self._get_or_create_user(session, "0")
-            # Also create default collection for this user
-            self._create_default_collection_for_user(session, user.id)
+            self._get_or_create_user(session, "0")
 
-    def _create_default_collection_for_user(self, session: Session, user_id: int) -> None:
-        """Create default collection for a specific user."""
-        # Check if default collection exists for this user
-        collection = (
-            session.query(Collection)
-            .join(User, Collection.user_id == User.id)
-            .filter(
-                Collection.user_id == user_id,
-                Collection.name == self.default_collection,
-                User.formation_id == self.formation_id,
-            )
-            .first()
-        )
-
-        if not collection:
-            # Create default collection
-            collection = Collection(
-                user_id=user_id,
-                name=self.default_collection,
-                description="Default collection for memories",
-            )
-            session.add(collection)
-            session.commit()
-            #  Default collection creation - TODO: add observability
+    # Collection table removed - no longer needed
 
     async def add(
         self,
@@ -316,6 +290,7 @@ class LongTermMemory:
         metadata: Dict[str, Any] = None,
         embedding: Optional[Union[List[float], np.ndarray]] = None,
         external_user_id: Optional[str] = None,
+        collection: Optional[str] = None,
     ) -> str:
         """
         Asynchronously adds new content to long-term memory, generating an embedding if not provided.
@@ -327,6 +302,8 @@ class LongTermMemory:
             If not provided, an embedding is generated.
             external_user_id (str, optional): The external user identifier for
             multi-user environments.
+            collection (str, optional): The collection to store the memory in.
+            If not provided, uses the default collection.
 
         Returns:
             str: The unique ID of the newly created memory entry.
@@ -339,7 +316,7 @@ class LongTermMemory:
                 "content_length": len(content),
                 "has_metadata": metadata is not None,
                 "has_embedding": embedding is not None,
-                "collection": self.default_collection,
+                "collection": collection or self.default_collection,
             },
             description="Long-term memory storage started",
         )
@@ -351,11 +328,35 @@ class LongTermMemory:
         if embedding is None:
             if not self.embedding_model:
                 raise ValueError("No embedding model available for generating embeddings")
-            embedding = await self.embedding_model.embed(content)
+            embedding_response = await self.embedding_model.embed(content)
+            # Extract the actual embedding vector from the response
+            if hasattr(embedding_response, "data") and embedding_response.data:
+                # OpenAI-style response: EmbeddingResponse.data[0].embedding
+                embedding_item = embedding_response.data[0]
+                if hasattr(embedding_item, "embedding"):
+                    embedding = embedding_item.embedding
+                else:
+                    embedding = embedding_item
+            elif hasattr(embedding_response, "embeddings") and embedding_response.embeddings:
+                # Alternative format: might have embeddings list
+                embedding_item = embedding_response.embeddings[0]
+                if hasattr(embedding_item, "embedding"):
+                    embedding = embedding_item.embedding
+                else:
+                    embedding = embedding_item
+            elif hasattr(embedding_response, "embedding"):
+                # Direct embedding attribute
+                embedding = embedding_response.embedding
+            elif isinstance(embedding_response, list):
+                # Already a list of floats
+                embedding = embedding_response
+            else:
+                # Last resort - try to use as is
+                embedding = embedding_response
 
         # Insert into database using async method
         memory_id = await self._add_internal_async(
-            content, embedding, metadata, self.default_collection, external_user_id
+            content, embedding, metadata, collection, external_user_id
         )
 
         # Emit memory storage completed event
@@ -405,9 +406,6 @@ class LongTermMemory:
         async with self.db_manager.get_async_session() as session:
             # Get or create user
             user = await self._get_or_create_user_async(session, external_user_id)
-
-            # Ensure collection exists for this user
-            await self._ensure_collection_exists_async(session, collection, user.id)
 
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
@@ -460,9 +458,6 @@ class LongTermMemory:
             # Get or create user
             user = self._get_or_create_user(session, external_user_id)
 
-            # Ensure collection exists for this user
-            self._ensure_collection_exists(session, collection, user.id)
-
             # Convert numpy array to list if necessary
             if isinstance(embedding, np.ndarray):
                 embedding = embedding.tolist()
@@ -483,39 +478,7 @@ class LongTermMemory:
             # Return ID
             return memory.id
 
-    def _ensure_collection_exists(
-        self, session: Session, collection_name: str, user_id: int
-    ) -> None:
-        """
-        Ensure that a collection exists for a user, creating it if necessary.
-
-        This method checks if a collection exists and creates it if it
-        doesn't, ensuring that memories can always be stored properly.
-
-        Args:
-            session: The database session.
-            collection_name: The name of the collection.
-            user_id: The internal user ID.
-        """
-        collection = (
-            session.query(Collection)
-            .join(User, Collection.user_id == User.id)
-            .filter(
-                Collection.user_id == user_id,
-                Collection.name == collection_name,
-                User.formation_id == self.formation_id,
-            )
-            .first()
-        )
-
-        if not collection:
-            collection = Collection(
-                user_id=user_id,
-                name=collection_name,
-                description=f"Collection: {collection_name}",
-            )
-            session.add(collection)
-            session.flush()
+    # Collection methods removed - using simple column-based collections
 
     async def search(
         self,
@@ -563,7 +526,31 @@ class LongTermMemory:
         if query_embedding is None:
             if not self.embedding_model:
                 raise ValueError("No embedding model available for generating embeddings")
-            query_embedding = await self.embedding_model.embed(query)
+            embedding_response = await self.embedding_model.embed(query)
+            # Extract the actual embedding vector from the response
+            if hasattr(embedding_response, "data") and embedding_response.data:
+                # OpenAI-style response: EmbeddingResponse.data[0].embedding
+                embedding_item = embedding_response.data[0]
+                if hasattr(embedding_item, "embedding"):
+                    query_embedding = embedding_item.embedding
+                else:
+                    query_embedding = embedding_item
+            elif hasattr(embedding_response, "embeddings") and embedding_response.embeddings:
+                # Alternative format: might have embeddings list
+                embedding_item = embedding_response.embeddings[0]
+                if hasattr(embedding_item, "embedding"):
+                    query_embedding = embedding_item.embedding
+                else:
+                    query_embedding = embedding_item
+            elif hasattr(embedding_response, "embedding"):
+                # Direct embedding attribute
+                query_embedding = embedding_response.embedding
+            elif isinstance(embedding_response, list):
+                # Already a list of floats
+                query_embedding = embedding_response
+            else:
+                # Last resort - try to use as is
+                query_embedding = embedding_response
 
         # Use default collection if not specified
         if collection is None:
@@ -872,34 +859,44 @@ class LongTermMemory:
 
             return True
 
-    def list_collections(self) -> List[Dict[str, Any]]:
+    def list_collections(self, external_user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
-        List all collections.
+        List all collections used by memories.
 
-        This method returns information about all available collections
-        in the long-term memory system, useful for browsing available
-        data organization structures.
+        This method returns information about all collections that have
+        memories stored in them, based on the collection column in the
+        memories table.
+
+        Args:
+            external_user_id: Optional external user ID for multi-user mode.
 
         Returns:
             A list of dictionaries containing collection information.
         """
         with self.Session() as session:
+            # Get user
+            user = self._get_or_create_user(session, external_user_id)
+
+            # Get distinct collections from memories table
+            from sqlalchemy import distinct
+
             collections = (
-                session.query(Collection)
-                .join(User, Collection.user_id == User.id)
-                .filter(User.formation_id == self.formation_id)
+                session.query(distinct(Memory.collection))
+                .join(User, Memory.user_id == User.id)
+                .filter(
+                    Memory.user_id == user.id,
+                    User.formation_id == self.formation_id,
+                )
                 .all()
             )
 
             return [
                 {
-                    "id": c.id,
-                    "name": c.name,
-                    "description": c.description,
-                    "created_at": c.created_at.isoformat(),
-                    "updated_at": c.updated_at.isoformat(),
+                    "name": c[0],
+                    "description": MEMORY_COLLECTIONS.get(c[0], f"Collection: {c[0]}"),
                 }
                 for c in collections
+                if c[0]
             ]
 
     def create_collection(
@@ -908,45 +905,28 @@ class LongTermMemory:
         """
         Create a new collection.
 
-        This method creates a new organizational collection for storing
-        related memories together.
+        Note: With the simplified collection system, this method now just
+        validates that the collection name is valid. Collections are created
+        automatically when memories are added to them.
 
         Args:
             name: The name of the collection.
-            description: Optional description of the collection.
-            external_user_id: Optional external user ID for multi-user mode.
+            description: Optional description of the collection (ignored).
+            external_user_id: Optional external user ID for multi-user mode (ignored).
 
         Returns:
-            The ID of the newly created collection.
+            The collection name.
         """
-        with self.Session() as session:
-            # Get or create user
-            user = self._get_or_create_user(session, external_user_id)
+        # Ignore unused parameters but keep them for API compatibility
+        _ = description
+        _ = external_user_id
 
-            # Check if collection already exists for this user
-            existing = (
-                session.query(Collection)
-                .join(User, Collection.user_id == User.id)
-                .filter(
-                    Collection.name == name,
-                    Collection.user_id == user.id,
-                    User.formation_id == self.formation_id,
-                )
-                .first()
-            )
+        if not name or not name.strip():
+            raise ValueError("Collection name cannot be empty")
 
-            if existing:
-                return str(existing.id)
-
-            # Create new collection
-            collection = Collection(
-                user_id=user.id, name=name, description=description or f"Collection: {name}"
-            )
-
-            session.add(collection)
-            session.commit()
-
-            return str(collection.id)
+        # Collections are now created automatically when memories are added
+        # This method exists for API compatibility
+        return name
 
     def delete_collection(
         self, name: str, delete_memories: bool = False, external_user_id: Optional[str] = None
@@ -954,8 +934,8 @@ class LongTermMemory:
         """
         Delete a collection.
 
-        This method removes a collection and either deletes its memories
-        or moves them to the default collection.
+        This method removes all memories from a collection and either deletes
+        them or moves them to the default collection.
 
         Args:
             name: The name of the collection to delete.
@@ -964,7 +944,7 @@ class LongTermMemory:
             external_user_id: Optional external user ID for multi-user mode.
 
         Returns:
-            True if the collection was deleted, False if not found.
+            True if the collection had memories and was processed, False if not found.
         """
         if name == self.default_collection:
             raise ValueError("Cannot delete the default collection")
@@ -973,19 +953,19 @@ class LongTermMemory:
             # Get user
             user = self._get_or_create_user(session, external_user_id)
 
-            # Find collection with proper formation scoping
-            collection = (
-                session.query(Collection)
-                .join(User, Collection.user_id == User.id)
+            # Check if there are memories in this collection
+            memories_count = (
+                session.query(Memory)
+                .join(User, Memory.user_id == User.id)
                 .filter(
-                    Collection.name == name,
-                    Collection.user_id == user.id,
+                    Memory.collection == name,
+                    Memory.user_id == user.id,
                     User.formation_id == self.formation_id,
                 )
-                .first()
+                .count()
             )
 
-            if not collection:
+            if memories_count == 0:
                 return False
 
             if delete_memories:
@@ -999,10 +979,7 @@ class LongTermMemory:
                     Memory.collection == name, Memory.user_id == user.id
                 ).update({"collection": self.default_collection})
 
-            # Delete the collection
-            session.delete(collection)
             session.commit()
-
             return True
 
     def get_recent_memories(
@@ -1077,44 +1054,14 @@ class LongTermMemory:
             # Create new user
             user = await User.create(
                 session,
-                public_id=get_default_nanoid()(),
+                public_id=get_default_nanoid(),
                 external_user_id=external_user_id,
                 formation_id=self.formation_id,
             )
 
         return user
 
-    async def _ensure_collection_exists_async(
-        self, session: AsyncSession, collection_name: str, user_id: int
-    ) -> None:
-        """
-        Asynchronously ensures that a collection with the specified name
-        exists for the given user and formation, creating it if it does not already exist.
-        """
-        # Build query to check if collection exists
-        from sqlalchemy import and_
-
-        stmt = (
-            select(Collection)
-            .join(User, Collection.user_id == User.id)
-            .where(
-                and_(
-                    Collection.user_id == user_id,
-                    Collection.name == collection_name,
-                    User.formation_id == self.formation_id,
-                )
-            )
-        )
-        result = await session.execute(stmt)
-        collection = result.scalar_one_or_none()
-
-        if not collection:
-            await Collection.create(
-                session,
-                user_id=user_id,
-                name=collection_name,
-                description=f"Collection: {collection_name}",
-            )
+    # Async collection methods removed - using simple column-based collections
 
     async def _search_internal_async(
         self,
@@ -1203,3 +1150,96 @@ class LongTermMemory:
                 )
                 for result in results
             ]
+
+    async def search_text(
+        self,
+        query: str,
+        limit: int = 5,
+        collection: Optional[str] = None,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        external_user_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Search memories using text-based search with proper user isolation.
+
+        This method uses PostgreSQL's full-text search capabilities with the GIN index
+        on the text field, ensuring results are always filtered by user.
+        """
+        if collection is None:
+            collection = self.default_collection
+
+        async with self.db_manager.get_async_session() as session:
+            # Get user - this ensures we have the correct internal user ID
+            user = await self._get_or_create_user_async(session, external_user_id)
+
+            # Build the query with proper user isolation
+            if self.db_manager.database_type == "postgresql":
+                # Use PostgreSQL full-text search with 'simple' configuration for multilingual support
+                from sqlalchemy import text as sql_text
+
+                # Using parameterized query for safety
+                sql = sql_text(
+                    """
+                    SELECT
+                        m.id,
+                        m.text,
+                        m.meta_data,
+                        m.created_at,
+                        ts_rank(to_tsvector('simple', m.text), plainto_tsquery('simple', :query)) as rank
+                    FROM memories m
+                    JOIN users u ON m.user_id = u.id
+                    WHERE u.id = :user_id
+                        AND u.formation_id = :formation_id
+                        AND m.collection = :collection
+                        AND to_tsvector('simple', m.text) @@ plainto_tsquery('simple', :query)
+                    ORDER BY rank DESC
+                    LIMIT :limit
+                """
+                )
+
+                result = await session.execute(
+                    sql,
+                    {
+                        "query": query,
+                        "user_id": user.id,
+                        "formation_id": self.formation_id,
+                        "collection": collection,
+                        "limit": limit,
+                    },
+                )
+                rows = result.fetchall()
+
+                # Format results
+                return [
+                    {
+                        "id": row.id,
+                        "text": row.text,
+                        "metadata": row.meta_data,
+                        "score": float(row.rank) if row.rank else 0.0,
+                    }
+                    for row in rows
+                ]
+            else:
+                # Fallback for SQLite - use LIKE with proper user filtering
+                query_obj = (
+                    select(Memory)
+                    .filter(
+                        Memory.user_id == user.id,
+                        Memory.collection == collection,
+                        Memory.text.ilike(f"%{query}%"),
+                    )
+                    .limit(limit)
+                )
+
+                result = await session.execute(query_obj)
+                memories = result.scalars().all()
+
+                return [
+                    {
+                        "id": m.id,
+                        "text": m.text,
+                        "metadata": m.meta_data,
+                        "score": 1.0,  # No ranking for LIKE queries
+                    }
+                    for m in memories
+                ]

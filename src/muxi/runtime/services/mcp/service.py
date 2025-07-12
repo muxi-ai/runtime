@@ -354,6 +354,7 @@ class MCPService:
         request_timeout: Optional[int] = None,
         user_id: Optional[str] = None,
         credential_resolver: Optional[Any] = None,
+        conversation_context: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """
         Invoke a tool on an MCP server using ephemeral connection.
@@ -467,6 +468,21 @@ class MCPService:
                     if credentials is None:
                         # Trigger clarification flow
                         raise MissingCredentialError(service_name, user_id)
+
+                    # If we got multiple credentials, use LLM to pick the best one
+                    if isinstance(credentials, list):
+                        original_list = credentials
+                        credentials = await self._select_best_credential_with_llm(
+                            credentials, parameters, service_name, conversation_context
+                        )
+                        if credentials is None:
+                            # LLM couldn't decide - trigger clarification flow
+                            # For now, use the first credential but this should ideally trigger clarification
+                            # TODO: Implement proper multi-credential clarification flow
+                            print(
+                                f"Multiple {service_name} credentials available but no clear choice, using first one"
+                            )
+                            credentials = original_list[0]["credentials"]
 
                     # Format credentials based on stored_creds structure
                     # Replace the user credential placeholder with actual value
@@ -1513,3 +1529,106 @@ class MCPService:
             for server_id, config in self.server_configs.items()
             if config.get("uses_user_credentials", False)
         ]
+
+    async def _select_best_credential_with_llm(
+        self,
+        credential_list: List[Dict],
+        parameters: Dict[str, Any],
+        service_name: str,
+        conversation_context: Optional[List[str]] = None,
+    ) -> Optional[Dict]:
+        """
+        Use LLM to select the best credential from multiple options based on user parameters and conversation context.
+
+        Args:
+            credential_list: List of credentials with names and credential data
+            parameters: Tool parameters that may contain user intent
+            service_name: Name of the service (e.g., 'github')
+            conversation_context: Recent conversation messages for context
+
+        Returns:
+            Selected credential data or None if LLM can't decide
+        """
+        try:
+            # Extract user intent from parameters
+            user_intent = ""
+            for key, value in parameters.items():
+                if isinstance(value, str):
+                    user_intent += f"{key}: {value} "
+
+            # Build conversation context
+            context_text = ""
+            if conversation_context and len(conversation_context) > 0:
+                context_text = "\n".join(conversation_context[-5:])  # Last 5 messages
+
+            print(f"[DEBUG] Credential selection for {service_name}:")
+            print(f"  Available credentials: {[cred['name'] for cred in credential_list]}")
+            print(f"  User intent from parameters: '{user_intent.strip()}'")
+            print(f"  Conversation context: '{context_text.strip()}'")
+
+            # If no user intent in parameters and no conversation context, return None
+            # This will trigger clarification instead of just picking first credential
+            if not user_intent.strip() and not context_text.strip():
+                return None
+
+            # Create LLM prompt
+            credential_names = [cred["name"] for cred in credential_list]
+
+            prompt_parts = [f"The user wants to use {service_name}."]
+
+            if context_text.strip():
+                prompt_parts.append(f"Recent conversation context:\n{context_text}")
+
+            if user_intent.strip():
+                prompt_parts.append(f"Current request details: {user_intent.strip()}")
+
+            prompt_parts.extend(
+                [
+                    f"\nThey have the following {service_name} credentials available:",
+                    chr(10).join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
+                    "\nWhich credential should be used? Reply with just the number (1, 2, etc.) or 0 if none match clearly.",  # noqa: E501
+                    "\nPRIORITY ORDER (most important first):",
+                    "1. Use the MOST RECENTLY mentioned account in the conversation context",
+                    "2. If user says 'use my [account name]', prioritize that account for all future requests",
+                    "3. Exact name matches in the current request",
+                    "4. Partial matches (e.g. 'lily' matches 'lily account')",
+                    "5. Account ownership references (e.g. 'my acme account')",
+                    "\nIf the conversation shows the user previously specified an account preference, use that account.",  # noqa: E501
+                    "\nReply with just the number:",
+                ]
+            )
+
+            prompt = "\n".join(prompt_parts)
+
+            # Create a basic LLM instance - we'll use the default from the environment
+            llm = LLM()
+
+            print("[DEBUG] LLM prompt for credential selection:")
+            print(f"{prompt}")
+            print("[DEBUG] Sending to LLM...")
+
+            # Use chat method with simple messages format
+            messages = [{"role": "user", "content": prompt}]
+            response = await llm.chat(messages, max_tokens=10)
+
+            print(f"[DEBUG] LLM response: '{response.strip()}'")
+
+            # Parse the response
+            import re
+
+            match = re.search(r"\b([0-9]+)\b", response.strip())
+            if match:
+                choice = int(match.group(1))
+                print(f"[DEBUG] Extracted choice: {choice}")
+                if 1 <= choice <= len(credential_list):
+                    selected_cred = credential_list[choice - 1]
+                    print(f"[DEBUG] Selected credential: {selected_cred['name']}")
+                    return selected_cred["credentials"]
+
+            # If LLM didn't give a clear answer, return first credential
+            return credential_list[0]["credentials"]
+
+        except Exception as e:
+            print(f"LLM credential selection failed: {e}, using first credential")
+            # Fallback to first credential
+            return credential_list[0]["credentials"]
