@@ -446,398 +446,146 @@ def test_async_webhook_delivery():
             message="Process this large video",
             files=[large_video_file],
         ))
+
+        # Should return task info for async processing
+        assert isinstance(response, dict)
+        assert "request_id" in response
         
-        # Should return request_id for async processing
-        if isinstance(response, dict) and "request_id" in response:
-            request_id = response["request_id"]
-            
-            # Monitor processing status
-            for i in range(24):  # 2 minutes max
-                asyncio.sleep(5)
-                if hasattr(overlord, '_background_tasks'):
-                    if len(overlord._background_tasks) == 0:
-                        print("✅ Processing completed")
-                        break
-        else:
-            # Fallback: direct processing for smaller files
-            assert len(response) > 100
+        # For webhook testing, you'd need to mock or run webhook receiver
+        
+    with ThreadPoolExecutor() as executor:
+        future = executor.submit(run_test)
+        future.result()
 ```
 
-### 14. Cross-Modal Content Validation
+## Latest Testing Patterns (July 2025)
 
-**Testing content correlation across formats:**
+### 14. Chat Flow Testing with Real Services
+
+**New Recommended Approach:** Focus on end-to-end chat flow testing with real LLM services instead of unit testing individual components.
+
+**Key Principles:**
+1. **No Mocks**: Always use real OpenAI, Anthropic, or other LLM providers
+2. **Chat Flow Validation**: Test through `overlord.chat()` interface
+3. **Detailed Response Documentation**: Capture user prompts and actual overlord responses
+4. **Service Integration**: Validate MCP servers, memory systems, and agent routing
+
+**Modern Test Structure:**
 ```python
-def test_cross_modal_fusion():
-    def run_test():
-        # Test with multiple related files
-        response = asyncio.run(overlord.chat(
-            user_id="test_user",
-            message="Analyze these related documents and find connections",
-            files=[
-                {"filename": "report.pdf", "content": pdf_content, "content_type": "application/pdf"},
-                {"filename": "chart.png", "content": img_content, "content_type": "image/png"},
-                {"filename": "speech.m4a", "content": audio_content, "content_type": "audio/m4a"}
-            ],
-        ))
-        
-        # Should demonstrate intelligent fusion
-        assert len(response) > 200
-        assert any(term in response.lower() for term in ["report", "chart", "speech", "correlation"])
-```
-
-### 15. Error Handling and Graceful Degradation
-
-**Testing with corrupted files:**
-```python
-def test_graceful_error_handling():
-    def run_test():
-        # Test with intentionally corrupted content
-        corrupted_content = b"fake_pdf_content"
-        
-        response = asyncio.run(overlord.chat(
-            user_id="test_user",
-            message="Analyze this document",
-            files=[{
-                "filename": "corrupted.pdf",
-                "content": corrupted_content,
-                "content_type": "application/pdf",
-                "size": len(corrupted_content),
-            }],
-        ))
-        
-        # Should handle gracefully, not crash
-        assert isinstance(response, str)
-        assert any(term in response.lower() for term in ["issue", "error", "unable", "problem"])
-```
-
-### 16. Performance and Timeout Testing
-
-**For large file processing:**
-```python
-def test_timeout_handling():
-    def run_test():
-        start_time = time.time()
-        
-        response = asyncio.run(overlord.chat(
-            user_id="test_user",
-            message="Process this large file",
-            files=[very_large_file],
-        ))
-        
-        duration = time.time() - start_time
-        
-        # Should either complete quickly (async) or handle timeout gracefully
-        if duration < 10:
-            # Async processing triggered
-            assert isinstance(response, dict) and "request_id" in response
-        else:
-            # Direct processing with timeout handling
-            assert duration < 300  # 5 minute max timeout
-```
-
-### 17. Real vs. Mock Services (Critical Insight)
-
-**ALWAYS use real providers for multimodal testing:**
-
-```python
-# ❌ Wrong - mock providers miss critical behaviors
-llm:
-  models:
-    - text: "test/mock-model"
-    - vision: "test/mock-vision"
-
-# ✅ Correct - real providers reveal actual capabilities
-llm:
-  api_keys:
-    openai: "${{ secrets.OPENAI_API_KEY }}"
-    google: "${{ secrets.GOOGLE_API_KEY }}"
-  models:
-    - text: "openai/gpt-4o-mini"
-    - vision: "google/gemini-2.0-flash"
-    - audio: "openai/whisper-1"
-```
-
-**Why real providers are essential:**
-- Provider-specific limits and behaviors (OpenAI 25MB audio limit)
-- Real quality differences in OCR, transcription, video analysis
-- Actual error handling and timeout behaviors
-- Provider-specific optimizations and capabilities
-- Real-world performance characteristics
-
-## Summary
-
-The comprehensive Day 3 and Day 4 testing revealed that MUXI Runtime's multimodal and MCP capabilities are **production-ready** with excellent cross-provider support. Key insights:
-
-**Multimodal (Day 3):**
-1. **Provider Selection Matters**: Different providers excel at different content types
-2. **File Size Management**: Dynamic routing based on provider capabilities required
-3. **Content Types Critical**: Correct MIME types essential for processing success
-4. **Async Processing**: Webhook delivery enables enterprise-scale file processing
-5. **Error Handling**: Graceful degradation maintains user experience
-6. **Real Testing Required**: Mock providers miss critical real-world behaviors
-
-**MCP Integration (Day 4):**
-1. **Async Generator Fix**: Use `formation.shutdown()` to bypass Python cleanup errors
-2. **Tool Discovery**: Automatic discovery of 105+ tools across MCP servers
-3. **Multi-MCP Orchestration**: Complex workflows execute seamlessly
-4. **Credential Management**: Formation and user-level credentials properly isolated
-5. **Transport Support**: Command, HTTP SSE, and Streamable transports all working
-6. **Streaming Responses**: Always use `async for` to collect MCP responses
-
-The testing pattern remains consistent:
-1. Run formation operations in appropriate async context
-2. Use `asyncio.run()` for test isolation or `await` in async tests
-3. Always use real providers and services for comprehensive validation
-4. Test both sync and async response patterns
-5. Validate error handling with various failure scenarios
-6. Use `formation.shutdown()` for clean test exits
-
-This approach ensures reliable, production-ready multimodal processing across all supported content types and providers.
-
-## MCP Integration Testing Patterns (Day 4 Insights)
-
-### 18. MCP Server Configuration and Transport Types
-
-MUXI supports multiple MCP transport types, each with specific configuration patterns:
-
-**Command Transport (stdio):**
-```yaml
-mcp:
-  - name: "filesystem-mcp"
-    transport: "command"
-    config:
-      command: "npx"
-      args: ["@modelcontextprotocol/server-filesystem"]
-      env:
-        ALLOWED_DIRECTORIES: "/Users/ran/Desktop/tests"
-```
-
-**HTTP SSE Transport:**
-```yaml
-mcp:
-  - name: "linear-mcp"
-    transport: "http_sse"
-    config:
-      url: "http://localhost:5173/sse"
-      api_key: "${{ secrets.LINEAR_MCP_TOKEN }}"  # Formation-level secret
-```
-
-**Streamable HTTP Transport:**
-```yaml
-mcp:
-  - name: "github-mcp"
-    transport: "streamable"
-    config:
-      url: "http://localhost:5174/stream"
-      # User credentials injected at runtime
-```
-
-### 19. Async Generator Cleanup Resolution
-
-**Problem**: MCP servers using anyio/httpx create async generators that throw errors during Python shutdown:
-```
-RuntimeError: Attempted to exit cancel scope in a different task
-```
-
-**Solution**: Use `formation.shutdown()` instead of direct `os._exit()`:
-```python
-async def run_async_test():
-    try:
-        formation = Formation()
-        await formation.load("test-formations/formation-mcp")
-        overlord = await formation.start_overlord()
-        
-        # Your test code here
-        response_gen = await overlord.chat("Test MCP operation")
-        
-        # Collect streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
-            
-        # Clean shutdown that uses os._exit internally
-        formation.shutdown(0)  # ✅ Bypasses Python cleanup phase
-        
-    except Exception as e:
-        formation.shutdown(1)  # Exit with error code
-```
-
-### 20. MCP Tool Discovery and Invocation
-
-**Tool discovery happens automatically during MCP initialization:**
-```python
-# Debug tool discovery
-mcp_service = overlord.mcp_service
-if mcp_service:
-    tools = mcp_service.tool_registry
-    print(f"Available MCP tools: {list(tools.keys())}")
-    # Example output:
-    # - Filesystem: 12 tools (read_file, write_file, etc.)
-    # - GitHub: 67 tools (create_repository, list_repositories, etc.)
-    # - Linear: 23 tools (create_issue, update_issue, etc.)
-    # - System: 3 tools (get_system_info, etc.)
-```
-
-### 21. Multi-MCP Orchestration Patterns
-
-**Complex workflows across multiple MCPs:**
-```python
-def test_multi_mcp_workflow():
-    async def test_operations():
-        # This single prompt orchestrates multiple MCP servers
-        response_gen = await overlord.chat(
-            "Create a Linear issue asking to check CPU usage. "
-            "Get the actual CPU stats and save them to a file. "
-            "Then create a GitHub repository with that file and "
-            "update the Linear issue with the GitHub link.",
-            user_id="user1",
-            use_async=False
-        )
-        
-        # The agent will:
-        # 1. Use Linear MCP to create issue
-        # 2. Use System MCP to get CPU stats
-        # 3. Use Filesystem MCP to save the file
-        # 4. Use GitHub MCP to create repository
-        # 5. Use Linear MCP to update the issue
-        
-        # Handle streaming response
-        response = ""
-        async for chunk in response_gen:
-            response += chunk
-```
-
-### 22. Credential Management Patterns
-
-**Formation-level secrets (shared by all users):**
-```yaml
-# In formation YAML
-mcp:
-  - name: "linear-mcp"
-    config:
-      api_key: "${{ secrets.LINEAR_MCP_TOKEN }}"
-```
-
-**User-level credentials (per-user isolation):**
-```python
-# GitHub MCP uses user credentials
-response = await overlord.chat(
-    "Create a GitHub repository",
-    user_id="user1",  # Has GitHub credentials
-    use_async=False
-)
-
-# User without credentials triggers clarification
-response = await overlord.chat(
-    "Create a GitHub repository",
-    user_id="user2",  # No GitHub credentials
-    use_async=False
-)
-# Response: "I need your GitHub credentials to create a repository..."
-```
-
-### 23. MCP-Specific Limitations and Workarounds
-
-**GitHub MCP doesn't support gists:**
-```python
-# ❌ This won't work as expected
-response = await overlord.chat("Create a GitHub gist")
-# GitHub MCP will create a repository instead (no gist-specific tools)
-
-# ✅ Work with what's available
-response = await overlord.chat("Create a GitHub repository with a single file")
-```
-
-### 24. MCP Error Handling Patterns
-
-**Test various failure scenarios:**
-```python
-def test_mcp_failures():
-    # Permission denied
-    response = await overlord.chat("Create file in /root/forbidden")
-    assert "permission" in response.lower() or "denied" in response.lower()
+async def test_agent_communication():
+    """Test Group 1B: Agent Communication with real LLM validation"""
+    formation = Formation()
+    await formation.load("test-formations/formation-multi-agent/")
+    overlord = await formation.start_overlord()
     
-    # File not found  
-    response = await overlord.chat("Read /nonexistent/file.txt")
-    assert "not found" in response.lower() or "doesn't exist" in response.lower()
+    # Test 1: Math Query Routing
+    response = await overlord.chat("Calculate 2+2", user_id="test_user", stream=False)
+    response_text = response.content if hasattr(response, 'content') else str(response)
+    assert "4" in response_text  # Validate actual LLM response
     
-    # Dangerous operations
-    response = await overlord.chat("Delete everything in /")
-    assert "cannot" in response.lower() or "refuse" in response.lower()
+    # Test 2: Research Query Routing  
+    response = await overlord.chat(
+        "What are the latest trends in renewable energy?", 
+        user_id="test_user", 
+        stream=False
+    )
+    response_text = response.content if hasattr(response, 'content') else str(response)
+    assert len(response_text) > 50  # Substantive research response
     
-    # Invalid filenames
-    response = await overlord.chat('Create file "test\x00file.txt"')
-    assert "invalid" in response.lower() or "error" in response.lower()
+    await formation.stop_overlord()
 ```
 
-### 25. Streaming Response Handling
+### 15. Test Report Generation
 
-**Always handle streaming responses in MCP tests:**
+**Create detailed test reports** documenting user interactions:
+
+```markdown
+# Test Group 1B: Basic Agent Communication - Test Report
+
+## Chat Interactions:
+
+### ✅ Test 1B1: Single Agent Response
+- 👤 **User**: "What can you help me with?"
+- 🤖 **Overlord**: Successfully responded with helpful information
+- **Validation**: Response contains help-related keywords
+
+### ✅ Test 1B2: Agent Routing Validation  
+- 👤 **User**: "Calculate 2+2"
+- 🤖 **Overlord**: "2 + 2 equals 4."
+- **Validation**: Math query properly routed to appropriate agent
+
+## Technical Achievements:
+- Agent specialization (Code Assistant, Research Specialist, General Assistant)
+- Memory integration with conversation context
+- Async processing for complex queries
+```
+
+### 16. Formation Testing Best Practices
+
+**Directory vs File Formations:**
 ```python
-# MCP operations often return async generators
-response_gen = await overlord.chat(
-    "Perform MCP operation",
-    user_id="user1",
-    use_async=False  # Still returns async generator!
-)
-
-# Always collect the full response
-response = ""
-async for chunk in response_gen:
-    response += chunk
-    
-# Now you can assert on the complete response
-assert "expected" in response.lower()
+# Test both formation types
+single_agent_formation = "test-formations/formation-basic/"  # Directory
+multi_agent_formation = "test-formations/formation-multi-agent/"  # Directory  
+flattened_formation = "test-formations/formation-basic/formation-flattened.yaml"  # File
 ```
 
-### 26. MCP Testing Best Practices
+**Validation Testing:**
+```python
+# Test comprehensive error scenarios
+invalid_formations = [
+    "test-formations/invalid-formations/invalid-syntax.yaml",
+    "test-formations/invalid-formations/invalid-not-yaml.txt", 
+    "test-formations/invalid-formations/invalid-missing-keys.yaml",
+    "test-formations/invalid-formations/invalid-schema.yaml",
+    "test-formations/invalid-formations/invalid-values.yaml",
+    "test-formations/invalid-formations/invalid-empty.yaml",
+    "test-formations/invalid-formations/invalid-no-agents/",
+    "test-formations/does-not-exist/"
+]
 
-1. **Always wait for MCP initialization:**
-   ```python
-   await formation.start_overlord()
-   await asyncio.sleep(3)  # Give MCP servers time to initialize
-   ```
+for invalid_path in invalid_formations:
+    with pytest.raises(Exception):  # ConfigurationValidationError, etc.
+        await formation.load(invalid_path)
+```
 
-2. **Use real directories for filesystem MCP:**
-   ```python
-   test_dir = Path("/Users/ran/Desktop/tests")
-   assert test_dir.exists()  # Verify before testing
-   ```
+### 17. Memory Configuration Testing
 
-3. **Check MCP availability before assertions:**
-   ```python
-   if "linear" not in response.lower() and "mcp" not in response.lower():
-       # MCP might not be configured
-       if "cannot" in response.lower() or "no tool" in response.lower():
-           print("✓ Correctly identified missing MCP")
-           return True
-   ```
+**Remote vs Local Memory Validation:**
+```python
+# Remote memory requires specific fields
+async def test_remote_memory_validation():
+    formation = Formation()
+    
+    # Should fail - missing URL
+    with pytest.raises(ConfigurationValidationError):
+        await formation.load("test-formations/invalid-remote-no-url.yaml")
+    
+    # Should fail - missing tenant  
+    with pytest.raises(ConfigurationValidationError):
+        await formation.load("test-formations/invalid-remote-no-tenant.yaml")
+        
+    # Should fail - uses "auto" instead of explicit MB
+    with pytest.raises(ConfigurationValidationError):
+        await formation.load("test-formations/invalid-remote-auto-memory.yaml")
+    
+    # Should pass - valid remote config
+    await formation.load("test-formations/valid-remote-memory.yaml")
+```
 
-4. **Handle both sync and async responses:**
-   ```python
-   if isinstance(response, dict) and "request_id" in response:
-       # Async processing
-       await asyncio.sleep(3)  # Wait for completion
-   elif hasattr(response, '__aiter__'):
-       # Streaming response
-       async for chunk in response:
-           full_response += chunk
-   ```
+### 18. Real Service Integration Requirements
 
-### 27. MCP Integration Summary
+**Required External Services:**
+- **OpenAI API**: Real GPT-4o-mini and GPT-4o models for agent responses
+- **MCP Servers**: Filesystem MCP server (npm package required)
+- **Memory Systems**: Real buffer memory and long-term memory storage
+- **Observability**: Complete event logging and request tracking
 
-Day 4 testing revealed that MUXI's MCP integration is **production-ready** with:
+**Never Use Mocks For:**
+- LLM responses (use real OpenAI, Anthropic, etc.)
+- Agent routing decisions
+- Memory storage and retrieval
+- MCP tool discovery and invocation
+- Formation loading and validation
 
-1. **Robust Tool Discovery**: 105+ tools discovered across 4 MCP servers
-2. **Complex Orchestration**: Multi-MCP workflows execute seamlessly
-3. **Clean Shutdown**: `formation.shutdown()` resolves async generator issues
-4. **Credential Isolation**: User credentials properly isolated
-5. **Error Handling**: Graceful handling of permissions, missing files, dangerous ops
-6. **Transport Flexibility**: Command, HTTP SSE, and Streamable transports all working
-
-Key insights:
-- Use `formation.shutdown(0)` for clean exits
-- Always collect streaming responses with `async for`
-- Real MCP servers reveal actual capabilities (e.g., GitHub has no gist tools)
-- Credential management works at both formation and user levels
-- Multi-MCP orchestration enables powerful workflows
+This approach reveals real integration issues and validates actual user experience rather than mocked behavior.
