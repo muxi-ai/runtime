@@ -2,6 +2,7 @@
 """Test 2D1: Buffer Memory Modes (Local vs Remote)"""
 
 import sys
+import os
 sys.path.insert(0, ".")
 import asyncio
 from src.muxi.runtime.formation.formation import Formation
@@ -30,18 +31,14 @@ async def test_local_buffer_memory():
         print("Testing local buffer memory context...")
 
         # Add context
-        response1 = await overlord.chat(
-            "My name is Alice and I work at TechCorp.", 
-            user_id="alice"
-        )
+        response1 = await overlord.chat("My name is Alice and I work at TechCorp.", user_id="alice"
+        , use_async=False)
         response1_text = await collect_stream(response1)
         print("  - Initial context added")
 
         # Query context
-        response2 = await overlord.chat(
-            "What's my name?", 
-            user_id="alice"
-        )
+        response2 = await overlord.chat("What's my name?", user_id="alice"
+        , use_async=False)
         response2_text = await collect_stream(response2)
         alice_remembered = "alice" in response2_text.lower()
         print(f"  - Name remembered: {'✅' if alice_remembered else '❌'}")
@@ -51,16 +48,12 @@ async def test_local_buffer_memory():
         
         # Fill the buffer with more messages
         for i in range(15):  # Buffer size is 10 with multiplier 5 = 50 total
-            await overlord.chat(
-                f"Message {i}: This is test content to fill the buffer.",
-                user_id="alice"
-            )
+            await overlord.chat(f"Message {i}: This is test content to fill the buffer.", user_id="alice"
+            , use_async=False)
         
         # Check if early context is still remembered
-        response3 = await overlord.chat(
-            "Do you remember where I work?",
-            user_id="alice"
-        )
+        response3 = await overlord.chat("Do you remember where I work?", user_id="alice"
+        , use_async=False)
         response3_text = await collect_stream(response3)
         techcorp_remembered = "techcorp" in response3_text.lower()
         print(f"  - Original context after buffer fill: {'⚠️ May be forgotten' if not techcorp_remembered else '✅ Still remembered'}")
@@ -98,33 +91,25 @@ async def test_remote_buffer_memory():
         print("Testing remote buffer memory context...")
 
         # Add context
-        response1 = await overlord.chat(
-            "My name is Bob and I'm a software engineer.",
-            user_id="bob"
-        )
+        response1 = await overlord.chat("My name is Bob and I'm a software engineer.", user_id="bob"
+        , use_async=False)
         response1_text = await collect_stream(response1)
         print("  - Initial context added")
 
         # Query context  
-        response2 = await overlord.chat(
-            "What's my profession?",
-            user_id="bob"
-        )
+        response2 = await overlord.chat("What's my profession?", user_id="bob"
+        , use_async=False)
         response2_text = await collect_stream(response2)
         engineer_remembered = "engineer" in response2_text.lower() or "software" in response2_text.lower()
         print(f"  - Profession remembered: {'✅' if engineer_remembered else '❌'}")
 
         # Test technical context
-        response3 = await overlord.chat(
-            "I specialize in Python and machine learning.",
-            user_id="bob"
-        )
+        response3 = await overlord.chat("I specialize in Python and machine learning.", user_id="bob"
+        , use_async=False)
         response3_text = await collect_stream(response3)
         
-        response4 = await overlord.chat(
-            "What technical skills have I mentioned?",
-            user_id="bob"
-        )
+        response4 = await overlord.chat("What technical skills have I mentioned?", user_id="bob"
+        , use_async=False)
         response4_text = await collect_stream(response4)
         technical_remembered = ("python" in response4_text.lower() or "machine learning" in response4_text.lower())
         print(f"  - Technical content found: {'✅' if technical_remembered else '❌'}")
@@ -206,4 +191,4 @@ async def main():
 
 if __name__ == "__main__":
     result = asyncio.run(main())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

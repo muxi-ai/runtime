@@ -153,7 +153,7 @@ async def test_automatic_context_extraction():
         response1 = await overlord.chat(
             "Hi, I'm Alice and I work on Python machine learning projects.",
             user_id="test_user"
-        )
+        , use_async=False)
         # Collect response
         chunks = []
         async for chunk in response1:
@@ -161,20 +161,16 @@ async def test_automatic_context_extraction():
         response1_text = ''.join(chunks)
         
         # Send another message
-        response2 = await overlord.chat(
-            "I love using TensorFlow and PyTorch for deep learning.",
-            user_id="test_user"
-        )
+        response2 = await overlord.chat("I love using TensorFlow and PyTorch for deep learning.", user_id="test_user"
+        , use_async=False)
         chunks = []
         async for chunk in response2:
             chunks.append(chunk)
         response2_text = ''.join(chunks)
         
         # Query to see if context was extracted
-        response3 = await overlord.chat(
-            "What do you know about me?",
-            user_id="test_user"
-        )
+        response3 = await overlord.chat("What do you know about me?", user_id="test_user"
+        , use_async=False)
         chunks = []
         async for chunk in response3:
             chunks.append(chunk)
@@ -205,6 +201,107 @@ async def test_automatic_context_extraction():
                 pass
 
 
+async def test_automatic_context_usage():
+    """Test 2G4: Verify system applies stored context to responses"""
+    print("\n=== Testing Automatic Context Usage ===")
+    
+    formation = None
+    overlord = None
+    try:
+        formation = Formation()
+        await formation.load("test-formations/formation-memory/formation-auto-extract.yaml")
+        overlord = await formation.start_overlord()
+        
+        print("Setting up user context...")
+        
+        # Test 1: Name recall
+        print("\n1. Testing name recall...")
+        await overlord.chat("My name is Jennifer Lopez", user_id="context_test_user", use_async=False)
+        await asyncio.sleep(2)  # Give time for extraction
+        
+        response = await overlord.chat("What's my name?", user_id="context_test_user", use_async=False)
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        response_text = ''.join(chunks)
+        
+        name_recalled = "jennifer" in response_text.lower()
+        print(f"   - Name recall: {'✅ PASS' if name_recalled else '❌ FAIL'}")
+        print(f"   - Response: {response_text[:100]}...")
+        
+        # Test 2: Preference-based recommendation
+        print("\n2. Testing preference-based recommendations...")
+        await overlord.chat("I'm vegetarian and I love spicy food", user_id="context_test_user", use_async=False)
+        await asyncio.sleep(2)
+        
+        response = await overlord.chat("What restaurant should I go to?", user_id="context_test_user", use_async=False)
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        response_text = ''.join(chunks)
+        
+        preference_used = ("vegetarian" in response_text.lower() or "spicy" in response_text.lower())
+        print(f"   - Preference context used: {'✅ PASS' if preference_used else '❌ FAIL'}")
+        print(f"   - Response mentions: vegetarian={bool('vegetarian' in response_text.lower())}, spicy={bool('spicy' in response_text.lower())}")
+        
+        # Test 3: Professional context
+        print("\n3. Testing professional context...")
+        await overlord.chat("I'm a graphic designer and I specialize in logo design", user_id="context_test_user", use_async=False)
+        await asyncio.sleep(2)
+        
+        response = await overlord.chat("What do I do for work?", user_id="context_test_user", use_async=False)
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        response_text = ''.join(chunks)
+        
+        profession_recalled = ("graphic designer" in response_text.lower() or "logo" in response_text.lower())
+        print(f"   - Professional context recalled: {'✅ PASS' if profession_recalled else '❌ FAIL'}")
+        print(f"   - Response: {response_text[:100]}...")
+        
+        # Test 4: Combined context usage
+        print("\n4. Testing combined context usage...")
+        response = await overlord.chat("Can you tell me about myself?", user_id="context_test_user", use_async=False)
+        chunks = []
+        async for chunk in response:
+            chunks.append(chunk)
+        response_text = ''.join(chunks)
+        
+        # Check how many context elements are included
+        context_elements = {
+            "name": "jennifer" in response_text.lower() or "lopez" in response_text.lower(),
+            "diet": "vegetarian" in response_text.lower(),
+            "preference": "spicy" in response_text.lower(),
+            "profession": "graphic designer" in response_text.lower() or "designer" in response_text.lower(),
+            "specialty": "logo" in response_text.lower()
+        }
+        
+        elements_used = sum(context_elements.values())
+        print(f"   - Context elements used: {elements_used}/5")
+        print(f"   - Details: {context_elements}")
+        
+        # Overall test passes if at least 3 out of 4 individual tests pass
+        tests_passed = sum([name_recalled, preference_used, profession_recalled, elements_used >= 3])
+        success = tests_passed >= 3
+        
+        print(f"\n✓ Automatic context usage: {'SUCCESS' if success else 'FAILED'}")
+        print(f"  - Individual tests passed: {tests_passed}/4")
+        
+        return success
+        
+    except Exception as e:
+        print(f"❌ Automatic context usage test failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+    finally:
+        if overlord and formation:
+            try:
+                await formation.stop_overlord()
+            except:
+                pass
+
+
 async def main():
     """Run all advanced memory feature tests"""
     print("🧠 Testing Advanced Memory Features")
@@ -214,6 +311,7 @@ async def main():
     fifo_result = await test_fifo_memory_management()
     vector_search_result = await test_buffer_vector_search()
     context_extraction_result = await test_automatic_context_extraction()
+    context_usage_result = await test_automatic_context_usage()
     
     # Summary
     print("\n" + "=" * 60)
@@ -232,7 +330,11 @@ async def main():
     print("   - User information captured from conversation")
     print("   - Context available in subsequent messages")
     
-    all_passed = fifo_result and vector_search_result and context_extraction_result
+    print(f"\n4. Automatic Context Usage: {'✅ PASS' if context_usage_result else '❌ FAIL'}")
+    print("   - System applies stored context to responses")
+    print("   - Maintains conversation continuity")
+    
+    all_passed = fifo_result and vector_search_result and context_extraction_result and context_usage_result
     
     print(f"\n🎯 OVERALL RESULT: {'✅ ALL TESTS PASSED' if all_passed else '❌ SOME TESTS FAILED'}")
     
@@ -246,4 +348,4 @@ async def main():
 
 if __name__ == "__main__":
     result = asyncio.run(main())
-    sys.exit(0 if result else 1)
+    os._exit(0 if result else 1)

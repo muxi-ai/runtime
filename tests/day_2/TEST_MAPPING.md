@@ -60,7 +60,68 @@ These support the main test groups:
 - `test_faissx_auth_simple_helper.py` - Simple auth testing
 - `test_agent_loading_debug_helper.py` - Agent loading debugging
 
+## Test Group 2H: Buffer Memory Context Enhancement & Retrieval ✅
+- **2H1: Basic Buffer Memory via Chat Flow** → Tested in multiple files
+- **2H2: Context-Dependent Message Understanding** → Tested in context enhancement
+
+## Test Group 2I: Natural Language Memory Extraction (NEW) ✅
+- **2I1: Natural Language Memory Extraction** → `test_2i1_natural_language_extraction.py`
+  - Memories stored as sentences, not key-value pairs
+  - Age converted to birth year
+  - Natural language format verification
+- **2I2: Complex Multi-Fact Extraction** → `test_2i2_complex_extraction.py`
+  - Multiple facts from single message
+  - CEO, company, product extraction
+  - Distributed across appropriate collections
+- **2I3: Context-Aware Extraction** → `test_2i3_context_aware_extraction.py`
+  - Pronoun resolution using context
+  - Building on previous information
+  - Enhanced context for extraction
+
+## Test Group 2J: Collection-Based Memory Organization (NEW) ✅
+- **2J1: Collection Field Usage** → `test_2j1_collection_field_usage.py`
+  - No collections table required
+  - Memories tagged with collection values
+  - Collection-based filtering works
+
+## Test Group 2K: Memory System Integration (NEW) ✅
+- **2K1: Enhanced Prompt Integration** → `test_2k1_enhanced_prompt_integration.py`
+  - Long-term memories in prompts
+  - Buffer context included
+  - User profile integration
+- **2K2: Memory Priority** → `test_2k2_memory_priority.py`
+  - Important memories prioritized
+  - Health/safety info over noise
+  - Context window management
+
+## Test Group 2L: Database Optimization (NEW) ✅
+- **2L1: Database Optimization** → `test_2l1_database_optimization.py`
+  - GIN index on memories.text
+  - Collection index usage
+  - No collections table
+  - Credentials table optimization
+
+## Test Group 2M: Error Resilience (NEW) ✅
+- **2M1: Error Resilience** → `test_2m1_error_resilience.py`
+  - Chat continues despite extraction failures
+  - Buffer storage failures handled
+  - Database errors don't crash system
+  - Graceful degradation
+
+## Helper/Debug Tests
+These support the main test groups:
+- `test_shortterm_pattern_helper.py` - Short-term memory patterns
+- `test_faissx_configure_helper.py` - FAISSx configuration testing
+- `test_faissx_debugging_helper.py` - FAISSx debugging utilities
+- `test_faissx_read_helper.py` - FAISSx read verification
+- `test_faissx_auth_simple_helper.py` - Simple auth testing
+- `test_agent_loading_debug_helper.py` - Agent loading debugging
+
+## Enhanced Test Runner
+- `run_day2_enhanced_tests.py` - Runs all new enhanced memory tests (Groups 2I-2M)
+
 ## Notes
 - Some test numbers (like 2A2, 2A3) are consolidated into single test files that test multiple aspects
 - The test files are more comprehensive than individual test cases, often covering multiple requirements
-- Total unique test files: 7 main tests + 6 helper tests = 13 files
+- Total unique test files: 15 main tests + 6 helper tests = 21 files
+- All tests use real services via chat flow - NO MOCKS!

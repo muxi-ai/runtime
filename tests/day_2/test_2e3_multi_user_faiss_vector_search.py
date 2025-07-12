@@ -2,6 +2,7 @@
 """Test multi-user FAISSx vector search with tenant isolation"""
 
 import sys
+import os
 sys.path.insert(0, '.')
 import asyncio
 import time
@@ -460,3 +461,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    os._exit(0)

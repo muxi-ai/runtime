@@ -2,11 +2,12 @@
 """Test to verify database records are created properly"""
 
 import sys
+import os
 sys.path.insert(0, '.')
 import asyncio
 
 from src.muxi.runtime.services.db import get_database_manager
-from src.muxi.runtime.services.memory.long_term import LongTermMemory, User, Collection, Memory
+from src.muxi.runtime.services.memory.long_term import LongTermMemory, User, Memory
 from src.muxi.runtime.services.secrets.secrets_manager import SecretsManager
 from sqlalchemy import select, func
 
@@ -78,14 +79,7 @@ async def main():
         users = session.query(User).all()
         print(f"Total users: {len(users)}")
         for user in users:
-            print(f"  User ID: {user.id}, External ID: {user.external_user_id}, Hash: {user.external_user_id_hash[:10]}...")
-        
-        # Check collections table
-        print("\n--- COLLECTIONS TABLE ---")
-        collections = session.query(Collection).all()
-        print(f"Total collections: {len(collections)}")
-        for coll in collections:
-            print(f"  Collection ID: {coll.id}, Name: {coll.name}, User ID: {coll.user_id}, Description: {coll.description}")
+            print(f"  User ID: {user.id}, External ID: {user.external_user_id}, Formation: {user.formation_id}")
         
         # Check memories table
         print("\n--- MEMORIES TABLE ---")
@@ -131,3 +125,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    os._exit(0)
