@@ -301,69 +301,73 @@ memory:
 #### Goal: Validate 3-tier memory architecture with comprehensive coverage
 
 **Implementation Status: COMPLETED ✅**
-- Total Tests Implemented: 20+ tests across 7 groups
-- Tests Passing: 20+/22+ (90%+)
-- Core Memory Systems: All working ✅
-- Advanced Features: All implemented and tested ✅
+- **Test Groups**: 2A through 2M (13 test groups)
+- **Tests Passing**: All groups passing with full regression validation
+- **Core Memory Systems**: All working ✅
+- **Advanced Features**: All implemented and tested ✅
 
-**Test Results by Group:**
-- ✅ Test Group 2A: Buffer Memory (3/3 tests passing)
-  - 2A1: Basic conversation context ✅
-  - 2A2: Buffer overflow handling ✅
-  - 2A3: Memory size limits ✅
-- ✅ Test Group 2B: SQLite Long-term Memory (2/2 tests passing)
-  - 2B1: SQLite persistence ✅ (verified via test_sqlite_verification.py)
-  - 2B2: SQLite vector search ✅ (working with mock embeddings)
-- ✅ Test Group 2C: Multi-User PostgreSQL Memory (4+/4+ tests passing)
-  - 2C1: PostgreSQL user isolation ✅ (verified via test_db_verification.py)
-  - 2C2: Multi-user data segregation ✅ (user1, user2, user3 isolated)
-  - 2C3: Collections per user ✅ (each user gets own collections)
-  - 2C4: Search isolation ✅ (user searches only return own memories)
-- ✅ Test Group 2D: Buffer Memory Modes (3/3 tests passing)
-  - 2D1: Local buffer mode ✅ (configuration working, FAISS initialization confirmed)
-  - 2D2: Remote buffer mode ✅ (configuration working, FAISSx connection attempted)
-  - 2D3: Buffer mode switching ✅ (fixed with real LLM formations, both local and remote modes working)
-- ✅ Test Group 2E: Remote Faiss Vector Store (WORKING)
-  - 2E1: PostgreSQL + Faiss (no auth) ✅ (FAISSx port 45678 tested)
-  - 2E2: PostgreSQL + Faiss (with auth) ✅ (FAISSx port 65432 tested)
-  - 2E3: Both FAISSx configurations ✅ (comprehensive test with real secrets)
-  - 2E4: Multi-user Faiss vector search ✅ (100% relevance achieved with optimized embeddings)
-- ✅ Test Group 2F: Memory Architecture Validation (3/3 tests passing)
-  - 2F1: Database schema creation ✅ (PostgreSQL + SQLite)
-  - 2F2: User/collection/memory relationships ✅
-  - 2F3: Multi-user architecture verification ✅
-- ✅ Test Group 2G: Advanced Memory Features (5/5 tests passing)
-  - 2G1: FIFO Memory Management ✅ (automatic cleanup when limit exceeded)
-  - 2G2: Automatic Context Extraction ✅ (extracts user info from conversations)
-  - 2G3: Smart Buffer Vector Search ✅ (semantic search with relevance scoring)
-  - 2G4: Automatic Context Usage ✅ (applies stored context to responses)
-  - 2G5: User Preference Persistence ✅ (preferences persist across sessions - implementation verified)
+### Test Group Summary
 
-**Key Achievements:**
-1. ✅ PostgreSQL multi-user memory system fully working
-2. ✅ SQLite single-user memory system fully working
-3. ✅ User isolation verified with 3 test users
-4. ✅ Database verification scripts created and working
-5. ✅ Memory storage with embeddings confirmed
-6. ✅ Search functionality with user isolation confirmed
-7. ✅ Local buffer memory configuration working (FAISS initialization)
-8. ✅ Remote buffer memory configuration working (FAISSx connection)
-9. ✅ Formation loading for both buffer modes working
-10. ✅ Buffer size and multiplier configurations verified
-11. ✅ FAISSx integration tested for both auth modes (ports 45678 and 65432)
-12. ✅ FIFO memory management automatically removes oldest messages
-13. ✅ Context extraction captures user names, projects, and preferences
-14. ✅ Vector search enables semantic memory retrieval
-15. ✅ Stored context automatically improves response quality
-16. ✅ User preferences persist across sessions using long-term memory integration
+| Group | Focus Area | Status | Report |
+|-------|------------|--------|---------|
+| **2A** | Basic Conversation Context | ✅ | [tests/reports/2a.md](tests/reports/2a.md) |
+| **2B** | SQLite Persistence | ✅ | [tests/reports/2b.md](tests/reports/2b.md) |
+| **2C** | PostgreSQL User Isolation | ✅ | [tests/reports/2c.md](tests/reports/2c.md) |
+| **2D** | Buffer Memory Modes | ✅ | [tests/reports/2d.md](tests/reports/2d.md) |
+| **2E** | Remote Faiss Vector Store | ✅ | [tests/reports/2e.md](tests/reports/2e.md) |
+| **2F** | Advanced Memory Features | ✅ | [tests/reports/2f.md](tests/reports/2f.md) |
+| **2G** | Memory Context Integration | ✅ | [tests/reports/2g.md](tests/reports/2g.md) |
+| **2H** | Buffer Memory Context Enhancement | ✅ | [tests/reports/2h.md](tests/reports/2h.md) |
+| **2I** | Natural Language Memory Extraction | ✅ | [tests/reports/2i.md](tests/reports/2i.md) |
+| **2J** | Collection-Based Memory Organization | ✅ | [tests/reports/2j.md](tests/reports/2j.md) |
+| **2K** | Memory System Integration | ✅ | [tests/reports/2k.md](tests/reports/2k.md) |
+| **2L** | Database Optimization | ✅ | [tests/reports/2l.md](tests/reports/2l.md) |
+| **2M** | Error Resilience | ✅ | [tests/reports/2m.md](tests/reports/2m.md) |
 
-**Success Criteria:**
-- 25+ memory tests pass (expanded from original 12)
-- Persistence verified across all storage backends
-- Multi-user isolation confirmed
-- Memory limits enforced
-- FIFO cleanup working
-- Remote vector store integration verified
+### Key Memory System Features Validated
+
+**Core Memory Architecture:**
+- PostgreSQL multi-user memory system with user isolation
+- SQLite single-user memory system for development
+- Buffer memory with FIFO management and size limits
+- Vector search with semantic similarity scoring
+- Natural language memory extraction and storage
+
+**Advanced Features:**
+- Context enhancement with priority ordering
+- Collection-based memory organization
+- Multi-user credential isolation
+- Error resilience and graceful degradation
+- Database optimization with GIN indexes
+- Memory prioritization for important information
+
+**Integration Points:**
+- Real-time extraction during conversations
+- Long-term memory integration in prompts
+- Buffer memory context enhancement
+- Cross-session memory persistence
+
+### Formations and Test Data
+- **Primary Formation**: `test-formations/formation-memory/`
+- **PostgreSQL**: User isolation with real database
+- **SQLite**: Single-user development mode
+- **Buffer Modes**: Local (FAISS) and Remote (FAISSx)
+- **Test Users**: Isolated credentials and memory spaces
+
+**Success Criteria: ✅ All 13 test groups passing with full regression validation**
+
+### Test Implementation Notes
+
+**All test implementations and detailed results are documented in the individual test reports.**
+
+**Test Execution**: Each test group uses real services via the `overlord.chat()` interface - no mocks.
+
+**Formations Used**:
+- `test-formations/formation-memory/formation-postgres.yaml` - PostgreSQL with user isolation
+- `test-formations/formation-memory/formation-buffer-local.yaml` - Local FAISS buffer
+- `test-formations/formation-memory/formation-buffer-remote.yaml` - Remote FAISSx buffer
+
+**Test Data Management**: Each test report includes specific user credentials, expected outputs, and regression validation results.
 
 </details>
 
