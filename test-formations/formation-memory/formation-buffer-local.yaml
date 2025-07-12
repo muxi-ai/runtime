@@ -19,7 +19,7 @@ memory:
     max_memory_mb: 1
     fifo_interval_min: 5
     vector_dimension: 1536
-  
+
   buffer:
     size: 10
     multiplier: 5
