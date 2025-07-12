@@ -3334,7 +3334,7 @@ class Overlord:
                     request_id=request_id,
                 )
                 observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_STORED,
+                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "request_id": request_id,
@@ -3346,7 +3346,7 @@ class Overlord:
             except Exception as e:
                 # Log error but don't fail the async request
                 observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_STORE_FAILED,
+                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "request_id": request_id,
