@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, '../src/muxi/runtime/utils')
 
 # Import the storage classes
+sys.path.insert(0, 'utils')
 from a2a_registry import RegistryStorage, AgentCard  # noqa: E402
 
 

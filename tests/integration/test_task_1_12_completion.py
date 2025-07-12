@@ -127,7 +127,7 @@ class Task112CompletionTest:
         """Start the A2A registry server"""
         try:
             # Start the registry server as a subprocess
-            registry_script = "./src/muxi/runtime/utils/a2a_registry.py"
+            registry_script = "./utils/a2a_registry.py"
             self.registry_process = subprocess.Popen([
                 sys.executable, registry_script
             ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)

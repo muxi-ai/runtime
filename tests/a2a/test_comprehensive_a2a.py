@@ -406,7 +406,7 @@ async def main():
     registry_url = "http://localhost:9090"
     print(f"🎯 Testing against registry server: {registry_url}")
     print("🏃 Make sure the mock A2A registry server is running!")
-    print("   Run: python runtime/src/muxi/runtime/utils/a2a_registry.py")
+    print("   Run: python runtime/utils/a2a_registry.py")
     print()
 
     # Run the comprehensive test

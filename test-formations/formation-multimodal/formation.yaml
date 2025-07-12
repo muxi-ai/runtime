@@ -30,7 +30,7 @@ runtime:
 async:
   threshold_seconds: 30  # Switch to async mode for requests taking longer than this (seconds)
   enable_estimation: true  # Allow overlord to estimate processing time for smart async decisions
-  webhook_url: "https://webhook.site/ef0cfa0f-4d38-443d-b459-ed5233fe6fbd"  # Default webhook URL for async completion notifications
+  webhook_url: "http://127.0.0.1:8765/"  # Default webhook URL for async completion notifications
 
 logging:
   enabled: true
