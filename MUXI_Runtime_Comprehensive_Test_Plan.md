@@ -242,11 +242,11 @@ memory:
 
 **Implementation Status: COMPLETED ✅**
 - **Test Groups Completed**: 2 groups (1A Formation Loading, 1B Agent Communication)
-- **Tests Passing**: 7/7 (100% success rate)
+- **Tests Passing**: 10/10 (100% success rate)
 - **Test Reports**: [tests/reports/1a.md](tests/reports/1a.md), [tests/reports/1b.md](tests/reports/1b.md)
 - **Real Service Integration**: All tests use actual OpenAI models, no mocks
 
-### Test Group 1A: Formation Loading (5/5 tests ✅)
+### Test Group 1A: Formation Loading (6/6 tests ✅)
 
 **Comprehensive Test Coverage:**
 - **1A1**: Basic YAML formation loading from directory structure
@@ -254,6 +254,7 @@ memory:
 - **1A3**: Formation validation failures (8 invalid scenarios)
 - **1A4**: Flattened formation loading with inline agents and MCPs
 - **1A5**: Remote memory configuration validation (6 validation rules)
+- **1A6**: Simple formation v2 with IntentDetectionService validation
 
 **Key Achievements:**
 - Formation loading from both directory and file structures
@@ -263,7 +264,7 @@ memory:
 - Comprehensive error handling for invalid formations
 - End-to-end chat functionality verification
 
-### Test Group 1B: Basic Agent Communication (2/2 tests ✅)
+### Test Group 1B: Basic Agent Communication (4/4 tests ✅)
 
 **Chat Flow Validation:**
 - **1B1**: Single agent response testing with actual user interactions
@@ -273,12 +274,17 @@ memory:
   - 👤 "Calculate 2+2" → 🤖 "4" ✅ Math routing confirmed
   - 👤 "What are the latest trends in renewable energy?" → ✅ Research routing
   - 👤 "How are you today?" → ✅ General conversation routing
+- **1B3**: Basic formation with Python dict configuration loading
+- **1B4**: Simple chat with agent structure validation and initialization
 
 **Technical Validations:**
 - Agent specialization (Code Assistant, Research Specialist, General Assistant)
 - Intelligent agent selection based on query type and context
 - Memory integration with conversation context across interactions
 - Async processing for complex queries (>30s threshold detection)
+- IntentDetectionService validation and schema v1.0.0 compliance
+- Python dict configuration loading and chat structure validation
+- Agent object structure inspection and initialization details
 
 ### Formations Tested:
 - `test-formations/formation-basic/` - Single-agent with MCP integration
