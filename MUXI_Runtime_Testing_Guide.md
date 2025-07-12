@@ -589,3 +589,317 @@ async def test_remote_memory_validation():
 - Formation loading and validation
 
 This approach reveals real integration issues and validates actual user experience rather than mocked behavior.
+
+## Testing Async Requests with Webhooks
+
+### 19. Understanding Async Processing in MUXI
+
+MUXI Runtime supports async processing for long-running tasks. Async responses can occur even when `use_async` is not specified, based on:
+- Formation settings and agent configurations
+- System determination that a request needs async processing
+- Large file processing (PDFs, videos, audio)
+- Complex multi-step analyses
+- Long-running computations
+- When explicitly requested with `use_async=True`
+
+**Important:** Always check the response structure to determine if it's async, don't assume based on request parameters.
+
+### 20. Basic Async Response Structure
+
+```python
+# Async response format
+{
+    "status": "processing",
+    "request_id": "req_xxxxx", 
+    "webhook_url": "http://your-webhook-url/",
+    "message": "Processing async request..."
+}
+```
+
+### 21. Setting Up Webhook Testing
+
+**1. Install and run the webhook test server:**
+```bash
+# In a separate terminal
+python utils/webhook_server.py
+# Server runs on http://127.0.0.1:8765/
+```
+
+**2. Import webhook utilities:**
+```python
+from utils.webhook_test_utils import (
+    setup_webhook_test,
+    check_async_response_with_webhook,
+    extract_request_id,
+    wait_for_webhook_result,
+)
+```
+
+### 22. Basic Async Test Pattern (Recommended)
+
+```python
+def test_processing_with_dynamic_async(overlord):
+    """Test that handles both sync and async responses dynamically"""
+    
+    # Clear webhook logs before test
+    setup_webhook_test()
+    
+    # Send request - async may trigger based on formation or content
+    response = get_response(
+        overlord.chat(
+            user_id="test_user",
+            message="Complex request that might process async",
+            # Note: Not specifying use_async - let system decide
+        )
+    )
+    
+    # Universal checker that handles both sync and async
+    result, was_async = check_response_with_webhook(
+        response,
+        expected_keywords=['keyword1', 'keyword2'],
+        min_keywords=2,
+        min_length=100,
+        test_name="Dynamic Processing Test"
+    )
+    
+    if was_async:
+        print(f"✅ Processed asynchronously via webhook")
+    else:
+        print(f"✅ Processed synchronously")
+    
+    # Result contains the actual response text either way
+    assert len(result) > 100, "Should have substantial response"
+```
+
+### 23. Advanced Webhook Verification
+
+**Custom webhook verification logic:**
+```python
+def test_specific_async_behavior(overlord):
+    """Test with custom webhook verification"""
+    
+    response = get_response(
+        overlord.chat(
+            user_id="test_user", 
+            message="Analyze this data and return JSON",
+            use_async=True,
+        )
+    )
+    
+    # Manual webhook checking for custom logic
+    if isinstance(response, dict) and response.get('status') == 'processing':
+        request_id = response.get('request_id')
+        
+        # Wait up to 60 seconds for webhook
+        result = wait_for_webhook_result(request_id, timeout=60)
+        
+        if result:
+            # Custom verification
+            assert isinstance(result, str), "Expected string result"
+            
+            # Try to parse as JSON
+            import json
+            try:
+                data = json.loads(result)
+                assert 'analysis' in data, "Expected analysis field"
+            except json.JSONDecodeError:
+                pytest.fail("Expected JSON response")
+```
+
+### 24. Testing File Processing with Webhooks
+
+```python
+def test_large_file_async(overlord):
+    """Test large file processing with webhook"""
+    
+    # Read large file
+    with open("large_document.pdf", "rb") as f:
+        content = f.read()
+    
+    response = get_response(
+        overlord.chat(
+            user_id="test_file_user",
+            message="Extract all text and summarize",
+            files=[{
+                "filename": "large_document.pdf",
+                "content": content,
+                "content_type": "application/pdf",
+                "size": len(content),
+            }],
+            use_async=True,  # Force async for large files
+        )
+    )
+    
+    # Verify webhook delivers processed content
+    webhook_result = check_async_response_with_webhook(
+        response,
+        expected_keywords=['summary', 'document', 'page', 'text'],
+        min_keywords=2,
+        min_length=200,
+        test_name="Large PDF Processing"
+    )
+```
+
+### 25. Common Webhook Testing Issues and Solutions
+
+**Issue 1: Webhook not received**
+```python
+# Solution: Check observability events are correct
+# The error "MEMORY_STORE_FAILED" was due to incorrect event names
+# Fixed by using: MEMORY_SHORT_TERM_UPDATED
+```
+
+**Issue 2: Test continues after webhook**
+```python
+# Solution: Exit immediately after webhook verification
+if webhook_received:
+    print("✅ Webhook received, test complete")
+    # Use os._exit(0) if needed to force exit
+```
+
+**Issue 3: Can't find request ID in webhook**
+```python
+# Webhooks use 'id' field, not 'request_id'
+webhook_req_id = body.get('id') or body.get('request_id')
+```
+
+### 26. Webhook Test Utilities Reference
+
+**setup_webhook_test()**
+- Clears webhook logs
+- Prepares for new test
+
+**check_response_with_webhook(response, expected_keywords, min_keywords, min_length, timeout, test_name)** *(Recommended)*
+- Universal checker for both sync and async responses
+- Automatically detects async based on response structure
+- Returns tuple of (result_text, was_async)
+- Handles dict and string response formats
+
+**check_async_response_with_webhook(response, expected_keywords, min_keywords, min_length, test_name)**
+- Legacy function for backward compatibility
+- Use check_response_with_webhook() for new tests
+- Returns webhook result text or None
+
+**is_async_response(response)**
+- Checks if response structure indicates async processing
+- Handles both dict format (status, webhook_url, request_id) and string format
+
+**extract_request_id(response)**
+- Extracts request ID from async response
+- Handles different response formats
+
+**wait_for_webhook_result(request_id, timeout=30)**
+- Waits for specific webhook by request ID
+- Returns result text when found
+- Times out after specified seconds
+
+### 27. Defensive Async Testing Approach
+
+Since async responses can be triggered by formation settings or system determination, not just `use_async` parameter:
+
+```python
+def test_with_defensive_async_handling(overlord):
+    """Example of defensive async testing"""
+    
+    # Always setup webhook testing, even if you don't expect async
+    setup_webhook_test()
+    
+    # Send any request
+    response = get_response(
+        overlord.chat(
+            user_id="test_user",
+            message="Analyze this document",
+            files=[document],
+            # Not specifying use_async - let formation/system decide
+        )
+    )
+    
+    # Always use universal checker
+    result, was_async = check_response_with_webhook(
+        response,
+        expected_keywords=['document', 'analysis'],
+        test_name="Document Analysis"
+    )
+    
+    # Test passes whether response was sync or async
+    assert 'document' in result.lower()
+    print(f"Processing mode: {'async' if was_async else 'sync'}")
+```
+
+### 28. Best Practices for Async Testing
+
+1. **Always run webhook server** before any tests that might trigger async
+2. **Use check_response_with_webhook()** instead of assuming sync/async
+3. **Clear logs** between tests with `setup_webhook_test()`
+4. **Don't assume use_async parameter controls behavior** - formation settings override
+5. **Use appropriate timeouts** - video processing may take longer than text
+6. **Verify content**, not just webhook receipt
+7. **Handle both response types** in the same test gracefully
+8. **Exit cleanly** after webhook verification
+
+### 29. Example: Complete Async Test Suite
+
+```python
+import pytest
+from pathlib import Path
+from utils.webhook_test_utils import setup_webhook_test, check_response_with_webhook
+
+class TestDynamicProcessing:
+    
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        """Setup webhook testing for all tests"""
+        setup_webhook_test()
+    
+    def test_text_analysis(self, overlord):
+        """Test text analysis - handles both sync and async"""
+        response = get_response(
+            overlord.chat(
+                user_id="test_user",
+                message="Write a comprehensive analysis of renewable energy trends",
+                # Let formation/system decide sync vs async
+            )
+        )
+        
+        result, was_async = check_response_with_webhook(
+            response,
+            expected_keywords=['renewable', 'energy', 'solar', 'wind'],
+            min_keywords=2,
+            min_length=200,
+            test_name="Energy Analysis"
+        )
+        
+        # Test passes regardless of processing mode
+        assert len(result) > 200
+        print(f"Processed via: {'webhook' if was_async else 'direct response'}")
+    
+    def test_multimodal_processing(self, overlord):
+        """Test file processing - adapts to sync/async dynamically"""
+        for file_type in ['pdf', 'image', 'audio']:
+            response = get_response(
+                overlord.chat(
+                    user_id=f"test_{file_type}_user",
+                    message=f"Analyze this {file_type} file",
+                    files=[get_test_file(file_type)],
+                    # System determines async based on file size/type
+                )
+            )
+            
+            result, was_async = check_response_with_webhook(
+                response,
+                expected_keywords=[file_type, 'analysis', 'content'],
+                min_keywords=2,
+                min_length=100,
+                test_name=f"{file_type.upper()} Processing"
+            )
+            
+            # Verify we got meaningful analysis
+            assert file_type in result.lower()
+            
+            if was_async:
+                print(f"✅ {file_type} processed asynchronously")
+            else:
+                print(f"✅ {file_type} processed synchronously")
+```
+
+This comprehensive async testing approach ensures reliable validation of MUXI's async processing capabilities with real webhook delivery.
