@@ -186,3 +186,4 @@ test-docs/spreadsheet.csv
 test-docs/spreadsheet.xlsx
 .claude/.mcp.json
 .claude/.mcp.json
+webhook_log.json
