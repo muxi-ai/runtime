@@ -51,6 +51,9 @@ class ObservabilityManager:
         self._streams_initialized = False
         self._health_monitoring_started = False
 
+        # Track async requests to prevent premature completion
+        self._async_requests = set()
+
     def _create_event_logger(self) -> EventLogger:
         """Create event logger from configuration."""
         logging_config = self.config.get("logging", {})
@@ -128,6 +131,18 @@ class ObservabilityManager:
         if self._health_monitoring_started:
             await self.health_monitor.stop()
 
+    def mark_request_async(self, request_id: str) -> None:
+        """Mark a request as async to prevent premature completion.
+
+        This should be called after determining that a request will be processed
+        asynchronously. The track_request context manager will not mark the request
+        as completed when it exits for async requests.
+
+        Args:
+            request_id: The request ID to mark as async
+        """
+        self._async_requests.add(request_id)
+
     @contextmanager
     def track_request(
         self,
@@ -170,16 +185,19 @@ class ObservabilityManager:
         try:
             yield context
 
-            # Mark as completed
-            context.complete()
+            # Only mark as completed if not an async request
+            # Async requests will be completed by the background task
+            if context.id not in self._async_requests:
+                # Mark as completed
+                context.complete()
 
-            # Emit request completed event using observe() to respect context
-            observe(
-                event_type=ConversationEvents.REQUEST_COMPLETED,
-                level=EventLevel.INFO,
-                data={},
-                description=f"Request {context.id} completed in {context.duration_ms}ms",
-            )
+                # Emit request completed event using observe() to respect context
+                observe(
+                    event_type=ConversationEvents.REQUEST_COMPLETED,
+                    level=EventLevel.INFO,
+                    data={},
+                    description=f"Request {context.id} completed in {context.duration_ms}ms",
+                )
 
         except Exception as e:
             # Mark as failed
@@ -198,6 +216,8 @@ class ObservabilityManager:
             from .context import _current_request_context
 
             _current_request_context.set(None)
+
+            # Don't remove from async set here - let the background task handle it
 
     async def emit_conversation_event(
         self,

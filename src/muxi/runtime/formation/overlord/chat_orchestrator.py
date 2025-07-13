@@ -203,6 +203,9 @@ class ChatOrchestrator:
             )
 
             if should_use_async:
+                # Mark this request as async to prevent premature completion
+                self.overlord.observability_manager.mark_request_async(request_id)
+
                 # Execute async request
                 return await self._execute_async_request(
                     message=enhanced_message,

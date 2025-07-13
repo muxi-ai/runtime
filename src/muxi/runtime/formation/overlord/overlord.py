@@ -3440,9 +3440,6 @@ class Overlord:
                     description=f"Request {request_id}: No webhook URL configured, skipping notification",
                 )
 
-            # Auto-remove completed request AFTER webhook delivery
-            await self.request_tracker.remove_request(request_id)
-
         except Exception as e:
             import traceback
 
@@ -3487,8 +3484,13 @@ class Overlord:
                 # ConversationEvents.WEBHOOK_FAILED
                 _ = None  # remove this after implementing observability
 
+        finally:
             # Auto-remove failed request AFTER webhook delivery
             await self.request_tracker.remove_request(request_id)
+
+            # Always remove from async requests set when the method completes
+            # This ensures cleanup happens regardless of success or failure
+            self.observability_manager._async_requests.discard(request_id)
 
     async def _process_sync_chat(
         self,
@@ -4793,6 +4795,8 @@ Token:"""
                     # Auto-remove failed request to prevent memory buildup
                     await self.request_tracker.remove_request(request_id)
 
+                    # Remove from async requests set even on failure
+                    self.observability_manager._async_requests.discard(request_id)
                     return False
 
             return False
@@ -4811,6 +4815,10 @@ Token:"""
 
                 # Auto-remove failed request to prevent memory buildup
                 await self.request_tracker.remove_request(request_id)
+
+                # Remove from async requests set even on failure
+                self.observability_manager._async_requests.discard(request_id)
+
             except Exception:
                 pass  # Avoid nested exceptions
 
