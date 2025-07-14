@@ -29,6 +29,9 @@ class SystemEvents(Enum):
     SERVICE_STARTED = "service.started"
     # When server is fully initialized and ready
 
+    CLEANUP = "cleanup"
+    # When server is cleaning up
+
     # ===================================================================
     # MCP SYSTEM EVENTS
     # ===================================================================
@@ -552,6 +555,9 @@ class ConversationEvents(Enum):
 
     AGENT_TOOL_CHAIN_COMPLETED = "agent.tool_chain.completed"
     # When agent completes entire tool chaining sequence
+
+    AGENT_TOOL_CHAIN_FAILED = "agent.tool_chain.failed"
+    # When agent fails the entire tool chaining sequence
 
     # ===================================================================
     # MODEL OPERATIONS

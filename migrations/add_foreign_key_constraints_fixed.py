@@ -121,15 +121,21 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 3:
         print("Usage: python add_foreign_key_constraints_fixed.py <up|down> <connection_string>")
+        print("Example: python add_foreign_key_constraints_fixed.py up postgresql://user:pass@localhost/db")
         sys.exit(1)
 
     direction = sys.argv[1]
     connection_string = sys.argv[2]
+
+    # Basic validation
+    if not connection_string.startswith(('postgresql://', 'sqlite://')):
+        print("❌ Error: Connection string must start with 'postgresql://' or 'sqlite://'")
+        sys.exit(1)
 
     if direction == "up":
         asyncio.run(migrate_up(connection_string))
     elif direction == "down":
         asyncio.run(migrate_down(connection_string))
     else:
-        print("Direction must be 'up' or 'down'")
+        print("❌ Error: Direction must be 'up' or 'down'")
         sys.exit(1)

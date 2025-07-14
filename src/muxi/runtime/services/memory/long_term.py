@@ -284,6 +284,46 @@ class LongTermMemory:
 
     # Collection table removed - no longer needed
 
+    def _extract_embedding_from_response(self, embedding_response: Any) -> List[float]:
+        """
+        Extract embedding vector from various response formats.
+        
+        This method handles different embedding response formats from various providers:
+        - OpenAI-style: response.data[0].embedding
+        - Alternative: response.embeddings[0].embedding
+        - Direct: response.embedding
+        - List: Already a list of floats
+        
+        Args:
+            embedding_response: The response from embedding model
+            
+        Returns:
+            List of floats representing the embedding vector
+        """
+        # OpenAI-style response: EmbeddingResponse.data[0].embedding
+        if hasattr(embedding_response, "data") and embedding_response.data:
+            embedding_item = embedding_response.data[0]
+            if hasattr(embedding_item, "embedding"):
+                return embedding_item.embedding
+            else:
+                return embedding_item
+        # Alternative format: might have embeddings list
+        elif hasattr(embedding_response, "embeddings") and embedding_response.embeddings:
+            embedding_item = embedding_response.embeddings[0]
+            if hasattr(embedding_item, "embedding"):
+                return embedding_item.embedding
+            else:
+                return embedding_item
+        # Direct embedding attribute
+        elif hasattr(embedding_response, "embedding"):
+            return embedding_response.embedding
+        # Already a list of floats
+        elif isinstance(embedding_response, list):
+            return embedding_response
+        else:
+            # Last resort - try to use as is
+            return embedding_response
+
     async def add(
         self,
         content: str,
@@ -330,29 +370,7 @@ class LongTermMemory:
                 raise ValueError("No embedding model available for generating embeddings")
             embedding_response = await self.embedding_model.embed(content)
             # Extract the actual embedding vector from the response
-            if hasattr(embedding_response, "data") and embedding_response.data:
-                # OpenAI-style response: EmbeddingResponse.data[0].embedding
-                embedding_item = embedding_response.data[0]
-                if hasattr(embedding_item, "embedding"):
-                    embedding = embedding_item.embedding
-                else:
-                    embedding = embedding_item
-            elif hasattr(embedding_response, "embeddings") and embedding_response.embeddings:
-                # Alternative format: might have embeddings list
-                embedding_item = embedding_response.embeddings[0]
-                if hasattr(embedding_item, "embedding"):
-                    embedding = embedding_item.embedding
-                else:
-                    embedding = embedding_item
-            elif hasattr(embedding_response, "embedding"):
-                # Direct embedding attribute
-                embedding = embedding_response.embedding
-            elif isinstance(embedding_response, list):
-                # Already a list of floats
-                embedding = embedding_response
-            else:
-                # Last resort - try to use as is
-                embedding = embedding_response
+            embedding = self._extract_embedding_from_response(embedding_response)
 
         # Insert into database using async method
         memory_id = await self._add_internal_async(
@@ -528,29 +546,7 @@ class LongTermMemory:
                 raise ValueError("No embedding model available for generating embeddings")
             embedding_response = await self.embedding_model.embed(query)
             # Extract the actual embedding vector from the response
-            if hasattr(embedding_response, "data") and embedding_response.data:
-                # OpenAI-style response: EmbeddingResponse.data[0].embedding
-                embedding_item = embedding_response.data[0]
-                if hasattr(embedding_item, "embedding"):
-                    query_embedding = embedding_item.embedding
-                else:
-                    query_embedding = embedding_item
-            elif hasattr(embedding_response, "embeddings") and embedding_response.embeddings:
-                # Alternative format: might have embeddings list
-                embedding_item = embedding_response.embeddings[0]
-                if hasattr(embedding_item, "embedding"):
-                    query_embedding = embedding_item.embedding
-                else:
-                    query_embedding = embedding_item
-            elif hasattr(embedding_response, "embedding"):
-                # Direct embedding attribute
-                query_embedding = embedding_response.embedding
-            elif isinstance(embedding_response, list):
-                # Already a list of floats
-                query_embedding = embedding_response
-            else:
-                # Last resort - try to use as is
-                query_embedding = embedding_response
+            query_embedding = self._extract_embedding_from_response(embedding_response)
 
         # Use default collection if not specified
         if collection is None:

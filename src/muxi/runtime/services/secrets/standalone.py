@@ -66,6 +66,29 @@ class SecretsManager:
         normalized = re.sub(r"_+", "_", normalized)
         return normalized.strip("_")
 
+    def _initialize_fernet_sync(self) -> bool:
+        """
+        Initialize Fernet encryption synchronously.
+
+        This is a synchronous version of the encryption initialization
+        used by sync methods like get_secret_sync.
+
+        Returns:
+            True if initialization was successful, False otherwise.
+        """
+        if self._fernet:
+            return True
+
+        if not self.master_key_path.exists():
+            return False
+
+        try:
+            key_data = self.master_key_path.read_bytes()
+            self._fernet = Fernet(key_data)
+            return True
+        except Exception:
+            return False
+
     async def _load_secrets_from_file(self) -> Dict[str, Any]:
         """Load and decrypt secrets from file."""
         if not self.secrets_file_path.exists():
@@ -138,12 +161,8 @@ class SecretsManager:
     def get_secret_sync(self, name: str) -> Optional[Any]:
         """Synchronously retrieve secret by name."""
         with self._sync_lock:
-            if not self._fernet:
-                if self.master_key_path.exists():
-                    key_data = self.master_key_path.read_bytes()
-                    self._fernet = Fernet(key_data)
-                else:
-                    return None
+            if not self._initialize_fernet_sync():
+                return None
 
             normalized_name = self._normalize_secret_name(name)
 

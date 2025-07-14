@@ -31,15 +31,19 @@ async def migrate_up(connection_string: str):
             """))
 
             # Try to add the new constraint (ignore if already exists)
-            try:
+            # Check if constraint exists before adding
+            result = await session.execute(text("""
+                SELECT constraint_name FROM information_schema.table_constraints
+                WHERE table_name = 'users'
+                AND constraint_name = 'uq_user_formation_external_id'
+            """))
+
+            if not result.fetchone():
                 await session.execute(text("""
                     ALTER TABLE users
                     ADD CONSTRAINT uq_user_formation_external_id
                     UNIQUE (external_user_id, formation_id)
                 """))
-            except Exception:
-                # Constraint already exists, that's fine
-                pass
 
             # Create indexes on the normalized columns for performance
             await session.execute(text("""

@@ -61,6 +61,18 @@ async def migrate_down(connection_string: str):
             """))
 
             # Populate it from users table
+            # Check for orphaned jobs first
+            orphaned_result = await session.execute(text("""
+                SELECT COUNT(*) FROM scheduled_jobs sj
+                LEFT JOIN users u ON sj.user_id = u.id
+                WHERE u.id IS NULL
+            """))
+            orphaned_count = orphaned_result.scalar()
+
+            if orphaned_count > 0:
+                print(f"Warning: Found {orphaned_count} orphaned scheduled jobs")
+
+            # Populate external_user_id from users table
             await session.execute(text("""
                 UPDATE scheduled_jobs sj
                 SET external_user_id = u.external_user_id

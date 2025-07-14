@@ -48,9 +48,8 @@ class JobManager:
             description=f"Job manager initialized with {self.db_manager.database_type} database",
         )
 
-
     def _get_or_create_user(self, session, external_user_id: str) -> User:
-        """Get existing user or create new one."""
+        """Get existing user or create new one with proper concurrency handling."""
         # Try to find existing user with formation scope
         user = (
             session.query(User)
@@ -60,18 +59,42 @@ class JobManager:
         if user:
             return user
 
-        # Create new user
+        # Create new user with proper concurrency control
         from ...utils.datetime_utils import utc_now_naive
         from ...utils.id_generator import get_default_nanoid
+        from sqlalchemy.exc import IntegrityError
+
         user = User(
             public_id=get_default_nanoid()(),
             external_user_id=external_user_id,
             formation_id=self.formation_id,
             created_at=utc_now_naive(),
         )
-        session.add(user)
-        session.commit()
-        return user
+        
+        try:
+            # Attempt to create the user
+            session.add(user)
+            session.commit()
+            return user
+        except IntegrityError as e:
+            # Handle unique constraint violation (concurrent creation)
+            session.rollback()
+            
+            # Check if this is the unique constraint we expect
+            if "uq_user_formation_external_id" in str(e) or "UNIQUE constraint failed" in str(e):
+                # Another concurrent request created the user, fetch it
+                user = (
+                    session.query(User)
+                    .filter_by(external_user_id=external_user_id, formation_id=self.formation_id)
+                    .first()
+                )
+                if user:
+                    return user
+                # If still not found, something else went wrong
+                raise ValueError(f"Failed to retrieve user after concurrent creation: {external_user_id}")
+            else:
+                # Some other integrity error, re-raise
+                raise
 
     async def initialize(self):
         """Initialize database schema using unified database manager."""
@@ -693,7 +716,9 @@ class JobManager:
 
                 if job:
                     job.last_run_status = "failed"
-                    job.last_run_failure_message = error_message[:1000]  # Truncate to prevent overflow
+                    job.last_run_failure_message = error_message[
+                        :1000
+                    ]  # Truncate to prevent overflow
                     job.total_runs += 1
                     job.total_failures += 1
                     job.consecutive_failures += 1

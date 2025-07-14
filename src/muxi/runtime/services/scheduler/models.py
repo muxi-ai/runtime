@@ -94,6 +94,7 @@ class ScheduledJob(Base, AsyncModelMixin):
     # Primary key and identification
     id = Column(String(255), primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    external_user_id = Column(String(255), nullable=True)  # Store original user ID string
 
     # Job content
     title = Column(String(500), nullable=False)

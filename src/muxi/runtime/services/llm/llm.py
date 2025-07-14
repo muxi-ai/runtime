@@ -740,6 +740,161 @@ class LLM:
         # Use existing chat logic for text-only processing
         return await self._basic_chat_with_files(messages, None, **kwargs)
 
+    async def _process_files_for_chat(self, files: Optional[List[Union[str, Path]]]) -> List[Dict]:
+        """Process files for chat, validating security and converting to OneLLM format."""
+        processed_files = []
+        if not files:
+            return processed_files
+
+        for file_path in files:
+            try:
+                # Validate file security
+                if not await FileProcessor.validate_file_security(file_path):
+                    raise LLMError(
+                        f"File security validation failed: {file_path}",
+                        error_type=LLMErrorType.FILE_PROCESSING,
+                        provider=self._provider,
+                        retryable=False,
+                    )
+
+                # Convert file to OneLLM format
+                file_data = await FileProcessor.convert_file_for_onellm(file_path)
+                processed_files.append(file_data)
+
+                observability.observe(
+                    event_type=observability.ConversationEvents.RESPONSE_FORMATTED,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "file_path": str(file_path),
+                        "file_type": file_data.get("type", "unknown"),
+                    },
+                    description=(
+                        f"Successfully processed file "
+                        f"{file_path.name if hasattr(file_path, 'name') else file_path}"
+                    ),
+                )
+
+            except LLMError:
+                # Re-raise LLMErrors as-is
+                raise
+            except Exception as e:
+                raise LLMError(
+                    f"Failed to process file {file_path}: {str(e)}",
+                    error_type=LLMErrorType.FILE_PROCESSING,
+                    provider=self._provider,
+                    retryable=False,
+                    original_error=e,
+                )
+
+        return processed_files
+
+    async def _prepare_chat_request(
+        self,
+        messages: List[Dict[str, str]],
+        files: Optional[List[Union[str, Path]]] = None,
+        temperature: Optional[float] = None,
+        max_tokens: Optional[int] = None,
+        top_p: Optional[float] = None,
+        frequency_penalty: Optional[float] = None,
+        presence_penalty: Optional[float] = None,
+        stop: Optional[Union[str, List[str]]] = None,
+        **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Prepare parameters for chat request, including file processing."""
+        # Process files if provided
+        processed_files = await self._process_files_for_chat(files)
+
+        # Prepare parameters
+        params = {
+            "model": self.model_name,  # Use full model name with provider prefix
+            "messages": messages,
+            "temperature": temperature or kwargs.get("temperature") or self.temperature,
+        }
+
+        # Add files to parameters if processed
+        if processed_files:
+            params["files"] = processed_files
+
+        # Add optional parameters if provided
+        if max_tokens is not None:
+            params["max_tokens"] = max_tokens
+        elif "max_tokens" in kwargs and kwargs["max_tokens"] is not None:
+            params["max_tokens"] = kwargs["max_tokens"]
+        elif self.max_tokens is not None:
+            params["max_tokens"] = self.max_tokens
+
+        if top_p is not None:
+            params["top_p"] = top_p
+        elif "top_p" in kwargs and kwargs["top_p"] is not None:
+            params["top_p"] = kwargs["top_p"]
+
+        if frequency_penalty is not None:
+            params["frequency_penalty"] = frequency_penalty
+        elif "frequency_penalty" in kwargs and kwargs["frequency_penalty"] is not None:
+            params["frequency_penalty"] = kwargs["frequency_penalty"]
+
+        if presence_penalty is not None:
+            params["presence_penalty"] = presence_penalty
+        elif "presence_penalty" in kwargs and kwargs["presence_penalty"] is not None:
+            params["presence_penalty"] = kwargs["presence_penalty"]
+
+        if stop is not None:
+            params["stop"] = stop
+        elif "stop" in kwargs and kwargs["stop"] is not None:
+            params["stop"] = kwargs["stop"]
+
+        # Add any additional kwargs not already handled
+        excluded_params = {
+            "temperature", "max_tokens", "top_p", "frequency_penalty",
+            "presence_penalty", "stop", "files", "timeout"
+        }
+        additional_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_params}
+        params.update(additional_kwargs)
+        params.update(self.additional_params)
+
+        return params
+
+    def _extract_content_from_response(self, response: Any) -> str:
+        """Extract string content from various response formats."""
+        if isinstance(response, dict) and "choices" in response:
+            content = response["choices"][0]["message"]["content"] or ""
+        elif hasattr(response, "choices") and response.choices:
+            # Handle ChatCompletionResponse object
+            message = response.choices[0].message
+            if hasattr(message, "content"):
+                content = message.content or ""
+            elif isinstance(message, dict):
+                content = message.get("content", "")
+            else:
+                content = str(message)
+        elif isinstance(response, str):
+            # If it's already a string, return it
+            content = response
+        else:
+            # Fallback: try to extract content from string representation
+            response_str = str(response)
+            if "content" in response_str:
+                # Try to extract content using regex
+                match = re.search(r"'content':\s*'([^']*)'", response_str)
+                if match:
+                    content = match.group(1)
+                else:
+                    content = "Error: Could not extract content from response"
+            else:
+                content = "Error: No content found in response"
+
+        return content
+
+    def _has_tool_calls(self, response: Any) -> bool:
+        """Check if response contains tool calls."""
+        if hasattr(response, "choices") and response.choices:
+            message = response.choices[0].message
+            if isinstance(message, dict) and "tool_calls" in message and message["tool_calls"]:
+                return True
+            elif hasattr(message, "tool_calls") and message.tool_calls:
+                return True
+        return False
+
     async def _execute_with_resilience(self, func, *args, **kwargs):
         """Execute a function with full resilience patterns including fallback model support."""
 
@@ -1031,86 +1186,8 @@ Provide a helpful, conversational response that directly addresses what the user
         """Basic file processing implementation"""
 
         async def _chat_request():
-            # Process files if provided
-            processed_files = []
-            if files:
-                for file_path in files:
-                    try:
-                        # Validate file security
-                        if not await FileProcessor.validate_file_security(file_path):
-                            raise LLMError(
-                                f"File security validation failed: {file_path}",
-                                error_type=LLMErrorType.FILE_PROCESSING,
-                                provider=self._provider,
-                                retryable=False,
-                            )
-
-                        # Convert file to OneLLM format
-                        file_data = await FileProcessor.convert_file_for_onellm(file_path)
-                        processed_files.append(file_data)
-
-                        observability.observe(
-                            event_type=observability.ConversationEvents.RESPONSE_FORMATTED,
-                            level=observability.EventLevel.DEBUG,
-                            data={
-                                "file_path": str(file_path),
-                                "file_type": file_data.get("type", "unknown"),
-                            },
-                            description=f"Successfully processed file {file_path.name}",
-                        )
-
-                    except LLMError:
-                        # Re-raise LLMErrors as-is
-                        raise
-                    except Exception as e:
-                        raise LLMError(
-                            f"Failed to process file {file_path}: {str(e)}",
-                            error_type=LLMErrorType.FILE_PROCESSING,
-                            provider=self._provider,
-                            retryable=False,
-                            original_error=e,
-                        )
-
-            # Prepare parameters
-            params = {
-                "model": self.model_name,  # Use full model name with provider prefix
-                "messages": messages,
-                "temperature": kwargs.get("temperature", self.temperature),
-            }
-
-            # Add files to parameters if processed
-            if processed_files:
-                params["files"] = processed_files
-
-            # Add optional parameters if provided
-            for param_name in [
-                "max_tokens",
-                "top_p",
-                "frequency_penalty",
-                "presence_penalty",
-                "stop",
-            ]:
-                if param_name in kwargs and kwargs[param_name] is not None:
-                    params[param_name] = kwargs[param_name]
-                elif param_name == "max_tokens" and self.max_tokens is not None:
-                    params["max_tokens"] = self.max_tokens
-
-            # Add any additional kwargs
-            additional_kwargs = {
-                k: v
-                for k, v in kwargs.items()
-                if k
-                not in [
-                    "temperature",
-                    "max_tokens",
-                    "top_p",
-                    "frequency_penalty",
-                    "presence_penalty",
-                    "stop",
-                ]
-            }
-            params.update(additional_kwargs)
-            params.update(self.additional_params)
+            # Prepare parameters using helper
+            params = await self._prepare_chat_request(messages, files, **kwargs)
 
             # Check cache first (but exclude files from cache key for security)
             cache_params = {k: v for k, v in params.items() if k != "files"}
@@ -1125,36 +1202,8 @@ Provide a helpful, conversational response that directly addresses what the user
             # Call OneLLM ChatCompletion using async method
             response = await ChatCompletion.acreate(**params)
 
-            # Extract content from response even if tool calls are present
-            # The chat() method always returns a string for consistency
-
-            # Extract content from response
-            if isinstance(response, dict) and "choices" in response:
-                content = response["choices"][0]["message"]["content"] or ""
-            elif hasattr(response, "choices") and response.choices:
-                # Handle ChatCompletionResponse object
-                message = response.choices[0].message
-                if hasattr(message, "content"):
-                    content = message.content or ""
-                elif isinstance(message, dict):
-                    content = message.get("content", "")
-                else:
-                    content = str(message)
-            elif isinstance(response, str):
-                # If it's already a string, return it
-                content = response
-            else:
-                # Fallback: try to extract content from string representation
-                response_str = str(response)
-                if "content" in response_str:
-                    # Try to extract content using regex
-                    match = re.search(r"'content':\s*'([^']*)'", response_str)
-                    if match:
-                        content = match.group(1)
-                    else:
-                        content = "Error: Could not extract content from response"
-                else:
-                    content = "Error: No content found in response"
+            # Extract content from response using helper
+            content = self._extract_content_from_response(response)
 
             # Cache the response only if no files were involved
             if not files:
@@ -1190,104 +1239,22 @@ Provide a helpful, conversational response that directly addresses what the user
             The full response object if tool calls are present, otherwise a string.
         """
 
-        # We need to create a modified version of _basic_chat_with_files that returns the raw response
         async def _chat_request_with_tools():
-            # Process files if provided
-            processed_files = []
-            if files:
-                for file_path in files:
-                    try:
-                        # Validate file security
-                        if not await FileProcessor.validate_file_security(file_path):
-                            raise LLMError(
-                                f"File security validation failed: {file_path}",
-                                error_type=LLMErrorType.FILE_PROCESSING,
-                                provider=self._provider,
-                                retryable=False,
-                            )
-
-                        # Convert file to OneLLM format
-                        file_data = await FileProcessor.convert_file_for_onellm(file_path)
-                        processed_files.append(file_data)
-
-                    except LLMError:
-                        # Re-raise LLMErrors as-is
-                        raise
-                    except Exception as e:
-                        raise LLMError(
-                            f"Failed to process file {file_path}: {str(e)}",
-                            error_type=LLMErrorType.FILE_PROCESSING,
-                            provider=self._provider,
-                            retryable=False,
-                            original_error=e,
-                        )
-
-            # Prepare parameters
-            params = {
-                "model": self.model_name,  # Use full model name with provider prefix
-                "messages": messages,
-                "temperature": temperature or self.temperature,
-            }
-
-            # Add files to parameters if processed
-            if processed_files:
-                params["files"] = processed_files
-
-            # Add optional parameters if provided
-            if max_tokens is not None:
-                params["max_tokens"] = max_tokens
-            elif self.max_tokens is not None:
-                params["max_tokens"] = self.max_tokens
-
-            if top_p is not None:
-                params["top_p"] = top_p
-
-            if frequency_penalty is not None:
-                params["frequency_penalty"] = frequency_penalty
-
-            if presence_penalty is not None:
-                params["presence_penalty"] = presence_penalty
-
-            if stop is not None:
-                params["stop"] = stop
-
-            # Add any additional kwargs
-            params.update(kwargs)
-            params.update(self.additional_params)
+            # Prepare parameters using helper
+            params = await self._prepare_chat_request(
+                messages, files, temperature, max_tokens,
+                top_p, frequency_penalty, presence_penalty, stop, **kwargs
+            )
 
             # Call OneLLM ChatCompletion using async method
             response = await ChatCompletion.acreate(**params)
 
             # Check if response contains tool calls - if so, return the full response
-            if hasattr(response, "choices") and response.choices:
-                message = response.choices[0].message
-                if isinstance(message, dict) and "tool_calls" in message and message["tool_calls"]:
-                    # Return the full response object for the agent to handle tool calls
-                    return response
-                elif hasattr(message, "tool_calls") and message.tool_calls:
-                    # Return the full response object for the agent to handle tool calls
-                    return response
+            if self._has_tool_calls(response):
+                return response
 
             # Otherwise extract and return content as string
-            if isinstance(response, dict) and "choices" in response:
-                content = response["choices"][0]["message"]["content"] or ""
-            elif hasattr(response, "choices") and response.choices:
-                # Handle ChatCompletionResponse object
-                message = response.choices[0].message
-                if hasattr(message, "content"):
-                    content = message.content or ""
-                elif isinstance(message, dict):
-                    content = message.get("content", "")
-                else:
-                    content = str(message)
-            elif isinstance(response, str):
-                # If it's already a string, return it
-                content = response
-            else:
-                # Fallback
-                content = str(response)
-
-            return content
+            return self._extract_content_from_response(response)
 
         return await self._execute_with_resilience(_chat_request_with_tools)
 

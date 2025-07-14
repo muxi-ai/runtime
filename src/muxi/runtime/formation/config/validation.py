@@ -10,6 +10,7 @@ from pathlib import Path
 import yaml
 import json
 import re
+import asyncio
 
 # Import the MCP registry to get valid MCP names dynamically
 from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
@@ -2278,13 +2279,16 @@ def validate_user_credentials_requirements(
     config: Dict[str, Any], secrets_manager: Optional[Any] = None
 ) -> None:
     """
-    Validate that database is configured if user credentials are used.
+    Validate that database is configured if user credentials are used (synchronous version).
     Also validates that USER_CREDENTIALS_* secrets exist for MCP servers.
 
     This function checks if any user credential placeholders (${{ user.credentials.* }})
     are used in the configuration and ensures that:
     1. Persistent database storage is configured when they are found
     2. For MCP servers, corresponding USER_CREDENTIALS_* secrets exist
+
+    NOTE: This is the synchronous version. Use validate_user_credentials_requirements_async
+    if calling from an async context.
 
     Args:
         config: The formation configuration dictionary to validate
@@ -2293,7 +2297,19 @@ def validate_user_credentials_requirements(
     Raises:
         ValueError: If user credentials are used but database is not configured
                    or if USER_CREDENTIALS_* secrets are missing for MCP servers
+        RuntimeError: If called from an async context (use async version instead)
     """
+    # Check if we're in an async context
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            raise RuntimeError(
+                "validate_user_credentials_requirements called from async context. "
+                "Use validate_user_credentials_requirements_async instead."
+            )
+    except RuntimeError:
+        # No event loop, we're in sync context - this is fine
+        pass
 
     def contains_user_credentials(obj: Any) -> bool:
         """Recursively check if object contains user credential patterns."""
@@ -2355,40 +2371,14 @@ def validate_user_credentials_requirements(
 
     # Check if we have corresponding USER_CREDENTIALS_* secrets
     if found_credentials and secrets_manager:
-        import asyncio
-
-        async def check_secrets():
-            await secrets_manager.initialize_encryption()
-            available_secrets = await secrets_manager.list_secrets()
-            return available_secrets
-
         try:
-            # Get available secrets - handle both sync and async contexts
-            try:
-                # Check if there's already an event loop
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # We're in an async context, but this is a sync function
-                    # This is a problematic situation - log a warning
-                    import warnings
+            async def check_secrets():
+                await secrets_manager.initialize_encryption()
+                available_secrets = await secrets_manager.list_secrets()
+                return available_secrets
 
-                    warnings.warn(
-                        "validate_user_credentials_requirements called from async context. "
-                        "Consider using an async version of this function.",
-                        RuntimeWarning,
-                    )
-                    # Create a new loop in a thread to avoid conflicts
-                    import concurrent.futures
-
-                    with concurrent.futures.ThreadPoolExecutor() as executor:
-                        future = executor.submit(asyncio.run, check_secrets())
-                        available_secrets = future.result()
-                else:
-                    # Loop exists but not running, we can use it
-                    available_secrets = loop.run_until_complete(check_secrets())
-            except RuntimeError:
-                # No event loop exists, create a new one
-                available_secrets = asyncio.run(check_secrets())
+            # In sync context, use asyncio.run
+            available_secrets = asyncio.run(check_secrets())
 
             # Check each found credential
             missing_secrets = []
@@ -2405,11 +2395,120 @@ def validate_user_credentials_requirements(
 
                 raise ValueError(error_msg)
 
-        except ValueError as e:
+        except ValueError:
             # Re-raise our validation errors
-            if "initialization credentials" in str(e):
-                raise
-            # Other ValueError might be from secrets manager
+            raise
+        except Exception:
+            # For other exceptions, just continue (secrets manager might not be initialized)
+            pass
+
+
+async def validate_user_credentials_requirements_async(
+    config: Dict[str, Any], secrets_manager: Optional[Any] = None
+) -> None:
+    """
+    Validate that database is configured if user credentials are used (asynchronous version).
+    Also validates that USER_CREDENTIALS_* secrets exist for MCP servers.
+
+    This function checks if any user credential placeholders (${{ user.credentials.* }})
+    are used in the configuration and ensures that:
+    1. Persistent database storage is configured when they are found
+    2. For MCP servers, corresponding USER_CREDENTIALS_* secrets exist
+
+    This is the async version for use in async contexts. Use validate_user_credentials_requirements
+    for synchronous contexts.
+
+    Args:
+        config: The formation configuration dictionary to validate
+        secrets_manager: Optional secrets manager to check for initialization credentials
+
+    Raises:
+        ValueError: If user credentials are used but database is not configured
+                   or if USER_CREDENTIALS_* secrets are missing for MCP servers
+    """
+
+    def contains_user_credentials(obj: Any) -> bool:
+        """Recursively check if object contains user credential patterns."""
+        if isinstance(obj, str):
+            return bool(USER_CREDENTIAL_PATTERN.search(obj))
+        elif isinstance(obj, dict):
+            return any(contains_user_credentials(v) for v in obj.values())
+        elif isinstance(obj, list):
+            return any(contains_user_credentials(item) for item in obj)
+        return False
+
+    def find_user_credentials_in_mcp(obj: Any, found_credentials: set, path: str = "") -> None:
+        """Recursively find all user credential patterns in MCP configurations."""
+        if isinstance(obj, str):
+            matches = USER_CREDENTIAL_PATTERN.findall(obj)
+            for match in matches:
+                service_name = match.split('.')[-1].rstrip('}').strip()
+                found_credentials.add((service_name, path))
+        elif isinstance(obj, dict):
+            for k, v in obj.items():
+                new_path = f"{path}.{k}" if path else k
+                find_user_credentials_in_mcp(v, found_credentials, new_path)
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                new_path = f"{path}[{i}]"
+                find_user_credentials_in_mcp(item, found_credentials, new_path)
+
+    # Check if any user credentials are used
+    if contains_user_credentials(config):
+        # Get memory configuration
+        memory = config.get("memory", {})
+        persistent = memory.get("persistent", {})
+
+        # Check if persistent memory is configured using the current schema
+        if not persistent or not persistent.get("connection_string"):
+            raise ValueError(
+                "User credentials (${{ user.credentials.* }}) require persistent database storage. "
+                "Please configure memory.persistent with a connection_string in your formation."
+            )
+
+    # Check MCP servers for user credentials that need initialization secrets
+    mcp_config = config.get("mcp", {})
+    servers = mcp_config.get("servers", [])
+
+    # Also check agent-level MCP servers
+    agents = config.get("agents", [])
+    for agent in agents:
+        if isinstance(agent, dict) and "mcp_servers" in agent:
+            agent_servers = agent["mcp_servers"]
+            if isinstance(agent_servers, list):
+                servers.extend(agent_servers)
+
+    # Find all user credentials in MCP server configurations
+    found_credentials = set()
+    for server in servers:
+        if isinstance(server, dict):
+            server_id = server.get("id", "unknown")
+            find_user_credentials_in_mcp(server, found_credentials, f"mcp_server[{server_id}]")
+
+    # Check if we have corresponding USER_CREDENTIALS_* secrets
+    if found_credentials and secrets_manager:
+        try:
+            # In async context, use await directly
+            await secrets_manager.initialize_encryption()
+            available_secrets = await secrets_manager.list_secrets()
+
+            # Check each found credential
+            missing_secrets = []
+            for service_name, location in found_credentials:
+                initialization_secret = f"USER_CREDENTIALS_{service_name.upper()}"
+                if initialization_secret not in available_secrets:
+                    missing_secrets.append((service_name, initialization_secret, location))
+
+            if missing_secrets:
+                error_msg = "MCP servers require initialization credentials:\n"
+                for service, secret, location in missing_secrets:
+                    error_msg += f"\n  • {location} uses ${{{{ user.credentials.{service} }}}} but {secret} is missing."
+                    error_msg += f"\n    To fix: python -m muxi.runtime.utils.secrets add {secret} <{service}_token>\n"
+
+                raise ValueError(error_msg)
+
+        except ValueError:
+            # Re-raise our validation errors
             raise
         except Exception:
             # For other exceptions, just continue (secrets manager might not be initialized)

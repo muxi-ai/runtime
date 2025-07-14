@@ -54,7 +54,15 @@ class BufferMemoryManager:
             or an error occurred during addition.
         """
         if self.overlord.buffer_memory is None:
-            print("[BufferManager] No buffer memory available, returning False")
+            observability.observe(
+                event_type=observability.SystemEvents.MEMORY_BUFFER_UPDATE_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "reason": "No buffer memory available",
+                    "operation": "add_to_buffer_memory",
+                },
+                description="[BufferManager] No buffer memory available, returning False",
+            )
             return False
 
         # Add agent_id to metadata for context if provided
@@ -65,14 +73,27 @@ class BufferMemoryManager:
         # Add to buffer memory (now async)
         try:
             await self.overlord.buffer_memory.add(text=message, metadata=full_metadata)
-            #  Info - TODO: add observability
-            # ConversationEvents.MEMORY_SHORT_TERM_UPDATED
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": agent_id,
+                    "operation": "add_to_buffer_memory",
+                },
+                description="Successfully added message to buffer memory",
+            )
             return True
         except Exception as e:
-            print(f"[BufferManager] Error adding to buffer: {e}")
-            #  Warning - TODO: add observability
-            # ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED
-            _ = e  # remove this after implementing observability
+            observability.observe(
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "operation": "add_to_buffer_memory",
+                },
+                description=f"[BufferManager] Error adding to buffer: {e}",
+            )
             return False
 
     async def search_buffer_memory(

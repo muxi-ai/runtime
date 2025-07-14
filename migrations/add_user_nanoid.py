@@ -40,22 +40,40 @@ async def migrate_up(connection_string: str):
                 """), {"nano_id": nano_id, "user_id": user[0]})
 
             # Make column NOT NULL after populating
-            if users:
-                await session.execute(text("""
-                    ALTER TABLE users
-                    ALTER COLUMN public_id SET NOT NULL
-                """))
+            await session.execute(text("""
+                ALTER TABLE users
+                ALTER COLUMN public_id SET NOT NULL
+            """))
 
-            # Add unique constraint
-            try:
+            # Add unique constraint if it doesn't exist
+            # First check if constraint already exists (PostgreSQL)
+            result = await session.execute(text("""
+                SELECT COUNT(*) FROM information_schema.table_constraints 
+                WHERE table_name = 'users' 
+                AND constraint_name = 'uq_users_public_id'
+                AND constraint_type = 'UNIQUE'
+            """))
+            constraint_exists = result.scalar() > 0
+            
+            if not constraint_exists:
+                # Also check SQLite style
+                try:
+                    result = await session.execute(text("""
+                        SELECT sql FROM sqlite_master 
+                        WHERE type = 'index' 
+                        AND name = 'uq_users_public_id'
+                    """))
+                    constraint_exists = result.scalar() is not None
+                except Exception:
+                    # Not SQLite, continue with PostgreSQL approach
+                    pass
+            
+            if not constraint_exists:
                 await session.execute(text("""
                     ALTER TABLE users
                     ADD CONSTRAINT uq_users_public_id
                     UNIQUE (public_id)
                 """))
-            except Exception:
-                # Constraint might already exist
-                pass
 
             # Create index for fast lookups
             await session.execute(text("""

@@ -13,6 +13,7 @@ import nanoid
 from ...datatypes.json_type import JSONType
 from ...datatypes.exceptions import FormationError
 from ...utils.datetime_utils import utc_now_naive
+from ...services import observability
 
 Base = declarative_base()
 
@@ -306,19 +307,19 @@ class CredentialResolver:
 
         if smart_name and smart_name != service:
             # Log the credential name update
-            # TODO: Add proper observability event type for credential updates
-            # from ...services import observability
-            # observability.observe(
-            #     event_type=observability.SystemEvents.CREDENTIAL_STORED,
-            #     level=observability.EventLevel.INFO,
-            #     data={
-            #         "user_id": user_id,
-            #         "service": service,
-            #         "old_name": service,
-            #         "new_name": smart_name,
-            #         "description": f"Updated credential name from '{service}' to '{smart_name}'"
-            #     }
-            # )
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "user_id": user_id,
+                    "service": service,
+                    "old_name": service,
+                    "new_name": smart_name,
+                    "operation_type": "credential_name_update"
+                },
+                description=f"Updated credential name from '{service}' to '{smart_name}'"
+            )
+            
             # Update in database
             async with self.async_session_maker() as session:
                 stmt = (
