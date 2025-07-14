@@ -97,6 +97,154 @@ memory:
 # Send more messages than buffer size
 for i in range(buffer_size + 5):
     asyncio.run(overlord.chat(f"Message {i}"))
+```
+
+## Day 4 Lessons Learned: MCP Integration & User Credentials
+
+### 1. Database State Management for Tests
+
+**Critical Lesson**: Test database state must be carefully managed for credential isolation tests.
+
+**Problem**: Tests were failing because User2 had residual credentials from previous test runs, causing false security issues.
+
+**Solution**: Ensure proper database cleanup between test runs:
+
+```python
+# Before running credential isolation tests
+# 1. Clean User2 credentials from database
+# 2. Ensure only User1 has the expected credentials
+# 3. Verify database state before running tests
+
+# Test should expect this behavior:
+# - User1: Has GitHub credentials → Direct access
+# - User2: No GitHub credentials → Clarification flow
+```
+
+**Key Insight**: Initial test failures were due to **test contamination**, not system failures. The credential isolation system works correctly when database state is clean.
+
+### 2. MCP Response Handling in Tests
+
+**Problem**: MCP responses can be various types (MuxiResponse, async generators, strings).
+
+**Solution**: Create a unified response handler:
+
+```python
+async def handle_response(response):
+    """Handle different response types from overlord.chat()"""
+    if hasattr(response, '__aiter__'):
+        full_response = ""
+        async for chunk in response:
+            full_response += chunk
+        return full_response
+    elif hasattr(response, 'content'):
+        return response.content
+    else:
+        return str(response)
+
+# Usage in tests:
+response = await overlord.chat("message", stream=False)
+response_text = await handle_response(response)
+```
+
+### 3. Formation Cleanup and Resource Management
+
+**Problem**: Tests would timeout or hang due to improper formation cleanup.
+
+**Solution**: Always use proper cleanup patterns:
+
+```python
+async def test_mcp_operation():
+    try:
+        formation = Formation()
+        await formation.load("test-formations/formation-mcp")
+        overlord = await formation.start_overlord()
+        
+        # Test operations here
+        
+    finally:
+        # Proper cleanup
+        try:
+            await formation.stop_overlord(5.0)
+        except Exception as e:
+            print(f"Warning: Cleanup error: {e}")
+            formation.kill_overlord()
+```
+
+### 4. Credential System Architecture Understanding
+
+**Key Findings**:
+
+1. **Smart Credential Naming**: The system implements async credential naming:
+   - Initial storage: "github" 
+   - Background discovery: "github" → "lilyautomaze"
+   - Uses identity tools (get_me, whoami) for account detection
+
+2. **Multiple Credential Selection**: LLM-powered selection for ambiguous requests:
+   - Analyzes user intent to select appropriate credential
+   - Provides structured clarification when ambiguous
+   - Supports both name-based and numeric selection
+
+3. **Database Schema**: Proper user-credential isolation:
+   - User table with formation_id scoping
+   - Credential table with user_id foreign key
+   - Proper created_at/updated_at timestamp fields
+
+### 5. Security Testing Best Practices
+
+**Test Database Requirements**:
+- User1: Should have expected credentials for positive tests
+- User2: Should have NO credentials for negative/isolation tests
+- Database should be cleaned between test runs
+
+**Security Validation Pattern**:
+```python
+# Test that User2 gets prompted for credentials
+response = await overlord.chat("GitHub operation", user_id="user2")
+assert any(term in response.lower() for term in 
+          ["credential", "token", "provide", "authenticate"])
+
+# Test that User2 cannot access User1's resources
+assert not any(term in response.lower() for term in 
+              ["successfully", "retrieved", "found"])
+```
+
+### 6. Async Operations and Formation Management
+
+**Key Pattern**: All formation operations should be async:
+
+```python
+# Correct async pattern
+formation = Formation()
+await formation.load("path/to/formation")
+overlord = await formation.start_overlord()
+
+# Give time for MCP initialization
+await asyncio.sleep(2)
+
+# All chat operations with proper response handling
+response = await overlord.chat("message", stream=False)
+response_text = await handle_response(response)
+```
+
+### 7. Test Structure for Complex Systems
+
+**Lesson**: Complex systems like credential isolation require:
+
+1. **Proper Setup**: Clean database state
+2. **Clear Expectations**: Know what each user should/shouldn't be able to do
+3. **Comprehensive Coverage**: Test positive and negative scenarios
+4. **Proper Cleanup**: Resource management to prevent test contamination
+
+### 8. Documentation and Reporting
+
+**Best Practice**: Maintain detailed test reports with:
+- Chat interactions (user prompts and system responses)
+- Technical analysis of what happened
+- Security implications
+- Expected vs actual behavior
+- Clear pass/fail criteria
+
+This enables easier debugging and validation of complex multi-user systems.
 
 # Verify old messages are forgotten (FIFO)
 response = asyncio.run(overlord.chat("What was message 0?"))
