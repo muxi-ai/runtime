@@ -12,6 +12,7 @@ from ...datatypes.clarification import (
     ClarificationQuestion,
     QuestionStyle,
 )
+from ..memory.credential_resolver import AmbiguousCredentialError
 
 
 class CredentialClarificationHandler:
@@ -174,6 +175,98 @@ class CredentialClarificationHandler:
 
         # Default: capitalize each word
         return service.replace("_", " ").replace("-", " ").title()
+
+    def generate_ambiguous_credential_request(
+        self,
+        error: AmbiguousCredentialError,
+        agent_id: str = "system",
+        context: Optional[Dict[str, Any]] = None,
+    ) -> ClarificationRequest:
+        """
+        Generate a clarification request for ambiguous credential selection.
+
+        Args:
+            error: The AmbiguousCredentialError containing available credentials and ordering
+            agent_id: The agent ID (defaults to "system")
+            context: Optional context about why the credential is needed
+
+        Returns:
+            ClarificationRequest for credential selection
+        """
+        # Format service name for display
+        display_name = self._format_service_name(error.service)
+
+        # Get ordered credential names using LLM ordering
+        available_creds = error.available_credentials
+        ordered_indices = error.ordered_credentials
+
+        # Create ordered list of credential names
+        if ordered_indices:
+            # Use LLM ordering - convert 1-based indices to 0-based
+            ordered_names = []
+            for idx in ordered_indices:
+                if 1 <= idx <= len(available_creds):
+                    ordered_names.append(available_creds[idx - 1]["name"])
+        else:
+            # Fallback to original order
+            ordered_names = [cred["name"] for cred in available_creds]
+
+        # Build the message
+        message_parts = [
+            f"I found multiple {display_name} accounts for you.",
+            "Which account would you like to use?",
+        ]
+
+        # Add the credential options in smart order
+        options_text = "\n".join(
+            [f"{i+1}. {name}" for i, name in enumerate(ordered_names)]
+        )
+        message_parts.append(f"\nAvailable accounts:\n{options_text}")
+
+        message = " ".join(message_parts)
+
+        # Create the clarification question
+        clarification_question = ClarificationQuestion(
+            question_id=f"select_credential_{error.service}",
+            question_text=message,
+            parameter_name="credential_selection",
+            parameter_type="choice",
+            parameter_description=f"Selected {display_name} credential",
+            required=True,
+            validation_rules={
+                "type": "choice",
+                "options": [{"value": name, "label": name} for name in ordered_names],
+            },
+            context_hints=[f"Choose which {display_name} account to use"],
+            style=QuestionStyle.CONVERSATIONAL,
+        )
+
+        # Create the clarification request
+        return ClarificationRequest(
+            user_id=error.user_id,
+            agent_id=agent_id,
+            request_type=RequestType.TOOL_CALL,
+            tool_name=context.get("tool_name") if context else None,
+            intent=f"Select {error.service} credential from multiple options",
+            missing_info=[f"{error.service}_credential_selection"],
+            clarification_plan=[clarification_question],
+            context=(
+                {
+                    "reason": "ambiguous_credential",
+                    "service": error.service,
+                    "available_credentials": [cred["name"] for cred in available_creds],
+                    "ordered_credentials": ordered_names,
+                    **context,
+                }
+                if context
+                else {
+                    "reason": "ambiguous_credential",
+                    "service": error.service,
+                    "available_credentials": [cred["name"] for cred in available_creds],
+                    "ordered_credentials": ordered_names,
+                }
+            ),
+        )
 
     def _determine_field_name(self, service: str) -> str:
         """

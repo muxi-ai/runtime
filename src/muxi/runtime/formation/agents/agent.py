@@ -750,6 +750,9 @@ class Agent:
         # Add message to conversation context
         self._messages.append({"role": "user", "content": message_obj.content})
 
+        # Store current user message for credential selection context
+        self._current_user_message = message_obj.content
+
         # Search knowledge and memory if handler is available
         context_enhancement = ""
 
@@ -1846,6 +1849,10 @@ class Agent:
                     # Use current conversation messages from this agent's memory
                     # Look at recent messages for account preferences
                     conversation_context = []
+
+                    # Always include the current user message if available
+                    if hasattr(self, "_current_user_message") and self._current_user_message:
+                        conversation_context.append(self._current_user_message)
 
                     # Extract text from recent messages that might contain account preferences
                     for msg in self._messages[-10:]:  # Last 10 messages

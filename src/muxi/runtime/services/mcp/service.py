@@ -44,10 +44,15 @@ from .sampling.creator import MCPSamplingCreator
 from .templates.discovery import MCPTemplateDiscovery
 from .health.monitor import MCPHealthMonitor, MCPCapabilitiesNegotiator
 from .. import observability
-from ...formation.memory.credential_resolver import MissingCredentialError
+from ...formation.memory.credential_resolver import (
+    MissingCredentialError,
+    AmbiguousCredentialError,
+)
 
 # Regex pattern for user credential placeholders
-USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+USER_CREDENTIAL_PATTERN = re.compile(
+    r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
+)
 
 
 class MCPService:
@@ -254,13 +259,14 @@ class MCPService:
         if url and transport_type == "auto":
             try:
                 # Use enhanced transport detector with caching
-                detected_transport, detection_metadata = (
-                    await TransportDetector.detect_with_fallback(
-                        url=url,
-                        timeout=min(request_timeout // 2, 30),
-                        use_cache=True,
-                        credentials=credentials,
-                    )
+                (
+                    detected_transport,
+                    detection_metadata,
+                ) = await TransportDetector.detect_with_fallback(
+                    url=url,
+                    timeout=min(request_timeout // 2, 30),
+                    use_cache=True,
+                    credentials=credentials,
                 )
 
                 observability.observe(
@@ -281,7 +287,9 @@ class MCPService:
                 )
 
                 # Get recommended URL for the detected transport
-                recommended_url = TransportDetector.get_recommended_url(url, detected_transport)
+                recommended_url = TransportDetector.get_recommended_url(
+                    url, detected_transport
+                )
 
                 return await self._connect_single_transport(
                     server_id,
@@ -318,7 +326,11 @@ class MCPService:
                             "Try specifying transport_type explicitly "
                             "('streamable_http', 'http_sse', or 'command')"
                         ),
-                        "available_transports": ["streamable_http", "http_sse", "command"],
+                        "available_transports": [
+                            "streamable_http",
+                            "http_sse",
+                            "command",
+                        ],
                     },
                 )
 
@@ -460,10 +472,14 @@ class MCPService:
 
                     if not service_name:
                         # Fallback: try to extract from server_id
-                        service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
+                        service_name = (
+                            server_id.replace("-mcp", "").replace("_mcp", "").lower()
+                        )
 
                     # Resolve credentials from database
-                    credentials = await credential_resolver.resolve(user_id, service_name)
+                    credentials = await credential_resolver.resolve(
+                        user_id, service_name
+                    )
 
                     if credentials is None:
                         # Trigger clarification flow
@@ -471,22 +487,24 @@ class MCPService:
 
                     # If we got multiple credentials, use LLM to pick the best one
                     if isinstance(credentials, list):
-                        original_list = credentials
-                        credentials = await self._select_best_credential_with_llm(
-                            credentials, parameters, service_name, conversation_context
-                        )
-                        if credentials is None:
-                            # LLM couldn't decide - trigger clarification flow
-                            # For now, use the first credential but this should ideally trigger clarification
-                            # TODO: Implement proper multi-credential clarification flow
-                            print(
-                                f"Multiple {service_name} credentials available but no clear choice, using first one"
+                        try:
+                            credentials = await self._select_best_credential_with_llm(
+                                credentials,
+                                parameters,
+                                service_name,
+                                conversation_context,
                             )
-                            credentials = original_list[0]["credentials"]
+                        except AmbiguousCredentialError as e:
+                            # LLM determined the request is ambiguous
+                            # fill in user_id and re-raise for clarification flow
+                            e.user_id = user_id
+                            raise e
 
                     # Format credentials based on stored_creds structure
                     # Replace the user credential placeholder with actual value
-                    resolved_auth = self._replace_credential_in_auth(stored_creds, credentials)
+                    resolved_auth = self._replace_credential_in_auth(
+                        stored_creds, credentials
+                    )
 
                     # Cache the credentials
                     self.user_credentials[server_id][user_id] = resolved_auth
@@ -494,10 +512,11 @@ class MCPService:
                 except MissingCredentialError:
                     # Re-raise to trigger clarification flow
                     raise
+                except AmbiguousCredentialError:
+                    # Re-raise to trigger clarification flow with credential options
+                    raise
                 except Exception as e:
-                    error_msg = (
-                        f"Failed to resolve user credentials for MCP server '{server_id}': {str(e)}"
-                    )
+                    error_msg = f"Failed to resolve user credentials for MCP server '{server_id}': {str(e)}"
                     raise ValueError(error_msg) from e
         else:
             # Not using user credentials, use the stored credentials
@@ -511,7 +530,9 @@ class MCPService:
                 "tool_name": tool_name,
                 "has_user_credentials": resolved_auth is not None,
                 "auth_type": (
-                    resolved_auth.get("type") if isinstance(resolved_auth, dict) else "string"
+                    resolved_auth.get("type")
+                    if isinstance(resolved_auth, dict)
+                    else "string"
                 ),
                 "description": f"Executing tool with user credentials for {server_id}",
             },
@@ -539,7 +560,9 @@ class MCPService:
                         if error_data:
                             error_message = f"{error_message}: {error_data}"
                     else:
-                        error_message = str(error_info) if error_info else "Unknown error"
+                        error_message = (
+                            str(error_info) if error_info else "Unknown error"
+                        )
 
                     # Emit error event
                     observability.observe(
@@ -550,10 +573,14 @@ class MCPService:
                             "tool_name": tool_name,
                             "error": error_message,
                             "error_code": (
-                                error_info.get("code") if isinstance(error_info, dict) else None
+                                error_info.get("code")
+                                if isinstance(error_info, dict)
+                                else None
                             ),
                         },
-                        description=(f"MCP tool returned error: {tool_name} on {server_id}"),
+                        description=(
+                            f"MCP tool returned error: {tool_name} on {server_id}"
+                        ),
                     )
 
                     return {"error": error_message, "status": "error"}
@@ -565,7 +592,9 @@ class MCPService:
 
                 # Process result using modern protocol features
                 # This handles structured output with isError field
-                processed_result = ModernProtocolFeatures.process_structured_output(result)
+                processed_result = ModernProtocolFeatures.process_structured_output(
+                    result
+                )
 
                 # Enhanced observability with structured output info
                 observability.observe(
@@ -602,7 +631,9 @@ class MCPService:
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
+                description=(
+                    f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"
+                ),
             )
 
             # Error event already emitted above
@@ -668,7 +699,9 @@ class MCPService:
 
                 if transport_type == transports_to_try[-1]:
                     # Both transports failed - create detailed error message
-                    error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
+                    error_details = "\n".join(
+                        [f"  - {t}: {errors[t]}" for t in transports_to_try]
+                    )
 
                     raise MCPConnectionError(
                         f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
@@ -742,7 +775,9 @@ class MCPService:
 
                 # Store original credentials if provided
                 if original_credentials:
-                    self.connections[server_id]["original_credentials"] = original_credentials
+                    self.connections[server_id]["original_credentials"] = (
+                        original_credentials
+                    )
 
                 # Discover available tools with modern protocol features
                 try:
@@ -756,7 +791,9 @@ class MCPService:
                         # Use modern protocol features for better UX
                         self.tool_registry[server_id][tool_name] = {
                             **tool,
-                            "display_name": (ModernProtocolFeatures.extract_display_name(tool)),
+                            "display_name": (
+                                ModernProtocolFeatures.extract_display_name(tool)
+                            ),
                             "supports_structured_output": True,
                             "supports_elicitation": True,
                             "_meta": tool.get("_meta", {}),
@@ -781,7 +818,9 @@ class MCPService:
                                 {
                                     "name": tool.get("name", f"unknown_{i}"),
                                     "display_name": (
-                                        ModernProtocolFeatures.extract_display_name(tool)
+                                        ModernProtocolFeatures.extract_display_name(
+                                            tool
+                                        )
                                     ),
                                 }
                                 for i, tool in enumerate(tools)
@@ -797,9 +836,14 @@ class MCPService:
                     observability.observe(
                         event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
                         level=observability.EventLevel.WARNING,
-                        data={"server_id": server_id, "error": str(e), "tools_count": 0},
+                        data={
+                            "server_id": server_id,
+                            "error": str(e),
+                            "tools_count": 0,
+                        },
                         description=(
-                            f"Unable to discover tools from MCP server " f"{server_id}: {str(e)}"
+                            f"Unable to discover tools from MCP server "
+                            f"{server_id}: {str(e)}"
                         ),
                     )
                     self.tool_registry[server_id] = {}
@@ -1033,7 +1077,9 @@ class MCPService:
         client = handler.active_connections[server_name]
         return client.transport
 
-    async def list_resources(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
+    async def list_resources(
+        self, server_id: str, cursor: Optional[str] = None
+    ) -> Dict[str, Any]:
         """List available resources from an MCP server.
 
         Args:
@@ -1134,7 +1180,9 @@ class MCPService:
             max_tokens=max_tokens,
         )
 
-    async def list_templates(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
+    async def list_templates(
+        self, server_id: str, cursor: Optional[str] = None
+    ) -> Dict[str, Any]:
         """List available templates from an MCP server.
 
         Args:
@@ -1166,7 +1214,9 @@ class MCPService:
         transport = self._get_transport_for_server(server_id)
         return await self.template_discovery.get_template(transport, name)
 
-    async def ping_server(self, server_id: str, data: Optional[str] = None) -> Dict[str, Any]:
+    async def ping_server(
+        self, server_id: str, data: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Send a ping to an MCP server.
 
         Args:
@@ -1182,7 +1232,9 @@ class MCPService:
         transport = self._get_transport_for_server(server_id)
         return await self.health_monitor.ping(transport, data)
 
-    async def start_health_monitoring(self, server_id: str, ping_interval: float = 30.0) -> None:
+    async def start_health_monitoring(
+        self, server_id: str, ping_interval: float = 30.0
+    ) -> None:
         """Start continuous health monitoring for a server.
 
         Args:
@@ -1246,7 +1298,9 @@ class MCPService:
                 "capabilities": self.capabilities_negotiator.get_supported_capabilities(),
             }
 
-        return await self.capabilities_negotiator.initialize_connection(transport, client_info)
+        return await self.capabilities_negotiator.initialize_connection(
+            transport, client_info
+        )
 
     def get_transport_cache_stats(self) -> Dict[str, Any]:
         """
@@ -1352,24 +1406,31 @@ class MCPService:
                 )
 
                 if test_passed:
-                    recommended_url = TransportDetector.get_recommended_url(url, transport_type)
+                    recommended_url = TransportDetector.get_recommended_url(
+                        url, transport_type
+                    )
                     test_results["status"] = "success"
                     test_results["recommended_transport"] = transport_type
                     test_results["recommended_url"] = recommended_url
-                    test_results["recommended_action"] = f"Use transport_type='{transport_type}'"
+                    test_results["recommended_action"] = (
+                        f"Use transport_type='{transport_type}'"
+                    )
                 else:
                     test_results["status"] = "failed"
-                    test_results["recommended_action"] = "Try auto-detection or different transport"
+                    test_results["recommended_action"] = (
+                        "Try auto-detection or different transport"
+                    )
 
             else:
                 # Auto-detect best transport
-                detected_transport, detection_metadata = (
-                    await TransportDetector.detect_with_fallback(
-                        url,
-                        timeout,
-                        use_cache=False,  # Don't use cache for testing
-                        credentials=credentials,
-                    )
+                (
+                    detected_transport,
+                    detection_metadata,
+                ) = await TransportDetector.detect_with_fallback(
+                    url,
+                    timeout,
+                    use_cache=False,  # Don't use cache for testing
+                    credentials=credentials,
                 )
 
                 test_results["status"] = "success"
@@ -1385,7 +1446,9 @@ class MCPService:
         except Exception as e:
             test_results["status"] = "error"
             test_results["error"] = str(e)
-            test_results["recommended_action"] = "Check server is running and accessible"
+            test_results["recommended_action"] = (
+                "Check server is running and accessible"
+            )
 
         return test_results
 
@@ -1475,7 +1538,9 @@ class MCPService:
         Returns:
             Auth config with placeholders replaced
         """
-        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
+        USER_CREDENTIAL_PATTERN = re.compile(
+            r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
+        )
 
         def replace_recursive(data: Any, cred_val: Any = credential_value) -> Any:
             if isinstance(data, dict):
@@ -1494,12 +1559,20 @@ class MCPService:
                     # Replace with actual credential
                     if isinstance(cred_val, dict):
                         # If credential is a dict, try to extract the token
-                        for field in ["token", "api_key", "access_token", "key", "password"]:
+                        for field in [
+                            "token",
+                            "api_key",
+                            "access_token",
+                            "key",
+                            "password",
+                        ]:
                             if field in cred_val:
                                 token_value = cred_val[field]
                                 # Strip quotes if present
                                 if isinstance(token_value, str):
-                                    token_value = token_value.strip().strip('"').strip("'")
+                                    token_value = (
+                                        token_value.strip().strip('"').strip("'")
+                                    )
                                 return token_value
                         # If no standard field found, return as is
                         return cred_val
@@ -1561,11 +1634,6 @@ class MCPService:
             if conversation_context and len(conversation_context) > 0:
                 context_text = "\n".join(conversation_context[-5:])  # Last 5 messages
 
-            print(f"[DEBUG] Credential selection for {service_name}:")
-            print(f"  Available credentials: {[cred['name'] for cred in credential_list]}")
-            print(f"  User intent from parameters: '{user_intent.strip()}'")
-            print(f"  Conversation context: '{context_text.strip()}'")
-
             # If no user intent in parameters and no conversation context, return None
             # This will trigger clarification instead of just picking first credential
             if not user_intent.strip() and not context_text.strip():
@@ -1585,16 +1653,29 @@ class MCPService:
             prompt_parts.extend(
                 [
                     f"\nThey have the following {service_name} credentials available:",
-                    chr(10).join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
-                    "\nWhich credential should be used? Reply with just the number (1, 2, etc.) or 0 if none match clearly.",  # noqa: E501
+                    chr(10).join(
+                        f"{i+1}. {name}" for i, name in enumerate(credential_names)
+                    ),
+                    "\nWhich credential should be used?",
                     "\nPRIORITY ORDER (most important first):",
                     "1. Use the MOST RECENTLY mentioned account in the conversation context",
                     "2. If user says 'use my [account name]', prioritize that account for all future requests",
                     "3. Exact name matches in the current request",
-                    "4. Partial matches (e.g. 'lily' matches 'lily account')",
+                    "4. Partial matches only if clearly unambiguous (e.g. 'lily' matches 'lily account' but 'automaze' alone does NOT match 'lily automaze' - they must be different accounts)",  # noqa: E501
                     "5. Account ownership references (e.g. 'my acme account')",
-                    "\nIf the conversation shows the user previously specified an account preference, use that account.",  # noqa: E501
-                    "\nReply with just the number:",
+                    "\n",
+                    "If the conversation shows the user previously specified an account preference, use that account.",
+                    "If no clear match or ambiguous, set selection to 0 to trigger clarification.",
+                    "IMPORTANT: If user asks for 'automaze account' but only has 'lily automaze', this is AMBIGUOUS - they likely want a different account. Return selection: 0.",  # noqa: E501
+                    "IMPORTANT: If user uses generic terms like 'my account', 'my repositories', 'my GitHub' without specifying which account, this is AMBIGUOUS with multiple credentials. Return selection: 0.",  # noqa: E501
+                    "\n",
+                    "Reply with JSON format:",
+                    "{",
+                    '  "selection": 2,  // number 1-N for clear match, or 0 if ambiguous',  # noqa: E501
+                    '  "ordered_credentials": [2, 1]  // all credentials ordered from most likely to least likely match',  # noqa: E501
+                    "}",
+                    "\n",
+                    "If selection is 0 (ambiguous), the ordered_credentials should rank all options from most likely match to least likely match based on the user's request.",  # noqa: E501
                 ]
             )
 
@@ -1603,32 +1684,57 @@ class MCPService:
             # Create a basic LLM instance - we'll use the default from the environment
             llm = LLM()
 
-            print("[DEBUG] LLM prompt for credential selection:")
-            print(f"{prompt}")
-            print("[DEBUG] Sending to LLM...")
-
             # Use chat method with simple messages format
             messages = [{"role": "user", "content": prompt}]
-            response = await llm.chat(messages, max_tokens=10)
+            response = await llm.chat(messages, max_tokens=100)
 
-            print(f"[DEBUG] LLM response: '{response.strip()}'")
-
-            # Parse the response
+            # Parse the JSON response
+            import json
             import re
 
-            match = re.search(r"\b([0-9]+)\b", response.strip())
-            if match:
-                choice = int(match.group(1))
-                print(f"[DEBUG] Extracted choice: {choice}")
-                if 1 <= choice <= len(credential_list):
-                    selected_cred = credential_list[choice - 1]
-                    print(f"[DEBUG] Selected credential: {selected_cred['name']}")
-                    return selected_cred["credentials"]
+            try:
+                # Extract JSON from response (might have extra text)
+                json_match = re.search(r"\{[^}]*\}", response.strip())
+                if json_match:
+                    json_str = json_match.group(0)
+                    result = json.loads(json_str)
 
-            # If LLM didn't give a clear answer, return first credential
-            return credential_list[0]["credentials"]
+                    selection = result.get("selection", 0)
+                    ordered_credentials = result.get(
+                        "ordered_credentials", list(range(1, len(credential_list) + 1))
+                    )
 
-        except Exception as e:
-            print(f"LLM credential selection failed: {e}, using first credential")
+                    if 1 <= selection <= len(credential_list):
+                        # Clear selection - use the selected credential
+                        selected_cred = credential_list[selection - 1]
+                        return selected_cred["credentials"]
+                    elif selection == 0:
+                        # Ambiguous - trigger clarification with smart ordering
+                        # Don't return None - instead raise AmbiguousCredentialError with ordering info
+                        # This will be caught and handled by the clarification flow
+                        raise AmbiguousCredentialError(
+                            service=service_name,
+                            user_id="",  # Will be filled in by caller
+                            available_credentials=credential_list,
+                            ordered_credentials=ordered_credentials,
+                        )
+
+            except (json.JSONDecodeError, KeyError):
+                # Fallback to old number parsing
+                match = re.search(r"\b([0-9]+)\b", response.strip())
+                if match:
+                    choice = int(match.group(1))
+                    if 1 <= choice <= len(credential_list):
+                        selected_cred = credential_list[choice - 1]
+                        return selected_cred["credentials"]
+
+            # If LLM didn't give a clear answer, return None to trigger clarification
+            return None
+
+        except AmbiguousCredentialError:
+            # Re-raise AmbiguousCredentialError to be handled by caller
+            raise
+        except Exception:
+            # LLM credential selection failed, using first credential as fallback
             # Fallback to first credential
             return credential_list[0]["credentials"]
