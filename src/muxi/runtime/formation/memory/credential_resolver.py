@@ -25,7 +25,11 @@ class MissingCredentialError(FormationError):
         self.user_id = user_id
         super().__init__(
             f"Missing credential for service '{service}' for user '{user_id}'",
-            {"service": service, "user_id": user_id, "error_type": "missing_credential"},
+            {
+                "service": service,
+                "user_id": user_id,
+                "error_type": "missing_credential",
+            },
         )
 
 
@@ -41,10 +45,10 @@ class AmbiguousCredentialError(FormationError):
     ):
         self.service = service
         self.user_id = user_id
-        self.available_credentials = (
-            available_credentials  # List of credential dicts with 'name' and 'credentials'
-        )
-        self.ordered_credentials = ordered_credentials or []  # LLM-provided ordering (indices)
+        self.available_credentials = available_credentials  # List of credential dicts with 'name' and 'credentials'
+        self.ordered_credentials = (
+            ordered_credentials or []
+        )  # LLM-provided ordering (indices)
 
         credential_names = [cred["name"] for cred in available_credentials]
         super().__init__(
@@ -68,7 +72,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    public_id = Column(String(21), nullable=False, unique=True)  # Nano ID for external exposure
+    public_id = Column(
+        String(21), nullable=False, unique=True
+    )  # Nano ID for external exposure
     external_user_id = Column(Text, nullable=False)  # The actual external user ID
     formation_id = Column(String, nullable=False, default="default-formation")
 
@@ -169,14 +175,20 @@ class CredentialResolver:
                 else:
                     # Multiple credentials - return them as a list with names
                     credential_list = [
-                        {"name": cred.name, "credentials": cred.credentials} for cred in credentials
+                        {"name": cred.name, "credentials": cred.credentials}
+                        for cred in credentials
                     ]
                     return credential_list
 
             return None
 
     async def store_credential(
-        self, user_id: str, service: str, credentials: Dict[str, Any]
+        self,
+        user_id: str,
+        service: str,
+        credentials: Dict[str, Any],
+        credential_name: Optional[str] = None,
+        mcp_service: Optional[Any] = None,
     ) -> None:
         """
         Store user credentials in the database.
@@ -185,9 +197,17 @@ class CredentialResolver:
             user_id: The user ID
             service: The service name (will be normalized to lowercase)
             credentials: The credential data to store
+            credential_name: Optional name for the credential. If None, will attempt smart naming
+            mcp_service: Optional MCP service for identity discovery
         """
         # Normalize service to lowercase for consistent storage
         service = service.lower()
+
+        # Determine credential name - use smart naming if not provided
+        if credential_name is None:
+            # For initial storage, use service name to avoid chicken-egg problem
+            # Smart naming requires credentials to be available for the identity tool
+            credential_name = service
 
         async with self.async_session_maker() as session:
             try:
@@ -227,7 +247,7 @@ class CredentialResolver:
                     new_cred = Credential(
                         user_id=user.id,  # Use the integer user ID from users table
                         credential_id=nanoid.generate(),  # Generate unique ID
-                        name=service,  # Can be customized later
+                        name=credential_name,  # Use discovered/provided name
                         service=service,
                         credentials=credentials,
                     )
@@ -244,6 +264,80 @@ class CredentialResolver:
                 raise FormationError(
                     f"Failed to store credential for service '{service}': {str(e)}"
                 ) from e
+
+    async def update_credential_name_with_discovery(
+        self,
+        user_id: str,
+        service: str,
+        mcp_service: Optional[Any] = None,
+    ) -> Optional[str]:
+        """
+        Update credential name using identity discovery after credential is stored.
+
+        This should be called AFTER credentials are stored and MCP service is
+        initialized with those credentials.
+
+        Args:
+            user_id: The user ID
+            service: The service name
+            mcp_service: MCP service initialized with user credentials
+
+        Returns:
+            The updated credential name if successful, None otherwise
+        """
+        if not mcp_service:
+            return None
+
+        # Get the stored credentials
+        stored_creds = await self.resolve(user_id, service)
+        if not stored_creds:
+            return None
+
+        # Discover the name using the initialized MCP service
+        smart_name = await self._discover_credential_name(
+            service, stored_creds, mcp_service, user_id
+        )
+
+        if smart_name and smart_name != service:
+            # Log the credential name update
+            # TODO: Add proper observability event type for credential updates
+            # from ...services import observability
+            # observability.observe(
+            #     event_type=observability.SystemEvents.CREDENTIAL_STORED,
+            #     level=observability.EventLevel.INFO,
+            #     data={
+            #         "user_id": user_id,
+            #         "service": service,
+            #         "old_name": service,
+            #         "new_name": smart_name,
+            #         "description": f"Updated credential name from '{service}' to '{smart_name}'"
+            #     }
+            # )
+            # Update in database
+            async with self.async_session_maker() as session:
+                stmt = (
+                    select(Credential)
+                    .join(User, Credential.user_id == User.id)
+                    .where(
+                        User.external_user_id == user_id,
+                        User.formation_id == self.formation_id,
+                        Credential.service == service,
+                    )
+                )
+                result = await session.execute(stmt)
+                credential = result.scalar_one_or_none()
+
+                if credential:
+                    credential.name = smart_name
+                    await session.commit()
+
+                    # Clear cache
+                    if user_id in self._cache:
+                        self._cache[user_id].pop(service, None)
+
+                    return smart_name
+
+        return None
 
     def clear_cache(self, user_id: str = None) -> None:
         """
@@ -325,3 +419,352 @@ class CredentialResolver:
             credentials = result.scalars().all()
 
             return {cred.service: cred.credentials for cred in credentials}
+
+    async def _discover_credential_name(
+        self,
+        service: str,
+        credentials: Dict[str, Any],
+        mcp_service: Optional[Any],
+        user_id: str,
+    ) -> str:
+        """
+        Discover a meaningful name for the credential using LLM-guided identity tools.
+
+        Uses the same approach as agent.py - asks LLM to identify and call appropriate
+        identity discovery tools (like get_me, whoami, get_authenticated_user, etc.)
+
+        Args:
+            service: The service name (e.g., 'github')
+            credentials: The credential data
+            mcp_service: MCP service for tool invocation
+            user_id: User ID for context
+
+        Returns:
+            A meaningful name for the credential or fallback to service name
+        """
+        # If no MCP service provided, fall back to service name
+        if not mcp_service:
+            return service
+
+        try:
+            # Get the MCP server ID for this service
+            server_id = f"{service}-mcp"  # Convention: service-mcp
+
+            # Check if this server exists and has tools
+            if server_id not in mcp_service.tool_registry:
+                return service
+
+            available_tools = mcp_service.tool_registry[server_id]
+            if not available_tools:
+                return service
+
+            # Use LLM to intelligently discover and call identity tools
+            from ...services.llm import LLM
+
+            # Create a lightweight LLM instance for tool discovery
+            # Use a fast, inexpensive model for this utility task
+            try:
+                discovery_llm = LLM(model="openai/gpt-4o-mini")
+            except Exception:
+                # If LLM creation fails (no API key, etc.), fall back to heuristic approach
+                return await self._discover_credential_name_heuristic(
+                    service, mcp_service, server_id, user_id
+                )
+
+            # Build tool list for LLM
+            tool_list = []
+            for tool_name, tool_info in available_tools.items():
+                description = tool_info.get("description", "")
+                tool_list.append(f"- {tool_name}: {description}")
+
+            tools_text = "\n".join(tool_list)
+
+            # Ask LLM to identify the best identity discovery tool
+            discovery_prompt = (
+                f"You are helping discover a meaningful name for a {service} credential by calling an identity tool."
+                f"\n\nAvailable tools from {server_id}:"
+                f"\n{tools_text}"
+                "\n\nPlease identify the BEST tool for discovering the authenticated user's identity/account info "
+                "(like get_me, whoami, get_authenticated_user, user_info, auth_test, etc.)."
+                "\n\nRespond with ONLY the exact tool name (no explanation, no quotes, no extra text). "
+                "\n\nIf no identity tool is available, respond with 'NONE'."
+            )
+
+            # Get LLM recommendation
+            try:
+                response = discovery_llm.generate(
+                    messages=[{"role": "user", "content": discovery_prompt}],
+                    max_tokens=20,
+                    temperature=0
+                )
+                recommended_tool = response.strip()
+            except Exception:
+                # Fall back to heuristic approach
+                return await self._discover_credential_name_heuristic(
+                    service, mcp_service, server_id, user_id
+                )
+
+            # Validate the recommended tool exists
+            if recommended_tool == "NONE" or recommended_tool not in available_tools:
+                return service
+
+            # Call the recommended identity tool
+            result = await mcp_service.invoke_tool(
+                server_id=server_id,
+                tool_name=recommended_tool,
+                parameters={},
+                user_id=user_id,
+                credential_resolver=self,
+            )
+
+            # Extract meaningful name from response
+            if result.get("status") == "success":
+                name = self._extract_name_from_identity_response(
+                    service, result.get("result", {})
+                )
+                if name and name != service:
+                    return name
+
+        except Exception:
+            # If anything fails, fall back to service name
+            pass
+
+        return service
+
+    async def _discover_credential_name_heuristic(
+        self,
+        service: str,
+        mcp_service: Any,
+        server_id: str,
+        user_id: str,
+    ) -> str:
+        """
+        Fallback heuristic approach when LLM is not available.
+
+        Uses common identity tool name patterns to find suitable tools.
+        """
+        available_tools = mcp_service.tool_registry[server_id]
+
+        # Common identity tool name patterns (ordered by preference)
+        identity_patterns = [
+            "get_me", "whoami", "get_authenticated_user", "get_current_user",
+            "me", "user_info", "get_user", "current_user", "auth_test",
+            "get_profile", "profile", "identity", "account_info"
+        ]
+
+        # Try each pattern to find a matching tool
+        for pattern in identity_patterns:
+            if pattern in available_tools:
+                try:
+                    # Call the identity tool
+                    result = await mcp_service.invoke_tool(
+                        server_id=server_id,
+                        tool_name=pattern,
+                        parameters={},
+                        user_id=user_id,
+                        credential_resolver=self,
+                    )
+
+                    # Extract meaningful name from response
+                    if result.get("status") == "success":
+                        name = self._extract_name_from_identity_response(
+                            service, result.get("result", {})
+                        )
+                        if name and name != service:
+                            return name
+
+                except Exception:
+                    # Continue to next pattern if this tool fails
+                    continue
+
+        # If no identity tools work, fall back to service name
+        return service
+
+    def _extract_name_from_identity_response(
+        self, service: str, response: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Extract a meaningful name from identity tool response using LLM when available.
+
+        Args:
+            service: The service name
+            response: Response from identity tool
+
+        Returns:
+            Extracted name or None
+        """
+        if not response:
+            return None
+
+        # Handle structured response format from MCP tools
+        response_text = ""
+        if isinstance(response, dict):
+            # Look for text content in MCP response structure
+            content = response.get("content", [])
+            if isinstance(content, list) and content:
+                # Get first content item
+                first_content = content[0]
+                if (
+                    isinstance(first_content, dict)
+                    and first_content.get("type") == "text"
+                ):
+                    response_text = first_content.get("text", "")
+
+        if not response_text:
+            # Direct field access fallback
+            return self._extract_name_from_fields(service, response)
+
+        # Try LLM-based extraction first, then fallback to parsing
+        try:
+            from ...services.llm import LLM
+            extraction_llm = LLM(model="openai/gpt-4o-mini")
+
+            extraction_prompt = f"""
+Extract the most meaningful account identifier from this {service} identity response.
+
+Response data:
+{response_text}
+
+Look for username, login, account name, or similar unique identifier.
+Respond with ONLY the identifier (no explanation, no quotes, no extra text).
+If no suitable identifier found, respond with "NONE".
+"""
+
+            result = extraction_llm.generate(
+                messages=[{"role": "user", "content": extraction_prompt}],
+                max_tokens=50,
+                temperature=0
+            )
+
+            extracted_name = result.strip()
+            if extracted_name != "NONE" and extracted_name:
+                return extracted_name
+
+        except Exception:
+            # Fall back to traditional parsing if LLM fails
+            pass
+
+        # Fallback to traditional parsing methods
+        return self._parse_identity_text(service, response_text)
+
+    def _parse_identity_text(self, service: str, text: str) -> Optional[str]:
+        """
+        Parse identity information from text response.
+
+        Args:
+            service: The service name
+            text: Text response from identity tool
+
+        Returns:
+            Extracted name or None
+        """
+        if not text:
+            return None
+
+        # Service-specific parsing
+        if service == "github":
+            # Look for GitHub identity patterns
+            import json
+
+            try:
+                # Try to parse as JSON first
+                data = json.loads(text)
+                return self._extract_name_from_fields(service, data)
+            except (json.JSONDecodeError, ValueError):
+                # Parse text patterns
+                patterns = [
+                    r'"login":\s*"([^"]+)"',
+                    r'"name":\s*"([^"]+)"',
+                    r"Username:\s*([^\s\n]+)",
+                    r"Login:\s*([^\s\n]+)",
+                ]
+
+                for pattern in patterns:
+                    import re
+
+                    match = re.search(pattern, text, re.IGNORECASE)
+                    if match:
+                        name = match.group(1).strip()
+                        if name and name != "null":
+                            return name
+
+        return None
+
+    def _extract_name_from_fields(
+        self, service: str, data: Dict[str, Any]
+    ) -> Optional[str]:
+        """
+        Extract name from structured data fields using LLM when available.
+
+        Args:
+            service: The service name
+            data: Structured data from identity response
+
+        Returns:
+            Extracted name or None
+        """
+        if not isinstance(data, dict):
+            return None
+
+        # Try LLM-based extraction first for better results
+        try:
+            from ...services.llm import LLM
+            extraction_llm = LLM(model="openai/gpt-4o-mini")
+
+            data_str = str(data)
+            extraction_prompt = f"""
+Extract the most meaningful account identifier from this {service} user data.
+
+Data: {data_str}
+
+Look for username, login, account name, or similar unique identifier.
+Prefer usernames over display names, and unique identifiers over generic ones.
+Respond with ONLY the identifier (no explanation, no quotes, no extra text).
+If no suitable identifier found, respond with "NONE".
+"""
+
+            result = extraction_llm.generate(
+                messages=[{"role": "user", "content": extraction_prompt}],
+                max_tokens=50,
+                temperature=0
+            )
+
+            extracted_name = result.strip()
+            if extracted_name != "NONE" and extracted_name:
+                return extracted_name
+
+        except Exception:
+            # Fall back to traditional field extraction
+            pass
+
+        # Traditional field-based extraction fallback
+        # Service-specific field mappings
+        if service == "github":
+            # GitHub API response fields in order of preference
+            name_fields = [
+                "login",  # GitHub username (most unique)
+                "name",  # Display name
+                "email",  # Email as fallback
+            ]
+        else:
+            # Generic fallback fields
+            name_fields = [
+                "username",
+                "login",
+                "user",
+                "name",
+                "display_name",
+                "displayName",
+                "email",
+            ]
+
+        # Try each field in order
+        for field in name_fields:
+            value = data.get(field)
+            if value and isinstance(value, str) and value.strip():
+                cleaned = value.strip()
+                # Avoid generic/placeholder values
+                if cleaned.lower() not in ["null", "none", "", "unknown", "user"]:
+                    return cleaned
+
+        return None

@@ -3554,7 +3554,26 @@ class Overlord:
                                 user_id=user_id,
                                 service=service,
                                 credentials=credential_value,
+                                mcp_service=self.mcp_service,
                             )
+
+                            # Asynchronously update credential name with smart discovery
+                            # This happens after storage so credentials are available for MCP
+                            async def update_credential_name():
+                                try:
+                                    # Re-initialize MCP connection with new credentials
+                                    # and discover the account name
+                                    await self.credential_resolver.update_credential_name_with_discovery(
+                                        user_id=user_id,
+                                        service=service,
+                                        mcp_service=self.mcp_service,
+                                    )
+                                except Exception:
+                                    # Silent failure - credential still works with generic name
+                                    pass
+
+                            # Fire and forget - don't wait for completion
+                            asyncio.create_task(update_credential_name())
 
                             # Get the original message that triggered the clarification
                             original_message = clarification_info.get("original_message")
@@ -4039,8 +4058,24 @@ class Overlord:
                             if self._validate_credential_data(credential_data, service):
                                 # Store the credential
                                 await self.credential_resolver.store_credential(
-                                    user_id=user_id, service=service, credentials=credential_data
+                                    user_id=user_id,
+                                    service=service,
+                                    credentials=credential_data,
+                                    mcp_service=self.mcp_service,
                                 )
+
+                                # Asynchronously update credential name with smart discovery
+                                async def update_name():
+                                    try:
+                                        await self.credential_resolver.update_credential_name_with_discovery(
+                                            user_id=user_id,
+                                            service=service,
+                                            mcp_service=self.mcp_service,
+                                        )
+                                    except Exception:
+                                        pass
+
+                                asyncio.create_task(update_name())
                             else:
                                 observability.observe(
                                     event_type=observability.ErrorEvents.VALIDATION_FAILED,
