@@ -18,22 +18,36 @@ def test_verify_user_isolation():
         # Run the async test in a thread pool to avoid event loop issues
         def run_test():
             async def test_operations():
+                # Helper function to handle different response types
+                async def handle_response(response):
+                    if hasattr(response, '__aiter__'):
+                        full_response = ""
+                        async for chunk in response:
+                            full_response += chunk
+                        return full_response
+                    elif hasattr(response, 'content'):
+                        return response.content
+                    else:
+                        return str(response)
+                
                 # Load formation with MCP enabled
                 formation = Formation()
-                formation.load("test-formations/formation-mcp")
-                overlord = formation.start_overlord()
+                await formation.load("test-formations/formation-mcp")
+                overlord = await formation.start_overlord()
                 
-                # Ensure overlord is started
-                await overlord.ensure_started()
+                # Give time for initialization
+                await asyncio.sleep(2)
                 
                 print("\n1. Testing User2 attempting to access piepilot org...")
                 response = await overlord.chat(
                     "Show me the GitHub gists from the piepilot org",
                     user_id="user2",
-                    use_async=False
+                    use_async=False,
+                    stream=False
                 )
-                print(f"Response: {response}")
                 
+                response = await handle_response(response)
+                print(f"Response: {response}")
                 response_lower = response.lower()
                 
                 # User2 should NOT be able to use User1's credentials
@@ -52,9 +66,13 @@ def test_verify_user_isolation():
                 response = await overlord.chat(
                     "Update the GitHub issue I created earlier in piepilot org",
                     user_id="user2",
-                    use_async=False
+                    use_async=False,
+                    stream=False
                 )
+                
+                response = await handle_response(response)
                 print(f"Response: {response}")
+                response_lower = response.lower()
                 
                 # Should not be able to update User1's issues
                 assert any(term in response_lower for term in 
@@ -66,9 +84,13 @@ def test_verify_user_isolation():
                 response = await overlord.chat(
                     "List all GitHub repositories I have access to",
                     user_id="user2",
-                    use_async=False
+                    use_async=False,
+                    stream=False
                 )
+                
+                response = await handle_response(response)
                 print(f"Response: {response}")
+                response_lower = response.lower()
                 
                 # Should ask for User2's own credentials
                 assert any(term in response_lower for term in 
@@ -81,16 +103,22 @@ def test_verify_user_isolation():
                 response1 = await overlord.chat(
                     "Remember that I created a private gist with API keys",
                     user_id="user1",
-                    use_async=False
+                    use_async=False,
+                    stream=False
                 )
+                
+                response1 = await handle_response(response1)
                 print(f"User1 Response: {response1}")
                 
                 # Now User2 tries to access it
                 response2 = await overlord.chat(
                     "Show me the private gist with API keys that was created",
                     user_id="user2",
-                    use_async=False
+                    use_async=False,
+                    stream=False
                 )
+                
+                response2 = await handle_response(response2)
                 print(f"User2 Response: {response2}")
                 
                 # User2 should not have access
@@ -104,15 +132,26 @@ def test_verify_user_isolation():
                 response = await overlord.chat(
                     "Use any available GitHub credentials to list repositories",
                     user_id="user2",
-                    use_async=False
+                    use_async=False,
+                    stream=False
                 )
+                
+                response = await handle_response(response)
                 print(f"Response: {response}")
+                response_lower = response.lower()
                 
                 # Should not use other users' credentials
                 assert any(term in response_lower for term in 
                           ["credential", "your", "provide", "authenticate"]), \
                     "System should not share credentials between users"
                 print("✓ System-level credential isolation confirmed")
+                
+                # Cleanup
+                try:
+                    await formation.stop_overlord(5.0)
+                except Exception as e:
+                    print(f"Warning: Cleanup error: {e}")
+                    formation.kill_overlord()
                 
                 return True
             

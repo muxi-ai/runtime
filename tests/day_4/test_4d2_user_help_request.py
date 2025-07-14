@@ -41,7 +41,7 @@ async def run_async_test():
         # Give MCP servers time to initialize
         print("\nWaiting for MCP servers to initialize...")
         await asyncio.sleep(3)
-        
+
         # Clean up any existing credentials for user2 to ensure test starts fresh
         print("\n=== CLEANING UP EXISTING CREDENTIALS ===")
         if formation._db_manager:
@@ -51,8 +51,8 @@ async def run_async_test():
                     # Delete existing GitHub credentials for user_id=5 (user2)
                     delete_result = await session.execute(
                         text("""
-                        DELETE FROM credentials 
-                        WHERE service = 'github' 
+                        DELETE FROM credentials
+                        WHERE service = 'github'
                         AND user_id = 5
                         """)
                     )
@@ -60,7 +60,7 @@ async def run_async_test():
                     print(f"✅ Deleted {delete_result.rowcount} GitHub credential(s) for user_id=5")
             except Exception as e:
                 print(f"Warning: Could not clear credentials: {e}")
-                
+
         # Also clear the credential cache if it exists
         if overlord.credential_resolver:
             print("Clearing credential cache...")
@@ -77,7 +77,7 @@ async def run_async_test():
 
         # Create a session ID for this conversation
         session_id = "test_session_4d2_help"
-        
+
         # Make the initial request
         response1 = await overlord.chat(
             user_id="user2",
@@ -145,17 +145,17 @@ async def run_async_test():
 
         # Analyze the help response
         response2_str = str(response2).lower()
-        
+
         # Check if the response contains helpful instructions
         helpful_keywords = [
             "github.com", "settings", "developer settings", "personal access",
             "generate", "create", "token", "permission", "scope",
             "sign in", "profile", "configure", "expiration", "copy"
         ]
-        
+
         keywords_found = [kw for kw in helpful_keywords if kw in response2_str]
         is_helpful = len(keywords_found) >= 3  # At least 3 helpful keywords
-        
+
         # Check if it still asks for the token
         still_asks = any(phrase in response2_str for phrase in [
             "once you have", "after you", "when you get", "provide it",
@@ -176,7 +176,7 @@ async def run_async_test():
             token_response = "Thanks for the help! Here's my token: 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"
             print("User response:", token_response)
             print("="*80 + "\n")
-            
+
             response3 = await overlord.chat(
                 user_id="user2",
                 message=token_response,
@@ -184,24 +184,24 @@ async def run_async_test():
                 use_async=False,
                 stream=False,
             )
-            
+
             if hasattr(response3, '__aiter__'):
                 full_response = ""
                 async for chunk in response3:
                     full_response += chunk
                 response3 = full_response
-            
+
             print("\n" + "="*80)
             print("Final Response:")
             print("="*80)
             print(str(response3))
             print("="*80 + "\n")
-            
+
             # Check if repositories were listed
             response3_str = str(response3).lower()
             found_repos = any(word in response3_str for word in ["repository", "repositories", "repo", "repos"])
             has_error = "error" in response3_str or "failed" in response3_str
-            
+
             # Extract and display repositories if found
             if found_repos and not has_error:
                 print("\n" + "="*80)
@@ -220,7 +220,7 @@ async def run_async_test():
                     # Fallback: show part of response
                     print(str(response3)[:300] + "..." if len(str(response3)) > 300 else str(response3))
                 print("="*80 + "\n")
-                
+
                 print("✅ Token was accepted and repositories were listed!")
                 summary = "SUCCESS: Complete flow worked - help provided, token accepted, repositories listed!"
             else:
@@ -228,7 +228,7 @@ async def run_async_test():
                 summary = "PARTIAL SUCCESS: Help was provided but token was not processed correctly"
         else:
             summary = "FAILED: System did not provide adequate help for obtaining a token"
-        
+
         # Final success determination
         success = is_helpful and found_repos if is_helpful else False
 
