@@ -6,13 +6,13 @@ and other components that need to access services on behalf of users.
 """
 
 from typing import Optional, Dict, Any
-from datetime import datetime
 from sqlalchemy import Column, Integer, String, DateTime, select, Text
 from sqlalchemy.orm import declarative_base
 import nanoid
 
 from ...datatypes.json_type import JSONType
 from ...datatypes.exceptions import FormationError
+from ...utils.datetime_utils import utc_now_naive
 
 Base = declarative_base()
 
@@ -77,6 +77,12 @@ class User(Base):
     )  # Nano ID for external exposure
     external_user_id = Column(Text, nullable=False)  # The actual external user ID
     formation_id = Column(String, nullable=False, default="default-formation")
+    created_at = Column(DateTime, default=lambda: utc_now_naive())
+    updated_at = Column(
+        DateTime,
+        default=lambda: utc_now_naive(),
+        onupdate=lambda: utc_now_naive(),
+    )
 
     def __repr__(self) -> str:
         """Return a string representation for debugging."""
@@ -94,11 +100,11 @@ class Credential(Base):
     name = Column(String, nullable=False)
     service = Column(String, nullable=False)  # Always lowercase
     credentials = Column(JSONType, nullable=False, default={})  # Works with both DBs
-    created_at = Column(DateTime, default=lambda: datetime.utcnow())
+    created_at = Column(DateTime, default=lambda: utc_now_naive())
     updated_at = Column(
         DateTime,
-        default=lambda: datetime.utcnow(),
-        onupdate=lambda: datetime.utcnow(),
+        default=lambda: utc_now_naive(),
+        onupdate=lambda: utc_now_naive(),
     )
 
     # Add indexes in the database migration
@@ -241,7 +247,7 @@ class CredentialResolver:
                 if existing:
                     # Update existing credential
                     existing.credentials = credentials
-                    existing.updated_at = datetime.utcnow()
+                    existing.updated_at = utc_now_naive()
                 else:
                     # Create new credential
                     new_cred = Credential(
@@ -366,15 +372,12 @@ class CredentialResolver:
         service = service.lower()
 
         async with self.async_session_maker() as session:
-            # Compute user ID hash for lookup
-            user_id_hash = self._compute_user_id_hash(user_id)
-
             stmt = (
                 select(Credential)
                 .join(User, Credential.user_id == User.id)
                 .where(
-                    User.external_user_id_hash == user_id_hash,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.external_user_id == user_id,
+                    User.formation_id == self.formation_id,
                     Credential.service == service,
                 )
             )
@@ -404,15 +407,12 @@ class CredentialResolver:
             Dictionary mapping service names to credentials
         """
         async with self.async_session_maker() as session:
-            # Compute user ID hash for lookup
-            user_id_hash = self._compute_user_id_hash(user_id)
-
             stmt = (
                 select(Credential)
                 .join(User, Credential.user_id == User.id)
                 .where(
-                    User.external_user_id_hash == user_id_hash,
-                    User.formation_id_hash == self.formation_id_hash,
+                    User.external_user_id == user_id,
+                    User.formation_id == self.formation_id,
                 )
             )
             result = await session.execute(stmt)
