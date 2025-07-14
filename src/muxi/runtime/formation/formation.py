@@ -44,7 +44,10 @@ import sys
 
 
 # Configuration imports
-from .config.validation import validate_formation, validate_user_credentials_requirements
+from .config.validation import (
+    validate_formation,
+    validate_user_credentials_requirements_async,
+)
 from .config.formation_loader import FormationLoader
 
 # Service imports
@@ -315,7 +318,7 @@ class Formation:
 
             # Validate user credentials requirements (ensure database is configured if needed)
             try:
-                validate_user_credentials_requirements(self.config, self.secrets_manager)
+                await validate_user_credentials_requirements_async(self.config, self.secrets_manager)
             except ValueError as e:
                 raise ConfigurationValidationError(
                     [str(e)],
