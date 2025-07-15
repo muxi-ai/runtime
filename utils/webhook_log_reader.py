@@ -26,9 +26,9 @@ class WebhookLogReader:
             if response.ok:
                 data = response.json()
                 return data.get('logs', [])
-        except:
+        except Exception:
             pass
-        
+
         # Fall back to file if server not available
         if not self.log_file.exists():
             return []
@@ -92,9 +92,9 @@ class WebhookLogReader:
             response = requests.delete("http://127.0.0.1:8765/logs", timeout=1)
             if response.ok:
                 return
-        except:
+        except Exception:
             pass
-            
+
         # Fall back to file if server not available
         if self.log_file.exists():
             self.log_file.unlink()

@@ -7,6 +7,7 @@ Logs all received webhooks to a file for test analysis.
 import asyncio
 import json
 import logging
+import fcntl
 from datetime import datetime, timezone
 from pathlib import Path
 from aiohttp import web
@@ -100,34 +101,59 @@ class WebhookServer:
             return web.json_response({"status": "error", "message": str(e)}, status=500)
 
     def _append_to_log(self, data: dict):
-        """Append webhook data to log file"""
+        """Append webhook data to log file using append-only approach with file locking"""
         try:
             # Ensure directory exists
             self.log_file.parent.mkdir(parents=True, exist_ok=True)
 
-            # Read existing logs
-            logs = self._read_logs()
+            # Append to file with locking (JSONL format - one JSON object per line)
+            with open(self.log_file, "a") as f:
+                # Acquire exclusive lock to prevent race conditions
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    # Write as single line JSON (JSONL format)
+                    json.dump(data, f, separators=(',', ':'))
+                    f.write('\n')
+                    f.flush()  # Ensure data is written immediately
+                finally:
+                    # Release lock
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
-            # Append new log
-            logs.append(data)
-
-            # Write back
-            with open(self.log_file, "w") as f:
-                json.dump(logs, f, indent=2)
-
+        except OSError as e:
+            logger.error(f"File I/O error writing to log file: {e}")
+        except (TypeError, ValueError) as e:
+            logger.error(f"JSON serialization error writing to log file: {e}")
         except Exception as e:
-            logger.error(f"Error writing to log file: {e}")
+            logger.error(f"Unexpected error writing to log file: {e}")
 
     def _read_logs(self) -> list:
-        """Read logs from file"""
+        """Read logs from file (JSONL format - one JSON object per line)"""
         if not self.log_file.exists():
             return []
 
+        logs = []
         try:
             with open(self.log_file, "r") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError):
+                # Acquire shared lock for reading
+                fcntl.flock(f.fileno(), fcntl.LOCK_SH)
+                try:
+                    for line in f:
+                        line = line.strip()
+                        if line:  # Skip empty lines
+                            try:
+                                logs.append(json.loads(line))
+                            except json.JSONDecodeError:
+                                # Skip malformed lines but continue reading
+                                logger.warning(f"Skipping malformed log line: {line}")
+                                continue
+                finally:
+                    # Release lock
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except IOError as e:
+            logger.error(f"Error reading log file: {e}")
             return []
+        
+        return logs
 
     def _get_webhook_count(self) -> int:
         """Get total webhook count"""

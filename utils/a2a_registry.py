@@ -26,7 +26,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .user_dirs import get_a2a_registry_dir
+try:
+    from .user_dirs import get_a2a_registry_dir
+except ImportError:
+    # When running as standalone script
+    from user_dirs import get_a2a_registry_dir
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -387,115 +391,100 @@ class RegistryStorage:
 
     def _save_agents(self, agents: Dict[str, Dict]):
         """Save registered agents to storage."""
-        try:
-            with open(self.agents_file, "w") as f:
-                json.dump(agents, f, indent=2)
-        except Exception:
-            raise
+        with open(self.agents_file, "w") as f:
+            json.dump(agents, f, indent=2)
 
     def register_agent(self, agent_card: AgentCard) -> bool:
         """Register a new agent. Returns True if successful."""
+        agents = self._load_agents()
 
-        try:
-            agents = self._load_agents()
+        # Use URL as unique key
+        url_key = agent_card.url
 
-            # Use URL as unique key
-            url_key = agent_card.url
+        # Debug logging
+        logging.info(
+            f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'"
+        )
 
-            # Debug logging
-            logging.info(
-                f"REGISTER: Registering agent '{agent_card.name}' with URL key: '{url_key}'"
-            )
+        # Add registration metadata
+        agent_data = agent_card.model_dump()
+        agent_data["_registered_at"] = datetime.now(timezone.utc).isoformat()
 
-            # Add registration metadata
-            agent_data = agent_card.model_dump()
-            agent_data["_registered_at"] = datetime.now(timezone.utc).isoformat()
+        agents[url_key] = agent_data
+        self._save_agents(agents)
 
-            agents[url_key] = agent_data
-            self._save_agents(agents)
+        logging.info(f"REGISTER: Successfully stored agent at URL key: '{url_key}'")
 
-            logging.info(f"REGISTER: Successfully stored agent at URL key: '{url_key}'")
-
-            return True
-        except Exception:
-            raise
+        return True
 
     def deregister_agent(self, agent_url: str) -> bool:
         """Deregister an agent by URL. Returns True if found and removed."""
+        agents = self._load_agents()
 
-        try:
-            agents = self._load_agents()
+        # Debug logging
+        logging.info(f"DEREGISTER: Looking for agent with URL: '{agent_url}'")
+        logging.info(f"DEREGISTER: Available URLs in storage: {list(agents.keys())}")
 
-            # Debug logging
-            logging.info(f"DEREGISTER: Looking for agent with URL: '{agent_url}'")
-            logging.info(f"DEREGISTER: Available URLs in storage: {list(agents.keys())}")
+        if agent_url in agents:
+            agent_name = agents[agent_url].get("name", "unknown")
+            del agents[agent_url]
+            self._save_agents(agents)
+            logging.info(
+                f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'"
+            )
 
-            if agent_url in agents:
-                agent_name = agents[agent_url].get("name", "unknown")
-                del agents[agent_url]
-                self._save_agents(agents)
-                logging.info(
-                    f"DEREGISTER: Successfully removed agent '{agent_name}' at '{agent_url}'"
-                )
+            return True
 
-                return True
+        logging.warning(f"DEREGISTER: Agent URL '{agent_url}' not found in storage")
 
-            logging.warning(f"DEREGISTER: Agent URL '{agent_url}' not found in storage")
-
-            return False
-        except Exception:
-            raise
+        return False
 
     def get_registered_agents(self) -> List[AgentCard]:
         """Get all registered agents as AgentCard objects."""
+        agents = self._load_agents()
+        agent_cards = []
+        parse_errors = 0
 
-        try:
-            agents = self._load_agents()
-            agent_cards = []
-            parse_errors = 0
+        for agent_data in agents.values():
+            # Remove metadata before creating AgentCard
+            clean_data = {k: v for k, v in agent_data.items() if not k.startswith("_")}
 
-            for agent_data in agents.values():
-                # Remove metadata before creating AgentCard
-                clean_data = {k: v for k, v in agent_data.items() if not k.startswith("_")}
+            try:
+                # Convert capabilities from dict to A2ACapability objects
+                if "capabilities" in clean_data and isinstance(
+                    clean_data["capabilities"], dict
+                ):
+                    converted_capabilities = {}
+                    for cap_name, cap_data in clean_data["capabilities"].items():
+                        if isinstance(cap_data, dict):
+                            # Convert dict to A2ACapability
+                            converted_capabilities[cap_name] = A2ACapability(**cap_data)
+                        else:
+                            # Skip invalid capability data
+                            logging.warning(
+                                f"Skipping invalid capability {cap_name}: {cap_data}"
+                            )
+                    clean_data["capabilities"] = converted_capabilities
 
-                try:
-                    # Convert capabilities from dict to A2ACapability objects
-                    if "capabilities" in clean_data and isinstance(
-                        clean_data["capabilities"], dict
-                    ):
-                        converted_capabilities = {}
-                        for cap_name, cap_data in clean_data["capabilities"].items():
-                            if isinstance(cap_data, dict):
-                                # Convert dict to A2ACapability
-                                converted_capabilities[cap_name] = A2ACapability(**cap_data)
-                            else:
-                                # Skip invalid capability data
-                                logging.warning(
-                                    f"Skipping invalid capability {cap_name}: {cap_data}"
-                                )
-                        clean_data["capabilities"] = converted_capabilities
+                # Convert authentication from dict to A2AAuthentication object
+                auth_data = clean_data.get("authentication")
+                if auth_data and isinstance(auth_data, dict):
+                    clean_data["authentication"] = A2AAuthentication(**auth_data)
 
-                    # Convert authentication from dict to A2AAuthentication object
-                    auth_data = clean_data.get("authentication")
-                    if auth_data and isinstance(auth_data, dict):
-                        clean_data["authentication"] = A2AAuthentication(**auth_data)
+                # Convert endpoints from dict to A2AEndpoint objects
+                if "endpoints" in clean_data and isinstance(clean_data["endpoints"], dict):
+                    converted_endpoints = {}
+                    for ep_name, ep_data in clean_data["endpoints"].items():
+                        if isinstance(ep_data, dict):
+                            converted_endpoints[ep_name] = A2AEndpoint(**ep_data)
+                    clean_data["endpoints"] = converted_endpoints
 
-                    # Convert endpoints from dict to A2AEndpoint objects
-                    if "endpoints" in clean_data and isinstance(clean_data["endpoints"], dict):
-                        converted_endpoints = {}
-                        for ep_name, ep_data in clean_data["endpoints"].items():
-                            if isinstance(ep_data, dict):
-                                converted_endpoints[ep_name] = A2AEndpoint(**ep_data)
-                        clean_data["endpoints"] = converted_endpoints
+                agent_cards.append(AgentCard(**clean_data))
+            except Exception as e:
+                logging.warning(f"Failed to parse stored agent: {e}")
+                parse_errors += 1
 
-                    agent_cards.append(AgentCard(**clean_data))
-                except Exception as e:
-                    logging.warning(f"Failed to parse stored agent: {e}")
-                    parse_errors += 1
-
-            return agent_cards
-        except Exception:
-            raise
+        return agent_cards
 
     def get_uptime(self) -> float:
         """Get server uptime in seconds."""
@@ -585,7 +574,6 @@ async def deregister_agent(request: dict):
     try:
         agent_url = request.get("agent_url")
         if not agent_url:
-
             raise HTTPException(status_code=400, detail="agent_url is required in request body")
 
         success = storage.deregister_agent(agent_url)
@@ -599,10 +587,10 @@ async def deregister_agent(request: dict):
         else:
             raise HTTPException(status_code=404, detail=f"Agent not found: {agent_url}")
 
-    except Exception as e:
-        if not isinstance(e, HTTPException):
-            raise HTTPException(status_code=500, detail="Failed to deregister agent")
+    except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to deregister agent: {str(e)}")
 
 
 @app.get("/discover", response_model=DiscoveryResponse)
