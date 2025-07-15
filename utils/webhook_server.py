@@ -112,8 +112,8 @@ class WebhookServer:
                 fcntl.flock(f.fileno(), fcntl.LOCK_EX)
                 try:
                     # Write as single line JSON (JSONL format)
-                    json.dump(data, f, separators=(',', ':'))
-                    f.write('\n')
+                    json.dump(data, f, separators=(",", ":"))
+                    f.write("\n")
                     f.flush()  # Ensure data is written immediately
                 finally:
                     # Release lock
@@ -152,7 +152,7 @@ class WebhookServer:
         except IOError as e:
             logger.error(f"Error reading log file: {e}")
             return []
-        
+
         return logs
 
     def _get_webhook_count(self) -> int:
