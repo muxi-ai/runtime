@@ -4,7 +4,6 @@
 import asyncio
 import sys
 from pathlib import Path
-import json
 
 sys.path.insert(0, ".")
 
@@ -72,7 +71,7 @@ async def run_async_test():
         session_id = "test_session_4d3"
         prompt1 = "list the repositories in my account"
 
-        print(f"User: user1")
+        print("User: user1")
         print(f"Prompt: {prompt1}")
 
         response1 = await overlord.chat(
@@ -135,7 +134,7 @@ async def run_async_test():
         session_id2 = "test_session_4d3_part2"
         prompt2 = "list the repositories in my automaze account"
 
-        print(f"User: user1")
+        print("User: user1")
         print(f"Prompt: {prompt2}")
 
         response2 = await overlord.chat(
@@ -200,7 +199,7 @@ async def run_async_test():
             mentioned_ranaroussi = "ranaroussi" in response2_str
             mentioned_lily = "lily" in response2_str
 
-            print(f"Clarification mentioned:")
+            print("Clarification mentioned:")
             print(f"- ranaroussi: {mentioned_ranaroussi}")
             print(f"- lily: {mentioned_lily}")
 
@@ -233,7 +232,8 @@ async def run_async_test():
 
             # Check if we got repositories after selection
             response2b_str = str(response2b).lower()
-            found_repos_after_selection = any(word in response2b_str for word in ["repository", "repositories", "repo", "repos"])
+            found_repos_after_selection = any(
+                word in response2b_str for word in ["repository", "repositories", "repo", "repos"])
             has_error_after_selection = "error" in response2b_str or "failed" in response2b_str
 
             part2b_success = found_repos_after_selection and not has_error_after_selection
@@ -267,7 +267,7 @@ async def run_async_test():
         session_id3 = "test_session_4d3_part3"
         prompt3 = "list my repositories"
 
-        print(f"User: user1")
+        print("User: user1")
         print(f"Prompt: {prompt3}")
 
         response3 = await overlord.chat(
@@ -301,7 +301,9 @@ async def run_async_test():
         ])
 
         # Check if it just used one of the accounts without asking
-        used_account_directly = any(word in response3_str for word in ["repository", "repositories", "repo", "repos"]) and not asked_which_account
+        used_account_directly = any(
+            word in response3_str for word in ["repository", "repositories", "repo", "repos"]
+        ) and not asked_which_account
 
         # Check if it asked for credentials (shouldn't happen since credentials exist)
         asked_for_creds_part3 = any(phrase in response3_str for phrase in [
@@ -321,7 +323,9 @@ async def run_async_test():
 
         if not part3_success:
             print("❌ PART 3 FAILED: System did not ask for clarification when multiple accounts available")
-            print("    This suggests the LLM is either picking one arbitrarily or there's an issue with credential selection")
+            print(
+                "    This suggests the LLM is either picking one arbitrarily or there's an issue with credential selection"  # noqa: E501
+            )
         else:
             print("✅ PART 3 PASSED: System correctly asked for clarification when no specific account mentioned")
 
@@ -349,7 +353,7 @@ async def run_async_test():
         # Clean up
         try:
             await formation.stop_overlord(5.0)
-        except:
+        except Exception:
             formation.kill_overlord()
 
 
