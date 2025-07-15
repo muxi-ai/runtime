@@ -1248,7 +1248,6 @@ class Overlord:
 
             # Additional configuration fields
             self.max_extraction_tokens = config_section.get("max_extraction_tokens", 500)
-            self.max_tool_calls = config_section.get("max_tool_calls", -1)
 
             # Response configuration
             response_config = config_section.get("response", {})
@@ -1280,7 +1279,6 @@ class Overlord:
             #     f"cache_enabled={self.routing_cache_enabled}, "
             #     f"ttl={self.routing_cache_ttl}, "
             #     f"max_extraction_tokens={self.max_extraction_tokens}, "
-            #     f"max_tool_calls={self.max_tool_calls}, "
             #     f"response_format={self.response_format}, "
             #     f"interactive_elements={self.use_interactive_elements}, "
             #     f"learn_user_preference={self.learn_user_preference}, "
@@ -1971,7 +1969,6 @@ class Overlord:
         user_id: Any,
         agent_id: str,
         extraction_model: Optional[LLM] = None,
-        original_message: str = None,
     ) -> None:
         """
         Handle the process of extracting user information from a conversation turn.
@@ -1993,11 +1990,9 @@ class Overlord:
                 Used for metadata and context.
             extraction_model: Optional model to use for extraction.
                 If provided, overrides the default extraction model.
-            original_message: The original user message (without enhancement).
-                This is what gets stored in memory.
         """
         await self.extraction_coordinator.handle_user_information_extraction(
-            user_message, agent_response, user_id, agent_id, extraction_model, original_message
+            user_message, agent_response, user_id, agent_id, extraction_model
         )
 
     async def extract_user_information(
@@ -2007,11 +2002,10 @@ class Overlord:
         user_id: Any,
         agent_id: str,
         extraction_model=None,
-        original_message: str = None,
     ) -> None:
         """Extract user information from conversation (delegates to handle method)."""
         await self.handle_user_information_extraction(
-            user_message, agent_response, user_id, agent_id, extraction_model, original_message
+            user_message, agent_response, user_id, agent_id, extraction_model
         )
 
     async def get_user_context(
@@ -2674,27 +2668,19 @@ class Overlord:
                     return f"Based on the uploaded documents:\n\n{relevant_content}"
                 else:
                     # Try without filter to see if documents are in memory at all
-                    all_results = await self.buffer_memory_manager.search_buffer_memory(
+                    await self.buffer_memory_manager.search_buffer_memory(
                         query=user_request, k=5
                     )
-                    print(
-                        f"All results (no filter): {len(all_results) if all_results else 0} found"
-                    )
-                    if all_results:
-                        print(f"First result metadata: {all_results[0].get('metadata', {})}")
 
                     return (
                         "I've processed your documents but couldn't find specific "
                         "information related to your request."
                     )
 
-        except Exception as e:
+        except Exception:
             #  Error - TODO: add observability
             # ConversationEvents.DOCUMENT_PROCESSING_FAILED
-            import traceback
-
-            print(f"Document workflow error: {e}")
-            print(f"Traceback: {traceback.format_exc()}")
+            # Document workflow error - logged via observability
             return (
                 "I processed your documents but encountered an issue generating "
                 "the workflow response."
@@ -2799,7 +2785,6 @@ class Overlord:
             vision_model_config = None
             if hasattr(self, "_capability_models") and "vision" in self._capability_models:
                 vision_model_config = self._capability_models["vision"]
-                print(f"Found vision model config: {vision_model_config}")
 
             if vision_model_config:
                 # Create LLM instance for vision
@@ -2813,8 +2798,6 @@ class Overlord:
                 if not api_key and hasattr(self, "_global_api_keys"):
                     # Extract provider from model name (e.g., "openai/gpt-4o-mini" -> "openai")
                     provider = model_name.split("/")[0] if "/" in model_name else "openai"
-                    print(f"Looking for API key for provider: {provider}")
-                    print(f"Available providers: {list(self._global_api_keys.keys())}")
                     api_key = self._global_api_keys.get(provider)
 
                 if not api_key:
@@ -2859,7 +2842,7 @@ class Overlord:
                 return f"Image {attachment.get('filename')} uploaded but vision analysis is not currently available"
 
         except Exception as e:
-            print(f"Error processing image with vision model: {e}")
+            # Error processing image - logged via observability
             import traceback
 
             traceback.print_exc()
@@ -2892,7 +2875,6 @@ class Overlord:
             transcription_model_config = None
             if hasattr(self, "_capability_models") and "audio" in self._capability_models:
                 transcription_model_config = self._capability_models["audio"]
-                print(f"Found audio/transcription model config: {transcription_model_config}")
 
             if transcription_model_config:
                 # Create LLM instance for transcription
@@ -2943,7 +2925,7 @@ class Overlord:
                 return f"Audio {attachment.get('filename')} uploaded but audio transcription is not currently available"
 
         except Exception as e:
-            print(f"Error processing audio with transcription model: {e}")
+            # Error processing audio - logged via observability
             import traceback
 
             traceback.print_exc()
@@ -3050,7 +3032,6 @@ class Overlord:
             video_model_config = None
             if hasattr(self, "_capability_models") and "video" in self._capability_models:
                 video_model_config = self._capability_models["video"]
-                print(f"Found video model config: {video_model_config}")
 
             if video_model_config:
                 # Create LLM instance for video
@@ -3133,7 +3114,7 @@ class Overlord:
                 return f"Video {attachment.get('filename')} uploaded but video analysis is not currently available"
 
         except Exception as e:
-            print(f"Error processing video with video model: {e}")
+            # Error processing video - logged via observability
             import traceback
 
             traceback.print_exc()
@@ -3513,18 +3494,25 @@ class Overlord:
         # Check if this might be a credential response (e.g., GitHub token)
         contains_token = await self._looks_like_credential_token(message) if session_id else False
 
-        if session_id and contains_token:
+        # Debug session and clarifications
+
+        # Check if this might be a clarification response
+        is_clarification_response = False
+        if session_id and session_id in self._pending_clarifications:
+            # If there's a pending clarification, ANY response should be treated as a clarification response
+            # What else could it be? The user is responding to our clarification question.
+            is_clarification_response = True
+
+        if session_id and (contains_token or is_clarification_response):
             # Check if we have a pending credential request for this session
             if session_id in self._pending_clarifications:
                 clarification_info = self._pending_clarifications[session_id]
+
                 if clarification_info.get("type") == "credential":
                     service = clarification_info.get("service")
                     # Store the credential
                     if self.credential_resolver:
                         try:
-                            # Import MuxiResponse here
-                            from ...datatypes.response import MuxiResponse
-
                             # Store the credential using the correct method
                             # Store as-is: string credentials remain strings, JSON remains JSON
                             # First try to extract token from text
@@ -3601,7 +3589,6 @@ class Overlord:
                                     ),
                                 )
                         except Exception as e:
-                            from ...datatypes.response import MuxiResponse
 
                             observability.observe(
                                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -3616,6 +3603,137 @@ class Overlord:
                                     "Please try again or contact support if the issue persists."
                                 ),
                             )
+
+                elif clarification_info.get("type") == "ambiguous_credential":
+                    # Handle ambiguous credential selection response
+                    service = clarification_info.get("service")
+                    user_id = clarification_info.get("user_id")
+                    available_credentials = clarification_info.get("available_credentials", [])
+                    ordered_credentials = clarification_info.get("ordered_credentials", [])
+
+                    # Parse the user's selection
+                    selected_credential = None
+                    try:
+                        # Extract just the user's message from the formatted context
+                        actual_message = message
+                        if "=== CURRENT REQUEST ===" in message and "User:" in message:
+                            # Extract the user's actual message from the formatted context
+                            lines = message.split("\n")
+                            for i, line in enumerate(lines):
+                                if line.strip() == "=== CURRENT REQUEST ===" and i + 1 < len(lines):
+                                    next_line = lines[i + 1].strip()
+                                    if next_line.startswith("User:"):
+                                        actual_message = next_line[
+                                            5:
+                                        ].strip()  # Remove "User: " prefix
+                                        break
+
+                        import re
+
+                        numbers = re.findall(r"\d+", actual_message.strip())
+                        if numbers:
+                            # User selected by number
+                            choice_index = int(numbers[0]) - 1  # Convert to 0-based index
+                            if ordered_credentials and 0 <= choice_index < len(ordered_credentials):
+                                # Use ordered credentials
+                                selected_idx = (
+                                    ordered_credentials[choice_index] - 1
+                                )  # ordered_credentials is 1-based
+                                if 0 <= selected_idx < len(available_credentials):
+                                    selected_credential = available_credentials[selected_idx]
+                            elif 0 <= choice_index < len(available_credentials):
+                                # Fallback to original order
+                                selected_credential = available_credentials[choice_index]
+                        else:
+                            # User selected by name
+                            message_lower = actual_message.lower().strip()
+                            for cred in available_credentials:
+                                if (
+                                    cred["name"].lower() in message_lower
+                                    or message_lower in cred["name"].lower()
+                                ):
+                                    selected_credential = cred
+                                    break
+
+                        if selected_credential and self.credential_resolver:
+                            # Debug logging
+
+                            # Store the selected credential in MCP service cache
+                            # Get the MCP service - it's a singleton so should be the same everywhere
+                            mcp_service = MCPService.get_instance()
+                            if mcp_service:
+                                # Get server list and check which one matches our service
+                                server_ids = await mcp_service.list_servers()
+
+                                # Find the server that matches this service
+                                # For GitHub, we expect server_id like "github-mcp"
+                                matching_server = None
+                                for server_id in server_ids:
+                                    if service.lower() in server_id.lower():
+                                        matching_server = server_id
+                                        break
+
+                                if matching_server:
+                                    # Cache the selected credential
+                                    if matching_server not in mcp_service.user_credentials:
+                                        mcp_service.user_credentials[matching_server] = {}
+
+                                    # Store the resolved credential in the expected format
+                                    # Handle both "credential_data" and "credentials" keys
+                                    credential_data = selected_credential.get(
+                                        "credential_data"
+                                    ) or selected_credential.get("credentials")
+
+                                    mcp_service.user_credentials[matching_server][user_id] = {
+                                        "type": "bearer",
+                                        "token": credential_data,
+                                    }
+
+                            # Get the original message and clean up
+                            original_message = clarification_info.get("original_message")
+                            del self._pending_clarifications[session_id]
+
+                            # Retry the original message with the selected credential
+                            if original_message:
+                                # Just retry with the original message - the credential is already cached
+                                # The agent doesn't need to know about the clarification that happened
+
+                                return await self._process_sync_chat(
+                                    message=original_message,
+                                    user_id=user_id,
+                                    session_id=session_id,
+                                    request_id=request_id,
+                                    agent_name=agent_name,
+                                )
+                            else:
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=(
+                                        f"Thank you! I've selected the {selected_credential['name']} account. "
+                                        "You can now retry your request."
+                                    ),
+                                )
+                        else:
+                            # Selection parsing failed
+                            return MuxiResponse(
+                                role="assistant",
+                                content=(
+                                    "I didn't understand your selection. "
+                                    "Please respond with a number (e.g., '1') or the account name."
+                                ),
+                            )
+
+                    except Exception as e:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.ERROR,
+                            data={"error": str(e), "service": service},
+                            description=f"Failed to process credential selection: {str(e)}",
+                        )
+                        return MuxiResponse(
+                            role="assistant",
+                            content="I encountered an error processing your selection. Please try again.",
+                        )
 
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
@@ -3665,8 +3783,11 @@ class Overlord:
             # On error, still mark agent as idle
             await self.active_agent_tracker.mark_agent_idle(agent_name)
 
-            # Check if this is a MissingCredentialError that needs clarification
-            from ..memory.credential_resolver import MissingCredentialError
+            # Check if this is a credential error that needs clarification
+            from ..memory.credential_resolver import (
+                MissingCredentialError,
+                AmbiguousCredentialError,
+            )
 
             if isinstance(e, MissingCredentialError):
                 # Store pending clarification if we have a session
@@ -3680,7 +3801,6 @@ class Overlord:
                     }
 
                 # Return a simple response asking for credentials
-                from ...datatypes.response import MuxiResponse
 
                 service_display = e.service.capitalize()
                 if e.service == "github":
@@ -3695,6 +3815,56 @@ class Overlord:
                     metadata={
                         "clarification_requested": True,
                         "clarification_type": "missing_credential",
+                        "service": e.service,
+                        "user_id": e.user_id,
+                        "session_id": session_id,
+                    },
+                )
+
+            elif isinstance(e, AmbiguousCredentialError):
+                # Store pending clarification if we have a session
+                if session_id:
+                    self._pending_clarifications[session_id] = {
+                        "type": "ambiguous_credential",
+                        "service": e.service,
+                        "user_id": e.user_id,
+                        "timestamp": time.time(),
+                        "original_message": message,
+                        "available_credentials": e.available_credentials,
+                        "ordered_credentials": e.ordered_credentials,
+                    }
+                else:
+                    # No session_id, log warning
+                    pass
+
+                # Generate clarification question
+                service_display = e.service.capitalize()
+                if e.service == "github":
+                    service_display = "GitHub"
+
+                # Format the credential options
+                if e.ordered_credentials:
+                    # Use LLM ordering
+                    ordered_names = []
+                    for idx in e.ordered_credentials:
+                        if 1 <= idx <= len(e.available_credentials):
+                            ordered_names.append(e.available_credentials[idx - 1]["name"])
+                else:
+                    # Fallback to original order
+                    ordered_names = [cred["name"] for cred in e.available_credentials]
+
+                options_text = "\n".join([f"{i+1}. {name}" for i, name in enumerate(ordered_names)])
+
+                return MuxiResponse(
+                    role="assistant",
+                    content=(
+                        f"I found multiple {service_display} accounts for you. "
+                        f"Which account would you like to use?\n\n"
+                        f"Available accounts:\n{options_text}"
+                    ),
+                    metadata={
+                        "clarification_requested": True,
+                        "clarification_type": "ambiguous_credential",
                         "service": e.service,
                         "user_id": e.user_id,
                         "session_id": session_id,
@@ -3902,6 +4072,51 @@ class Overlord:
             original_message = clarification_metadata.get("original_message", "")
             agent_name = clarification_metadata.get("agent_name")
 
+            # Check if this is a credential clarification response
+            if (
+                self.clarification_manager
+                and user_id
+                and user_id in self.clarification_manager._user_to_request
+            ):
+                request_id = self.clarification_manager._user_to_request[user_id]
+                if request_id in self.clarification_manager.active_requests:
+                    clarification_request = self.clarification_manager.active_requests[request_id]
+
+                    # Check if this is a credential selection clarification
+                    if (
+                        clarification_request.context
+                        and clarification_request.context.get("reason") == "ambiguous_credential"
+                    ):
+
+                        # Parse the credential selection from the response
+                        selected_credential = await self._parse_credential_selection(
+                            clarification_response, clarification_request
+                        )
+
+                        if selected_credential:
+                            # Store the selected credential for this user and service
+                            service = clarification_request.context.get("service")
+                            if service and self.mcp_service:
+                                # Find the server that uses this service
+                                for server_id, config in self.mcp_service.servers.items():
+                                    if (
+                                        config.get("uses_user_credentials")
+                                        and service in server_id.lower()
+                                    ):
+                                        # Cache the selected credential
+                                        if server_id not in self.mcp_service.user_credentials:
+                                            self.mcp_service.user_credentials[server_id] = {}
+
+                                        # Store the resolved credential
+                                        self.mcp_service.user_credentials[server_id][
+                                            user_id
+                                        ] = selected_credential
+                                        break
+
+                            # Clear the clarification request since it's resolved
+                            del self.clarification_manager.active_requests[request_id]
+                            del self.clarification_manager._user_to_request[user_id]
+
             # Enhance original message with clarification response
             enhanced_message = f"{original_message}\n\nAdditional context: {clarification_response}"
 
@@ -3939,6 +4154,95 @@ class Overlord:
                     "information. Please try again."
                 ),
             )
+
+    async def _parse_credential_selection(
+        self, clarification_response: str, clarification_request
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Parse user's credential selection response and retrieve the actual credential.
+
+        Args:
+            clarification_response: User's response (e.g., "1", "ranaroussi", etc.)
+            clarification_request: The original clarification request with context
+
+        Returns:
+            The selected credential data, or None if parsing failed
+        """
+        try:
+            # Get the ordered credentials from the clarification context
+
+            # Handle different types of clarification info
+            if isinstance(clarification_request, dict):
+                # Direct dictionary access
+                ordered_credentials = clarification_request.get("ordered_credentials", [])
+                service = clarification_request.get("service")
+                user_id = clarification_request.get("user_id")
+            else:
+                # Object attribute access
+                ordered_credentials = clarification_request.context.get("ordered_credentials", [])
+                service = clarification_request.context.get("service")
+                user_id = clarification_request.user_id
+
+            if not ordered_credentials or not service or not user_id:
+                return None
+
+            # Try to parse the response as a number first
+            import re
+
+            numbers = re.findall(r"\d+", clarification_response.strip())
+            if numbers:
+                try:
+                    choice_index = int(numbers[0]) - 1  # Convert to 0-based index
+                    if 0 <= choice_index < len(ordered_credentials):
+                        selected_name = ordered_credentials[choice_index]
+                    else:
+                        return None
+                except (ValueError, IndexError):
+                    return None
+            else:
+                # Try to match the response directly to a credential name
+                response_lower = clarification_response.lower().strip()
+                selected_name = None
+                for cred_name in ordered_credentials:
+                    if cred_name.lower() in response_lower or response_lower in cred_name.lower():
+                        selected_name = cred_name
+                        break
+
+                if not selected_name:
+                    return None
+
+            # Now retrieve the actual credential from the database
+            if self.credential_resolver:
+                try:
+                    # Get all credentials for this user and service
+                    all_credentials = await self.credential_resolver.get_user_credentials(
+                        user_id, service
+                    )
+
+                    # Find the credential with the matching name
+                    for cred in all_credentials:
+                        if cred.get("name") == selected_name:
+                            # Return the credential in the format expected by MCP service
+                            return {"type": "bearer", "token": cred.get("credential_data")}
+
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.ERROR,
+                        data={"error": str(e), "service": service, "user_id": user_id},
+                        description=f"Failed to retrieve selected credential: {str(e)}",
+                    )
+
+            return None
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e)},
+                description=f"Failed to parse credential selection: {str(e)}",
+            )
+            return None
 
     async def handle_missing_credential(
         self, service: str, user_id: str, context: Optional[Dict[str, Any]] = None

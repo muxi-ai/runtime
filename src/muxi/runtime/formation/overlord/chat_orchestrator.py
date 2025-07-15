@@ -512,9 +512,6 @@ class ChatOrchestrator:
         request_id: Optional[str],
     ) -> None:
         """Store user message in buffer memory without blocking."""
-        print(
-            f"[ChatOrchestrator] _store_user_message_async called: message='{message[:50]}...', user_id={user_id}"
-        )
         try:
             await self.overlord.add_message_to_memory(
                 content=message,
@@ -525,16 +522,25 @@ class ChatOrchestrator:
                 session_id=session_id,
                 request_id=request_id,
             )
-            print("[ChatOrchestrator] User message stored successfully")
-            # User message stored in buffer memory successfully
 
             # NOTE: We do NOT store raw user messages in long-term memory
             # Only extracted facts should be in long-term memory
             # Extraction happens separately in _extract_user_information_async
         except Exception as e:
-            print(f"[ChatOrchestrator] Failed to store user message: {e}")
-            # Failed to store user message in buffer memory
-            pass
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "request_id": request_id,
+                    "role": "user",
+                    "operation": "store_user_message",
+                },
+                description=f"Failed to store user message in buffer memory: {str(e)}",
+            )
 
     async def _store_assistant_response_async(
         self,
@@ -556,13 +562,25 @@ class ChatOrchestrator:
                 session_id=session_id,
                 request_id=request_id,
             )
-            # Assistant response stored in buffer memory successfully
 
             # NOTE: We do NOT store assistant responses in long-term memory
             # Only user messages and extracted facts should be in long-term memory
-        except Exception:
-            # Failed to store assistant response in buffer memory
-            pass
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "request_id": request_id,
+                    "role": "assistant",
+                    "agent_name": agent_name,
+                    "operation": "store_assistant_response",
+                },
+                description=f"Failed to store assistant response in buffer memory: {str(e)}",
+            )
 
     async def _enhance_message_with_context(
         self,
@@ -756,16 +774,24 @@ class ChatOrchestrator:
                 agent_response=agent_response,
                 user_id=user_id,
                 agent_id=agent_id,
-                original_message=user_message,  # Pass original for storage
             )
             # User information extraction completed
         except Exception as e:
             import traceback
 
-            print(f"[ChatOrchestrator] Failed to extract user information: {e}")
-            traceback.print_exc()
-            # Failed to extract user information
-            pass
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "user_id": user_id,
+                    "agent_id": agent_id,
+                    "operation": "extract_user_information",
+                    "traceback": traceback.format_exc(),
+                },
+                description=f"Failed to extract user information: {str(e)}",
+            )
 
     async def _store_to_long_term_memory_async(
         self,

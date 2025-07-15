@@ -49,10 +49,29 @@ from ...formation.memory.credential_resolver import (
     AmbiguousCredentialError,
 )
 
+
+class CredentialSelectionNeededError(Exception):
+    """Raised when multiple credentials exist and LLM cannot determine which to use."""
+
+    def __init__(
+        self,
+        service: str,
+        user_id: str,
+        available_credentials: list,
+        ordered_credentials: list = None,
+    ):
+        self.service = service
+        self.user_id = user_id
+        self.available_credentials = available_credentials
+        self.ordered_credentials = ordered_credentials or []
+        super().__init__(
+            f"Multiple credentials found for {service}, selection needed. "
+            f"Available: {[c['name'] for c in available_credentials]}"
+        )
+
+
 # Regex pattern for user credential placeholders
-USER_CREDENTIAL_PATTERN = re.compile(
-    r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
-)
+USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
 
 class MCPService:
@@ -287,9 +306,7 @@ class MCPService:
                 )
 
                 # Get recommended URL for the detected transport
-                recommended_url = TransportDetector.get_recommended_url(
-                    url, detected_transport
-                )
+                recommended_url = TransportDetector.get_recommended_url(url, detected_transport)
 
                 return await self._connect_single_transport(
                     server_id,
@@ -472,14 +489,10 @@ class MCPService:
 
                     if not service_name:
                         # Fallback: try to extract from server_id
-                        service_name = (
-                            server_id.replace("-mcp", "").replace("_mcp", "").lower()
-                        )
+                        service_name = server_id.replace("-mcp", "").replace("_mcp", "").lower()
 
                     # Resolve credentials from database
-                    credentials = await credential_resolver.resolve(
-                        user_id, service_name
-                    )
+                    credentials = await credential_resolver.resolve(user_id, service_name)
 
                     if credentials is None:
                         # Trigger clarification flow
@@ -494,20 +507,22 @@ class MCPService:
                                 service_name,
                                 conversation_context,
                             )
-                        except AmbiguousCredentialError as e:
-                            # LLM determined the request is ambiguous
-                            # fill in user_id and re-raise for clarification flow
+                        except CredentialSelectionNeededError as e:
+                            # LLM determined the request is ambiguous - pass it up to agent
                             e.user_id = user_id
-                            raise e
+                            raise
 
-                    # Format credentials based on stored_creds structure
-                    # Replace the user credential placeholder with actual value
-                    resolved_auth = self._replace_credential_in_auth(
-                        stored_creds, credentials
-                    )
+                    # Only format and cache credentials if we have a valid selection
+                    # (This code should not run if AmbiguousCredentialError was raised)
+                    if credentials:
+                        # Format credentials based on stored_creds structure
+                        # Replace the user credential placeholder with actual value
+                        resolved_auth = self._replace_credential_in_auth(stored_creds, credentials)
 
-                    # Cache the credentials
-                    self.user_credentials[server_id][user_id] = resolved_auth
+                        # Cache the credentials
+                        self.user_credentials[server_id][user_id] = resolved_auth
+                    else:
+                        raise ValueError("No valid credentials after selection")
 
                 except MissingCredentialError:
                     # Re-raise to trigger clarification flow
@@ -515,8 +530,13 @@ class MCPService:
                 except AmbiguousCredentialError:
                     # Re-raise to trigger clarification flow with credential options
                     raise
+                except CredentialSelectionNeededError:
+                    # Re-raise to let agent handle clarification
+                    raise
                 except Exception as e:
-                    error_msg = f"Failed to resolve user credentials for MCP server '{server_id}': {str(e)}"
+                    error_msg = (
+                        f"Failed to resolve user credentials for MCP server '{server_id}': {str(e)}"
+                    )
                     raise ValueError(error_msg) from e
         else:
             # Not using user credentials, use the stored credentials
@@ -530,9 +550,7 @@ class MCPService:
                 "tool_name": tool_name,
                 "has_user_credentials": resolved_auth is not None,
                 "auth_type": (
-                    resolved_auth.get("type")
-                    if isinstance(resolved_auth, dict)
-                    else "string"
+                    resolved_auth.get("type") if isinstance(resolved_auth, dict) else "string"
                 ),
                 "description": f"Executing tool with user credentials for {server_id}",
             },
@@ -560,9 +578,7 @@ class MCPService:
                         if error_data:
                             error_message = f"{error_message}: {error_data}"
                     else:
-                        error_message = (
-                            str(error_info) if error_info else "Unknown error"
-                        )
+                        error_message = str(error_info) if error_info else "Unknown error"
 
                     # Emit error event
                     observability.observe(
@@ -573,14 +589,10 @@ class MCPService:
                             "tool_name": tool_name,
                             "error": error_message,
                             "error_code": (
-                                error_info.get("code")
-                                if isinstance(error_info, dict)
-                                else None
+                                error_info.get("code") if isinstance(error_info, dict) else None
                             ),
                         },
-                        description=(
-                            f"MCP tool returned error: {tool_name} on {server_id}"
-                        ),
+                        description=(f"MCP tool returned error: {tool_name} on {server_id}"),
                     )
 
                     return {"error": error_message, "status": "error"}
@@ -592,9 +604,7 @@ class MCPService:
 
                 # Process result using modern protocol features
                 # This handles structured output with isError field
-                processed_result = ModernProtocolFeatures.process_structured_output(
-                    result
-                )
+                processed_result = ModernProtocolFeatures.process_structured_output(result)
 
                 # Enhanced observability with structured output info
                 observability.observe(
@@ -631,9 +641,7 @@ class MCPService:
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
-                description=(
-                    f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"
-                ),
+                description=(f"MCP tool invocation failed: {tool_name} on {server_id} - {e}"),
             )
 
             # Error event already emitted above
@@ -699,9 +707,7 @@ class MCPService:
 
                 if transport_type == transports_to_try[-1]:
                     # Both transports failed - create detailed error message
-                    error_details = "\n".join(
-                        [f"  - {t}: {errors[t]}" for t in transports_to_try]
-                    )
+                    error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
 
                     raise MCPConnectionError(
                         f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
@@ -775,9 +781,7 @@ class MCPService:
 
                 # Store original credentials if provided
                 if original_credentials:
-                    self.connections[server_id]["original_credentials"] = (
-                        original_credentials
-                    )
+                    self.connections[server_id]["original_credentials"] = original_credentials
 
                 # Discover available tools with modern protocol features
                 try:
@@ -791,9 +795,7 @@ class MCPService:
                         # Use modern protocol features for better UX
                         self.tool_registry[server_id][tool_name] = {
                             **tool,
-                            "display_name": (
-                                ModernProtocolFeatures.extract_display_name(tool)
-                            ),
+                            "display_name": (ModernProtocolFeatures.extract_display_name(tool)),
                             "supports_structured_output": True,
                             "supports_elicitation": True,
                             "_meta": tool.get("_meta", {}),
@@ -818,9 +820,7 @@ class MCPService:
                                 {
                                     "name": tool.get("name", f"unknown_{i}"),
                                     "display_name": (
-                                        ModernProtocolFeatures.extract_display_name(
-                                            tool
-                                        )
+                                        ModernProtocolFeatures.extract_display_name(tool)
                                     ),
                                 }
                                 for i, tool in enumerate(tools)
@@ -842,8 +842,7 @@ class MCPService:
                             "tools_count": 0,
                         },
                         description=(
-                            f"Unable to discover tools from MCP server "
-                            f"{server_id}: {str(e)}"
+                            f"Unable to discover tools from MCP server " f"{server_id}: {str(e)}"
                         ),
                     )
                     self.tool_registry[server_id] = {}
@@ -1077,9 +1076,7 @@ class MCPService:
         client = handler.active_connections[server_name]
         return client.transport
 
-    async def list_resources(
-        self, server_id: str, cursor: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def list_resources(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
         """List available resources from an MCP server.
 
         Args:
@@ -1180,9 +1177,7 @@ class MCPService:
             max_tokens=max_tokens,
         )
 
-    async def list_templates(
-        self, server_id: str, cursor: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def list_templates(self, server_id: str, cursor: Optional[str] = None) -> Dict[str, Any]:
         """List available templates from an MCP server.
 
         Args:
@@ -1214,9 +1209,7 @@ class MCPService:
         transport = self._get_transport_for_server(server_id)
         return await self.template_discovery.get_template(transport, name)
 
-    async def ping_server(
-        self, server_id: str, data: Optional[str] = None
-    ) -> Dict[str, Any]:
+    async def ping_server(self, server_id: str, data: Optional[str] = None) -> Dict[str, Any]:
         """Send a ping to an MCP server.
 
         Args:
@@ -1232,9 +1225,7 @@ class MCPService:
         transport = self._get_transport_for_server(server_id)
         return await self.health_monitor.ping(transport, data)
 
-    async def start_health_monitoring(
-        self, server_id: str, ping_interval: float = 30.0
-    ) -> None:
+    async def start_health_monitoring(self, server_id: str, ping_interval: float = 30.0) -> None:
         """Start continuous health monitoring for a server.
 
         Args:
@@ -1298,9 +1289,7 @@ class MCPService:
                 "capabilities": self.capabilities_negotiator.get_supported_capabilities(),
             }
 
-        return await self.capabilities_negotiator.initialize_connection(
-            transport, client_info
-        )
+        return await self.capabilities_negotiator.initialize_connection(transport, client_info)
 
     def get_transport_cache_stats(self) -> Dict[str, Any]:
         """
@@ -1406,20 +1395,14 @@ class MCPService:
                 )
 
                 if test_passed:
-                    recommended_url = TransportDetector.get_recommended_url(
-                        url, transport_type
-                    )
+                    recommended_url = TransportDetector.get_recommended_url(url, transport_type)
                     test_results["status"] = "success"
                     test_results["recommended_transport"] = transport_type
                     test_results["recommended_url"] = recommended_url
-                    test_results["recommended_action"] = (
-                        f"Use transport_type='{transport_type}'"
-                    )
+                    test_results["recommended_action"] = f"Use transport_type='{transport_type}'"
                 else:
                     test_results["status"] = "failed"
-                    test_results["recommended_action"] = (
-                        "Try auto-detection or different transport"
-                    )
+                    test_results["recommended_action"] = "Try auto-detection or different transport"
 
             else:
                 # Auto-detect best transport
@@ -1446,9 +1429,7 @@ class MCPService:
         except Exception as e:
             test_results["status"] = "error"
             test_results["error"] = str(e)
-            test_results["recommended_action"] = (
-                "Check server is running and accessible"
-            )
+            test_results["recommended_action"] = "Check server is running and accessible"
 
         return test_results
 
@@ -1538,9 +1519,7 @@ class MCPService:
         Returns:
             Auth config with placeholders replaced
         """
-        USER_CREDENTIAL_PATTERN = re.compile(
-            r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
-        )
+        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
         def replace_recursive(data: Any, cred_val: Any = credential_value) -> Any:
             if isinstance(data, dict):
@@ -1570,9 +1549,7 @@ class MCPService:
                                 token_value = cred_val[field]
                                 # Strip quotes if present
                                 if isinstance(token_value, str):
-                                    token_value = (
-                                        token_value.strip().strip('"').strip("'")
-                                    )
+                                    token_value = token_value.strip().strip('"').strip("'")
                                 return token_value
                         # If no standard field found, return as is
                         return cred_val
@@ -1634,10 +1611,14 @@ class MCPService:
             if conversation_context and len(conversation_context) > 0:
                 context_text = "\n".join(conversation_context[-5:])  # Last 5 messages
 
-            # If no user intent in parameters and no conversation context, return None
-            # This will trigger clarification instead of just picking first credential
-            if not user_intent.strip() and not context_text.strip():
-                return None
+                # Also extract the most recent user message for better context
+                for msg in reversed(conversation_context):
+                    if "User:" in msg or "list" in msg.lower():
+                        user_intent = msg + " " + user_intent
+                        break
+
+            # Always ask the LLM to decide when there are multiple credentials
+            # The LLM can determine if the request is ambiguous even without clear user intent
 
             # Create LLM prompt
             credential_names = [cred["name"] for cred in credential_list]
@@ -1653,20 +1634,18 @@ class MCPService:
             prompt_parts.extend(
                 [
                     f"\nThey have the following {service_name} credentials available:",
-                    chr(10).join(
-                        f"{i+1}. {name}" for i, name in enumerate(credential_names)
-                    ),
+                    chr(10).join(f"{i+1}. {name}" for i, name in enumerate(credential_names)),
                     "\nWhich credential should be used?",
                     "\nPRIORITY ORDER (most important first):",
                     "1. Use the MOST RECENTLY mentioned account in the conversation context",
                     "2. If user says 'use my [account name]', prioritize that account for all future requests",
                     "3. Exact name matches in the current request",
-                    "4. Partial matches only if clearly unambiguous (e.g. 'lily' matches 'lily account' but 'automaze' alone does NOT match 'lily automaze' - they must be different accounts)",  # noqa: E501
+                    "4. Partial matches when the request contains the beginning of the credential name (e.g. 'lily' matches both 'lily account' AND 'lily automaze')",  # noqa: E501
                     "5. Account ownership references (e.g. 'my acme account')",
                     "\n",
                     "If the conversation shows the user previously specified an account preference, use that account.",
                     "If no clear match or ambiguous, set selection to 0 to trigger clarification.",
-                    "IMPORTANT: If user asks for 'automaze account' but only has 'lily automaze', this is AMBIGUOUS - they likely want a different account. Return selection: 0.",  # noqa: E501
+                    "IMPORTANT: Match partial names from the beginning - 'lily' matches 'lily automaze'. However, if user asks for 'automaze account' but only has 'lily automaze', this is AMBIGUOUS since 'automaze' is not at the beginning. Return selection: 0.",  # noqa: E501
                     "IMPORTANT: If user uses generic terms like 'my account', 'my repositories', 'my GitHub' without specifying which account, this is AMBIGUOUS with multiple credentials. Return selection: 0.",  # noqa: E501
                     "\n",
                     "Reply with JSON format:",
@@ -1681,12 +1660,16 @@ class MCPService:
 
             prompt = "\n".join(prompt_parts)
 
+            # Debug logging
+
             # Create a basic LLM instance - we'll use the default from the environment
             llm = LLM()
 
             # Use chat method with simple messages format
             messages = [{"role": "user", "content": prompt}]
             response = await llm.chat(messages, max_tokens=100)
+
+            # Debug log the response
 
             # Parse the JSON response
             import json
@@ -1709,10 +1692,9 @@ class MCPService:
                         selected_cred = credential_list[selection - 1]
                         return selected_cred["credentials"]
                     elif selection == 0:
-                        # Ambiguous - trigger clarification with smart ordering
-                        # Don't return None - instead raise AmbiguousCredentialError with ordering info
-                        # This will be caught and handled by the clarification flow
-                        raise AmbiguousCredentialError(
+                        # Ambiguous - trigger credential selection needed error
+                        # The agent will decide whether to trigger clarification
+                        raise CredentialSelectionNeededError(
                             service=service_name,
                             user_id="",  # Will be filled in by caller
                             available_credentials=credential_list,
@@ -1728,13 +1710,15 @@ class MCPService:
                         selected_cred = credential_list[choice - 1]
                         return selected_cred["credentials"]
 
-            # If LLM didn't give a clear answer, return None to trigger clarification
-            return None
+            # If LLM didn't give a clear answer, raise CredentialSelectionNeededError
+            raise CredentialSelectionNeededError(
+                service=service_name,
+                user_id="",  # Will be filled in by caller
+                available_credentials=credential_list,
+                ordered_credentials=list(range(1, len(credential_list) + 1)),
+            )
 
-        except AmbiguousCredentialError:
-            # Re-raise AmbiguousCredentialError to be handled by caller
-            raise
         except Exception:
-            # LLM credential selection failed, using first credential as fallback
-            # Fallback to first credential
-            return credential_list[0]["credentials"]
+            # LLM credential selection failed
+            # Don't fallback - raise the error to trigger proper handling
+            raise

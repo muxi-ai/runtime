@@ -836,9 +836,11 @@ class Agent:
             if not recent_docs and self.overlord and hasattr(self.overlord, "get_recent_documents"):
                 recent_docs = self.overlord.get_recent_documents(session_id=session_id)
 
+            context_parts = []
             if recent_docs:
                 context_parts = self._format_recent_documents(recent_docs)
 
+            if context_parts:
                 context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
 
                 # Add enhanced context to the conversation
@@ -873,7 +875,7 @@ class Agent:
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_WARNING,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -886,11 +888,73 @@ class Agent:
         # Process the message with the model, including tools if available
         if tools:
             try:
+                # Get MCP configuration for message enhancement
+                mcp_config = {}
+                if self.overlord and hasattr(self.overlord, "_config") and self.overlord._config:
+                    mcp_config = self.overlord._config.get("mcp", {})
+
+                # Check if message enhancement is enabled
+                enhance_prompts = mcp_config.get("enhance_user_prompts", True)
+
+                # Enhance the last user message for better tool selection
+                if enhance_prompts and self._messages and self._messages[-1]["role"] == "user":
+                    original_message = self._messages[-1]["content"]
+
+                    # Extract tool names for context
+                    tool_names = [tool["function"]["name"] for tool in tools]
+                    server_names = list(
+                        set([name.split("__")[0] for name in tool_names if "__" in name])
+                    )
+
+                    # Use LLM to enhance the message for better tool selection
+                    enhancement_prompt = (
+                        f'The user said: "{original_message}"'
+                        f"\n\nAvailable tool servers: {', '.join(server_names)}"
+                        f"\nAvailable tools: {', '.join(tool_names[:10])}{'...' if len(tool_names) > 10 else ''}"
+                        f"\nPlease rewrite the user's message to be more explicit and clear for tool selection, without changing the intent or meaning. "  # noqa: E501
+                        'If the message mentions generic terms like "my repositories" or "my account", make it explicit that it refers to the user\'s account in the relevant service (e.g., GitHub).'  # noqa: E501
+                        "\n\nIMPORTANT: Preserve any specific account names mentioned (e.g., 'lily account', 'john's account', etc). These are crucial for credential selection."  # noqa: E501
+                        "\n\nImportant: Only return the enhanced message, nothing else. Do not explain or add any other text."  # noqa: E501
+                    )
+
+                    try:
+                        # Create a simple message list for enhancement
+                        enhancement_messages = [
+                            {
+                                "role": "system",
+                                "content": "You are a helpful assistant that enhances user messages for clarity.",
+                            },  # noqa: E501
+                            {"role": "user", "content": enhancement_prompt},
+                        ]
+
+                        # Get enhanced message from LLM
+                        enhancement_response = await self.model.chat(enhancement_messages)
+
+                        if (
+                            enhancement_response
+                            and isinstance(enhancement_response, str)
+                            and enhancement_response.strip()
+                        ):  # noqa: E501
+                            enhanced_message = enhancement_response.strip()
+
+                            # Only use enhancement if it's reasonable (not too long, not empty)
+                            if 10 < len(enhanced_message) < len(original_message) * 3:
+
+                                # Update the message
+                                self._messages[-1]["content"] = enhanced_message
+
+                                # Store original for potential rollback
+                                self._messages[-1]["_original_content"] = original_message
+                    except Exception:
+                        # If enhancement fails, just use original message
+                        # Message enhancement failed, continue with original message
+                        pass
+
                 raw_response = await self.model.chat_with_tools(self._messages, tools=tools)
             except Exception as e:
                 # Log error and fallback to no tools
                 observability.observe(
-                    event_type=observability.SystemEvents.SERVICE_WARNING,
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={
                         "agent_id": self.agent_id,
@@ -1094,10 +1158,16 @@ class Agent:
                     )
 
                 except Exception as e:
-                    # Check if this is a MissingCredentialError that needs to bubble up
-                    from ..memory.credential_resolver import MissingCredentialError
+                    # Check if this is a credential error that needs to bubble up
+                    from ..memory.credential_resolver import (
+                        MissingCredentialError,
+                        AmbiguousCredentialError,
+                    )
 
-                    if isinstance(e, MissingCredentialError):
+                    if isinstance(e, AmbiguousCredentialError):
+                        # Stop processing all remaining tool calls and bubble up immediately
+                        raise
+                    elif isinstance(e, MissingCredentialError):
                         # Re-raise to let overlord handle the clarification
                         raise
 
@@ -1843,29 +1913,31 @@ class Agent:
                 credential_resolver = self.overlord.credential_resolver
 
             # Get recent conversation context for credential selection
-            conversation_context = None
+            conversation_context = []
             if user_id:
                 try:
-                    # Use current conversation messages from this agent's memory
-                    # Look at recent messages for account preferences
-                    conversation_context = []
-
-                    # Always include the current user message if available
-                    if hasattr(self, "_current_user_message") and self._current_user_message:
-                        conversation_context.append(self._current_user_message)
-
-                    # Extract text from recent messages that might contain account preferences
-                    for msg in self._messages[-10:]:  # Last 10 messages
-                        if hasattr(msg, "content") and msg.content:
-                            content = msg.content.lower()
+                    # Always include the most recent user messages for context
+                    for msg in self._messages[-5:]:  # Last 5 messages
+                        if msg.get("role") == "user" and msg.get("content"):
+                            conversation_context.append(f"User: {msg['content']}")
+                        elif msg.get("role") == "assistant" and msg.get("content"):
+                            # Include assistant messages that mention credentials/accounts
+                            content_lower = msg["content"].lower()
                             if any(
-                                keyword in content
-                                for keyword in ["lily", "account", "use my", "ranaroussi"]
+                                word in content_lower
+                                for word in [
+                                    "account",
+                                    "credential",
+                                    "github",
+                                    "lily",
+                                    "ranaroussi",
+                                ]
                             ):
-                                conversation_context.append(msg.content)
+                                conversation_context.append(f"Assistant: {msg['content'][:200]}")
 
-                except Exception as e:
-                    print(f"Failed to get conversation context for credential selection: {e}")
+                except Exception:
+                    # Failed to get conversation context, continue without it
+                    conversation_context = []
 
             if server_id:
                 result = await self._mcp_service.invoke_tool(
@@ -1914,9 +1986,24 @@ class Agent:
             return result
 
         except Exception as e:
-            # Check if this is a MissingCredentialError
-            if isinstance(e, MissingCredentialError):
-                # Trigger clarification flow through overlord
+            # Check if this is a credential error
+            from ..memory.credential_resolver import AmbiguousCredentialError
+            from ...services.mcp.service import CredentialSelectionNeededError
+
+            if isinstance(e, CredentialSelectionNeededError):
+                # Convert to AmbiguousCredentialError and raise to overlord
+                raise AmbiguousCredentialError(
+                    service=e.service,
+                    user_id=e.user_id,
+                    available_credentials=e.available_credentials,
+                    ordered_credentials=e.ordered_credentials,
+                )
+            elif isinstance(e, AmbiguousCredentialError):
+                # Re-raise to let overlord handle it
+                raise
+
+            # Original MissingCredentialError handling
+            elif isinstance(e, MissingCredentialError):
                 if self.overlord and hasattr(self.overlord, "handle_missing_credential"):
                     await self.overlord.handle_missing_credential(
                         service=e.service,

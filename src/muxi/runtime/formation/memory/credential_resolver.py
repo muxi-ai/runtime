@@ -46,10 +46,10 @@ class AmbiguousCredentialError(FormationError):
     ):
         self.service = service
         self.user_id = user_id
-        self.available_credentials = available_credentials  # List of credential dicts with 'name' and 'credentials'
-        self.ordered_credentials = (
-            ordered_credentials or []
-        )  # LLM-provided ordering (indices)
+        self.available_credentials = (
+            available_credentials  # List of credential dicts with 'name' and 'credentials'
+        )
+        self.ordered_credentials = ordered_credentials or []  # LLM-provided ordering (indices)
 
         credential_names = [cred["name"] for cred in available_credentials]
         super().__init__(
@@ -73,9 +73,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True)
-    public_id = Column(
-        String(21), nullable=False, unique=True
-    )  # Nano ID for external exposure
+    public_id = Column(String(21), nullable=False, unique=True)  # Nano ID for external exposure
     external_user_id = Column(Text, nullable=False)  # The actual external user ID
     formation_id = Column(String, nullable=False, default="default-formation")
     created_at = Column(DateTime, default=lambda: utc_now_naive())
@@ -182,8 +180,7 @@ class CredentialResolver:
                 else:
                     # Multiple credentials - return them as a list with names
                     credential_list = [
-                        {"name": cred.name, "credentials": cred.credentials}
-                        for cred in credentials
+                        {"name": cred.name, "credentials": cred.credentials} for cred in credentials
                     ]
                     return credential_list
 
@@ -315,11 +312,11 @@ class CredentialResolver:
                     "service": service,
                     "old_name": service,
                     "new_name": smart_name,
-                    "operation_type": "credential_name_update"
+                    "operation_type": "credential_name_update",
                 },
-                description=f"Updated credential name from '{service}' to '{smart_name}'"
+                description=f"Updated credential name from '{service}' to '{smart_name}'",
             )
-            
+
             # Update in database
             async with self.async_session_maker() as session:
                 stmt = (
@@ -496,7 +493,7 @@ class CredentialResolver:
                 response = discovery_llm.generate(
                     messages=[{"role": "user", "content": discovery_prompt}],
                     max_tokens=20,
-                    temperature=0
+                    temperature=0,
                 )
                 recommended_tool = response.strip()
             except Exception:
@@ -520,9 +517,7 @@ class CredentialResolver:
 
             # Extract meaningful name from response
             if result.get("status") == "success":
-                name = self._extract_name_from_identity_response(
-                    service, result.get("result", {})
-                )
+                name = self._extract_name_from_identity_response(service, result.get("result", {}))
                 if name and name != service:
                     return name
 
@@ -548,9 +543,19 @@ class CredentialResolver:
 
         # Common identity tool name patterns (ordered by preference)
         identity_patterns = [
-            "get_me", "whoami", "get_authenticated_user", "get_current_user",
-            "me", "user_info", "get_user", "current_user", "auth_test",
-            "get_profile", "profile", "identity", "account_info"
+            "get_me",
+            "whoami",
+            "get_authenticated_user",
+            "get_current_user",
+            "me",
+            "user_info",
+            "get_user",
+            "current_user",
+            "auth_test",
+            "get_profile",
+            "profile",
+            "identity",
+            "account_info",
         ]
 
         # Try each pattern to find a matching tool
@@ -605,10 +610,7 @@ class CredentialResolver:
             if isinstance(content, list) and content:
                 # Get first content item
                 first_content = content[0]
-                if (
-                    isinstance(first_content, dict)
-                    and first_content.get("type") == "text"
-                ):
+                if isinstance(first_content, dict) and first_content.get("type") == "text":
                     response_text = first_content.get("text", "")
 
         if not response_text:
@@ -618,6 +620,7 @@ class CredentialResolver:
         # Try LLM-based extraction first, then fallback to parsing
         try:
             from ...services.llm import LLM
+
             extraction_llm = LLM(model="openai/gpt-4o-mini")
 
             extraction_prompt = f"""
@@ -634,7 +637,7 @@ If no suitable identifier found, respond with "NONE".
             result = extraction_llm.generate(
                 messages=[{"role": "user", "content": extraction_prompt}],
                 max_tokens=50,
-                temperature=0
+                temperature=0,
             )
 
             extracted_name = result.strip()
@@ -691,9 +694,7 @@ If no suitable identifier found, respond with "NONE".
 
         return None
 
-    def _extract_name_from_fields(
-        self, service: str, data: Dict[str, Any]
-    ) -> Optional[str]:
+    def _extract_name_from_fields(self, service: str, data: Dict[str, Any]) -> Optional[str]:
         """
         Extract name from structured data fields using LLM when available.
 
@@ -710,6 +711,7 @@ If no suitable identifier found, respond with "NONE".
         # Try LLM-based extraction first for better results
         try:
             from ...services.llm import LLM
+
             extraction_llm = LLM(model="openai/gpt-4o-mini")
 
             data_str = str(data)
@@ -727,7 +729,7 @@ If no suitable identifier found, respond with "NONE".
             result = extraction_llm.generate(
                 messages=[{"role": "user", "content": extraction_prompt}],
                 max_tokens=50,
-                temperature=0
+                temperature=0,
             )
 
             extracted_name = result.strip()

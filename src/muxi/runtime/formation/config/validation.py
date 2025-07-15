@@ -1850,12 +1850,6 @@ class FormationValidator:
             if not isinstance(tokens, int) or tokens <= 0:
                 self.result.add_error("max_extraction_tokens must be a positive integer")
 
-        # Validate max_tool_calls
-        if "max_tool_calls" in config:
-            calls = config["max_tool_calls"]
-            if not isinstance(calls, int) or (calls <= 0 and calls != -1):
-                self.result.add_error("max_tool_calls must be positive integer or -1")
-
         # Validate response_format (no longer supported)
         if "response_format" in config:
             self.result.add_error(
@@ -2372,6 +2366,7 @@ def validate_user_credentials_requirements(
     # Check if we have corresponding USER_CREDENTIALS_* secrets
     if found_credentials and secrets_manager:
         try:
+
             async def check_secrets():
                 await secrets_manager.initialize_encryption()
                 available_secrets = await secrets_manager.list_secrets()
@@ -2442,7 +2437,7 @@ async def validate_user_credentials_requirements_async(
         if isinstance(obj, str):
             matches = USER_CREDENTIAL_PATTERN.findall(obj)
             for match in matches:
-                service_name = match.split('.')[-1].rstrip('}').strip()
+                service_name = match.split(".")[-1].rstrip("}").strip()
                 found_credentials.add((service_name, path))
         elif isinstance(obj, dict):
             for k, v in obj.items():

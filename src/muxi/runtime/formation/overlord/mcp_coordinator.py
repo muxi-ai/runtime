@@ -166,8 +166,7 @@ class MCPCoordinator:
             raise
         except Exception as e:
             # Log credential resolution failure
-            error_msg = f"Credential resolution failed for MCP server {server_id}: {str(e)}"
-            print(f"ERROR: {error_msg}", flush=True)
+            # Error logged via observability
             raise ValueError(
                 f"Failed to resolve user credentials for MCP server {server_id}: {str(e)}"
             ) from e
@@ -363,7 +362,7 @@ class MCPCoordinator:
             except Exception as e:
                 # Log secret interpolation failure - this is critical for auth debugging
                 error_msg = f"Secret interpolation failed for MCP server {server_id}: {str(e)}"
-                print(f"ERROR: {error_msg}", flush=True)
+                # Error logged via observability
 
                 # TODO: Add observability event - SystemEvents.MCP_SERVER_REGISTRATION_FAILED
 
@@ -375,32 +374,6 @@ class MCPCoordinator:
 
         # Register the server with the MCP service
         try:
-            print(f"[MCPCoordinator] Registering server '{server_id}':")
-            print(f"  URL: {url}")
-            print(f"  Transport type: {transport_type}")
-
-            # Log auth config safely without exposing sensitive data
-            if final_auth and isinstance(final_auth, dict):
-                safe_auth = {}
-                for key, value in final_auth.items():
-                    if key.lower() in [
-                        "token",
-                        "password",
-                        "key",
-                        "secret",
-                        "api_key",
-                        "access_token",
-                    ]:
-                        # Mask sensitive values
-                        if isinstance(value, str):
-                            safe_auth[key] = f"****** (length: {len(value)})"
-                        else:
-                            safe_auth[key] = "****** (non-string)"
-                    else:
-                        safe_auth[key] = value
-                print(f"  Auth config: {safe_auth}")
-            else:
-                print(f"  Auth config: {final_auth}")
 
             res = await self.mcp_service.register_mcp_server(
                 server_id=server_id,
@@ -430,7 +403,7 @@ class MCPCoordinator:
         except Exception as e:
             # Fail fast on any MCP server connection/query errors
             error_msg = f"Failed to query MCP server '{server_id}': {str(e)}"
-            print(f"ERROR: {error_msg}", flush=True)
+            # Error logged via observability
 
             # Re-raise with clear error message
             raise ConnectionError(error_msg) from e

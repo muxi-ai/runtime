@@ -240,12 +240,9 @@ class MemoryExtractor:
         prompt = self._create_extraction_prompt(conversation)
 
         # Generate extraction results
-        print("[DEBUG Extractor] Sending extraction prompt to model...")
         try:
             extraction_response = await model.generate_text(prompt)
-            print(f"[DEBUG Extractor] Got extraction response: {extraction_response[:200]}...")
-        except Exception as e:
-            print(f"[DEBUG Extractor] ERROR generating response: {e}")
+        except Exception:
             import traceback
 
             traceback.print_exc()
@@ -266,13 +263,9 @@ class MemoryExtractor:
 
             # Parse JSON response (primary approach)
             extraction_results = json.loads(clean_response)
-            print(f"[DEBUG Extractor] Parsed extraction results: {extraction_results}")
         except json.JSONDecodeError:
-            print("[DEBUG Extractor] JSON decode failed, using fallback parsing")
-            print(f"[DEBUG Extractor] Full response: {extraction_response}")
             # Fallback parsing if LLM doesn't return valid JSON
             extraction_results = self._parse_fallback_extraction(extraction_response)
-            print(f"[DEBUG Extractor] Fallback parsing result: {extraction_results}")
 
         return extraction_results
 
@@ -373,9 +366,7 @@ class MemoryExtractor:
             extraction_results: Dictionary of extracted information
             user_id: The user's ID
         """
-        print(f"[DEBUG Extractor] Processing extraction results for user {user_id}")
         if not extraction_results or "extracted_info" not in extraction_results:
-            print("[DEBUG Extractor] No extraction results or missing 'extracted_info' key")
             return
 
         # Process each extracted item
@@ -446,15 +437,13 @@ class MemoryExtractor:
                     f"[DEBUG Extractor] Storing memory: '{memory_content}' (collection: {collection})"
                 )
                 try:
-                    result = await self.overlord.long_term_memory.add(
+                    await self.overlord.long_term_memory.add(
                         content=memory_content,
                         metadata=memory_metadata,
                         external_user_id=external_user_id,
                         collection=collection,
                     )
-                    print(f"[DEBUG Extractor] Stored memory with ID: {result}")
-                except Exception as e:
-                    print(f"[DEBUG Extractor] ERROR storing memory: {e}")
+                except Exception:
                     import traceback
 
                     traceback.print_exc()
