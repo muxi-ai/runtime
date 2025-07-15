@@ -433,7 +433,7 @@ memory:
 
 **Implementation Status: ✅ COMPLETED**
 - **Test Groups**: 5 test groups (4A through 4E) 
-- **Test Files**: 16 tested and documented files
+- **Total Tests**: 20+ tests across all groups
 - **Success Rate**: 100% (all tests passing)
 - **Formation Used**: `test-formations/formation-mcp`
 
@@ -444,90 +444,50 @@ memory:
 | **4A** | Single MCP Server Operations | ✅ PASSED | [tests/reports/4a.md](tests/reports/4a.md) |
 | **4B** | Multi-MCP Integration | ✅ PASSED | [tests/reports/4b.md](tests/reports/4b.md) |
 | **4C** | Linear MCP (Formation Secrets) | ✅ PASSED | [tests/reports/4c.md](tests/reports/4c.md) |
-| **4D** | GitHub MCP (User Credentials) | ✅ PASSED | [tests/reports/4d.md](tests/reports/4d.md) |
+| **4D** | GitHub MCP (User Credentials) | ✅ PASSED (7/7) | [tests/reports/4d.md](tests/reports/4d.md) |
 | **4E** | User Credential Isolation | ✅ PASSED | [tests/reports/4e.md](tests/reports/4e.md) |
 
 ### Key Technical Achievements
 
-**✅ MCP Integration Validated:**
-- **4 MCP Servers**: Filesystem, System Info, Linear, GitHub (105 total tools)
-- **Transport Types**: Command, HTTP/SSE, HTTP/streamable
-- **Tool Discovery**: All servers connect and register tools successfully
-- **Multi-MCP Coordination**: Complex workflows execute across multiple servers
+**✅ MCP Integration:**
+- 4 MCP servers tested: Filesystem, System Info, Linear, GitHub (105 total tools)
+- All transport types validated: Command, HTTP/SSE, HTTP/streamable
+- Tool discovery and registration working perfectly
+- Complex multi-MCP workflows executing successfully
 
-**✅ User Credential System Validated:**
-- **Formation Secrets**: Linear MCP uses formation-level API tokens
-- **User Credentials**: GitHub MCP uses user-specific credentials with isolation
-- **Clarification Flow**: Missing credentials trigger proper user prompts
-- **Smart Credential Naming**: Async identity discovery (lilyautomaze, ranaroussi)
-- **Multiple Credential Selection**: LLM-powered credential selection for ambiguous requests
+**✅ User Credential System:**
+- Formation-level secrets for services like Linear
+- User-specific credentials with proper isolation
+- Intelligent credential selection with LLM assistance
+- Complete clarification flow for missing/ambiguous credentials
 
-**✅ Security & Isolation Confirmed:**
-- **User Isolation**: Users cannot access each other's credentials
-- **Private Content Protection**: Users cannot access others' private resources
-- **Credential Scoping**: Proper authorization flows enforced
-- **Database Isolation**: User credentials properly isolated in PostgreSQL
+**✅ Security & Isolation:**
+- Multi-user credential isolation verified
+- Private resource protection confirmed
+- Proper authorization flows enforced
+- PostgreSQL database isolation working correctly
 
-### Test Group 4D: GitHub MCP with User Credentials
+### Highlight: Test Group 4D Extended Tests
 
-**Comprehensive credential system testing with smart naming and multiple account support:**
+The credential selection system received comprehensive testing with 7 test scenarios:
 
-- **4D1**: User with existing credentials - automatic usage ✅
-- **4D2**: User without credentials - clarification flow with variants ✅
-  - Token extraction from natural language
-  - Help request handling with GitHub instructions
-- **4D3**: Multiple credentials for same service - intelligent selection ✅
-  - LLM-powered credential selection
-  - Ambiguous request clarification with ordering
-- **4D4**: Multi-user credential isolation - security validation ✅
+1. **4D1**: User with existing credentials ✅
+2. **4D2**: User without credentials ✅
+3. **4D3**: Multiple credentials (original) ✅
+4. **4D3-Explicit**: Direct account selection ✅
+5. **4D3-Clarification**: Ambiguous request flow ✅
+6. **4D3-Cache**: Session credential memory ✅
+7. **4D3-Cache-Switch**: Explicit credential override ✅
 
-**Smart Features Implemented:**
-- **Async credential naming**: "github" → "lilyautomaze" using identity discovery
-- **LLM credential selection**: Intelligent choice between multiple accounts
-- **Clarification UI**: Structured presentation with numeric and name-based selection
-- **Token extraction**: Natural language processing for embedded tokens
+**Major Breakthrough Features:**
+- Message enhancement for better tool selection
+- Partial name matching ("lily" → "lily automaze")
+- Session-based credential caching
+- Intelligent clarification with numbered options
 
-### Test Group 4E: User Credential Isolation
+For detailed test implementations and results, see the individual test reports linked above.
 
-**Security validation ensuring proper multi-user isolation:**
-
-- **4E1**: Cross-user credential protection - verified ✅
-- **4E2**: Private content isolation - confirmed ✅
-
-**Security Features Validated:**
-- Users cannot access each other's credentials
-- Private data protection across user boundaries
-- Proper credential prompting when missing
-- System maintains security boundaries across all MCP operations
-
-### Formation Configuration
-
-**MCP Servers Configured:**
-```yaml
-mcp_servers:
-  filesystem-mcp:
-    transport: command
-    directory_access: /Users/ran/Desktop/tests
-  system-info-mcp:
-    transport: command
-    capabilities: cpu, memory, disk
-  linear-mcp:
-    transport: http
-    credentials: ${{ secrets.LINEAR_MCP_TOKEN }}
-  github-mcp:
-    transport: streamable_http
-    credentials: ${{ user.credentials.github }}
-    use_user_credentials: true
-```
-
-**Database Requirements:**
-- User1: Has GitHub credentials (lilyautomaze, ranaroussi)
-- User2: No GitHub credentials (triggers clarification)
-- PostgreSQL: User isolation and credential storage
-
-**Success Criteria: ✅ All 20+ MCP and credential tests passing**
-
-*Detailed implementation results and chat interactions documented in individual test reports.*
+**Success Criteria: ✅ All 20+ tests passing with 100% success rate**
 
 </details>
 
