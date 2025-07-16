@@ -10,7 +10,7 @@ authors = [
 ]
 description = "A powerful, extensible framework for building AI agents"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -35,7 +35,7 @@ dependencies = [
     "aiofiles>=23.2.0",
     "python-magic>=0.4.27",
 
-        # Document processing dependencies
+    # Document processing dependencies
     "markitdown[all]>=0.1.0",  # Convert various file formats to Markdown
     "pypdf2>=3.0.0",  # PDF document processing
     "python-docx>=1.1.0",  # Word document processing
@@ -48,7 +48,7 @@ dependencies = [
     "onellm>=0.1.0",
 
     # A2A (Agent-to-Agent) Communication
-    "a2a-sdk>=0.2.8",  # Google's Agent-to-Agent SDK for inter-agent communication
+    "a2a-sdk>=0.2",  # Google's Agent-to-Agent SDK for inter-agent communication
 
     # Development tools
     "pytest>=7.0.0",
@@ -60,10 +60,10 @@ dependencies = [
 
     # Vector search
     "faiss-cpu>=1.10.0",
-    "faissx>=0.1.0",  # Distributed FAISS for remote vector operations
+    "faissx>=0.0.3",  # Distributed FAISS for remote vector operations
     "pgvector>=0.3.6",
     "numpy>=1.24.0",
-    "sqlite-vec>=0.1.7",  # SQLite vector extension for similarity search
+    "sqlite-vec>=0.1.6",  # SQLite vector extension for similarity search
 
     # Database
     "psycopg2-binary>=2.9.9",
