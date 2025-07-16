@@ -149,3 +149,10 @@ test-docs/spreadsheet.csv
 test-docs/spreadsheet.xlsx
 .claude/.mcp.json
 webhook_log.json
+
+.pytest_cache
+.ruff_cache
+schemas/
+.cursor/
+context/
+.venv/
