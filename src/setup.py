@@ -6,9 +6,9 @@ with open(os.path.join(os.path.dirname(__file__), 'src/muxi/runtime', '.version'
     version = f.read().strip()
 
 setup(
-    name="muxi-formation",
+    name="muxi-runtime",
     version=version,
-    description="MUXI Formation",
+    description="MUXI Runtime",
     author="Ran Aroussi",
     author_email="ran@aroussi.com",
     packages=find_packages(),
@@ -21,10 +21,10 @@ setup(
         "markitdown[all]>=0.1.0",
     ],
     project_urls={
-        "Source": "https://github.com/muxi-ai/formations",
-        "Bug Reports": "https://github.com/muxi-ai/formations/issues",
-        "Documentation": "https://github.com/muxi-ai/formations",
-        "Changelog": "https://github.com/muxi-ai/formations/blob/main/CHANGELOG.md",
+        "Source": "https://github.com/muxi-ai/runtime",
+        "Bug Reports": "https://github.com/muxi-ai/runtime/issues",
+        "Documentation": "https://github.com/muxi-ai/runtime",
+        "Changelog": "https://github.com/muxi-ai/runtime/blob/main/CHANGELOG.md",
         "Funding": "https://github.com/sponsors/ranaroussi",
     },
     python_requires=">=3.10"

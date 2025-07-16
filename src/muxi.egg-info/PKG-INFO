@@ -73,7 +73,7 @@ Dynamic: license-file
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.9+-green.svg" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.10+-green.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-Elastic-purple.svg" alt="License">
   <img src="https://img.shields.io/badge/tests-passing-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/coverage-85%25-green.svg" alt="Coverage">
@@ -475,7 +475,7 @@ response = await overlord.chat(
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - SQLite (for single-user persistent memory)
 - PostgreSQL (for multi-user persistent memory)
 - FAISSx server (optional, for distributed vector memory)

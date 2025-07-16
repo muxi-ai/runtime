@@ -404,7 +404,7 @@ response = await overlord.chat(
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - SQLite (for single-user persistent memory)
 - PostgreSQL (for multi-user persistent memory)
 - FAISSx server (optional, for distributed vector memory)
