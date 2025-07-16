@@ -122,17 +122,19 @@ class CredentialResolver:
     the JSONType abstraction.
     """
 
-    def __init__(self, async_session_maker, formation_id: str):
+    def __init__(self, async_session_maker, formation_id: str, llm_model: Optional[str] = None):
         """
         Initialize the credential resolver.
 
         Args:
             async_session_maker: Async SQLAlchemy session factory
             formation_id: The formation ID (normalized)
+            llm_model: Optional LLM model to use for extraction (e.g., from formation.llm.models.text)
         """
         self.async_session_maker = async_session_maker
         self.formation_id = formation_id
         self._cache = {}  # In-memory cache: {user_id: {service: credentials}}
+        self.llm_model = llm_model  # Store the LLM model to use
 
     async def resolve(self, user_id: str, service: str) -> Optional[Dict]:
         """
@@ -460,9 +462,9 @@ class CredentialResolver:
             from ...services.llm import LLM
 
             # Create a lightweight LLM instance for tool discovery
-            # Use a fast, inexpensive model for this utility task
+            # Use the formation's configured model or fall back to a default
             try:
-                discovery_llm = LLM(model="openai/gpt-4o-mini")
+                discovery_llm = LLM(model=self.llm_model)
             except Exception:
                 # If LLM creation fails (no API key, etc.), fall back to heuristic approach
                 return await self._discover_credential_name_heuristic(
@@ -490,7 +492,7 @@ class CredentialResolver:
 
             # Get LLM recommendation
             try:
-                response = discovery_llm.generate(
+                response = await discovery_llm.chat(
                     messages=[{"role": "user", "content": discovery_prompt}],
                     max_tokens=20,
                     temperature=0,
@@ -517,7 +519,9 @@ class CredentialResolver:
 
             # Extract meaningful name from response
             if result.get("status") == "success":
-                name = self._extract_name_from_identity_response(service, result.get("result", {}))
+                name = await self._extract_name_from_identity_response(
+                    service, result.get("result", {})
+                )
                 if name and name != service:
                     return name
 
@@ -573,7 +577,7 @@ class CredentialResolver:
 
                     # Extract meaningful name from response
                     if result.get("status") == "success":
-                        name = self._extract_name_from_identity_response(
+                        name = await self._extract_name_from_identity_response(
                             service, result.get("result", {})
                         )
                         if name and name != service:
@@ -586,7 +590,7 @@ class CredentialResolver:
         # If no identity tools work, fall back to service name
         return service
 
-    def _extract_name_from_identity_response(
+    async def _extract_name_from_identity_response(
         self, service: str, response: Dict[str, Any]
     ) -> Optional[str]:
         """
@@ -615,26 +619,26 @@ class CredentialResolver:
 
         if not response_text:
             # Direct field access fallback
-            return self._extract_name_from_fields(service, response)
+            return await self._extract_name_from_fields(service, response)
 
         # Try LLM-based extraction first, then fallback to parsing
         try:
             from ...services.llm import LLM
 
-            extraction_llm = LLM(model="openai/gpt-4o-mini")
+            extraction_llm = LLM(model=self.llm_model)
 
             extraction_prompt = f"""
-Extract the most meaningful account identifier from this {service} identity response.
-
-Response data:
-{response_text}
-
+Extract the account's identifier (username/login/etc.) from the context below.
 Look for username, login, account name, or similar unique identifier.
 Respond with ONLY the identifier (no explanation, no quotes, no extra text).
 If no suitable identifier found, respond with "NONE".
+
+<context>
+{response_text}
+</context>
 """
 
-            result = extraction_llm.generate(
+            result = await extraction_llm.chat(
                 messages=[{"role": "user", "content": extraction_prompt}],
                 max_tokens=50,
                 temperature=0,
@@ -649,9 +653,9 @@ If no suitable identifier found, respond with "NONE".
             pass
 
         # Fallback to traditional parsing methods
-        return self._parse_identity_text(service, response_text)
+        return await self._parse_identity_text(service, response_text)
 
-    def _parse_identity_text(self, service: str, text: str) -> Optional[str]:
+    async def _parse_identity_text(self, service: str, text: str) -> Optional[str]:
         """
         Parse identity information from text response.
 
@@ -673,7 +677,7 @@ If no suitable identifier found, respond with "NONE".
             try:
                 # Try to parse as JSON first
                 data = json.loads(text)
-                return self._extract_name_from_fields(service, data)
+                return await self._extract_name_from_fields(service, data)
             except (json.JSONDecodeError, ValueError):
                 # Parse text patterns
                 patterns = [
@@ -694,7 +698,7 @@ If no suitable identifier found, respond with "NONE".
 
         return None
 
-    def _extract_name_from_fields(self, service: str, data: Dict[str, Any]) -> Optional[str]:
+    async def _extract_name_from_fields(self, service: str, data: Dict[str, Any]) -> Optional[str]:
         """
         Extract name from structured data fields using LLM when available.
 
@@ -712,7 +716,7 @@ If no suitable identifier found, respond with "NONE".
         try:
             from ...services.llm import LLM
 
-            extraction_llm = LLM(model="openai/gpt-4o-mini")
+            extraction_llm = LLM(model=self.llm_model)
 
             data_str = str(data)
             extraction_prompt = f"""
@@ -726,7 +730,7 @@ Respond with ONLY the identifier (no explanation, no quotes, no extra text).
 If no suitable identifier found, respond with "NONE".
 """
 
-            result = extraction_llm.generate(
+            result = await extraction_llm.chat(
                 messages=[{"role": "user", "content": extraction_prompt}],
                 max_tokens=50,
                 temperature=0,
