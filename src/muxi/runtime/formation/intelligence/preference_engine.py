@@ -41,7 +41,8 @@ class UserPreferenceEngine:
         """
         self.overlord = overlord
         self.preference_extractor = PreferenceExtractor()
-        self.behavior_analyzer = UserBehaviorAnalyzer()
+        # Pass the overlord instance to behavior analyzer for LLM configuration access
+        self.behavior_analyzer = UserBehaviorAnalyzer(overlord=overlord)
         self.context_predictor = ContextPredictor()
 
         # Automatically detect deployment mode

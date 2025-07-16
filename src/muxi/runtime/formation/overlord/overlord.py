@@ -384,9 +384,39 @@ class Overlord:
         if configured_services:
             db_manager = configured_services.get("db_manager")
             if db_manager and hasattr(db_manager, "AsyncSession") and db_manager.AsyncSession:
+                # Get text LLM model from formation config
+                llm_model = None
+                try:
+                    llm_config = configured_services.get("llm_config", {})
+                    models_config = llm_config.get("models", [])
+
+                    # Find the text model (guaranteed to exist by initialize_llm_config)
+                    for model_config in models_config:
+                        if isinstance(model_config, dict) and "text" in model_config:
+                            llm_model = model_config["text"]
+                            break
+
+                    if not llm_model:
+                        # This should not happen if initialize_llm_config ran successfully
+                        observability.observe(
+                            event_type=observability.ErrorEvents.CONFIG_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            data={"error": "Text model not found in LLM config"},
+                            description="Expected text model in formation config but not found",
+                        )
+                except Exception as e:
+                    # Log the error but don't fail - credential resolver can work without LLM
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONFIG_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e), "config_type": "llm_config"},
+                        description=f"Error extracting text model from config: {str(e)}",
+                    )
+
                 self.credential_resolver = CredentialResolver(
                     async_session_maker=db_manager.AsyncSession,
                     formation_id=self.formation_id,
+                    llm_model=llm_model,
                 )
 
         # Accept pre-generated API keys from Formation
@@ -438,11 +468,20 @@ class Overlord:
                     extraction_model = default_model
                 else:
                     # If no overlord config, try to use the first text model from llm.models
-                    llm_models = self.formation_config.get("llm", {}).get("models", [])
-                    for model_config in llm_models:
-                        if isinstance(model_config, dict) and "text" in model_config:
-                            extraction_model = model_config["text"]
-                            break
+                    try:
+                        llm_models = self.formation_config.get("llm", {}).get("models", [])
+                        for model_config in llm_models:
+                            if isinstance(model_config, dict) and "text" in model_config:
+                                extraction_model = model_config["text"]
+                                break
+                    except (TypeError, AttributeError) as e:
+                        # Log error but continue - extraction model is optional
+                        observability.observe(
+                            event_type=observability.ErrorEvents.CONFIG_ERROR,
+                            level=observability.EventLevel.DEBUG,
+                            data={"error": str(e), "config_type": "extraction_model"},
+                            description=f"Could not extract text model for extraction: {str(e)}",
+                        )
 
         self.extraction_model = extraction_model
         self.memory_extractor = None  # Will be initialized later
@@ -2668,9 +2707,7 @@ class Overlord:
                     return f"Based on the uploaded documents:\n\n{relevant_content}"
                 else:
                     # Try without filter to see if documents are in memory at all
-                    await self.buffer_memory_manager.search_buffer_memory(
-                        query=user_request, k=5
-                    )
+                    await self.buffer_memory_manager.search_buffer_memory(query=user_request, k=5)
 
                     return (
                         "I've processed your documents but couldn't find specific "
@@ -3549,14 +3586,23 @@ class Overlord:
                             # This happens after storage so credentials are available for MCP
                             async def update_credential_name():
                                 try:
+                                    print(
+                                        f"\n\n[DEBUG] Starting async credential name update for {service}/{user_id}"
+                                    )
                                     # Re-initialize MCP connection with new credentials
                                     # and discover the account name
-                                    await self.credential_resolver.update_credential_name_with_discovery(
+                                    result = await self.credential_resolver.update_credential_name_with_discovery(
                                         user_id=user_id,
                                         service=service,
                                         mcp_service=self.mcp_service,
                                     )
-                                except Exception:
+                                    print(f"[DEBUG] Credential name update result: {result}")
+                                except Exception as e:
+                                    # Log the error for debugging
+                                    print(f"[DEBUG] Credential name update failed: {e}")
+                                    import traceback
+
+                                    traceback.print_exc()
                                     # Silent failure - credential still works with generic name
                                     pass
 

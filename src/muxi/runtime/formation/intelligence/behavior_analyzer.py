@@ -32,8 +32,13 @@ logger = logging.getLogger(__name__)
 class UserBehaviorAnalyzer:
     """Analyze user behavior to infer implicit preferences"""
 
-    def __init__(self):
-        """Initialize behavior analyzer"""
+    def __init__(self, overlord=None):
+        """Initialize behavior analyzer
+
+        Args:
+            overlord: Overlord instance for accessing LLM configuration (optional)
+        """
+        self.overlord = overlord
         self.behavior_patterns = {
             "message_length_preferences": self._analyze_message_length_patterns,
             "response_time_preferences": self._analyze_response_time_patterns,
@@ -210,7 +215,19 @@ class UserBehaviorAnalyzer:
             # Get or create intent detection service
             if not hasattr(self, "_intent_detector"):
                 # Create LLM instance if needed
-                llm_service = LLM(model="openai/gpt-4", api_key=None)  # Will use env or config
+                model = "openai/gpt-4"  # default fallback
+                api_key = None
+
+                # Use overlord's text model configuration if available
+                if self.overlord and hasattr(self.overlord, "_capability_models"):
+                    text_model_config = self.overlord._capability_models.get("text", {})
+                    if text_model_config:
+                        model = text_model_config.get("model", model)
+                        api_key = text_model_config.get("api_key", api_key)
+
+                llm_service = LLM(
+                    model=model, api_key=api_key
+                )  # Will use env or config if api_key is None
 
                 self._intent_detector = IntentDetectionService(
                     llm_service=llm_service, enable_cache=True
