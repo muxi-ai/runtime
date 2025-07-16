@@ -62,20 +62,20 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 ## 🏗️ Architecture Overview
 
 ```
-┌───────────────────────────────────┐
-│         MUXI AI Server            │  ← User-facing API server
-├───────────────────────────────────┤
-│         MUXI Runtime              │  ← This repository
-│  ┌─────────────────────────────┐  │
-│  │     Formation Engine        │  │  ← YAML loader & validator
-│  ├─────────────────────────────┤  │
-│  │  Overlord  │  Agent Pool    │  │  ← Orchestration layer
-│  ├─────────────────────────────┤  │
-│  │ Memory │ Tools │ Services   │  │  ← Core subsystems
-│  └─────────────────────────────┘  │
-├───────────────────────────────────┤
-│      LLM Providers (OneLLM)       │  ← External integrations
-└───────────────────────────────────┘
+┌────────────────────────────────────┐
+│           MUXI AI Server           │  ← User-facing API server
+├────────────────────────────────────┤
+│             MUXI Runtime           │  ← This repository
+│  ┌──────────────────────────────┐  │
+│  │      Formation Engine        │  │  ← YAML loader & validator
+│  ├──────────────────────────────┤  │
+│  │    Overlord   │  Agent Pool  │  │  ← Orchestration layer
+│  ├──────────────────────────────┤  │
+│  │   Memory │ Services │ Tools  │  │  ← Core subsystems
+│  └──────────────────────────────┘  │
+├────────────────────────────────────┤
+│       LLM Providers (OneLLM)       │  ← External integrations
+└────────────────────────────────────┘
 ```
 
 ## 🚀 Quick Start for Contributors
