@@ -13,6 +13,7 @@ The initialization order is critical:
 from typing import Any, Dict, Optional
 
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
+from ..datatypes.exceptions import ConfigurationValidationError
 from ..datatypes.memory import BufferMemoryConfig, WorkingMemoryConfig
 from ..datatypes.observability import EventLevel
 from ..services import observability
@@ -111,6 +112,13 @@ def initialize_llm_config(formation) -> None:
 
     This processes the capability-based LLM schema and sets up model
     resolution for different capabilities like text, vision, transcription, etc.
+
+    Requirements:
+    - The 'text' capability MUST be configured (no fallback)
+    - Other capabilities default to the text model if not configured
+
+    Raises:
+        ConfigurationValidationError: If the 'text' capability is not configured
     """
     llm_config = formation._llm_config if hasattr(formation, "_llm_config") else {}
 
@@ -135,16 +143,59 @@ def initialize_llm_config(formation) -> None:
     formation._global_llm_settings = llm_config.get("settings", {})
     formation._global_api_keys = llm_config.get("api_keys", {})
 
+    # CRITICAL: Ensure text model is configured
+    if "text" not in formation._capability_models:
+        raise ConfigurationValidationError(
+            ["Missing required LLM capability 'text' in formation.llm.models"],
+            details={
+                "required_capability": "text",
+                "configured_capabilities": list(formation._capability_models.keys()),
+                "help": "You must configure at least: llm.models[0].text = 'provider/model-name'",
+            },
+        )
+
+    # Get text model configuration for fallback
+    text_model_config = formation._capability_models["text"]
+
+    # Define common capabilities that should default to text model if not configured
+    common_capabilities = ["vision", "audio", "documents", "embedding"]
+    capabilities_using_text_fallback = []
+
+    # Apply text model as default for unconfigured common capabilities
+    for capability in common_capabilities:
+        if capability not in formation._capability_models:
+            formation._capability_models[capability] = {
+                "model": text_model_config["model"],
+                "api_key": text_model_config.get("api_key"),
+                "settings": text_model_config.get("settings", {}),
+            }
+            capabilities_using_text_fallback.append(capability)
+
     capabilities = list(formation._capability_models.keys())
+
+    # Log initialization with details about fallbacks
+    log_data = {
+        "service": "llm",
+        "capabilities": capabilities,
+        "capability_count": len(capabilities),
+        "text_model": text_model_config["model"],
+    }
+
+    if capabilities_using_text_fallback:
+        log_data["capabilities_using_text_fallback"] = capabilities_using_text_fallback
+        description = (
+            f"LLM configuration initialized with {len(capabilities)} capabilities. "
+            f"Using text model '{text_model_config['model']}' as fallback for: "
+            f"{', '.join(capabilities_using_text_fallback)}"
+        )
+    else:
+        description = f"LLM configuration initialized with {len(capabilities)} capabilities"
+
     observability.observe(
         event_type=observability.SystemEvents.INITIALIZING,
         level=observability.EventLevel.INFO,
-        data={
-            "service": "llm",
-            "capabilities": capabilities,
-            "capability_count": len(capabilities),
-        },
-        description=f"LLM configuration initialized with {len(capabilities)} capabilities",
+        data=log_data,
+        description=description,
     )
 
 
