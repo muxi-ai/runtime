@@ -23,6 +23,11 @@ import threading
 from pathlib import Path
 from typing import Dict, Any, Optional, Set
 
+from mcp.server.fastmcp import FastMCP
+
+# Initialize MCP server
+mcp = FastMCP("file-generation")
+
 # Whitelist of allowed imports for file generation
 ALLOWED_IMPORTS: Set[str] = {
     # Data processing and analysis
@@ -196,8 +201,12 @@ def validate_code(code: str) -> tuple[bool, Optional[str]]:
 
         # Check for dangerous subscript access (e.g., sys.modules['os'])
         elif isinstance(node, ast.Subscript):
-            if isinstance(node.value, ast.Attribute) and isinstance(node.value.value, ast.Name):
-                if node.value.value.id == "sys" and node.value.attr == "modules":
+            if isinstance(node.value, ast.Attribute):
+                if (
+                    isinstance(node.value.value, ast.Name)
+                    and node.value.value.id == "sys"
+                    and node.value.attr == "modules"
+                ):
                     return False, "Access to sys.modules not allowed"
 
     return True, None
@@ -240,13 +249,19 @@ def cleanup_old_files(output_dir: Path, max_size_mb: int = MAX_OUTPUT_SIZE_MB):
                         pass
 
 
+@mcp.tool()
 def generate_file(code: str, filename: Optional[str] = None) -> Dict[str, Any]:
     """
-    Execute Python code to generate a file.
+    Generate files (charts, documents, spreadsheets, images, presentations)
+    by executing Python code with curated libraries.
+
+    The code should save the output file in the current directory
+    or 'outputs' subdirectory.
 
     Args:
-        code: Python code to execute
-        filename: Optional filename hint
+        code: Python code to execute for file generation.
+              The code should save the output file in the current directory.
+        filename: Optional filename hint for the generated file
 
     Returns:
         Dictionary with file_path and filename on success, or error details
@@ -254,7 +269,7 @@ def generate_file(code: str, filename: Optional[str] = None) -> Dict[str, Any]:
     # Validate code
     is_valid, error_msg = validate_code(code)
     if not is_valid:
-        return {"error": error_msg}
+        raise ValueError(error_msg)
 
     # Prepare output directory
     output_dir = get_output_directory()
@@ -287,115 +302,89 @@ def _save_file_list():
     """Save list of generated files on exit."""
     tracking_file = Path(".muxi_tracking_{execution_id}.json")
     with _original_open(tracking_file, 'w') as f:
-        json.dump({{"files": list(set(_generated_files))}}, f)
+        json.dump({{"files": _generated_files}}, f)
 
 atexit.register(_save_file_list)
+
+# Add common plotting backend setup
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
 
 # User code starts here
 {code}
 '''
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp_file:
-        tmp_file.write(tracking_code)
-        tmp_file_path = tmp_file.name
+    # Write to temporary file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        f.write(tracking_code)
+        tmp_file_path = f.name
 
     try:
-        # Execute code in subprocess
-        env = os.environ.copy()
-        # Remove potentially dangerous environment variables
-        sensitive_prefixes = (
-            "MUXI_",
-            "API_",
-            "SECRET_",
-            "KEY_",
-            "TOKEN_",
-            "PASSWORD_",
-            "CREDENTIAL_",
-            "AUTH_",
+        # Execute the code in the output directory with limitations
+        # Use ulimit on Unix-like systems to limit memory usage
+        if sys.platform != "win32":
+            # Limit memory to MAX_MEMORY_MB
+            memory_limit_cmd = f"ulimit -v {MAX_MEMORY_BYTES // 1024}; "
+        else:
+            memory_limit_cmd = ""
+
+        result = subprocess.run(
+            f"{memory_limit_cmd}{sys.executable} {tmp_file_path}"
+            if sys.platform != "win32"
+            else [sys.executable, tmp_file_path],
+            shell=sys.platform != "win32",
+            cwd=str(output_dir),
+            capture_output=True,
+            text=True,
+            timeout=MAX_EXECUTION_TIME,
         )
-        for key in list(env.keys()):
-            if any(key.startswith(prefix) for prefix in sensitive_prefixes):
-                del env[key]
-
-        # Prepare subprocess with resource limits (where supported)
-        try:
-            if sys.platform != "win32":
-                import resource
-
-                def set_limits():
-                    try:
-                        # Set memory limit (some systems may not support this)
-                        resource.setrlimit(resource.RLIMIT_AS, (MAX_MEMORY_BYTES, MAX_MEMORY_BYTES))
-                    except (OSError, ValueError):
-                        # Memory limit not supported on this system
-                        pass
-                    
-                    try:
-                        # Set CPU time limit (slightly higher than timeout to allow graceful shutdown)
-                        resource.setrlimit(
-                            resource.RLIMIT_CPU, (MAX_EXECUTION_TIME + 5, MAX_EXECUTION_TIME + 5)
-                        )
-                    except (OSError, ValueError):
-                        # CPU limit not supported on this system
-                        pass
-
-                result = subprocess.run(
-                    [sys.executable, tmp_file_path],
-                    cwd=str(output_dir),
-                    capture_output=True,
-                    text=True,
-                    timeout=MAX_EXECUTION_TIME,
-                    env=env,
-                    preexec_fn=set_limits,
-                )
-            else:
-                # Windows doesn't support preexec_fn or resource limits
-                result = subprocess.run(
-                    [sys.executable, tmp_file_path],
-                    cwd=str(output_dir),
-                    capture_output=True,
-                    text=True,
-                    timeout=MAX_EXECUTION_TIME,
-                    env=env,
-                )
-        except Exception as e:
-            # Fallback: run without resource limits if that fails
-            result = subprocess.run(
-                [sys.executable, tmp_file_path],
-                cwd=str(output_dir),
-                capture_output=True,
-                text=True,
-                timeout=MAX_EXECUTION_TIME,
-                env=env,
-            )
 
         if result.returncode != 0:
-            return {"error": f"Execution failed: {result.stderr}", "stdout": result.stdout}
+            error_msg = result.stderr if result.stderr else "Unknown error"
+            # Provide more helpful error messages for common issues
+            if "ModuleNotFoundError" in error_msg:
+                missing_module = error_msg.split("'")[1]
+                error_msg = f"Missing required module: {missing_module}. Make sure it's installed."
+            elif "FileNotFoundError" in error_msg:
+                error_msg = "File not found. Make sure all file paths are correct."
+            elif "MemoryError" in error_msg:
+                error_msg = f"Memory limit exceeded (max {MAX_MEMORY_MB}MB)"
 
-        # Read tracking file to get generated files
+            raise RuntimeError(f"Execution failed: {error_msg}")
+
+        # Check tracking file for generated files
         tracking_file = output_dir / f".muxi_tracking_{execution_id}.json"
         generated_files = []
 
-        try:
-            if tracking_file.exists():
-                with open(tracking_file, "r") as f:
+        if tracking_file.exists():
+            try:
+                with open(tracking_file) as f:
                     tracking_data = json.load(f)
                     generated_files = [Path(p) for p in tracking_data.get("files", [])]
-                # Clean up tracking file
-                tracking_file.unlink()
-        except Exception:
-            # Fallback to time-based detection if tracking fails
-            import time
+                tracking_file.unlink()  # Clean up tracking file
+            except Exception:
+                pass
 
-            current_time = time.time()
-            for file_path in output_dir.iterdir():
-                if file_path.is_file() and not file_path.name.startswith(".muxi_tracking_"):
-                    # Check if file was created in the last minute
-                    if current_time - file_path.stat().st_mtime < 60:
-                        generated_files.append(file_path)
+        # If no files tracked, look for new files in output directory
+        if not generated_files:
+            # List all files in output directory that aren't tracking files
+            all_files = [
+                f
+                for f in output_dir.glob("*")
+                if f.is_file() and not f.name.startswith(".muxi_tracking_")
+            ]
+            if all_files:
+                # Sort by modification time and take the newest
+                generated_files = sorted(
+                    all_files, key=lambda f: f.stat().st_mtime, reverse=True
+                )
 
         if not generated_files:
-            return {"error": "No file was generated"}
+            # Check if there was any output that might indicate what went wrong
+            if result.stdout:
+                raise RuntimeError(f"No file was generated. Output: {result.stdout}")
+            else:
+                raise RuntimeError("No file was generated")
 
         # Return the newest file (or the first one if tracked)
         if len(generated_files) == 1:
@@ -406,14 +395,19 @@ atexit.register(_save_file_list)
         return {
             "file_path": str(newest_file.absolute()),
             "filename": newest_file.name,
+            "message": f"File generated successfully: {newest_file.name}",
             "stdout": result.stdout if result.stdout else None,
         }
 
     except subprocess.TimeoutExpired:
-        return {"error": f"Code execution timed out after {MAX_EXECUTION_TIME} seconds"}
+        raise RuntimeError(f"Code execution timed out after {MAX_EXECUTION_TIME} seconds")
 
     except Exception as e:
-        return {"error": f"Unexpected error: {str(e)}"}
+        # Re-raise with cleaner error message
+        if isinstance(e, (RuntimeError, ValueError)):
+            raise
+        else:
+            raise RuntimeError(f"Unexpected error: {str(e)}")
 
     finally:
         # Clean up temporary script
@@ -423,131 +417,8 @@ atexit.register(_save_file_list)
             pass
 
 
-def handle_request(request: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Handle an MCP request.
-
-    Args:
-        request: MCP request dictionary
-
-    Returns:
-        MCP response dictionary
-    """
-    method = request.get("method", "")
-
-    if method == "tools/list":
-        return {
-            "tools": [
-                {
-                    "name": "generate_file",
-                    "description": "Generate files (charts, documents, spreadsheets, images, presentations) by executing Python code with curated libraries",  # noqa: E501
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {
-                            "code": {
-                                "type": "string",
-                                "description": "Python code to execute for file generation. The code should save the output file in the current directory.",  # noqa: E501
-                            },
-                            "filename": {
-                                "type": "string",
-                                "description": "Optional filename hint for the generated file",
-                            },
-                        },
-                        "required": ["code"],
-                    },
-                }
-            ]
-        }
-
-    elif method == "tools/call":
-        tool_name = request.get("params", {}).get("name", "")
-
-        if tool_name == "generate_file":
-            arguments = request.get("params", {}).get("arguments", {})
-            result = generate_file(
-                code=arguments.get("code", ""), filename=arguments.get("filename")
-            )
-
-            # Format as MCP response
-            if "error" in result:
-                return {"error": {"code": -32603, "message": result["error"]}}
-            else:
-                return {
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": f"File generated successfully: {result['filename']}",
-                        },
-                        {
-                            "type": "resource",
-                            "resource": {
-                                "uri": f"file://{result['file_path']}",
-                                "name": result["filename"],
-                                "mimeType": "application/octet-stream",
-                            },
-                        },
-                    ]
-                }
-
-        else:
-            return {"error": {"code": -32601, "message": f"Unknown tool: {tool_name}"}}
-
-    else:
-        return {"error": {"code": -32601, "message": f"Unknown method: {method}"}}
-
-
-def main():
-    """Main entry point for MCP server."""
-    # MCP servers communicate via stdin/stdout
-    while True:
-        try:
-            # Read request from stdin
-            line = sys.stdin.readline()
-
-            # Handle EOF gracefully
-            if not line:
-                # stdin closed, exit cleanly
-                break
-
-            # Skip empty lines (just newline characters)
-            line = line.strip()
-            if not line:
-                continue
-
-            # Parse JSON request - let json.loads() handle validation
-            try:
-                request = json.loads(line)
-            except json.JSONDecodeError as e:
-                response = {"error": {"code": -32700, "message": f"Parse error: {str(e)}"}}
-            else:
-                # Handle request
-                response = handle_request(request)
-
-            # Send response
-            print(json.dumps(response))
-            sys.stdout.flush()
-
-        except KeyboardInterrupt:
-            # Clean shutdown on Ctrl+C
-            break
-        except IOError as e:
-            # Handle pipe errors (e.g., when parent process dies)
-            if e.errno == 32:  # Broken pipe
-                break
-            # Other IO errors - log and continue
-            response = {"error": {"code": -32603, "message": f"IO error: {str(e)}"}}
-            print(json.dumps(response))
-            sys.stdout.flush()
-        except Exception as e:
-            # Log error and continue
-            response = {"error": {"code": -32603, "message": f"Internal error: {str(e)}"}}
-            try:
-                print(json.dumps(response))
-                sys.stdout.flush()
-            except Exception:
-                # If we can't even write errors, exit
-                break
-
-
+# The MCP SDK handles the main loop and protocol communication
+# No need for manual stdin/stdout handling
 if __name__ == "__main__":
-    main()
+    # Start the MCP server
+    mcp.run()
