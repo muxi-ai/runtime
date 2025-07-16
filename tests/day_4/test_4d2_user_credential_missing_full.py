@@ -48,18 +48,33 @@ async def run_async_test():
             try:
                 from sqlalchemy import text
                 async with formation._db_manager.get_session() as session:
-                    # Delete existing GitHub credentials for user_id=5 (user2)
+                    # Delete existing GitHub credentials for user2 (more comprehensive)
                     delete_result = await session.execute(
                         text("""
                         DELETE FROM credentials
                         WHERE service = 'github'
-                        AND user_id = 5
+                        AND user_id IN (
+                            SELECT id FROM users WHERE external_user_id = 'user2'
+                        )
                         """)
                     )
                     await session.commit()
-                    print(f"✅ Deleted {delete_result.rowcount} GitHub credential(s) for user_id=5")
+                    print(f"✅ Deleted {delete_result.rowcount} GitHub credential(s) for user2")
+
+                    # Also check if user2 exists
+                    user_check = await session.execute(
+                        text("SELECT id, external_user_id FROM users WHERE external_user_id = 'user2'")
+                    )
+                    user = user_check.fetchone()
+                    if user:
+                        print(f"✅ User2 exists with ID: {user.id}")
+                    else:
+                        print("⚠️  User2 does not exist in database")
+
             except Exception as e:
                 print(f"Warning: Could not clear credentials: {e}")
+                import traceback
+                traceback.print_exc()
 
         # Also clear the credential cache if it exists
         if overlord.credential_resolver:
@@ -189,16 +204,22 @@ async def run_async_test():
         print(f"- Asks for credentials again: {asks_again}")
         print("="*80 + "\n")
 
+        # Wait for async credential name update to complete
+        print("\n=== WAITING FOR ASYNC CREDENTIAL NAME UPDATE ===")
+        print("Waiting 25 seconds for async credential name discovery to complete...")
+        await asyncio.sleep(25)
+        print("✅ Wait complete - checking database for updated credential name")
+
         # Check if credentials were saved in DB
         if formation._db_manager:
             print("\n=== CHECKING DATABASE ===")
             try:
-                # Check if credential was saved
+                # Check if credential was saved and if name was updated
                 from sqlalchemy import text
                 async with formation._db_manager.get_session() as session:
                     result = await session.execute(
                         text("""
-                        SELECT c.service, c.encrypted_data IS NOT NULL as has_data
+                        SELECT c.service, c.name, c.encrypted_data IS NOT NULL as has_data
                         FROM credentials c
                         JOIN users u ON c.user_id = u.id
                         WHERE u.external_user_id = :user_id
@@ -209,7 +230,14 @@ async def run_async_test():
                     cred = result.fetchone()
 
                     if cred:
-                        print("✅ Credential found in DB for user2/github")
+                        print(f"✅ Credential found in DB for user2/github")
+                        print(f"   Service: {cred.service}")
+                        print(f"   Name: {cred.name}")
+                        print(f"   Has data: {cred.has_data}")
+                        if cred.name != "github":
+                            print(f"🎉 SUCCESS: Credential name was updated from 'github' to '{cred.name}'!")
+                        else:
+                            print("⚠️  Credential name is still 'github' - async update may not have completed")
                     else:
                         print("❌ No credential found in DB for user2/github")
             except Exception as e:
