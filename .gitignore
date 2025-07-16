@@ -152,7 +152,7 @@ webhook_log.json
 
 .pytest_cache
 .ruff_cache
-schemas/
-.cursor/
-context/
 .venv/
+.cursor
+context
+schemas
