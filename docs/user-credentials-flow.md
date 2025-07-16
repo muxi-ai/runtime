@@ -12,6 +12,55 @@ The MUXI Runtime supports user-specific credentials for external services (like 
 - **Session caching**: Selected credentials are remembered within a conversation
 - **Clarification flow**: Ambiguous requests trigger user clarification
 
+## Sequence Diagram(s)
+
+### Credential-Aware Tool Invocation Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Overlord
+    participant Agent
+    participant MCPService
+    participant CredentialResolver
+    participant LLM
+
+    User->>Overlord: Sends chat message
+    Overlord->>Agent: Forwards message
+    Agent->>MCPService: Requests tool call (with user_id)
+    MCPService->>CredentialResolver: Resolve credentials for user/service
+    alt Multiple credentials found
+        CredentialResolver->>LLM: Select best credential
+        LLM-->>CredentialResolver: Returns selection
+    end
+    CredentialResolver-->>MCPService: Returns credential
+    MCPService->>MCPService: Connects ephemerally with credential
+    MCPService->>MCPService: Executes tool call
+    MCPService-->>Agent: Returns tool result
+    Agent-->>Overlord: Returns response
+    Overlord-->>User: Delivers result
+```
+
+### Clarification Request for Missing Credentials
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant Overlord
+    participant CredentialHandler
+    participant User
+
+    Agent->>Overlord: Raises MissingCredentialError
+    Overlord->>CredentialHandler: Generate clarification request
+    CredentialHandler-->>Overlord: Returns ClarificationRequest
+    Overlord-->>User: Sends clarification prompt
+    User-->>Overlord: Submits credential response
+    Overlord->>CredentialHandler: Parse credential response
+    CredentialHandler-->>Overlord: Extracted credential
+    Overlord->>CredentialResolver: Store credential
+    Overlord->>Agent: Retry tool call with credential
+```
+
 ## Architecture Components
 
 ### 1. Credential Storage (PostgreSQL)
