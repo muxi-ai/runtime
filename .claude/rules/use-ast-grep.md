@@ -95,12 +95,12 @@ When asked to "find all Ruby service objects that call `perform`":
 
 ## Decision Matrix: When to Use Each Tool
 
-| Task Type                | Tool Choice         | Reason                        |
-|--------------------------|--------------------|-------------------------------|
-| Find text patterns       | grep_search        | Simple text matching          |
-| Find code structures     | ast-grep           | Syntax-aware search           |
-| Understand semantics     | codebase_search    | AI-powered context            |
-| Make edits               | edit_file          | Precise file editing          |
-| Structural refactoring   | ast-grep + edit_file | Structure + precision        |
+| Task Type                | Tool Choice          | Reason                        |
+|--------------------------|----------------------|-------------------------------|
+| Find text patterns       | grep_search          | Simple text matching          |
+| Find code structures     | ast-grep             | Syntax-aware search           |
+| Understand semantics     | codebase_search      | AI-powered context            |
+| Make edits               | edit_file            | Precise file editing          |
+| Structural refactoring   | ast-grep + edit_file | Structure + precision         |
 
 **Always prefer ast-grep for code structure analysis over regex-based approaches, but only if it is installed and available.**

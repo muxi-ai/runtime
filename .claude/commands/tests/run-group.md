@@ -1,4 +1,8 @@
-# Run Test Group
+---
+allowed-tools: Bash, Read
+---
+
+# Run test group
 
 Lets run all the tests from test group $ARGUMENTS. Keep a group-level report updated with progress in tests/reports/
 

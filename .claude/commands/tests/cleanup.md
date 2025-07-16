@@ -1,4 +1,8 @@
-# Cleanup the tests directory
+---
+allowed-tools: Bash, Read
+---
+
+# Cleanup tests
 
 Please clean up the tests/day_$ARGUMENTS directory.
 

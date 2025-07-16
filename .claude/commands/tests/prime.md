@@ -2,7 +2,7 @@
 allowed-tools: Bash, Read
 ---
 
-# Prime context
+# Prime tests
 
 This command loads essential context for a new agent session by examining the codebase structure and reading the project README.
 
@@ -11,6 +11,7 @@ This command loads essential context for a new agent session by examining the co
 - Read the README.md to understand the project purpose, setup instructions, and key information
 - Provide a concise overview of the project based on the gathered context
 - Read the formation spec
+- Read the test plan and guide
 
 ## Context
 - Codebase structure git accessible: !`git ls-files`
@@ -19,4 +20,6 @@ This command loads essential context for a new agent session by examining the co
 - Read the formation spec
    - [MUXI Formation Spec](schemas/formation/README.md)
    - [MUXI Formation directory](schemas/formation/)
-- Tell me when you're done priming
+- Read the test plan
+   - [Runtime Test Plan.md](MUXI_Runtime_Comprehensive_Test_Plan.md)
+   - [Runtime Testing Guide](MUXI_Runtime_Testing_Guide.md)
