@@ -51,7 +51,7 @@ sqlite-vec>=0.1.6  # SQLite vector extension for similarity search
 
 # Database
 psycopg2-binary>=2.9.9
-sqlalchemy>=2.0.0
+SQLAlchemy[asyncio]>=2.0.17
 
 # Legacy dependencies (keeping for compatibility)
 aiohttp>=3.8.0
