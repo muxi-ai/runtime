@@ -19,6 +19,31 @@ from ...services.mcp.built_in import BUILTIN_MCP_REGISTRY
 USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}")
 
 
+def extract_user_credential_placeholders(obj: Any, found_credentials: set, path: str = "") -> None:
+    """
+    Recursively extract all user credential placeholders from a configuration object.
+    
+    Args:
+        obj: The configuration object to scan
+        found_credentials: Set to store found credential service names and paths
+        path: Current path in the configuration tree (for error reporting)
+    """
+    if isinstance(obj, str):
+        matches = USER_CREDENTIAL_PATTERN.findall(obj)
+        for match in matches:
+            # findall returns the captured group directly (e.g., "github")
+            service_name = match
+            found_credentials.add((service_name, path))
+    elif isinstance(obj, dict):
+        for key, value in obj.items():
+            new_path = f"{path}.{key}" if path else key
+            extract_user_credential_placeholders(value, found_credentials, new_path)
+    elif isinstance(obj, list):
+        for i, item in enumerate(obj):
+            new_path = f"{path}[{i}]"
+            extract_user_credential_placeholders(item, found_credentials, new_path)
+
+
 class ValidationError(Exception):
     """Raised when formation validation fails."""
 
@@ -2317,19 +2342,7 @@ def validate_user_credentials_requirements(
 
     def find_user_credentials_in_mcp(obj: Any, found_credentials: set, path: str = "") -> None:
         """Recursively find all user credential patterns in MCP configurations."""
-        if isinstance(obj, str):
-            match = USER_CREDENTIAL_PATTERN.search(obj)
-            if match:
-                service_name = match.group(1)
-                found_credentials.add((service_name, path))
-        elif isinstance(obj, dict):
-            for key, value in obj.items():
-                new_path = f"{path}.{key}" if path else key
-                find_user_credentials_in_mcp(value, found_credentials, new_path)
-        elif isinstance(obj, list):
-            for i, item in enumerate(obj):
-                new_path = f"{path}[{i}]"
-                find_user_credentials_in_mcp(item, found_credentials, new_path)
+        extract_user_credential_placeholders(obj, found_credentials, path)
 
     # Check if any part of config uses user credentials
     if contains_user_credentials(config):
@@ -2434,19 +2447,7 @@ async def validate_user_credentials_requirements_async(
 
     def find_user_credentials_in_mcp(obj: Any, found_credentials: set, path: str = "") -> None:
         """Recursively find all user credential patterns in MCP configurations."""
-        if isinstance(obj, str):
-            matches = USER_CREDENTIAL_PATTERN.findall(obj)
-            for match in matches:
-                service_name = match.split(".")[-1].rstrip("}").strip()
-                found_credentials.add((service_name, path))
-        elif isinstance(obj, dict):
-            for k, v in obj.items():
-                new_path = f"{path}.{k}" if path else k
-                find_user_credentials_in_mcp(v, found_credentials, new_path)
-        elif isinstance(obj, list):
-            for i, item in enumerate(obj):
-                new_path = f"{path}[{i}]"
-                find_user_credentials_in_mcp(item, found_credentials, new_path)
+        extract_user_credential_placeholders(obj, found_credentials, path)
 
     # Check if any user credentials are used
     if contains_user_credentials(config):

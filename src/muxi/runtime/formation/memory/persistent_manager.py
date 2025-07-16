@@ -187,40 +187,22 @@ class PersistentMemoryManager:
             # Helper function to call the appropriate search method with correct parameters
             async def search_collection(collection=None):
                 memory_backend = self.overlord.long_term_memory
-                backend_name = type(memory_backend).__name__
 
-                # Build search parameters based on backend type
-                search_params = {"query": query}
-
-                if backend_name == "Memobase":
-                    # Memobase uses 'limit', 'additional_filter', and supports 'collection'
-                    search_params["limit"] = k
-                    if self.overlord.is_multi_user and user_id is not None:
-                        search_params["external_user_id"] = user_id
-                    search_params["additional_filter"] = full_filter
-                    if collection:
-                        search_params["collection"] = collection
-
-                elif backend_name == "LongTermMemory":
-                    # LongTermMemory uses 'limit', 'filter_metadata', and supports 'collection'
-                    search_params["limit"] = k
-                    if self.overlord.is_multi_user and user_id is not None:
-                        search_params["external_user_id"] = user_id
-                    search_params["filter_metadata"] = full_filter
-                    if collection:
-                        search_params["collection"] = collection
-
-                elif backend_name == "SQLiteMemory":
-                    # SQLiteMemory uses 'limit' and 'user_id' (not external_user_id)
-                    search_params["limit"] = k
-                    if user_id is not None:
-                        search_params["user_id"] = user_id
-                    # SQLiteMemory doesn't support collection parameter in public API
-                    # It will search all collections
-
+                # Use the backend's build_search_parameters method if available
+                if hasattr(memory_backend, "build_search_parameters"):
+                    search_params = memory_backend.build_search_parameters(
+                        query=query,
+                        k=k,
+                        user_id=user_id if self.overlord.is_multi_user else None,
+                        full_filter=full_filter,
+                        collection=collection,
+                    )
                 else:
-                    # Default case - try standard parameters
-                    search_params["k"] = k
+                    # Fallback for backends without the new method
+                    search_params = {
+                        "query": query,
+                        "k": k,
+                    }
                     if full_filter:
                         search_params["filter_metadata"] = full_filter
                     if collection:

@@ -35,6 +35,8 @@ import json
 import time
 from typing import Set, Any
 
+from .. import observability
+
 
 class MemoryExtractor:
     """
@@ -242,10 +244,19 @@ class MemoryExtractor:
         # Generate extraction results
         try:
             extraction_response = await model.generate_text(prompt)
-        except Exception:
-            import traceback
-
-            traceback.print_exc()
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.EXTENSION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "model": model._model if hasattr(model, "_model") else "unknown",
+                    "component": "memory_extractor",
+                    "operation": "generate_extraction",
+                },
+                description="Memory extractor failed to generate extraction response from model",
+            )
             return {"extracted_info": []}
 
         # Parse results into structured format
@@ -411,10 +422,6 @@ class MemoryExtractor:
             and hasattr(self.overlord, "long_term_memory")
             and self.overlord.long_term_memory
         ):
-            print(
-                f"[DEBUG Extractor] Storing {len(memories_to_store)} memories in long-term memory"
-            )
-
             # Handle multi-user mode
             external_user_id = user_id if self.overlord.is_multi_user else None
 
@@ -433,9 +440,6 @@ class MemoryExtractor:
                     "collection": collection,  # Keep in metadata for reference
                 }
 
-                print(
-                    f"[DEBUG Extractor] Storing memory: '{memory_content}' (collection: {collection})"
-                )
                 try:
                     await self.overlord.long_term_memory.add(
                         content=memory_content,
@@ -443,10 +447,22 @@ class MemoryExtractor:
                         external_user_id=external_user_id,
                         collection=collection,
                     )
-                except Exception:
-                    import traceback
-
-                    traceback.print_exc()
+                except Exception as e:
+                    # Log memory storage failure for debugging while continuing execution
+                    observability.observe(
+                        event_type=observability.SystemEvents.EXTENSION_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "memory_content": memory_content[:100] + "..." if len(memory_content) > 100 else memory_content,
+                            "collection": collection,
+                            "user_id": str(user_id),
+                            "component": "memory_extractor",
+                            "operation": "long_term_memory_add",
+                        },
+                        description="Memory extractor failed to store extracted information in long-term memory",
+                    )
 
     def _is_sensitive_information(self, key: str, value: Any) -> bool:
         """

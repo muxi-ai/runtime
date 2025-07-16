@@ -287,16 +287,16 @@ class LongTermMemory:
     def _extract_embedding_from_response(self, embedding_response: Any) -> List[float]:
         """
         Extract embedding vector from various response formats.
-        
+
         This method handles different embedding response formats from various providers:
         - OpenAI-style: response.data[0].embedding
         - Alternative: response.embeddings[0].embedding
         - Direct: response.embedding
         - List: Already a list of floats
-        
+
         Args:
             embedding_response: The response from embedding model
-            
+
         Returns:
             List of floats representing the embedding vector
         """
@@ -583,6 +583,41 @@ class LongTermMemory:
         )
 
         return formatted_results
+
+    def build_search_parameters(
+        self,
+        query: str,
+        k: int = 5,
+        user_id: Optional[str] = None,
+        full_filter: Optional[Dict[str, Any]] = None,
+        collection: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Build search parameters for the LongTermMemory search method.
+
+        Args:
+            query: The search query text
+            k: Number of results to return
+            user_id: Optional user ID for filtering
+            full_filter: Optional metadata filter
+            collection: Optional collection name
+
+        Returns:
+            Dictionary of parameters for the search method
+        """
+        search_params = {
+            "query": query,
+            "limit": k,
+            "filter_metadata": full_filter,
+        }
+
+        if user_id is not None:
+            search_params["external_user_id"] = user_id
+
+        if collection:
+            search_params["collection"] = collection
+
+        return search_params
 
     def _search_internal(
         self,

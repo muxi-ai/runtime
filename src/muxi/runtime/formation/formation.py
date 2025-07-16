@@ -318,12 +318,14 @@ class Formation:
 
             # Validate user credentials requirements (ensure database is configured if needed)
             try:
-                await validate_user_credentials_requirements_async(self.config, self.secrets_manager)
+                await validate_user_credentials_requirements_async(
+                    self.config, self.secrets_manager
+                )
             except ValueError as e:
                 raise ConfigurationValidationError(
                     [str(e)],
                     {"config_path": normalized_path, "validation_type": "user_credentials"},
-                )
+                ) from e
 
             # Validate dependencies before proceeding
             dependency_result = self._dependency_validator.validate_formation_dependencies(

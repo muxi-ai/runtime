@@ -774,30 +774,10 @@ class Agent:
                 memory_results = search_results.get("memory", [])
 
                 if knowledge_results or memory_results or recent_docs:
-                    context_parts = []
-
-                    # Add recent document uploads first (highest priority)
-                    if recent_docs:
-                        context_parts.extend(self._format_recent_documents(recent_docs))
-
-                    # Add domain knowledge context
-                    if knowledge_results:
-                        context_parts.append("--- Domain Knowledge ---")
-                        for result in knowledge_results:
-                            context_parts.append(f"• {result.get('content', '')}")
-                        context_parts.append("--- End Domain Knowledge ---")
-
-                    # Add memory context
-                    if memory_results:
-                        context_parts.append("--- Recent Context ---")
-                        for result in memory_results:
-                            context_parts.append(f"• {result.get('content', '')}")
-                        context_parts.append("--- End Recent Context ---")
-
-                    context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
-
                     # Add enhanced context to the conversation
-                    enhanced_message = f"{content}{context_enhancement}"
+                    enhanced_message = self._enhance_message_with_context(
+                        content, recent_docs, knowledge_results, memory_results
+                    )
                     self._messages[-1]["content"] = enhanced_message
 
                     # Log unified search success
@@ -836,15 +816,9 @@ class Agent:
             if not recent_docs and self.overlord and hasattr(self.overlord, "get_recent_documents"):
                 recent_docs = self.overlord.get_recent_documents(session_id=session_id)
 
-            context_parts = []
             if recent_docs:
-                context_parts = self._format_recent_documents(recent_docs)
-
-            if context_parts:
-                context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
-
                 # Add enhanced context to the conversation
-                enhanced_message = f"{content}{context_enhancement}"
+                enhanced_message = self._enhance_message_with_context(content, recent_docs)
                 self._messages[-1]["content"] = enhanced_message
 
         # Check if we should include MCP tools
@@ -1296,47 +1270,45 @@ class Agent:
 
                 # Check if agent is about to retry the same failed operation
                 next_tool_calls = self._extract_tool_calls(next_response)
-                if current_errors and next_tool_calls:
-                    if self._is_repeating_failed_operation(next_tool_calls, error_history):
-                        # Give agent one chance to reconsider
-                        self._messages.append(
-                            {
-                                "role": "system",
-                                "content": (
-                                    "Warning: You are about to retry an operation that just "
-                                    "failed with the same parameters. Please consider using a "
-                                    "different tool or approach to make progress."
-                                ),
-                            }
-                        )
-                        reconsider_response = await self.model.chat_with_tools(
-                            self._messages, tools=tools if tools else None
-                        )
+                if (
+                    current_errors
+                    and next_tool_calls
+                    and self._is_repeating_failed_operation(next_tool_calls, error_history)
+                ):
+                    # Give agent one chance to reconsider
+                    self._messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "Warning: You are about to retry an operation that just "
+                                "failed with the same parameters. Please consider using a "
+                                "different tool or approach to make progress."
+                            ),
+                        }
+                    )
+                    reconsider_response = await self.model.chat_with_tools(
+                        self._messages, tools=tools if tools else None
+                    )
 
-                        # Update with reconsidered response
-                        if isinstance(reconsider_response, str):
-                            current_content = reconsider_response
-                        elif (
-                            hasattr(reconsider_response, "choices") and reconsider_response.choices
-                        ):
-                            message = reconsider_response.choices[0].message
-                            if isinstance(message, dict):
-                                current_content = message.get("content", "") or ""
-                            else:
-                                current_content = getattr(message, "content", "") or ""
-                        elif (
-                            isinstance(reconsider_response, dict)
-                            and "choices" in reconsider_response
-                        ):
-                            current_content = (
-                                reconsider_response["choices"][0]["message"].get("content", "")
-                                or ""
-                            )
+                    # Update with reconsidered response
+                    if isinstance(reconsider_response, str):
+                        current_content = reconsider_response
+                    elif hasattr(reconsider_response, "choices") and reconsider_response.choices:
+                        message = reconsider_response.choices[0].message
+                        if isinstance(message, dict):
+                            current_content = message.get("content", "") or ""
                         else:
-                            current_content = str(reconsider_response)
+                            current_content = getattr(message, "content", "") or ""
+                    elif isinstance(reconsider_response, dict) and "choices" in reconsider_response:
+                        current_content = (
+                            reconsider_response["choices"][0]["message"].get("content", "")
+                            or ""
+                        )
+                    else:
+                        current_content = str(reconsider_response)
 
-                        current_raw_response = reconsider_response
-                        content = current_content
+                    current_raw_response = reconsider_response
+                    content = current_content
 
             # Emit tool chain iteration completed event
             observability.observe(
@@ -1450,6 +1422,51 @@ class Agent:
             context_parts.append("")  # Empty line between docs
         context_parts.append("--- End Recently Uploaded Documents ---")
         return context_parts
+
+    def _enhance_message_with_context(
+        self,
+        content: str,
+        recent_docs: List[Dict[str, Any]] = None,
+        knowledge_results: List[Dict[str, Any]] = None,
+        memory_results: List[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Enhance message content with context from recent documents, knowledge, and memory.
+
+        Args:
+            content: Original message content
+            recent_docs: List of recent document dictionaries
+            knowledge_results: List of knowledge search results
+            memory_results: List of memory search results
+
+        Returns:
+            Enhanced message content with context
+        """
+        if not (recent_docs or knowledge_results or memory_results):
+            return content
+
+        context_parts = []
+
+        # Add recent document uploads first (highest priority)
+        if recent_docs:
+            context_parts.extend(self._format_recent_documents(recent_docs))
+
+        # Add domain knowledge context
+        if knowledge_results:
+            context_parts.append("--- Domain Knowledge ---")
+            for result in knowledge_results:
+                context_parts.append(f"• {result.get('content', '')}")
+            context_parts.append("--- End Domain Knowledge ---")
+
+        # Add memory context
+        if memory_results:
+            context_parts.append("--- Recent Context ---")
+            for result in memory_results:
+                context_parts.append(f"• {result.get('content', '')}")
+            context_parts.append("--- End Recent Context ---")
+
+        context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
+        return f"{content}{context_enhancement}"
 
     def _is_making_no_progress(
         self, error_history: List[Dict[str, Any]], max_repeated_errors: int
@@ -1997,7 +2014,7 @@ class Agent:
                     user_id=e.user_id,
                     available_credentials=e.available_credentials,
                     ordered_credentials=e.ordered_credentials,
-                )
+                ) from e
             elif isinstance(e, AmbiguousCredentialError):
                 # Re-raise to let overlord handle it
                 raise

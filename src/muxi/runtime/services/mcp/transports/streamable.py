@@ -135,7 +135,7 @@ class StreamableHTTPTransport(BaseTransport):
             logger.error(f"Connection failed: {e}")
             # Clean up any partially created resources
             await self._cleanup()
-            raise MCPConnectionError(f"Failed to connect to {self.url}: {e}")
+            raise MCPConnectionError(f"Failed to connect to {self.url}: {e}") from e
 
     async def send_request(self, request_obj: Any, timeout: Optional[int] = None) -> Dict[str, Any]:
         """Send request using MCP SDK session."""
@@ -194,7 +194,7 @@ class StreamableHTTPTransport(BaseTransport):
 
         except Exception as e:
             self.connection_stats["errors_encountered"] += 1
-            raise MCPRequestError(f"Request failed: {e}")
+            raise MCPRequestError(f"Request failed: {e}") from e
 
     async def _cleanup(self):
         """Proper cleanup in same async context."""

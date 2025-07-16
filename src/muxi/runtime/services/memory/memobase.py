@@ -311,6 +311,41 @@ class Memobase:
             )
             raise
 
+    def build_search_parameters(
+        self,
+        query: str,
+        k: int = 5,
+        user_id: Optional[str] = None,
+        full_filter: Optional[Dict[str, Any]] = None,
+        collection: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Build search parameters for the Memobase search method.
+
+        Args:
+            query: The search query text
+            k: Number of results to return
+            user_id: Optional user ID for filtering
+            full_filter: Optional metadata filter
+            collection: Optional collection name
+
+        Returns:
+            Dictionary of parameters for the search method
+        """
+        search_params = {
+            "query": query,
+            "limit": k,
+            "additional_filter": full_filter,
+        }
+
+        if user_id is not None:
+            search_params["external_user_id"] = user_id
+
+        if collection:
+            search_params["collection"] = collection
+
+        return search_params
+
     async def delete(
         self,
         memory_id: str,

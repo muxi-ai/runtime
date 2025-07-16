@@ -248,6 +248,63 @@ class MCPCoordinator:
 
         return True
 
+    async def _validate_resolved_credentials(
+        self, auth: Dict[str, Any], final_auth: Dict[str, Any], server_id: str
+    ) -> None:
+        """
+        Validate resolved credentials for MCP server authentication.
+
+        This method extracts service names from the original auth configuration,
+        finds the resolved token values, and validates their format.
+
+        Args:
+            auth: Original auth configuration with potential user.credentials.* references
+            final_auth: Resolved auth configuration with actual credential values
+            server_id: The MCP server ID for error messages
+
+        Raises:
+            ValueError: If credential format validation fails
+        """
+        # Pattern to match user credential references
+        USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}}")
+
+        def find_services(obj):
+            """Recursively find service names in auth config."""
+            services = []
+            if isinstance(obj, str):
+                match = USER_CREDENTIAL_PATTERN.match(obj)
+                if match:
+                    services.append(match.group(1))
+            elif isinstance(obj, dict):
+                for value in obj.values():
+                    services.extend(find_services(value))
+            elif isinstance(obj, list):
+                for item in obj:
+                    services.extend(find_services(item))
+            return services
+
+        # Find which service credentials were referenced
+        services = find_services(auth)
+
+        if services and final_auth:
+            # Extract the resolved credential value (look for token field specifically)
+            if isinstance(final_auth, dict):
+                # For bearer auth, the token is in the 'token' field
+                token_value = final_auth.get("token")
+                if (
+                    token_value
+                    and isinstance(token_value, str)
+                    and not token_value.startswith("${{")
+                ):
+                    # This is a resolved credential - validate format
+                    for service in services:
+                        try:
+                            self._validate_credential_format(token_value, service)
+                        except ValueError as ve:
+                            raise ValueError(
+                                f"MCP server '{server_id}' initialization failed: {str(ve)}"
+                            ) from ve
+
     async def register_mcp_server(
         self,
         server_id: str,
@@ -318,46 +375,7 @@ class MCPCoordinator:
 
                 # Validate credential format if we resolved any initialization credentials
                 if final_auth != auth:  # Credentials were transformed/resolved
-                    # Find which service credentials were used
-                    USER_CREDENTIAL_PATTERN = re.compile(
-                        r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}}"
-                    )
-
-                    def find_services(obj):
-                        """Find service names in original auth config."""
-                        services = []
-                        if isinstance(obj, str):
-                            match = USER_CREDENTIAL_PATTERN.match(obj)
-                            if match:
-                                services.append(match.group(1))
-                        elif isinstance(obj, dict):
-                            for value in obj.values():
-                                services.extend(find_services(value))
-                        elif isinstance(obj, list):
-                            for item in obj:
-                                services.extend(find_services(item))
-                        return services
-
-                    # Validate resolved credentials
-                    services = find_services(auth)
-                    if services and final_auth:
-                        # Extract the resolved credential value (look for token field specifically)
-                        if isinstance(final_auth, dict):
-                            # For bearer auth, the token is in the 'token' field
-                            token_value = final_auth.get("token")
-                            if (
-                                token_value
-                                and isinstance(token_value, str)
-                                and not token_value.startswith("${{")
-                            ):
-                                # This is a resolved credential
-                                for service in services:
-                                    try:
-                                        self._validate_credential_format(token_value, service)
-                                    except ValueError as ve:
-                                        raise ValueError(
-                                            f"MCP server '{server_id}' initialization failed: {str(ve)}"
-                                        ) from ve
+                    await self._validate_resolved_credentials(auth, final_auth, server_id)
 
             except Exception as e:
                 # Log secret interpolation failure - this is critical for auth debugging

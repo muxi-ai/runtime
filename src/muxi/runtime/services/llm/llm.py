@@ -63,6 +63,7 @@
 import asyncio
 import base64
 import hashlib
+import json
 import mimetypes
 import random
 import re
@@ -762,7 +763,7 @@ class LLM:
                 processed_files.append(file_data)
 
                 observability.observe(
-                    event_type=observability.ConversationEvents.RESPONSE_FORMATTED,
+                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "file_path": str(file_path),
@@ -784,7 +785,7 @@ class LLM:
                     provider=self._provider,
                     retryable=False,
                     original_error=e,
-                )
+                ) from e
 
         return processed_files
 
@@ -798,7 +799,7 @@ class LLM:
         frequency_penalty: Optional[float] = None,
         presence_penalty: Optional[float] = None,
         stop: Optional[Union[str, List[str]]] = None,
-        **kwargs: Any
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Prepare parameters for chat request, including file processing."""
         # Process files if provided
@@ -845,8 +846,14 @@ class LLM:
 
         # Add any additional kwargs not already handled
         excluded_params = {
-            "temperature", "max_tokens", "top_p", "frequency_penalty",
-            "presence_penalty", "stop", "files", "timeout"
+            "temperature",
+            "max_tokens",
+            "top_p",
+            "frequency_penalty",
+            "presence_penalty",
+            "stop",
+            "files",
+            "timeout",
         }
         additional_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_params}
         params.update(additional_kwargs)
@@ -873,15 +880,42 @@ class LLM:
         else:
             # Fallback: try to extract content from string representation
             response_str = str(response)
-            if "content" in response_str:
-                # Try to extract content using regex
-                match = re.search(r"'content':\s*'([^']*)'", response_str)
-                if match:
-                    content = match.group(1)
+
+            # First, try to parse as JSON
+            try:
+                response_dict = json.loads(response_str)
+                if isinstance(response_dict, dict) and "content" in response_dict:
+                    content = response_dict["content"]
                 else:
-                    content = "Error: Could not extract content from response"
-            else:
-                content = "Error: No content found in response"
+                    raise ValueError("No content key in parsed JSON")
+            except (json.JSONDecodeError, ValueError):
+                # If JSON parsing fails, try regex with improved pattern
+                if "content" in response_str:
+                    # More robust regex that handles both single and double quotes,
+                    # escaped quotes, and multiline content
+                    patterns = [
+                        # Try double quotes first with non-greedy match
+                        r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"',
+                        # Then single quotes with non-greedy match
+                        r"'content'\s*:\s*'((?:[^'\\]|\\.)*)'",
+                        # Fallback pattern for edge cases
+                        r'["\']content["\']\s*:\s*["\']([^"\']*)["\']',
+                    ]
+
+                    match = None
+                    for pattern in patterns:
+                        match = re.search(pattern, response_str, re.DOTALL)
+                        if match:
+                            content = match.group(1)
+                            # Unescape common escaped characters
+                            content = content.replace('\\"', '"').replace("\\'", "'")
+                            content = content.replace("\\n", "\n").replace("\\t", "\t")
+                            break
+
+                    if not match:
+                        content = "Error: Could not extract content from response"
+                else:
+                    content = "Error: No content found in response"
 
         return content
 
@@ -1242,8 +1276,15 @@ Provide a helpful, conversational response that directly addresses what the user
         async def _chat_request_with_tools():
             # Prepare parameters using helper
             params = await self._prepare_chat_request(
-                messages, files, temperature, max_tokens,
-                top_p, frequency_penalty, presence_penalty, stop, **kwargs
+                messages,
+                files,
+                temperature,
+                max_tokens,
+                top_p,
+                frequency_penalty,
+                presence_penalty,
+                stop,
+                **kwargs,
             )
 
             # Call OneLLM ChatCompletion using async method

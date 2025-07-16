@@ -1640,12 +1640,12 @@ class MCPService:
                     "1. Use the MOST RECENTLY mentioned account in the conversation context",
                     "2. If user says 'use my [account name]', prioritize that account for all future requests",
                     "3. Exact name matches in the current request",
-                    "4. Partial matches when the request contains the beginning of the credential name (e.g. 'lily' matches both 'lily account' AND 'lily automaze')",  # noqa: E501
+                    "4. Partial matches when the request contains the beginning of the credential name (e.g. 'lily' matches both 'lily account' AND 'lily acme')",  # noqa: E501
                     "5. Account ownership references (e.g. 'my acme account')",
                     "\n",
                     "If the conversation shows the user previously specified an account preference, use that account.",
                     "If no clear match or ambiguous, set selection to 0 to trigger clarification.",
-                    "IMPORTANT: Match partial names from the beginning - 'lily' matches 'lily automaze'. However, if user asks for 'automaze account' but only has 'lily automaze', this is AMBIGUOUS since 'automaze' is not at the beginning. Return selection: 0.",  # noqa: E501
+                    "IMPORTANT: Match partial names from the beginning - 'lily' matches 'lily acme'. However, if user asks for 'acme account' but only has 'lily acme', this is AMBIGUOUS since 'acme' is not at the beginning. Return selection: 0.",  # noqa: E501
                     "IMPORTANT: If user uses generic terms like 'my account', 'my repositories', 'my GitHub' without specifying which account, this is AMBIGUOUS with multiple credentials. Return selection: 0.",  # noqa: E501
                     "\n",
                     "Reply with JSON format:",

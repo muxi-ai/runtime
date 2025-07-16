@@ -399,6 +399,40 @@ class SQLiteMemory(BaseMemory):
 
         return formatted_results
 
+    def build_search_parameters(
+        self,
+        query: str,
+        k: int = 5,
+        user_id: Optional[str] = None,
+        full_filter: Optional[Dict[str, Any]] = None,
+        collection: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Build search parameters for the SQLiteMemory search method.
+
+        Args:
+            query: The search query text
+            k: Number of results to return
+            user_id: Optional user ID for filtering
+            full_filter: Optional metadata filter (not used in SQLiteMemory)
+            collection: Optional collection name (not used in SQLiteMemory public API)
+
+        Returns:
+            Dictionary of parameters for the search method
+        """
+        search_params = {
+            "query": query,
+            "limit": k,
+        }
+
+        if user_id is not None:
+            search_params["user_id"] = user_id
+
+        # Note: SQLiteMemory doesn't support collection or metadata filtering
+        # in its public search API, so we don't include those parameters
+
+        return search_params
+
     def _search_internal(
         self,
         query_embedding: Union[List[float], np.ndarray],
