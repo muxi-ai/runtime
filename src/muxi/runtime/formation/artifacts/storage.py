@@ -41,7 +41,7 @@ def store_artifact(session_id: str, artifact: MuxiArtifact, user_id: str = "0") 
         The generated artifact ID
     """
     # Generate artifact ID
-    artifact_id = f"atf_{generate_nanoid(size=12)}"
+    artifact_id = f"art_{generate_nanoid(size=12)}"
 
     # Create stored artifact instance
     stored_artifact = StoredArtifact(

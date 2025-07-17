@@ -321,9 +321,11 @@ def generate_file(code: str, filename: Optional[str] = None) -> Dict[str, Any]:
     cleanup_old_files(output_dir)
 
     # Create a temporary Python script with tracking
-    from muxi.runtime.utils.id_generator import generate_nanoid
+    import random
+    import string
 
-    execution_id = f"exe_{generate_nanoid(size=8)}"
+    # Simple ID generation for standalone operation
+    execution_id = f"exe_{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
 
     # Modified code to track generated files
     tracking_code = f'''

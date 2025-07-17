@@ -258,7 +258,7 @@ class Workflow(BaseModel):
 
 def generate_workflow_id() -> str:
     """Generate a unique workflow ID"""
-    return f"wrkf_{generate_nanoid()}"
+    return f"wrk_{generate_nanoid()}"
 
 
 def generate_task_id() -> str:
