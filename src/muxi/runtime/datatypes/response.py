@@ -9,6 +9,7 @@ from typing import Optional, List, Literal, TypedDict, Union
 from pydantic import BaseModel, Field
 
 from .mcp import FunctionCallModel
+from .artifacts import MuxiArtifact
 
 
 class MuxiFileContent(TypedDict):
@@ -158,6 +159,7 @@ class MuxiResponse(BaseModel):
     content: Union[str, List[MuxiMessageContent]] = Field(
         ..., description="Message content (string or content items)"
     )
+    artifacts: Optional[List[MuxiArtifact]] = None
 
     def model_dump(self, **kwargs):
         """
