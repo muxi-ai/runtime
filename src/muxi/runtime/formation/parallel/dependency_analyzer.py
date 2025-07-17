@@ -373,7 +373,7 @@ class DependencyAnalyzer:
                 task = self.dependency_graph[task_id]
                 if task.estimated_duration > 60.0:  # Threshold for "long" task
                     bottleneck = BottleneckInfo(
-                        bottleneck_id=f"critical_path_task_{task_id}",
+                        bottleneck_id=f"critical_path_tsk_{task_id}",
                         bottleneck_type=BottleneckType.CRITICAL_PATH,
                         affected_tasks=[task_id],
                         severity_score=min(

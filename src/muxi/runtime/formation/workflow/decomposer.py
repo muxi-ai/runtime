@@ -426,7 +426,7 @@ Provide a clear, structured response that can be parsed into executable tasks.
         task_counter = 1
         for pattern in task_patterns:
             if any(keyword in request_lower for keyword in pattern["keywords"]):
-                task_id = f"task_{task_counter}"
+                task_id = f"tsk_{task_counter}"
 
                 # Set dependencies (writing usually comes after research)
                 dependencies = []

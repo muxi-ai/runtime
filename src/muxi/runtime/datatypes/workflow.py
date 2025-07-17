@@ -1,10 +1,10 @@
 from enum import Enum
 from datetime import datetime
 from typing import Dict, List, Optional, Any, Set
-import uuid
 
 from pydantic import BaseModel, Field, field_validator, computed_field, ConfigDict
 
+from ..utils.id_generator import generate_nanoid
 from .task_status import TaskStatus
 from .type_definitions import TaskOutput as TaskOutputType
 
@@ -226,8 +226,8 @@ class Workflow(BaseModel):
     @classmethod
     def validate_id_format(cls, v):
         """Validate workflow ID format."""
-        if not v.startswith("workflow_"):
-            raise ValueError("Workflow ID must start with 'workflow_'")
+        if not (v.startswith("workflow_") or v.startswith("wf_") or v.startswith("wrk_")):
+            raise ValueError("Workflow ID must start with 'workflow_', 'wf_', or 'wrk_'")
         return v
 
     @computed_field
@@ -258,12 +258,12 @@ class Workflow(BaseModel):
 
 def generate_workflow_id() -> str:
     """Generate a unique workflow ID"""
-    return f"workflow_{uuid.uuid4().hex[:8]}"
+    return f"wrkf_{generate_nanoid()}"
 
 
 def generate_task_id() -> str:
     """Generate a unique task ID"""
-    return f"task_{uuid.uuid4().hex[:8]}"
+    return f"tsk_{generate_nanoid()}"
 
 
 def validate_workflow_dag(workflow: Workflow) -> bool:

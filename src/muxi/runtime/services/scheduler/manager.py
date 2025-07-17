@@ -5,12 +5,12 @@ Complete implementation using the unified database infrastructure.
 All methods converted to use SQLAlchemy ORM with cross-database support.
 """
 
-import uuid
 import json
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 from ...utils.datetime_utils import utc_now
+from ...utils.id_generator import generate_nanoid
 
 from sqlalchemy import func
 from sqlalchemy.exc import SQLAlchemyError
@@ -70,7 +70,7 @@ class JobManager:
             formation_id=self.formation_id,
             created_at=utc_now_naive(),
         )
-        
+
         try:
             # Attempt to create the user
             session.add(user)
@@ -79,7 +79,7 @@ class JobManager:
         except IntegrityError as e:
             # Handle unique constraint violation (concurrent creation)
             session.rollback()
-            
+
             # Check if this is the unique constraint we expect
             if "uq_user_formation_external_id" in str(e) or "UNIQUE constraint failed" in str(e):
                 # Another concurrent request created the user, fetch it
@@ -172,7 +172,7 @@ class JobManager:
         await limits_enforcer.check_job_creation_limits(self, user_id)
         await limits_enforcer.check_system_limits(self)
 
-        job_id = f"sched_{uuid.uuid4().hex[:16]}"
+        job_id = f"job_{generate_nanoid(size=16)}"
 
         try:
             with self.db_manager.get_session() as session:

@@ -16,7 +16,7 @@ import os
 import time
 import hmac
 import hashlib
-import uuid
+from ...utils.id_generator import generate_nanoid
 from enum import Enum
 from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
@@ -1040,7 +1040,7 @@ class A2AAuthManager:
         try:
             secret = credentials.credentials["secret"]
             timestamp = str(int(time.time()))
-            nonce = str(uuid.uuid4())
+            nonce = f"nnc_{generate_nanoid()}"
 
             # Create signature string: method + url + timestamp + nonce + payload_hash
             payload_hash = ""
@@ -1090,7 +1090,7 @@ class A2AAuthManager:
                 "aud": audience,  # Audience
                 "iat": now,  # Issued at
                 "exp": now + 3600,  # Expires in 1 hour
-                "jti": str(uuid.uuid4()),  # JWT ID
+                "jti": f"jwt_{generate_nanoid()}",  # JWT ID
                 "sub": agent_id,  # Subject (agent identifier)
             }
 

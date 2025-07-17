@@ -68,7 +68,7 @@ class ParallelExecutor:
         Returns:
             ParallelExecutionResult with execution details
         """
-        execution_id = f"exec_{int(time.time())}_{optimized_workflow.workflow_id}"
+        execution_id = f"exe_{int(time.time())}_{optimized_workflow.workflow_id}"
         start_time = time.time()
 
         #  Info - TODO: add observability

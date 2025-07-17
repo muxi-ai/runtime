@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 from enum import Enum
 import time
-import uuid
 from ..utils.id_generator import generate_nanoid
 
 from .type_definitions import (
@@ -123,7 +122,7 @@ class ToolCall:
 
     def __post_init__(self):
         if self.call_id is None:
-            self.call_id = str(uuid.uuid4())
+            self.call_id = f"clr_{generate_nanoid()}"
 
 
 @dataclass

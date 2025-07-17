@@ -5,7 +5,7 @@ This module generates natural language clarifying questions for missing informat
 across different contexts and interaction styles.
 """
 
-import uuid
+from ...utils.id_generator import generate_nanoid
 from typing import Dict, List, Any
 
 from ...datatypes.clarification import (
@@ -74,7 +74,7 @@ class ClarificationQuestionGenerator:
                 )
 
             return ClarificationQuestion(
-                question_id=str(uuid.uuid4()),
+                question_id=f"qstn_{generate_nanoid()}",
                 question_text=question_text,
                 parameter_name=info_name,
                 parameter_type=info_schema.get("type", "string"),
@@ -175,7 +175,7 @@ class ClarificationQuestionGenerator:
                 )
 
             return ClarificationQuestion(
-                question_id=str(uuid.uuid4()),
+                question_id=f"qstn_{generate_nanoid()}",
                 question_text=question_text,
                 parameter_name=missing_context,
                 parameter_type="context",

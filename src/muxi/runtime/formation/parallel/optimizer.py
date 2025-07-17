@@ -5,9 +5,9 @@ This module coordinates dependency analysis, resource management, and bottleneck
 detection to create optimized parallel execution plans for complex workflows.
 """
 
-import uuid
 from typing import Dict, List, Any, Optional
 
+from ...utils.id_generator import generate_nanoid
 from ...datatypes.parallel import ExecutionPlan, OptimizedWorkflow, AgentCapability
 from .dependency_analyzer import DependencyAnalyzer
 from .resource_manager import ResourceManager
@@ -58,7 +58,7 @@ class ParallelWorkflowOptimizer:
         Returns:
             OptimizedWorkflow with execution plan and metadata
         """
-        workflow_id = workflow_definition.get("id", f"workflow_{uuid.uuid4().hex[:8]}")
+        workflow_id = workflow_definition.get("id", f"wrk_{generate_nanoid()}")
 
         #  Info - TODO: add observability
 
@@ -86,7 +86,7 @@ class ParallelWorkflowOptimizer:
 
         # Step 6: Create execution plan
         execution_plan = ExecutionPlan(
-            plan_id=f"plan_{uuid.uuid4().hex[:8]}",
+            plan_id=f"pln_{generate_nanoid()}",
             parallel_groups=parallel_groups,
             resource_allocation=resource_allocation,
             execution_order=[group.group_id for group in parallel_groups],

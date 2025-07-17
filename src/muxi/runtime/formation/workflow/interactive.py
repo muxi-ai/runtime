@@ -6,11 +6,12 @@ including buttons, forms, visualizations, and rich media integration.
 """
 
 import json
-import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+
+from ...utils.id_generator import generate_nanoid
 
 # Loguru import removed - add observability import
 
@@ -168,7 +169,7 @@ class InteractiveElementGenerator:
         **kwargs,
     ) -> ButtonElement:
         """Create an interactive button element"""
-        element_id = kwargs.get("element_id", f"btn_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"btn_{generate_nanoid()}")
 
         button = ButtonElement(
             element_id=element_id,
@@ -208,7 +209,7 @@ class InteractiveElementGenerator:
         **kwargs,
     ) -> FormElement:
         """Create an interactive form element"""
-        element_id = kwargs.get("element_id", f"form_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"form_{generate_nanoid()}")
 
         form = FormElement(
             element_id=element_id,
@@ -239,7 +240,7 @@ class InteractiveElementGenerator:
         self, chart_type: str, data: Dict[str, Any], title: Optional[str] = None, **kwargs
     ) -> ChartElement:
         """Create a chart/visualization element"""
-        element_id = kwargs.get("element_id", f"chart_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"chr_{generate_nanoid()}")
 
         chart = ChartElement(
             element_id=element_id,
@@ -263,7 +264,7 @@ class InteractiveElementGenerator:
         **kwargs,
     ) -> TableElement:
         """Create a table element"""
-        element_id = kwargs.get("element_id", f"table_{uuid.uuid4().hex[:8]}")
+        element_id = kwargs.get("element_id", f"tbl_{generate_nanoid()}")
 
         table = TableElement(
             element_id=element_id,

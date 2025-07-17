@@ -5,9 +5,9 @@ Utility for managing async operations with timeout and cancellation support in F
 """
 
 import asyncio
-import uuid
 from typing import Any, Dict, Optional, Callable, Awaitable, TypeVar, List
 
+from ..utils.id_generator import generate_nanoid
 from ..datatypes.async_operations import (
     OperationStatus,
     OperationContext,
@@ -70,7 +70,7 @@ class AsyncOperationManager:
         """
         # Generate operation ID if not provided
         if operation_id is None:
-            operation_id = f"{operation_type}_{uuid.uuid4().hex[:8]}"
+            operation_id = f"{operation_type}_{generate_nanoid()}"
 
         # Determine timeout
         if timeout is None:

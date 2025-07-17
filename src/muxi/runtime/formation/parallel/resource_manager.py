@@ -5,10 +5,10 @@ This module optimizes the allocation of agents to tasks for maximum efficiency,
 handles load balancing, and manages resource constraints in parallel execution.
 """
 
-import uuid
 from typing import Dict, List, Any
 from dataclasses import dataclass
 
+from ...utils.id_generator import generate_nanoid
 from ...datatypes.parallel import (
     TaskNode,
     ParallelGroup,
@@ -70,7 +70,7 @@ class ResourceManager:
         Returns:
             Optimized ResourceAllocation object
         """
-        allocation_id = f"allocation_{uuid.uuid4().hex[:8]}"
+        allocation_id = f"alc_{generate_nanoid()}"
         allocation = ResourceAllocation(allocation_id=allocation_id)
 
         # Filter available agents based on registered capabilities

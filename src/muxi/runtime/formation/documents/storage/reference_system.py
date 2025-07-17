@@ -15,7 +15,7 @@ import datetime
 import hashlib
 import json
 import time
-import uuid
+from ....utils.id_generator import generate_nanoid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Set
@@ -104,7 +104,7 @@ class DocumentReferenceSystem:
         Returns:
             Reference ID
         """
-        reference_id = str(uuid.uuid4())
+        reference_id = f"ref_{generate_nanoid()}"
         current_time = time.time()
 
         reference = DocumentReference(
@@ -147,7 +147,7 @@ class DocumentReferenceSystem:
         Returns:
             Lineage ID
         """
-        lineage_id = str(uuid.uuid4())
+        lineage_id = f"lin_{generate_nanoid()}"
         current_time = time.time()
 
         lineage = ReferenceLineage(

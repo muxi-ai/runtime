@@ -53,7 +53,7 @@
 #   )
 # =============================================================================
 
-import uuid
+from ...utils.id_generator import generate_nanoid
 from typing import Any, Dict, List, Optional
 from datetime import datetime
 from .. import observability
@@ -256,7 +256,7 @@ class MCPServerClient:
             )
 
         # Create JSON-RPC request (internal protocol ID)
-        json_rpc_id = str(uuid.uuid4())
+        json_rpc_id = f"rpc_{generate_nanoid()}"
         request_data = {
             "jsonrpc": "2.0",
             "id": json_rpc_id,

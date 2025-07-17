@@ -4,7 +4,7 @@ Real MCP protocol message handling.
 
 from mcp.shared.message import SessionMessage
 from mcp.types import JSONRPCRequest, JSONRPCResponse, JSONRPCError
-import uuid
+from ....utils.id_generator import generate_nanoid
 import json
 import logging
 from typing import Dict, Any, Union
@@ -17,7 +17,7 @@ class MCPMessageHandler:
 
     def create_request(self, method: str, params: dict) -> SessionMessage:
         """Create proper MCP request message."""
-        request = JSONRPCRequest(jsonrpc="2.0", id=str(uuid.uuid4()), method=method, params=params)
+        request = JSONRPCRequest(jsonrpc="2.0", id=f"rpc_{generate_nanoid()}", method=method, params=params)
         return SessionMessage(message=request)
 
     def parse_response(self, message: Union[SessionMessage, bytes, dict, str]) -> Dict[str, Any]:

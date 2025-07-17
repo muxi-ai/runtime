@@ -17,7 +17,7 @@ import asyncio
 import socket
 from contextlib import closing
 from typing import Dict, Any, Optional, List
-import uuid
+from ...utils.id_generator import generate_nanoid
 
 from fastapi import FastAPI, Path, Request
 import uvicorn
@@ -291,7 +291,7 @@ class A2AServer:
         separation of concerns.
         """
         # Generate unique message ID
-        message_id = str(uuid.uuid4())
+        message_id = f"msg_{generate_nanoid()}"
 
         try:
             # Emit message received event
