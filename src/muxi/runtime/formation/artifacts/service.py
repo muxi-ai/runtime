@@ -214,7 +214,9 @@ def validate_code(code: str) -> tuple[bool, Optional[str]]:
 
 def get_output_directory() -> Path:
     """Get or create the output directory for generated files."""
-    output_dir = Path.cwd() / "outputs"
+    # Use system temp directory for file generation
+    temp_dir = Path(tempfile.gettempdir())
+    output_dir = temp_dir / "muxi_artifacts"
     output_dir.mkdir(exist_ok=True)
     return output_dir
 
