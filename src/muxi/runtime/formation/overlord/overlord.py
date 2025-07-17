@@ -3221,6 +3221,12 @@ class Overlord:
             # Normalize user_id - lowercase and strip whitespace
             user_id = str(user_id).lower().strip()
 
+        # Force use_async=False if no webhook URL is configured in formation
+        # (and no webhook_url provided in this call)
+        async_webhook_url = self.formation_config.get("async", {}).get("webhook_url", webhook_url)
+        if use_async is not False and async_webhook_url is None:
+            use_async = False
+
         return await self.chat_orchestrator.chat(
             message=message,
             agent_name=agent_name,
