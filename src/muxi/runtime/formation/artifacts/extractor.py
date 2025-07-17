@@ -7,6 +7,7 @@ specifically looking for file generation results and converting them to MuxiArti
 
 import logging
 from typing import List
+from pathlib import Path
 
 from .processor import create_artifact_from_file
 from ...datatypes.artifacts import MuxiArtifact
@@ -67,7 +68,7 @@ async def extract_artifacts_from_tool_results(
                     if isinstance(actual_result, dict) and "content" in actual_result:
                         # Extract content from modern protocol format
                         content = actual_result.get("content")
-                        
+
                         # Handle the nested content structure
                         if isinstance(content, dict) and "content" in content:
                             # This is the double-nested content structure
@@ -127,13 +128,22 @@ async def extract_artifacts_from_tool_results(
                         "mime_type": file_info.get("mime_type", "application/octet-stream"),
                         # Note: size_bytes is handled by processor from actual file
                     }
-                    
+
                     artifact = create_artifact_from_file(file_path, metadata)
                     if artifact:
                         artifacts.append(artifact)
                         logger.info(
                             f"Successfully extracted artifact from file: {file_path}"
                         )
+
+                        # Clean up the temporary file now that it's been processed
+                        try:
+                            file_to_delete = Path(file_path)
+                            if file_to_delete.exists() and "muxi_artifacts" in str(file_to_delete):
+                                file_to_delete.unlink()
+                                logger.info(f"Cleaned up temporary file: {file_path}")
+                        except Exception as e:
+                            logger.debug(f"Could not clean up temporary file {file_path}: {e}")
                 except Exception as e:
                     logger.error(
                         f"Failed to create artifact from file {file_path}: {str(e)}"
@@ -148,4 +158,16 @@ async def extract_artifacts_from_tool_results(
             continue
 
     logger.info(f"Extracted {len(artifacts)} artifacts from tool results")
+
+    # Optional: Clean up the entire muxi_artifacts directory if it's empty
+    try:
+        from pathlib import Path
+        import tempfile
+        muxi_artifacts_dir = Path(tempfile.gettempdir()) / "muxi_artifacts"
+        if muxi_artifacts_dir.exists() and not any(muxi_artifacts_dir.iterdir()):
+            muxi_artifacts_dir.rmdir()
+            logger.debug("Cleaned up empty muxi_artifacts directory")
+    except Exception:
+        pass  # Ignore any cleanup errors
+
     return artifacts
