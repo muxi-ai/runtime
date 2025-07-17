@@ -11,7 +11,6 @@ from typing import Dict
 
 # Registry of built-in MCP servers
 BUILTIN_MCP_REGISTRY: Dict[str, str] = {
-    "file-generation": "file_generation.py",
     # Future additions?:
     # "web-search": "web_search.py",
     # "database": "database.py",
