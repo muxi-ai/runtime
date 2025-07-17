@@ -46,6 +46,7 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management with async database operations for 3x performance improvement
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
 - **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
+- **Artifacts System**: Comprehensive file generation, tracking, and management with secure sandboxed execution, intelligent metadata extraction, session-based storage, and nanoid-based unique identifiers
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
@@ -489,6 +490,7 @@ export MUXI_LOG_LEVEL=DEBUG
 - [Testing Guide](docs/testing.md) - How to write runtime tests
 - [Memory Systems](docs/memory.md) - Buffer, persistent, vector details
 - [MCP Integration](docs/mcp.md) - Tool development guide
+- [Artifacts System](docs/artifacts.md) - File generation, tracking, and management
 
 ## 🤝 Community
 
