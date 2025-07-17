@@ -1287,7 +1287,7 @@ class Formation:
             # Check if the script exists
             if not mcp_path.exists():
                 observability.observe(
-                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "mcp_name": mcp_name,
@@ -2175,7 +2175,7 @@ class Formation:
             except Exception as e:
                 # Log error but don't fail startup for MCP issues
                 observability.observe(
-                    event_type=observability.ErrorEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
                     description=f"Built-in MCP registration failed: {e}",

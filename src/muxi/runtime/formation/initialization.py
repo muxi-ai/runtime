@@ -10,6 +10,7 @@ The initialization order is critical:
 2. Then other services can be initialized
 """
 
+import os
 from typing import Any, Dict, Optional
 
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
@@ -483,32 +484,40 @@ async def initialize_mcp_services(formation) -> None:
         mcp_config = formation._mcp_config if hasattr(formation, "_mcp_config") else {}
         servers = mcp_config.get("servers", [])
 
+        # Add the artifact MCP (always enabled, non-configurable)
+        # Get the absolute path to the MCP file
+        artifacts_dir = os.path.dirname(os.path.abspath(__file__))
+        mcp_file_path = os.path.join(artifacts_dir, "artifacts", "service.py")
+
+        artifact_mcp_config = {
+            "id": "artifact-file-generation",
+            "name": "Artifact File Generation",
+            "command": "python",
+            "args": [mcp_file_path],
+            "description": "Built-in file generation for artifact system"
+        }
+
+        # Prepend artifact MCP to ensure it's always available
+        servers_with_artifacts = [artifact_mcp_config] + servers
+
         # Store the servers in formation for later access by overlord
-        formation._mcp_servers = servers
+        formation._mcp_servers = servers_with_artifacts
 
-        if not servers:
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "mcp",
-                    "server_count": 0,
-                },
-                description="No MCP servers configured",
-            )
-        else:
-            observability.observe(
-                event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "mcp",
-                    "server_count": len(servers),
-                },
-                description=f"Found {len(servers)} MCP servers to configure",
-            )
+        # Always at least 1 server (artifact MCP)
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "mcp",
+                "server_count": len(servers_with_artifacts),
+                "artifact_mcp": True,
+                "user_configured": len(servers),
+            },
+            description=f"Found {len(servers_with_artifacts)} MCP servers to configure (including artifact MCP)",
+        )
 
-            # Register MCP servers immediately so agents can see which use user credentials
-            await formation._register_mcp_servers()
+        # Register MCP servers immediately so agents can see which use user credentials
+        await formation._register_mcp_servers()
 
     except Exception as e:
         observability.observe(

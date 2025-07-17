@@ -44,10 +44,11 @@ import datetime
 import json
 import re
 import time
-import uuid
+from ...utils.id_generator import generate_nanoid
 from typing import Any, Dict, List, Optional, Union
 
 from ...datatypes.response import MuxiResponse
+from ..artifacts.extractor import extract_artifacts_from_tool_results
 from ...datatypes.intent import IntentType, IntentDetectionContext
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
@@ -104,7 +105,7 @@ class Agent:
         self.overlord = overlord
 
         # Set up agent identification
-        self.agent_id = agent_id or str(uuid.uuid4())
+        self.agent_id = agent_id or f"agt_{generate_nanoid()}"
         self.name = name or f"Agent-{self.agent_id}"
 
         # Initialize role and specialties for enhanced routing
@@ -1021,6 +1022,7 @@ class Agent:
         error_history = []
         current_raw_response = raw_response
         current_content = content
+        all_tool_execution_results = []  # Store all tool results for artifact extraction
 
         # Tool execution loop
         while iteration < max_iterations:
@@ -1111,6 +1113,32 @@ class Agent:
                         server_id=server_id,
                         user_id=user_id,
                     )
+                    
+                    # Store tool execution result for artifact extraction
+                    from ...datatypes.clarification import ToolExecutionResult
+                    
+                    # Debug log the result
+                    if actual_tool_name == "generate_file":
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "tool_name": actual_tool_name,
+                                "result_type": type(result).__name__,
+                                "result_content": str(result)[:500],  # First 500 chars
+                                "has_file_path": "file_path" in result if isinstance(result, dict) else False,
+                            },
+                            description=f"generate_file result: {str(result)[:200]}",
+                        )
+                    
+                    tool_exec_result = ToolExecutionResult(
+                        tool_name=actual_tool_name,
+                        parameters=tool_args,
+                        result=result,
+                        execution_time=0.0,  # We don't track this currently
+                        success=not isinstance(result, dict) or "error" not in result
+                    )
+                    all_tool_execution_results.append(tool_exec_result)
 
                     total_tool_calls += 1
 
@@ -1334,6 +1362,33 @@ class Agent:
 
         # Update the response content with final content
         response.content = content
+        
+        # Extract artifacts from tool results if any tools were executed
+        if total_tool_calls > 0 and all_tool_execution_results:
+            try:
+                artifacts = await extract_artifacts_from_tool_results(all_tool_execution_results)
+                if artifacts:
+                    response.artifacts = artifacts
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "artifacts_count": len(artifacts),
+                            "artifact_files": [a.filename for a in artifacts],
+                        },
+                        description=f"Agent {self.agent_id} extracted {len(artifacts)} artifacts from tool results",
+                    )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                    },
+                    description=f"Failed to extract artifacts: {e}",
+                )
 
         # Emit tool chain completed event
         if iteration > 0:  # Only emit if we actually did tool chaining
@@ -2070,7 +2125,7 @@ class Agent:
             The response from the target agent if wait_for_response is True.
         """
         # Generate unique message ID
-        message_id = str(uuid.uuid4())
+        message_id = f"msg_{generate_nanoid()}"
 
         observability.observe(
             event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,

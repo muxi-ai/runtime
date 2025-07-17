@@ -1128,6 +1128,13 @@ class Overlord:
         if builtin_mcp_prompts:
             system_message += f"\n\n## Built-in Tools\n\n{builtin_mcp_prompts}"
 
+        # Add artifact system prompt (always enabled)
+        from pathlib import Path
+        artifact_prompt_path = Path(__file__).parent.parent / "artifacts" / "prompt.md"
+        if artifact_prompt_path.exists():
+            artifact_prompt = artifact_prompt_path.read_text()
+            system_message += f"\n\n## File Generation (Always Available)\n\n{artifact_prompt}"
+
         # Combine technical instructions with persona
         return (
             f"<system-message>\n{system_message}\n</system-message>\n\n"
