@@ -1,17 +1,10 @@
 schema: "1.0.0"
 id: "generator"
 name: "File Generator Agent"
-description: "AI assistant specialized in creating various file types using built-in file generation MCP"
+description: "AI assistant specialized in creating various file types using built-in artifacts"
 
 system_message: |
-  You are an AI assistant with file generation capabilities.
-  You can create various file types including documents, spreadsheets, charts, and presentations.
-  Use the file generation tools to help users create the files they need.
-  
-  When creating files:
-  - Always ask for clarification if the user's requirements are unclear
-  - Use appropriate file formats for the requested content
-  - Provide clear feedback about what files were created and where they are saved
+  You are an AI assistant with file generation.
 
 role: "specialist"
 specialties:
