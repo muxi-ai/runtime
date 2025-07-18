@@ -6,10 +6,10 @@ The MUXI Runtime artifacts system provides intelligent file generation, tracking
 
 The artifacts system consists of several key components:
 
-- **File Generation MCP**: Secure sandboxed execution environment for creating files
-- **Artifact Extractor**: Intelligent parsing of MCP tool results into structured artifacts
-- **Artifact Storage**: Session-based storage with nanoid-based tracking
-- **Artifact Processor**: Conversion of raw files into standardized artifact objects
+- **Artifact Service**: Core service for secure sandboxed execution and file generation
+- **Artifact Processor**: Conversion of raw files into standardized artifact objects with base64 encoding
+- **Artifact Extractor**: Intelligent parsing of tool results into structured artifacts
+- **Agent Integration**: Seamless integration with agents via the `generate_file` tool
 
 ## Key Features
 
@@ -40,49 +40,41 @@ The artifacts system consists of several key components:
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────┐
-│                    User Request               │
-│              "Create a chart with..."         │
-└─────────────────────┬─────────────────────────┘
+┌───────────────────────────────────────────┐
+│               User Request                │
+│        "Create a PDF report..."           │
+└─────────────────────┬─────────────────────┘
                       │
-┌─────────────────────▼─────────────────────────┐
-│                   Agent                       │
-│            Routes to generate_file tool       │
-└─────────────────────┬─────────────────────────┘
+┌─────────────────────▼─────────────────────┐
+│                   Agent                   │
+│         Calls generate_file tool          │
+└─────────────────────┬─────────────────────┘
                       │
-┌─────────────────────▼─────────────────────────┐
-│              File Generation MCP              │
-│  ┌──────────────────────────────────────────┐ │
-│  │  1. Code Validation (AST)                │ │
-│  │  2. Sandboxed Execution                  │ │
-│  │  3. File Tracking                        │ │
-│  │  4. Result Packaging                     │ │
-│  └──────────────────────────────────────────┘ │
-└─────────────────────┬─────────────────────────┘
+┌─────────────────────▼─────────────────────┐
+│              Artifact Service             │
+│  ┌──────────────────────────────────────┐ │
+│  │  1. Code Validation (AST)            │ │
+│  │  2. Sandboxed Execution              │ │
+│  │  3. File Tracking                    │ │
+│  │  4. Create Artifact Object           │ │
+│  └──────────────────────────────────────┘ │
+└─────────────────────┬─────────────────────┘
                       │
-┌─────────────────────▼─────────────────────────┐
-│              Artifact Extractor               │
-│  ┌──────────────────────────────────────────┐ │
-│  │  1. Parse MCP Result                     │ │
-│  │  2. Extract File Information             │ │
-│  │  3. Create MuxiArtifact Objects          │ │
-│  └──────────────────────────────────────────┘ │
-└─────────────────────┬─────────────────────────┘
+┌─────────────────────▼─────────────────────┐
+│            Artifact Processor             │
+│  ┌──────────────────────────────────────┐ │
+│  │  1. Read Generated File              │ │
+│  │  2. Create Base64 Data URL           │ │
+│  │  3. Generate Preview (if applicable) │ │
+│  │  4. Extract Metadata                 │ │
+│  └──────────────────────────────────────┘ │
+└─────────────────────┬─────────────────────┘
                       │
-┌─────────────────────▼─────────────────────────┐
-│              Artifact Storage                 │
-│  ┌──────────────────────────────────────────┐ │
-│  │  1. Generate Unique ID (art_xxxxx)       │ │
-│  │  2. Store by Session                     │ │
-│  │  3. Index for Fast Retrieval             │ │
-│  └──────────────────────────────────────────┘ │
-└─────────────────────┬─────────────────────────┘
-                      │
-┌─────────────────────▼─────────────────────────┐
-│              User Response                    │
-│           "Created chart.png with..."         │
-│              + Artifact Metadata              │
-└───────────────────────────────────────────────┘
+┌─────────────────────▼─────────────────────┐
+│              User Response                │
+│     "Created financial_report.pdf..."     │
+│         + Complete Artifact Object        │
+└───────────────────────────────────────────┘
 ```
 
 ## Data Types
@@ -93,13 +85,13 @@ The core artifact data type containing:
 ```python
 @dataclass
 class MuxiArtifact:
-    type: str              # "chart", "document", "code", etc.
+    type: str              # "chart", "document", "code", "image", "text", "data"
     format: str            # File extension: "png", "pdf", "py"
     filename: str          # Original filename
-    content: str           # Raw file content
-    data_url: str          # Base64 data URL
+    content: Optional[str] # Raw text content (for text files)
+    data_url: str          # Base64 data URL with MIME type
     metadata: ArtifactMetadata
-    preview: Optional[str] = None
+    preview: Optional[ArtifactPreview] = None
     id: Optional[str] = None
 ```
 
@@ -109,12 +101,23 @@ Detailed metadata about the artifact:
 ```python
 @dataclass
 class ArtifactMetadata:
-    mime_type: str
     size_bytes: int
-    created_at: str
-    file_path: Optional[str] = None
-    description: Optional[str] = None
-    tags: List[str] = field(default_factory=list)
+    created_at: datetime
+    lines: Optional[int] = None      # For text files
+    characters: Optional[int] = None  # For text files
+    language: Optional[str] = None    # Programming language
+    pages: Optional[int] = None       # For documents
+    width: Optional[int] = None       # For images
+    height: Optional[int] = None      # For images
+```
+
+### ArtifactPreview
+Preview information for visual files:
+
+```python
+@dataclass
+class ArtifactPreview:
+    thumbnail: Optional[str] = None   # Base64 PNG thumbnail
 ```
 
 ## File Generation Capabilities
@@ -144,6 +147,7 @@ class ArtifactMetadata:
 - QR codes and barcodes
 - Custom PIL/Pillow images
 - SVG graphics
+- **PDF Preview Thumbnails** (requires Poppler - see requirements)
 
 #### 💻 **Code Files**
 - Python scripts
@@ -172,10 +176,12 @@ ALLOWED_IMPORTS = {
 ```
 
 #### Execution Limits
-- **Memory**: 512MB maximum
+- **Memory**: 512MB maximum (Linux only - no limit on macOS/Windows)
 - **Time**: 30 seconds maximum
 - **File Size**: 100MB output directory limit
 - **Network**: No external network access
+
+> **Note**: Memory limits using `ulimit -v` only work on Linux. macOS and Windows run without memory limits but still have timeout protection.
 
 #### Code Validation
 AST-based validation prevents:
@@ -184,15 +190,47 @@ AST-based validation prevents:
 - Import restrictions
 - Global/nonlocal modifications
 
+## System Requirements
+
+### Python Dependencies
+All required Python packages are included in the core dependencies:
+- `reportlab` - PDF generation
+- `fpdf2` - Alternative PDF generation
+- `pdf2image` - PDF preview generation (requires Poppler)
+- `Pillow` - Image processing and thumbnail generation
+- `python-docx` - Word document generation
+- `openpyxl` - Excel file generation
+- `matplotlib`, `seaborn`, `plotly` - Data visualization
+
+### System Dependencies for PDF Previews
+
+**PDF preview thumbnail generation requires Poppler utilities to be installed:**
+
+#### macOS
+```bash
+brew install poppler
+```
+
+#### Ubuntu/Debian
+```bash
+sudo apt-get install poppler-utils
+```
+
+#### RHEL/CentOS/Fedora
+```bash
+sudo yum install poppler-utils
+```
+
+#### Windows
+Download and install Poppler for Windows from: https://blog.alivate.com.au/poppler-windows/
+
+> **Note**: If Poppler is not installed, PDF files will still be generated successfully, but the `preview` field will be `null`. All other functionality remains unaffected.
+
 ## Usage Examples
 
 ### Basic File Generation
 
 ```python
-# In formation.yaml
-runtime:
-  built_in_mcps: ["file-generation"]
-
 # Agent conversation
 response = await overlord.chat(
     "Create a simple bar chart showing Q1=100, Q2=150, Q3=120",
@@ -204,7 +242,7 @@ if response.artifacts:
     chart = response.artifacts[0]
     print(f"Created: {chart.filename}")
     print(f"Type: {chart.type}")
-    print(f"ID: {chart.id}")
+    print(f"Data URL: {chart.data_url[:50]}...")
 ```
 
 ### Advanced Document Generation
@@ -236,6 +274,9 @@ response = await overlord.chat(
 # Multiple artifacts will be returned
 for artifact in response.artifacts:
     print(f"- {artifact.filename} ({artifact.format})")
+    print(f"  Size: {artifact.metadata.size_bytes} bytes")
+    if artifact.preview and artifact.preview.thumbnail:
+        print(f"  Has preview: Yes")
 ```
 
 ## Storage and Retrieval
@@ -274,20 +315,15 @@ Automatic cleanup removes:
 
 ## Configuration
 
-### Formation YAML
+### Artifact Service Configuration
 
-```yaml
-runtime:
-  built_in_mcps:
-    - file-generation  # Enable artifact generation
+The artifact service is automatically initialized when the Overlord starts. Configuration options are defined in the service itself:
 
-# Optional: Configure output directory
-runtime:
-  file_generation:
-    output_dir: "./outputs"
-    max_size_mb: 100
-    max_execution_time: 30
-    memory_limit_mb: 512
+```python
+# In artifact_service.py
+MAX_EXECUTION_TIME = 30      # Maximum execution time in seconds
+MAX_OUTPUT_SIZE_MB = 100     # Maximum output directory size
+MAX_MEMORY_MB = 512          # Memory limit (Linux only)
 ```
 
 ### Agent System Message
@@ -336,27 +372,33 @@ Retrieves recent artifacts for a session.
 **Returns:**
 - `List[MuxiArtifact]`: Recent artifacts
 
-### MCP Tool: generate_file
+### Agent Tool: generate_file
+
+The `generate_file` tool is automatically available to agents when the artifact service is initialized.
 
 #### Function Signature
 ```python
-def generate_file(code: str, filename: Optional[str] = None) -> Dict[str, Any]
+async def generate_file(code: str, filename: Optional[str] = None) -> MuxiArtifact
 ```
 
 #### Parameters
 - `code`: Python code to execute for file generation
-- `filename`: Optional filename hint
+- `filename`: Optional filename hint for the generated file
 
 #### Returns
+A `MuxiArtifact` object containing:
+- Complete base64 data URL of the generated file
+- File metadata (size, creation time, dimensions for images)
+- Preview thumbnail for supported formats (images, PDFs with Poppler)
+- File type classification
+
+#### Integration
+The tool is integrated directly with agents through the Overlord:
 ```python
-{
-    "file_path": str,      # Absolute path to generated file
-    "filename": str,       # File name
-    "mime_type": str,      # MIME type
-    "size_bytes": int,     # File size
-    "message": str,        # Success message
-    "stdout": str          # Execution output (optional)
-}
+# In agent.py
+if tool_name == "generate_file" and self.overlord and hasattr(self.overlord, "artifact_service"):
+    artifact = await self.overlord.artifact_service.generate_file(code, filename)
+    # Artifact is automatically attached to the response
 ```
 
 #### Example Usage
@@ -532,13 +574,24 @@ async def test_file_generation_e2e():
 ### Common Issues
 
 #### No Artifacts Generated
-1. Check MCP server registration
-2. Verify code validation passes
+1. Check if artifact service is initialized in Overlord
+2. Verify code validation passes (check for forbidden imports)
 3. Ensure proper file saving in code
 4. Check execution logs for errors
 
+#### PDF Preview Not Generated
+1. Install Poppler utilities (see System Requirements)
+2. Check logs for "PDF thumbnail generation failed"
+3. Verify PDF is valid and not corrupted
+4. Preview will be `null` without Poppler (this is normal)
+
+#### Memory Limit Errors on macOS
+1. Memory limits using `ulimit -v` don't work on macOS
+2. The service automatically skips memory limits on macOS/Windows
+3. Timeout protection still applies (30 seconds default)
+
 #### File Not Found
-1. Verify output directory exists
+1. Verify output directory exists (`/tmp/muxi_artifacts/`)
 2. Check file permissions
 3. Ensure proper file path in code
 4. Check for cleanup timing issues
@@ -546,8 +599,8 @@ async def test_file_generation_e2e():
 #### Performance Issues
 1. Optimize code complexity
 2. Reduce file sizes
-3. Check memory usage
-4. Implement caching
+3. Check execution timeout (30s limit)
+4. Monitor output directory size (100MB limit)
 
 ### Debug Mode
 ```python
