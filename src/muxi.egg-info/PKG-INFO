@@ -49,26 +49,24 @@ Requires-Dist: aiohttp>=3.8.0
 Requires-Dist: asyncio>=3.4.3
 Requires-Dist: click>=8.1.0
 Requires-Dist: openai>=1.3.0
-Provides-Extra: file-generation
-Requires-Dist: pandas>=2.0.0; extra == "file-generation"
-Requires-Dist: scipy>=1.10.0; extra == "file-generation"
-Requires-Dist: statsmodels>=0.14.0; extra == "file-generation"
-Requires-Dist: matplotlib>=3.7.0; extra == "file-generation"
-Requires-Dist: seaborn>=0.12.0; extra == "file-generation"
-Requires-Dist: plotly>=5.15.0; extra == "file-generation"
-Requires-Dist: bokeh>=3.1.0; extra == "file-generation"
-Requires-Dist: altair>=5.0.0; extra == "file-generation"
-Requires-Dist: reportlab>=4.0.0; extra == "file-generation"
-Requires-Dist: fpdf2>=2.7.0; extra == "file-generation"
-Requires-Dist: openpyxl>=3.1.0; extra == "file-generation"
-Requires-Dist: xlsxwriter>=3.1.0; extra == "file-generation"
-Requires-Dist: xlrd>=2.0.0; extra == "file-generation"
-Requires-Dist: xlwt>=1.3.0; extra == "file-generation"
-Requires-Dist: Pillow>=10.0.0; extra == "file-generation"
-Requires-Dist: qrcode>=7.4.0; extra == "file-generation"
-Requires-Dist: python-barcode>=0.15.0; extra == "file-generation"
-Requires-Dist: python-pptx>=0.6.21; extra == "file-generation"
-Requires-Dist: lxml>=4.9.0; extra == "file-generation"
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: scipy>=1.10.0
+Requires-Dist: statsmodels>=0.14.0
+Requires-Dist: matplotlib>=3.7.0
+Requires-Dist: seaborn>=0.12.0
+Requires-Dist: plotly>=5.15.0
+Requires-Dist: bokeh>=3.1.0
+Requires-Dist: altair>=5.0.0
+Requires-Dist: reportlab>=4.0.0
+Requires-Dist: fpdf2>=2.7.0
+Requires-Dist: openpyxl>=3.1.0
+Requires-Dist: xlsxwriter>=3.1.0
+Requires-Dist: xlrd>=2.0.0
+Requires-Dist: xlwt>=1.3.0
+Requires-Dist: qrcode>=7.4.0
+Requires-Dist: python-barcode>=0.15.0
+Requires-Dist: python-pptx>=0.6.21
+Requires-Dist: lxml>=4.9.0
 Dynamic: license-file
 
 # MUXI Runtime
