@@ -103,6 +103,7 @@ from .chat_orchestrator import ChatOrchestrator
 from .mcp_coordinator import MCPCoordinator
 from .a2a_coordinator import A2ACoordinator
 from ...services.scheduler.service import SchedulerService
+from ..initialization import initialize_artifact_service
 
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
@@ -885,6 +886,15 @@ class Overlord:
                     data={"service": "mcp", "source": "formation"},
                     description="MCP service received from Formation",
                 )
+
+        # Initialize artifact service
+        await initialize_artifact_service(self._formation_instance, self)
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "artifact"},
+            description="Artifact service initialized",
+        )
 
         # Start clarification cleanup task
         if not self._clarification_cleanup_task or self._clarification_cleanup_task.done():

@@ -54,7 +54,6 @@ from ...services.mcp.service import MCPService
 from ...services.llm import LLM
 from ...services.intent import IntentDetectionService
 from ...services import observability
-from ...utils.id_generator import generate_nanoid
 
 
 class Agent:
@@ -847,6 +846,33 @@ class Agent:
                                 },
                             }
                             tools.append(tool_def)
+                else:
+                    tools = []
+
+                # Always add the built-in generate_file tool if artifact service is available
+                if self.overlord and hasattr(self.overlord, "artifact_service"):
+                    generate_file_tool = {
+                        "type": "function",
+                        "function": {
+                            "name": "generate_file",
+                            "description": "Generate files (charts, documents, spreadsheets, images, presentations) by executing Python code with curated libraries.",  # noqa: E501
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "description": "Python code to execute for file generation. The code should save the output file in the current directory."  # noqa: E501
+                                    },
+                                    "filename": {
+                                        "type": "string",
+                                        "description": "Optional filename hint for the generated file"  # noqa: E501
+                                    }
+                                },
+                                "required": ["code"]
+                            }
+                        }
+                    }
+                    tools.append(generate_file_tool)
             except Exception as e:
                 # Log but don't fail if we can't get tools
                 observability.observe(
@@ -1113,10 +1139,10 @@ class Agent:
                         server_id=server_id,
                         user_id=user_id,
                     )
-                    
+
                     # Store tool execution result for artifact extraction
                     from ...datatypes.clarification import ToolExecutionResult
-                    
+
                     # Debug log the result
                     if actual_tool_name == "generate_file":
                         observability.observe(
@@ -1130,7 +1156,7 @@ class Agent:
                             },
                             description=f"generate_file result: {str(result)[:200]}",
                         )
-                    
+
                     tool_exec_result = ToolExecutionResult(
                         tool_name=actual_tool_name,
                         parameters=tool_args,
@@ -1362,7 +1388,7 @@ class Agent:
 
         # Update the response content with final content
         response.content = content
-        
+
         # Extract artifacts from tool results if any tools were executed
         if total_tool_calls > 0 and all_tool_execution_results:
             try:
@@ -1967,6 +1993,65 @@ class Agent:
         from ..memory.credential_resolver import MissingCredentialError
 
         try:
+            # Special handling for generate_file tool - use artifact service directly
+            if tool_name == "generate_file" and self.overlord and hasattr(self.overlord, "artifact_service"):
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "tool_name": tool_name,
+                        "parameters": parameters,
+                        "using_artifact_service": True,
+                    },
+                    description=f"Agent {self.agent_id} using artifact service for file generation",
+                )
+
+                # Call artifact service directly
+                code = parameters.get("code", "")
+                filename = parameters.get("filename")
+
+                try:
+                    artifact = await self.overlord.artifact_service.generate_file(code, filename)
+
+                    # Convert MuxiArtifact to a simplified tool response
+                    # Don't include full artifact details in the tool response to avoid
+                    # the agent mentioning file paths or download links
+                    result = {
+                        "success": True,
+                        "message": (
+                            f"Successfully created {artifact.filename}. "
+                            "The file has been automatically attached to this response."
+                        ),
+                        "filename": artifact.filename,
+                        "type": artifact.type,
+                        "format": artifact.format,
+                        "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
+                    }
+
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "success": True,
+                            "artifact_type": artifact.type,
+                            "artifact_format": artifact.format,
+                        },
+                        description=f"Agent {self.agent_id} successfully generated file using artifact service",
+                    )
+
+                    return result
+
+                except Exception as e:
+                    # Return error in expected format
+                    return {
+                        "error": str(e),
+                        "status": "error"
+                    }
+
+            # Regular MCP tool invocation
             observability.observe(
                 event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
                 level=observability.EventLevel.INFO,

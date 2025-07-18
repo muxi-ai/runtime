@@ -10,7 +10,6 @@ The initialization order is critical:
 2. Then other services can be initialized
 """
 
-import os
 from typing import Any, Dict, Optional
 
 from ..datatypes.clarification import ClarificationConfig, QuestionStyle
@@ -484,36 +483,19 @@ async def initialize_mcp_services(formation) -> None:
         mcp_config = formation._mcp_config if hasattr(formation, "_mcp_config") else {}
         servers = mcp_config.get("servers", [])
 
-        # Add the artifact MCP (always enabled, non-configurable)
-        # Get the absolute path to the MCP file
-        artifacts_dir = os.path.dirname(os.path.abspath(__file__))
-        mcp_file_path = os.path.join(artifacts_dir, "artifacts", "service.py")
-
-        artifact_mcp_config = {
-            "id": "artifact-file-generation",
-            "name": "Artifact File Generation",
-            "command": "python",
-            "args": [mcp_file_path],
-            "description": "Built-in file generation for artifact system"
-        }
-
-        # Prepend artifact MCP to ensure it's always available
-        servers_with_artifacts = [artifact_mcp_config] + servers
-
         # Store the servers in formation for later access by overlord
-        formation._mcp_servers = servers_with_artifacts
+        formation._mcp_servers = servers
 
-        # Always at least 1 server (artifact MCP)
+        # Log MCP server configuration
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
             data={
                 "service": "mcp",
-                "server_count": len(servers_with_artifacts),
-                "artifact_mcp": True,
+                "server_count": len(servers),
                 "user_configured": len(servers),
             },
-            description=f"Found {len(servers_with_artifacts)} MCP servers to configure (including artifact MCP)",
+            description=f"Found {len(servers)} MCP servers to configure",
         )
 
         # Register MCP servers immediately so agents can see which use user credentials
@@ -530,6 +512,42 @@ async def initialize_mcp_services(formation) -> None:
             description=f"Failed to initialize MCP service: {str(e)}",
         )
         # Don't raise - MCP is optional functionality
+
+
+async def initialize_artifact_service(formation, overlord) -> None:
+    """Initialize the artifact generation service."""
+    try:
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={"service": "artifact"},
+            description="Initializing artifact generation service",
+        )
+
+        # Import and initialize the artifact service
+        from .artifacts.artifact_service import get_artifact_service
+
+        artifact_service = get_artifact_service()
+
+        # Store the service in formation and overlord
+        formation._artifact_service = artifact_service
+        overlord.artifact_service = artifact_service
+
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "artifact"},
+            description="Artifact generation service initialized successfully",
+        )
+
+    except Exception as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={"error": str(e), "service": "artifact"},
+            description=f"Failed to initialize artifact service: {str(e)}",
+        )
+        raise
 
 
 def initialize_background_services(formation) -> None:
