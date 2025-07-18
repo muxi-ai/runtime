@@ -27,9 +27,6 @@ memory:
     multiplier: 10
     vector_search: true
 
-runtime:
-  built_in_mcps: ["file-generation"]
-
 logging:
   streams:
     - transport: "stdout"
