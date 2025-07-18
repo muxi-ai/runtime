@@ -34,6 +34,10 @@ spacy>=3.8.0  # Advanced NLP for semantic chunking (compatible with NumPy 2.x)
 # TODO: After installing, run: python -m spacy download en_core_web_sm
 sentence-transformers>=2.2.0  # Embedding generation for semantic search
 
+# Image processing
+Pillow>=10.0.0  # PIL/Pillow for image processing
+pdf2image>=1.16.0  # Convert PDF pages to images
+
 # Development tools
 pytest>=7.0.0
 
