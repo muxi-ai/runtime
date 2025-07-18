@@ -11,6 +11,7 @@ src/muxi.egg-info/requires.txt
 src/muxi.egg-info/top_level.txt
 src/muxi/runtime/__init__.py
 src/muxi/runtime/datatypes/__init__.py
+src/muxi/runtime/datatypes/artifacts.py
 src/muxi/runtime/datatypes/async_operations.py
 src/muxi/runtime/datatypes/caching.py
 src/muxi/runtime/datatypes/clarification.py
@@ -45,6 +46,11 @@ src/muxi/runtime/formation/agents/agent.py
 src/muxi/runtime/formation/agents/knowledge/__init__.py
 src/muxi/runtime/formation/agents/knowledge/base.py
 src/muxi/runtime/formation/agents/knowledge/handler.py
+src/muxi/runtime/formation/artifacts/__init__.py
+src/muxi/runtime/formation/artifacts/artifact_service.py
+src/muxi/runtime/formation/artifacts/extractor.py
+src/muxi/runtime/formation/artifacts/processor.py
+src/muxi/runtime/formation/artifacts/storage.py
 src/muxi/runtime/formation/background/__init__.py
 src/muxi/runtime/formation/background/request_tracker.py
 src/muxi/runtime/formation/background/time_estimator.py
@@ -161,7 +167,6 @@ src/muxi/runtime/services/mcp/reconnect_handler.py
 src/muxi/runtime/services/mcp/reconnection.py
 src/muxi/runtime/services/mcp/service.py
 src/muxi/runtime/services/mcp/built_in/__init__.py
-src/muxi/runtime/services/mcp/built_in/file_generation.py
 src/muxi/runtime/services/mcp/health/monitor.py
 src/muxi/runtime/services/mcp/prompts/__init__.py
 src/muxi/runtime/services/mcp/prompts/discovery.py
@@ -261,6 +266,7 @@ src/muxi/runtime/utils/retry_manager.py
 src/muxi/runtime/utils/user_dirs.py
 src/muxi/runtime/utils/version.py
 src/muxi/runtime/utils/zmq_decrypt.py
+tests/test_artifact_system_integration.py
 tests/test_async_database.py
 tests/test_async_formation_fix.py
 tests/test_auto_suppress.py
@@ -268,7 +274,6 @@ tests/test_contextvars_integration.py
 tests/test_formation_loading.py
 tests/test_health_monitoring_integration.py
 tests/test_mcp_basic.py
-tests/test_mcp_connectivity.py
 tests/test_mcp_event_loop.py
 tests/test_mcp_fix.py
 tests/test_mcp_init_only.py

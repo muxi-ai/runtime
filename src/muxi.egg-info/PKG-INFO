@@ -30,6 +30,8 @@ Requires-Dist: markdownify>=0.11.6
 Requires-Dist: nltk>=3.8.0
 Requires-Dist: spacy>=3.8.0
 Requires-Dist: sentence-transformers>=2.2.0
+Requires-Dist: Pillow>=10.0.0
+Requires-Dist: pdf2image>=1.16.0
 Requires-Dist: onellm>=0.1.0
 Requires-Dist: a2a-sdk>=0.2
 Requires-Dist: pytest>=7.0.0
@@ -73,7 +75,7 @@ Dynamic: license-file
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-1.0.0-blue.svg" alt="Version">
-  <img src="https://img.shields.io/badge/python-3.10+-green.svg" alt="Python">
+  <img src="https://img.shields.io/badge/python-3.9+-green.svg" alt="Python">
   <img src="https://img.shields.io/badge/license-Elastic-purple.svg" alt="License">
   <img src="https://img.shields.io/badge/tests-passing-brightgreen.svg" alt="Tests">
   <img src="https://img.shields.io/badge/coverage-85%25-green.svg" alt="Coverage">
@@ -117,6 +119,7 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Memory Systems**: Sophisticated memory management with buffer and long-term storage, including FIFO cleanup and automatic memory management with async database operations for 3x performance improvement
 - **MCP Protocol**: Model Context Protocol implementation for tool integration
 - **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
+- **Artifacts System**: Comprehensive file generation, tracking, and management with secure sandboxed execution, intelligent metadata extraction, session-based storage, and nanoid-based unique identifiers
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
@@ -560,6 +563,7 @@ export MUXI_LOG_LEVEL=DEBUG
 - [Testing Guide](docs/testing.md) - How to write runtime tests
 - [Memory Systems](docs/memory.md) - Buffer, persistent, vector details
 - [MCP Integration](docs/mcp.md) - Tool development guide
+- [Artifacts System](docs/artifacts.md) - File generation, tracking, and management
 
 ## 🤝 Community
 
