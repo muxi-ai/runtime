@@ -7,19 +7,8 @@ import io
 from typing import Optional, Dict, Any, Tuple
 from datetime import datetime
 
-# Import PIL/Pillow with graceful error handling
-try:
-    from PIL import Image
-    PIL_AVAILABLE = True
-except ImportError:
-    PIL_AVAILABLE = False
-
-# Import pdf2image with graceful error handling
-try:
-    from pdf2image import convert_from_path
-    PDF2IMAGE_AVAILABLE = True
-except ImportError:
-    PDF2IMAGE_AVAILABLE = False
+from PIL import Image
+from pdf2image import convert_from_path
 
 from ...datatypes.artifacts import MuxiArtifact, ArtifactMetadata, ArtifactPreview
 
@@ -40,8 +29,6 @@ def generate_image_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 
     Returns:
         Base64 encoded PNG thumbnail string, or None if error or not an image
     """
-    if not PIL_AVAILABLE:
-        return None
 
     if not file_path.exists():
         return None
@@ -63,7 +50,8 @@ def generate_image_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 
 
             # Convert to base64
             thumbnail_base64 = base64.b64encode(buffer.read()).decode('utf-8')
-            return thumbnail_base64
+            # Return as data URL
+            return f"data:image/png;base64,{thumbnail_base64}"
 
     except Exception:
         # Return None for any error (corrupted image, unsupported format, etc.)
@@ -81,8 +69,6 @@ def generate_pdf_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 20
     Returns:
         Base64 encoded PNG thumbnail string, or None if error or not a PDF
     """
-    if not PDF2IMAGE_AVAILABLE or not PIL_AVAILABLE:
-        return None
 
     if not file_path.exists() or file_path.suffix.lower() != '.pdf':
         return None
@@ -107,7 +93,8 @@ def generate_pdf_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 20
 
         # Convert to base64
         thumbnail_base64 = base64.b64encode(buffer.read()).decode('utf-8')
-        return thumbnail_base64
+        # Return as data URL
+        return f"data:image/png;base64,{thumbnail_base64}"
 
     except Exception:
         # Return None for any error
@@ -156,7 +143,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
     """
     import logging
     logger = logging.getLogger(__name__)
-    
+
     try:
         path = Path(file_path)
         logger.info(f"Creating artifact from file: {file_path}")
@@ -187,6 +174,8 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
             try:
                 with open(path, 'r', encoding='utf-8') as f:
                     content = f.read()
+                # Also create data URL for text files
+                data_url = read_file_as_base64(path)
             except UnicodeDecodeError:
                 # If text read fails, treat as binary
                 artifact_type = "data"
@@ -216,22 +205,29 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         file_stats = path.stat()
 
         # Create artifact metadata
-        # Remove mime_type from metadata if it exists to avoid duplicate
+        # Remove fields that don't belong in ArtifactMetadata
         metadata_copy = metadata.copy()
-        mime_type = metadata_copy.pop('mime_type', None)
-        if not mime_type:
-            mime_type = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
-            
-        # Also remove file_size if it exists in metadata
+        metadata_copy.pop('mime_type', None)
         metadata_copy.pop('file_size', None)
-        metadata_copy.pop('size_bytes', None)  # Remove if passed as size_bytes
-        
+        metadata_copy.pop('size_bytes', None)
+        metadata_copy.pop('tool_name', None)
+        metadata_copy.pop('message', None)
+
+        # Get image dimensions if it's an image
+        width = None
+        height = None
+        if artifact_type == "image":
+            try:
+                with Image.open(path) as img:
+                    width, height = img.size
+            except Exception:
+                pass
+
         artifact_metadata = ArtifactMetadata(
             created_at=datetime.now(),
-            updated_at=datetime.now(),
-            file_path=str(path.absolute()),
             size_bytes=file_stats.st_size,
-            mime_type=mime_type,
+            width=width,
+            height=height,
             **metadata_copy  # Include any additional metadata provided
         )
 

@@ -188,4 +188,8 @@ class MuxiResponse(BaseModel):
             mode = "json" if kwargs.get("mode") == "json" else None
             result["content"] = [item.model_dump(mode=mode) for item in self.content]
 
+        # Include artifacts if present
+        if self.artifacts:
+            result["artifacts"] = [artifact.model_dump() for artifact in self.artifacts]
+
         return result

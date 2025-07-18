@@ -999,6 +999,9 @@ class Agent:
             else:
                 content = response_str
 
+        # Clean response content to remove sandbox references and download links
+        content = self._clean_response_content(content)
+
         # Check if agent needs clarification from user
         clarification_request = await self._check_agent_clarification_needs(
             content, message_obj.content
@@ -1181,8 +1184,13 @@ class Agent:
                         )
 
                     # Format tool result
+                    # Remove non-serializable fields before JSON encoding
+                    serializable_result = result.copy() if isinstance(result, dict) else result
+                    if isinstance(serializable_result, dict) and "_artifact" in serializable_result:
+                        serializable_result.pop("_artifact")
+
                     tool_results.append(
-                        {"tool_call_id": tool_id, "role": "tool", "content": json.dumps(result)}
+                        {"tool_call_id": tool_id, "role": "tool", "content": json.dumps(serializable_result)}
                     )
 
                 except Exception as e:
@@ -1387,7 +1395,8 @@ class Agent:
                 break
 
         # Update the response content with final content
-        response.content = content
+        # Clean the content to remove sandbox references and download links
+        response.content = self._clean_response_content(content)
 
         # Extract artifacts from tool results if any tools were executed
         if total_tool_calls > 0 and all_tool_execution_results:
@@ -1633,6 +1642,51 @@ class Agent:
                 tool_calls = message["tool_calls"]
 
         return tool_calls
+
+    def _clean_response_content(self, content: str) -> str:
+        """
+        Clean response content to remove sandbox references and download links.
+
+        When files are generated, they are automatically attached as artifacts,
+        so we don't want agents mentioning file paths or download links.
+
+        Args:
+            content: The raw response content from the agent
+
+        Returns:
+            Cleaned content without file path references
+        """
+        import re
+
+        # Remove markdown download links with sandbox paths
+        content = re.sub(r'\[Download[^\]]*\]\(sandbox:[^\)]+\)', '', content)
+        content = re.sub(r'\[download[^\]]*\]\(sandbox:[^\)]+\)', '', content, re.IGNORECASE)
+
+        # Remove any remaining sandbox: references
+        content = re.sub(r'sandbox:[^\s\)]+', '', content)
+
+        # Remove common phrases about download links
+        replacements = [
+            (r'You can download it using the link below:\s*', ''),
+            (r'Click here to download[^\.\n]*\.?\s*', ''),
+            (r'Download link[s]?:\s*', ''),
+            (r'The file[s]? (?:is|are) available for download[^\.\n]*\.?\s*', ''),
+            (r'Use the download link[s]? to access[^\.\n]*\.?\s*', ''),
+        ]
+
+        for pattern, replacement in replacements:
+            content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
+
+        # Clean up any resulting double newlines or trailing spaces
+        content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
+        content = re.sub(r' +\n', '\n', content)
+        content = content.strip()
+
+        # If the content becomes too short after cleaning, add a note about attached files
+        if len(content) < 20 and any(word in content.lower() for word in ['created', 'generated', 'made']):
+            content += "\n\nThe file has been attached to this response."
+
+        return content
 
     async def _check_agent_clarification_needs(
         self, agent_response: str, user_message: str
@@ -2027,6 +2081,8 @@ class Agent:
                         "type": artifact.type,
                         "format": artifact.format,
                         "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
+                        # Store the actual artifact for the extractor
+                        "_artifact": artifact,
                     }
 
                     observability.observe(

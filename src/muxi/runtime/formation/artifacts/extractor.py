@@ -58,6 +58,13 @@ async def extract_artifacts_from_tool_results(
                 # Extract file info from the result
                 file_info = result.result
 
+                # Check if we have a direct artifact (from new artifact service)
+                if isinstance(file_info, dict) and "_artifact" in file_info:
+                    artifact = file_info["_artifact"]
+                    logger.info(f"Found direct artifact: {artifact.filename}")
+                    artifacts.append(artifact)
+                    continue
+
                 # Debug log to see what we're getting
                 logger.info(f"Tool result type: {type(file_info)}, value: {file_info}")
 
@@ -110,11 +117,61 @@ async def extract_artifacts_from_tool_results(
                     )
                     continue
 
-                # Check if file_path exists in the result
+                # Check if this is the new format with complete artifact
+                if "artifact" in file_info and file_info.get("success") is True:
+                    # New format: artifact is already processed
+                    artifact_data = file_info["artifact"]
+
+                    # Convert artifact dict back to MuxiArtifact
+                    from ...datatypes.artifacts import ArtifactMetadata, ArtifactPreview
+                    from datetime import datetime
+
+                    # Create metadata
+                    metadata = None
+                    if artifact_data.get("metadata"):
+                        meta_dict = artifact_data["metadata"]
+                        metadata = ArtifactMetadata(
+                            created_at=(
+                                datetime.fromisoformat(meta_dict["created_at"])
+                                if meta_dict.get("created_at")
+                                else datetime.now()
+                            ),
+                            size_bytes=meta_dict.get("size_bytes", 0),
+                            lines=meta_dict.get("lines"),
+                            characters=meta_dict.get("characters"),
+                            language=meta_dict.get("language"),
+                            pages=meta_dict.get("pages"),
+                            width=meta_dict.get("width"),
+                            height=meta_dict.get("height")
+                        )
+
+                    # Create preview
+                    preview = None
+                    if artifact_data.get("preview") and artifact_data["preview"].get("thumbnail"):
+                        preview = ArtifactPreview(
+                            thumbnail=artifact_data["preview"]["thumbnail"]
+                        )
+
+                    # Create artifact
+                    artifact = MuxiArtifact(
+                        type=artifact_data["type"],
+                        format=artifact_data["format"],
+                        filename=artifact_data["filename"],
+                        content=artifact_data.get("content"),
+                        data_url=artifact_data.get("data_url"),
+                        metadata=metadata,
+                        preview=preview
+                    )
+
+                    artifacts.append(artifact)
+                    logger.info(f"Successfully extracted pre-processed artifact: {artifact.filename}")
+                    continue
+
+                # Old format: check if file_path exists in the result
                 file_path = file_info.get("file_path")
                 if not file_path:
                     logger.warning(
-                        "generate_file result missing file_path field"
+                        "generate_file result missing both artifact and file_path fields"
                     )
                     continue
 
