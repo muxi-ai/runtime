@@ -13,12 +13,27 @@ from pdf2image import convert_from_path
 from ...datatypes.artifacts import MuxiArtifact, ArtifactMetadata, ArtifactPreview
 
 # Define file type extensions
-TEXT_EXTENSIONS = {'.txt', '.md', '.html', '.css', '.js', '.py', '.json', '.yaml', '.yml', '.xml', '.csv', '.log'}
-IMAGE_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp'}
-DOCUMENT_EXTENSIONS = {'.pdf', '.docx', '.xlsx', '.pptx'}
+TEXT_EXTENSIONS = {
+    ".txt",
+    ".md",
+    ".html",
+    ".css",
+    ".js",
+    ".py",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".csv",
+    ".log",
+}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"}
+DOCUMENT_EXTENSIONS = {".pdf", ".docx", ".xlsx", ".pptx"}
 
 
-def generate_image_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 200)) -> Optional[str]:
+def generate_image_thumbnail(
+    file_path: Path, max_size: Tuple[int, int] = (200, 200)
+) -> Optional[str]:
     """
     Generate a thumbnail for an image file.
 
@@ -37,19 +52,19 @@ def generate_image_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 
         # Open the image
         with Image.open(file_path) as img:
             # Convert to RGB if necessary (for PNG with transparency, etc.)
-            if img.mode not in ('RGB', 'RGBA'):
-                img = img.convert('RGB')
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGB")
 
             # Create thumbnail
             img.thumbnail(max_size, Image.Resampling.LANCZOS)
 
             # Save to bytes buffer as PNG
             buffer = io.BytesIO()
-            img.save(buffer, format='PNG')
+            img.save(buffer, format="PNG")
             buffer.seek(0)
 
             # Convert to base64
-            thumbnail_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+            thumbnail_base64 = base64.b64encode(buffer.read()).decode("utf-8")
             # Return as data URL
             return f"data:image/png;base64,{thumbnail_base64}"
 
@@ -58,9 +73,16 @@ def generate_image_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 
         return None
 
 
-def generate_pdf_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 200)) -> Optional[str]:
+def generate_pdf_thumbnail(
+    file_path: Path, max_size: Tuple[int, int] = (200, 200)
+) -> Optional[str]:
     """
     Generate a thumbnail for the first page of a PDF file.
+
+    Note: This requires Poppler utilities to be installed on the system.
+    - macOS: brew install poppler
+    - Ubuntu/Debian: apt-get install poppler-utils
+    - RHEL/CentOS: yum install poppler-utils
 
     Args:
         file_path: Path to the PDF file
@@ -70,11 +92,11 @@ def generate_pdf_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 20
         Base64 encoded PNG thumbnail string, or None if error or not a PDF
     """
 
-    if not file_path.exists() or file_path.suffix.lower() != '.pdf':
+    if not file_path.exists() or file_path.suffix.lower() != ".pdf":
         return None
 
     try:
-        # Convert first page of PDF to image
+        # Convert first page of PDF to image (requires Poppler)
         images = convert_from_path(file_path, first_page=1, last_page=1, dpi=150)
 
         if not images:
@@ -88,15 +110,25 @@ def generate_pdf_thumbnail(file_path: Path, max_size: Tuple[int, int] = (200, 20
 
         # Save to bytes buffer as PNG
         buffer = io.BytesIO()
-        first_page.save(buffer, format='PNG')
+        first_page.save(buffer, format="PNG")
         buffer.seek(0)
 
         # Convert to base64
-        thumbnail_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+        thumbnail_base64 = base64.b64encode(buffer.read()).decode("utf-8")
         # Return as data URL
         return f"data:image/png;base64,{thumbnail_base64}"
 
-    except Exception:
+    except Exception as e:
+        # Log the error for debugging but don't fail the whole artifact creation
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            f"PDF thumbnail generation failed for {file_path}: {str(e)}. "
+            f"This likely means Poppler is not installed. "
+            f"Install it with: brew install poppler (macOS) or "
+            f"apt-get install poppler-utils (Linux)"
+        )
         # Return None for any error
         return None
 
@@ -112,17 +144,17 @@ def read_file_as_base64(file_path: Path) -> str:
         Data URL string with proper MIME type
     """
     # Read file as binary
-    with open(file_path, 'rb') as f:
+    with open(file_path, "rb") as f:
         file_data = f.read()
 
     # Detect MIME type
     mime_type, _ = mimetypes.guess_type(str(file_path))
     if mime_type is None:
         # Default to application/octet-stream for unknown types
-        mime_type = 'application/octet-stream'
+        mime_type = "application/octet-stream"
 
     # Convert to base64
-    base64_data = base64.b64encode(file_data).decode('utf-8')
+    base64_data = base64.b64encode(file_data).decode("utf-8")
 
     # Create data URL
     data_url = f"data:{mime_type};base64,{base64_data}"
@@ -142,6 +174,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         MuxiArtifact object or None if error
     """
     import logging
+
     logger = logging.getLogger(__name__)
 
     try:
@@ -172,7 +205,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         if artifact_type == "text":
             # For text files, read content directly
             try:
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(path, "r", encoding="utf-8") as f:
                     content = f.read()
                 # Also create data URL for text files
                 data_url = read_file_as_base64(path)
@@ -191,15 +224,11 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         if artifact_type == "image":
             preview_data = generate_image_thumbnail(path)
             if preview_data:
-                preview = ArtifactPreview(
-                    thumbnail=preview_data
-                )
-        elif extension == '.pdf':
+                preview = ArtifactPreview(thumbnail=preview_data)
+        elif extension == ".pdf":
             preview_data = generate_pdf_thumbnail(path)
             if preview_data:
-                preview = ArtifactPreview(
-                    thumbnail=preview_data
-                )
+                preview = ArtifactPreview(thumbnail=preview_data)
 
         # Get file stats
         file_stats = path.stat()
@@ -207,11 +236,11 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         # Create artifact metadata
         # Remove fields that don't belong in ArtifactMetadata
         metadata_copy = metadata.copy()
-        metadata_copy.pop('mime_type', None)
-        metadata_copy.pop('file_size', None)
-        metadata_copy.pop('size_bytes', None)
-        metadata_copy.pop('tool_name', None)
-        metadata_copy.pop('message', None)
+        metadata_copy.pop("mime_type", None)
+        metadata_copy.pop("file_size", None)
+        metadata_copy.pop("size_bytes", None)
+        metadata_copy.pop("tool_name", None)
+        metadata_copy.pop("message", None)
 
         # Get image dimensions if it's an image
         width = None
@@ -228,7 +257,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
             size_bytes=file_stats.st_size,
             width=width,
             height=height,
-            **metadata_copy  # Include any additional metadata provided
+            **metadata_copy,  # Include any additional metadata provided
         )
 
         # Create and return artifact
@@ -239,7 +268,7 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
             content=content,
             data_url=data_url,
             metadata=artifact_metadata,
-            preview=preview
+            preview=preview,
         )
 
         logger.info(f"Successfully created artifact: {artifact.filename}")
@@ -249,5 +278,6 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
         # Return None for any error
         logger.error(f"Error creating artifact from {file_path}: {str(e)}")
         import traceback
+
         traceback.print_exc()
         return None

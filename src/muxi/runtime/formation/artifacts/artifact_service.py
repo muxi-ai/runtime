@@ -280,36 +280,36 @@ class ArtifactService:
         extension = file_path.suffix.lower()
         mime_types = {
             # Images
-            '.png': 'image/png',
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.gif': 'image/gif',
-            '.svg': 'image/svg+xml',
-            '.bmp': 'image/bmp',
-            '.webp': 'image/webp',
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif",
+            ".svg": "image/svg+xml",
+            ".bmp": "image/bmp",
+            ".webp": "image/webp",
             # Documents
-            '.pdf': 'application/pdf',
-            '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            '.doc': 'application/msword',
-            '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            '.xls': 'application/vnd.ms-excel',
-            '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            '.ppt': 'application/vnd.ms-powerpoint',
+            ".pdf": "application/pdf",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".doc": "application/msword",
+            ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ".xls": "application/vnd.ms-excel",
+            ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ".ppt": "application/vnd.ms-powerpoint",
             # Text
-            '.txt': 'text/plain',
-            '.csv': 'text/csv',
-            '.json': 'application/json',
-            '.xml': 'application/xml',
-            '.yaml': 'application/x-yaml',
-            '.yml': 'application/x-yaml',
-            '.md': 'text/markdown',
-            '.html': 'text/html',
+            ".txt": "text/plain",
+            ".csv": "text/csv",
+            ".json": "application/json",
+            ".xml": "application/xml",
+            ".yaml": "application/x-yaml",
+            ".yml": "application/x-yaml",
+            ".md": "text/markdown",
+            ".html": "text/html",
             # Code
-            '.py': 'text/x-python',
-            '.js': 'text/javascript',
-            '.css': 'text/css',
+            ".py": "text/x-python",
+            ".js": "text/javascript",
+            ".css": "text/css",
         }
-        return mime_types.get(extension, 'application/octet-stream')
+        return mime_types.get(extension, "application/octet-stream")
 
     async def generate_file(self, code: str, filename: Optional[str] = None) -> MuxiArtifact:
         """
@@ -377,24 +377,27 @@ matplotlib.use('Agg')  # Use non-interactive backend
 '''
 
         # Write to temporary file
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(tracking_code)
             tmp_file_path = f.name
 
         try:
             # Execute the code in the output directory with limitations
-            # Use ulimit on Unix-like systems to limit memory usage
-            if sys.platform != "win32":
-                # Limit memory to MAX_MEMORY_MB
-                memory_limit_cmd = f"ulimit -v {MAX_MEMORY_BYTES // 1024}; "
+            # Note: ulimit -v doesn't work on macOS, so we make it optional
+            # The timeout will still protect against runaway processes
+            if sys.platform == "linux":
+                # Only apply memory limit on Linux where ulimit -v works reliably
+                memory_limit_cmd = f"ulimit -v {MAX_MEMORY_BYTES // 1024} 2>/dev/null; "
+                cmd = f"{memory_limit_cmd}{sys.executable} {tmp_file_path}"
+                use_shell = True
             else:
-                memory_limit_cmd = ""
+                # On macOS and Windows, run without memory limit
+                cmd = [sys.executable, tmp_file_path]
+                use_shell = False
 
             result = subprocess.run(
-                f"{memory_limit_cmd}{sys.executable} {tmp_file_path}"
-                if sys.platform != "win32"
-                else [sys.executable, tmp_file_path],
-                shell=sys.platform != "win32",
+                cmd,
+                shell=use_shell,
                 cwd=str(self.output_dir),
                 capture_output=True,
                 text=True,
@@ -406,7 +409,9 @@ matplotlib.use('Agg')  # Use non-interactive backend
                 # Provide more helpful error messages for common issues
                 if "ModuleNotFoundError" in error_msg:
                     missing_module = error_msg.split("'")[1]
-                    error_msg = f"Missing required module: {missing_module}. Make sure it's installed."
+                    error_msg = (
+                        f"Missing required module: {missing_module}. Make sure it's installed."
+                    )
                 elif "FileNotFoundError" in error_msg:
                     error_msg = "File not found. Make sure all file paths are correct."
                 elif "MemoryError" in error_msg:
@@ -452,7 +457,9 @@ matplotlib.use('Agg')  # Use non-interactive backend
             if len(generated_files) == 1:
                 newest_file = generated_files[0]
             else:
-                newest_file = max(generated_files, key=lambda f: f.stat().st_mtime if f.exists() else 0)
+                newest_file = max(
+                    generated_files, key=lambda f: f.stat().st_mtime if f.exists() else 0
+                )
 
             # Create complete artifact from the generated file
             artifact_metadata = {
@@ -467,7 +474,9 @@ matplotlib.use('Agg')  # Use non-interactive backend
                 return artifact
             else:
                 # Fallback if artifact creation fails
-                raise RuntimeError(f"Failed to create artifact from generated file: {newest_file.name}")
+                raise RuntimeError(
+                    f"Failed to create artifact from generated file: {newest_file.name}"
+                )
 
         except subprocess.TimeoutExpired:
             raise RuntimeError(f"Code execution timed out after {MAX_EXECUTION_TIME} seconds")
