@@ -190,6 +190,7 @@ class MuxiResponse(BaseModel):
 
         # Include artifacts if present
         if self.artifacts:
-            result["artifacts"] = [artifact.model_dump() for artifact in self.artifacts]
+            mode = "json" if kwargs.get("mode") == "json" else None
+            result["artifacts"] = [artifact.model_dump(mode=mode) for artifact in self.artifacts]
 
         return result

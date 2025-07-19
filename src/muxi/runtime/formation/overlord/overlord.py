@@ -888,13 +888,31 @@ class Overlord:
                 )
 
         # Initialize artifact service
-        await initialize_artifact_service(self._formation_instance, self)
-        observability.observe(
-            event_type=observability.SystemEvents.SERVICE_STARTED,
-            level=observability.EventLevel.INFO,
-            data={"service": "artifact"},
-            description="Artifact service initialized",
-        )
+        formation_instance = getattr(self, "_formation_instance", None)
+        if formation_instance:
+            try:
+                await initialize_artifact_service(formation_instance, self)
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"service": "artifact"},
+                    description="Artifact service initialized",
+                )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={"service": "artifact", "error": str(e)},
+                    description=f"Failed to initialize artifact service: {e}",
+                )
+                # Continue execution even if artifact service fails
+        else:
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_WARNING,
+                level=observability.EventLevel.WARNING,
+                data={"service": "artifact"},
+                description="Artifact service not initialized: formation instance not available",
+            )
 
         # Start clarification cleanup task
         if not self._clarification_cleanup_task or self._clarification_cleanup_task.done():
@@ -1141,9 +1159,18 @@ class Overlord:
         # Add artifact system prompt (always enabled)
         from pathlib import Path
         artifact_prompt_path = Path(__file__).parent.parent / "artifacts" / "prompt.md"
-        if artifact_prompt_path.exists():
-            artifact_prompt = artifact_prompt_path.read_text()
-            system_message += f"\n\n## File Generation (Always Available)\n\n{artifact_prompt}"
+        try:
+            if artifact_prompt_path.exists():
+                artifact_prompt = artifact_prompt_path.read_text(encoding="utf-8")
+                system_message += f"\n\n## File Generation (Always Available)\n\n{artifact_prompt}"
+        except (IOError, OSError, UnicodeDecodeError) as e:
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_WARNING,
+                level=observability.EventLevel.WARNING,
+                data={"service": "artifact", "file": str(artifact_prompt_path), "error": str(e)},
+                description=f"Failed to read artifact prompt file: {e}",
+            )
+            # Continue without artifact prompt - system message construction continues gracefully
 
         # Combine technical instructions with persona
         return (

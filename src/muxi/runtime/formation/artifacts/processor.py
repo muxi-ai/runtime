@@ -11,6 +11,7 @@ from PIL import Image
 from pdf2image import convert_from_path
 
 from ...datatypes.artifacts import MuxiArtifact, ArtifactMetadata, ArtifactPreview
+from ...observability import observability
 
 # Define file type extensions
 TEXT_EXTENSIONS = {
@@ -120,14 +121,11 @@ def generate_pdf_thumbnail(
 
     except Exception as e:
         # Log the error for debugging but don't fail the whole artifact creation
-        import logging
-
-        logger = logging.getLogger(__name__)
-        logger.debug(
-            f"PDF thumbnail generation failed for {file_path}: {str(e)}. "
-            f"This likely means Poppler is not installed. "
-            f"Install it with: brew install poppler (macOS) or "
-            f"apt-get install poppler-utils (Linux)"
+        observability.observe(
+            event_type=observability.ErrorEvents.WARNING,
+            level=observability.EventLevel.WARNING,
+            data={"service": "artifact", "file": str(file_path), "error": str(e)},
+            description=f"PDF thumbnail generation failed: {e}. This likely means Poppler is not installed."
         )
         # Return None for any error
         return None
@@ -173,16 +171,22 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
     Returns:
         MuxiArtifact object or None if error
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         path = Path(file_path)
-        logger.info(f"Creating artifact from file: {file_path}")
+        observability.observe(
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "artifact", "action": "create_from_file", "file": str(file_path)},
+            description=f"Creating artifact from file: {file_path}"
+        )
 
         if not path.exists():
-            logger.warning(f"File does not exist: {file_path}")
+            observability.observe(
+                event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
+                level=observability.EventLevel.WARNING,
+                data={"service": "artifact", "file": str(file_path), "error": "file_not_found"},
+                description=f"File does not exist: {file_path}"
+            )
             return None
 
         # Get file extension
@@ -271,13 +275,20 @@ def create_artifact_from_file(file_path: str, metadata: Dict[str, Any]) -> Optio
             preview=preview,
         )
 
-        logger.info(f"Successfully created artifact: {artifact.filename}")
+        observability.observe(
+            event_type=observability.ConversationEvents.CONTENT_PROCESSED,
+            level=observability.EventLevel.INFO,
+            data={"service": "artifact", "action": "create_from_file", "filename": artifact.filename},
+            description=f"Successfully created artifact: {artifact.filename}"
+        )
         return artifact
 
     except Exception as e:
         # Return None for any error
-        logger.error(f"Error creating artifact from {file_path}: {str(e)}")
-        import traceback
-
-        traceback.print_exc()
+        observability.observe(
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={"service": "artifact", "action": "create_from_file", "file": str(file_path), "error": str(e)},
+            description=f"Error creating artifact from {file_path}: {str(e)}"
+        )
         return None
