@@ -8,7 +8,6 @@
 # Author:       Muxi Framework Team
 # =============================================================================
 
-import logging
 from typing import Any, Dict, Optional
 from datetime import datetime
 
@@ -23,9 +22,7 @@ from .base import (
 )
 from ..protocol.message_handler import MCPMessageHandler
 from .auth import create_httpx_auth
-
-# Create logger for this module
-logger = logging.getLogger(__name__)
+from ....observability import observability
 
 
 class StreamableHTTPTransport(BaseTransport):
@@ -40,10 +37,20 @@ class StreamableHTTPTransport(BaseTransport):
         self.write_stream = None
         self.get_session_id = None
         self.client_context = None
-        logger.debug(f"Initialized with URL: {url}")
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
+            level=observability.EventLevel.DEBUG,
+            data={"service": "mcp", "transport": "streamable_http", "action": "initialize", "url": url},
+            description=f"Initialized Streamable HTTP transport with URL: {url}"
+        )
         # Log auth config safely without exposing sensitive data
-        safe_auth = self._mask_sensitive_data(auth)
-        logger.debug(f"Auth config: {safe_auth}")
+        if auth:
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_TRANSPORT_DETECTED,
+                level=observability.EventLevel.DEBUG,
+                data={"service": "mcp", "transport": "streamable_http", "action": "auth_configured", "has_auth": True},
+                description="Auth configuration provided for Streamable HTTP transport"
+            )
 
     def _mask_sensitive_data(self, data: Any) -> Any:
         """
@@ -128,11 +135,27 @@ class StreamableHTTPTransport(BaseTransport):
             self.connect_time = datetime.now()
             self.last_activity = datetime.now()
 
-            logger.info(f"Connected successfully to {self.url}")
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_CONNECTED,
+                level=observability.EventLevel.INFO,
+                data={"service": "mcp", "transport": "streamable_http", "action": "connect_success", "url": self.url},
+                description=f"Connected successfully to {self.url}"
+            )
             return True
 
         except Exception as e:
-            logger.error(f"Connection failed: {e}")
+            observability.observe(
+                event_type=observability.SystemEvents.MCP_SERVER_CONNECTION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "mcp",
+                    "transport": "streamable_http",
+                    "action": "connect_failed",
+                    "url": self.url,
+                    "error": str(e),
+                },
+                description=f"Connection failed: {e}"
+            )
             # Clean up any partially created resources
             await self._cleanup()
             raise MCPConnectionError(f"Failed to connect to {self.url}: {e}") from e
