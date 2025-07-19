@@ -158,9 +158,9 @@ async def test_mcp_operation():
         formation = Formation()
         await formation.load("test-formations/formation-mcp")
         overlord = await formation.start_overlord()
-        
+
         # Test operations here
-        
+
     finally:
         # Proper cleanup
         try:
@@ -175,7 +175,7 @@ async def test_mcp_operation():
 **Key Findings**:
 
 1. **Smart Credential Naming**: The system implements async credential naming:
-   - Initial storage: "github" 
+   - Initial storage: "github"
    - Background discovery: "github" → "lilyautomaze"
    - Uses identity tools (get_me, whoami) for account detection
 
@@ -200,11 +200,11 @@ async def test_mcp_operation():
 ```python
 # Test that User2 gets prompted for credentials
 response = await overlord.chat("GitHub operation", user_id="user2")
-assert any(term in response.lower() for term in 
+assert any(term in response.lower() for term in
           ["credential", "token", "provide", "authenticate"])
 
 # Test that User2 cannot access User1's resources
-assert not any(term in response.lower() for term in 
+assert not any(term in response.lower() for term in
               ["successfully", "retrieved", "found"])
 ```
 
@@ -506,16 +506,16 @@ def test_multimodal_processing():
         formation = Formation()
         formation.load("test-formations/formation-multimodal")
         overlord = formation.start_overlord()
-        
+
         try:
             # Test with proper file structure
             file_path = Path("test-docs/sample.pdf")
             with open(file_path, "rb") as f:
                 content = f.read()
-            
+
             response = asyncio.run(overlord.chat(
                 user_id="test_user",
-                message="Analyze this document", 
+                message="Analyze this document",
                 files=[{
                     "filename": file_path.name,
                     "content": content,
@@ -523,7 +523,7 @@ def test_multimodal_processing():
                     "size": len(content),
                 }],
             ))
-            
+
             # Handle multiple response types
             if isinstance(response, dict) and "request_id" in response:
                 print("✅ Async processing triggered")
@@ -537,7 +537,7 @@ def test_multimodal_processing():
             else:
                 # Direct response
                 assert len(response) > 50
-                
+
         finally:
             formation.stop_overlord()
 ```
@@ -576,7 +576,7 @@ files=[{
 
 # ✅ Correct - matches file format
 files=[{
-    "filename": "demo.mov", 
+    "filename": "demo.mov",
     "content": video_content,
     "content_type": "video/quicktime",  # Correct for .mov files
 }]
@@ -598,9 +598,9 @@ def test_async_webhook_delivery():
         # Should return task info for async processing
         assert isinstance(response, dict)
         assert "request_id" in response
-        
+
         # For webhook testing, you'd need to mock or run webhook receiver
-        
+
     with ThreadPoolExecutor() as executor:
         future = executor.submit(run_test)
         future.result()
@@ -651,9 +651,9 @@ def get_optimal_provider(content_type, file_size):
 ```python
 def test_large_file_with_timeout_handling():
     """Pattern learned from 132MB video testing"""
-    
+
     large_file_content = load_test_file("presentation.mp4")  # 132MB
-    
+
     response = asyncio.run(overlord.chat(
         user_id="test_user",
         message="Analyze the slides and speaker content in this presentation video",
@@ -665,11 +665,11 @@ def test_large_file_with_timeout_handling():
         }],
         timeout=300  # 5 minute timeout for large files
     ))
-    
+
     # Handle timeout gracefully - this is expected for very large files
     if "timeout" in str(response).lower():
         print("⚠️ Large file timeout - expected behavior")
-        assert any(keyword in str(response).lower() 
+        assert any(keyword in str(response).lower()
                   for keyword in ['timeout', 'processing', 'large'])
     else:
         # If processing succeeded, validate response
@@ -680,7 +680,7 @@ def test_large_file_with_timeout_handling():
 ```python
 def test_document_image_alignment():
     """Pattern from Test Group 3D: Cross-Modal Analysis"""
-    
+
     # Test multiple file types together
     files = [
         {
@@ -690,25 +690,25 @@ def test_document_image_alignment():
             "size": len(pdf_content)
         },
         {
-            "filename": "chart.png", 
+            "filename": "chart.png",
             "content": image_content,
             "content_type": "image/png",
             "size": len(image_content)
         }
     ]
-    
+
     response = asyncio.run(overlord.chat(
         user_id="test_user",
         message="Analyze how the data in the chart relates to the information in the report document",
         files=files
     ))
-    
+
     # Cross-modal responses should reference both sources
     response_text = str(response).lower()
     assert 'chart' in response_text
     assert 'report' in response_text
     assert 'data' in response_text
-    
+
     # Should be substantial analysis (learned from test results)
     assert len(str(response)) > 500
 ```
@@ -718,7 +718,7 @@ def test_document_image_alignment():
 # All Day 3 tests used actual files from test-docs directory
 TEST_FILES = {
     'pdf': 'test-docs/sample.pdf',
-    'image': 'test-docs/chart.png', 
+    'image': 'test-docs/chart.png',
     'audio': 'test-docs/speech.m4a',
     'video': 'test-docs/demo.mov',
     'document': 'test-docs/document.docx',
@@ -730,11 +730,11 @@ def load_real_test_file(file_type):
     file_path = TEST_FILES[file_type]
     with open(file_path, 'rb') as f:
         content = f.read()
-    
+
     # Map file extensions to proper MIME types
     mime_mapping = {
         '.pdf': 'application/pdf',
-        '.png': 'image/png', 
+        '.png': 'image/png',
         '.jpg': 'image/jpeg',
         '.m4a': 'audio/m4a',
         '.mp3': 'audio/mpeg',
@@ -743,10 +743,10 @@ def load_real_test_file(file_type):
         '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     }
-    
+
     file_ext = Path(file_path).suffix.lower()
     content_type = mime_mapping.get(file_ext, 'application/octet-stream')
-    
+
     return {
         "filename": Path(file_path).name,
         "content": content,
@@ -759,27 +759,27 @@ def load_real_test_file(file_type):
 ```python
 def test_multimodal_error_handling():
     """Patterns learned from Test Groups 3H, 3I, 3J"""
-    
+
     # Test 1: File size limits
     large_audio = create_large_file(30_000_000)  # Exceeds 25MB Whisper limit
     response = asyncio.run(overlord.chat(
         user_id="test_user",
         message="Transcribe this audio",
-        files=[{"filename": "large.mp3", "content": large_audio, 
+        files=[{"filename": "large.mp3", "content": large_audio,
                "content_type": "audio/mpeg", "size": len(large_audio)}]
     ))
-    
+
     # Should handle gracefully, not crash
     assert isinstance(response, (str, dict))
-    
-    # Test 2: Format mismatches 
+
+    # Test 2: Format mismatches
     response = asyncio.run(overlord.chat(
         user_id="test_user",
         message="Analyze this video",
         files=[{"filename": "image.mp4", "content": jpeg_content,
                "content_type": "video/mp4", "size": len(jpeg_content)}]
     ))
-    
+
     # Should detect mismatch or process appropriately
     assert len(str(response)) > 50
 ```
@@ -788,37 +788,37 @@ def test_multimodal_error_handling():
 ```python
 def validate_multimodal_response_quality(response, content_type, expected_elements):
     """Quality checks learned from comprehensive testing"""
-    
+
     response_text = str(response).lower()
-    
+
     # Content-specific quality checks
     if content_type.startswith('image/'):
         # Image analysis should describe visual elements
         visual_terms = ['visual', 'image', 'color', 'text', 'chart', 'diagram']
         assert any(term in response_text for term in visual_terms)
-        
+
     elif content_type.startswith('audio/'):
         # Audio should provide transcription or description
         audio_terms = ['audio', 'speech', 'transcription', 'voice', 'sound']
         assert any(term in response_text for term in audio_terms)
-        
+
     elif content_type.startswith('video/'):
         # Video should analyze both visual and temporal elements
         video_terms = ['video', 'frame', 'scene', 'visual', 'movement']
         assert any(term in response_text for term in video_terms)
-        
+
     elif content_type == 'application/pdf':
         # Document analysis should extract meaningful content
         doc_terms = ['document', 'text', 'content', 'page', 'section']
         assert any(term in response_text for term in doc_terms)
-    
+
     # Check for expected elements
     for element in expected_elements:
         assert element.lower() in response_text
-    
+
     # Minimum response quality
     assert len(str(response)) > 100  # Substantial response
-    
+
     return True
 ```
 
@@ -828,7 +828,7 @@ def validate_multimodal_response_quality(response, content_type, expected_elemen
 llm:
   models:
     - text: "openai/gpt-4o-mini"           # General text processing
-    - vision: "google/gemini-2.0-flash"   # Best for video/images  
+    - vision: "google/gemini-2.0-flash"   # Best for video/images
     - documents: "openai/gpt-4o"          # PDF processing
       settings:
         max_size_mb: 20
@@ -877,21 +877,21 @@ async def test_agent_communication():
     formation = Formation()
     await formation.load("test-formations/formation-multi-agent/")
     overlord = await formation.start_overlord()
-    
+
     # Test 1: Math Query Routing
     response = await overlord.chat("Calculate 2+2", user_id="test_user", stream=False)
     response_text = response.content if hasattr(response, 'content') else str(response)
     assert "4" in response_text  # Validate actual LLM response
-    
-    # Test 2: Research Query Routing  
+
+    # Test 2: Research Query Routing
     response = await overlord.chat(
-        "What are the latest trends in renewable energy?", 
-        user_id="test_user", 
+        "What are the latest trends in renewable energy?",
+        user_id="test_user",
         stream=False
     )
     response_text = response.content if hasattr(response, 'content') else str(response)
     assert len(response_text) > 50  # Substantive research response
-    
+
     await formation.stop_overlord()
 ```
 
@@ -909,7 +909,7 @@ async def test_agent_communication():
 - 🤖 **Overlord**: Successfully responded with helpful information
 - **Validation**: Response contains help-related keywords
 
-### ✅ Test 1B2: Agent Routing Validation  
+### ✅ Test 1B2: Agent Routing Validation
 - 👤 **User**: "Calculate 2+2"
 - 🤖 **Overlord**: "2 + 2 equals 4."
 - **Validation**: Math query properly routed to appropriate agent
@@ -926,7 +926,7 @@ async def test_agent_communication():
 ```python
 # Test both formation types
 single_agent_formation = "test-formations/formation-basic/"  # Directory
-multi_agent_formation = "test-formations/formation-multi-agent/"  # Directory  
+multi_agent_formation = "test-formations/formation-multi-agent/"  # Directory
 flattened_formation = "test-formations/formation-basic/formation-flattened.yaml"  # File
 ```
 
@@ -935,7 +935,7 @@ flattened_formation = "test-formations/formation-basic/formation-flattened.yaml"
 # Test comprehensive error scenarios
 invalid_formations = [
     "test-formations/invalid-formations/invalid-syntax.yaml",
-    "test-formations/invalid-formations/invalid-not-yaml.txt", 
+    "test-formations/invalid-formations/invalid-not-yaml.txt",
     "test-formations/invalid-formations/invalid-missing-keys.yaml",
     "test-formations/invalid-formations/invalid-schema.yaml",
     "test-formations/invalid-formations/invalid-values.yaml",
@@ -956,19 +956,19 @@ for invalid_path in invalid_formations:
 # Remote memory requires specific fields
 async def test_remote_memory_validation():
     formation = Formation()
-    
+
     # Should fail - missing URL
     with pytest.raises(ConfigurationValidationError):
         await formation.load("test-formations/invalid-remote-no-url.yaml")
-    
-    # Should fail - missing tenant  
+
+    # Should fail - missing tenant
     with pytest.raises(ConfigurationValidationError):
         await formation.load("test-formations/invalid-remote-no-tenant.yaml")
-        
+
     # Should fail - uses "auto" instead of explicit MB
     with pytest.raises(ConfigurationValidationError):
         await formation.load("test-formations/invalid-remote-auto-memory.yaml")
-    
+
     # Should pass - valid remote config
     await formation.load("test-formations/valid-remote-memory.yaml")
 ```
@@ -1010,7 +1010,7 @@ MUXI Runtime supports async processing for long-running tasks. Async responses c
 # Async response format
 {
     "status": "processing",
-    "request_id": "req_xxxxx", 
+    "request_id": "req_xxxxx",
     "webhook_url": "http://your-webhook-url/",
     "message": "Processing async request..."
 }
@@ -1040,10 +1040,10 @@ from utils.webhook_test_utils import (
 ```python
 def test_processing_with_dynamic_async(overlord):
     """Test that handles both sync and async responses dynamically"""
-    
+
     # Clear webhook logs before test
     setup_webhook_test()
-    
+
     # Send request - async may trigger based on formation or content
     response = get_response(
         overlord.chat(
@@ -1052,7 +1052,7 @@ def test_processing_with_dynamic_async(overlord):
             # Note: Not specifying use_async - let system decide
         )
     )
-    
+
     # Universal checker that handles both sync and async
     result, was_async = check_response_with_webhook(
         response,
@@ -1061,12 +1061,12 @@ def test_processing_with_dynamic_async(overlord):
         min_length=100,
         test_name="Dynamic Processing Test"
     )
-    
+
     if was_async:
         print(f"✅ Processed asynchronously via webhook")
     else:
         print(f"✅ Processed synchronously")
-    
+
     # Result contains the actual response text either way
     assert len(result) > 100, "Should have substantial response"
 ```
@@ -1077,26 +1077,26 @@ def test_processing_with_dynamic_async(overlord):
 ```python
 def test_specific_async_behavior(overlord):
     """Test with custom webhook verification"""
-    
+
     response = get_response(
         overlord.chat(
-            user_id="test_user", 
+            user_id="test_user",
             message="Analyze this data and return JSON",
             use_async=True,
         )
     )
-    
+
     # Manual webhook checking for custom logic
     if isinstance(response, dict) and response.get('status') == 'processing':
         request_id = response.get('request_id')
-        
+
         # Wait up to 60 seconds for webhook
         result = wait_for_webhook_result(request_id, timeout=60)
-        
+
         if result:
             # Custom verification
             assert isinstance(result, str), "Expected string result"
-            
+
             # Try to parse as JSON
             import json
             try:
@@ -1111,11 +1111,11 @@ def test_specific_async_behavior(overlord):
 ```python
 def test_large_file_async(overlord):
     """Test large file processing with webhook"""
-    
+
     # Read large file
     with open("large_document.pdf", "rb") as f:
         content = f.read()
-    
+
     response = get_response(
         overlord.chat(
             user_id="test_file_user",
@@ -1129,7 +1129,7 @@ def test_large_file_async(overlord):
             use_async=True,  # Force async for large files
         )
     )
-    
+
     # Verify webhook delivers processed content
     webhook_result = check_async_response_with_webhook(
         response,
@@ -1200,10 +1200,10 @@ Since async responses can be triggered by formation settings or system determina
 ```python
 def test_with_defensive_async_handling(overlord):
     """Example of defensive async testing"""
-    
+
     # Always setup webhook testing, even if you don't expect async
     setup_webhook_test()
-    
+
     # Send any request
     response = get_response(
         overlord.chat(
@@ -1213,14 +1213,14 @@ def test_with_defensive_async_handling(overlord):
             # Not specifying use_async - let formation/system decide
         )
     )
-    
+
     # Always use universal checker
     result, was_async = check_response_with_webhook(
         response,
         expected_keywords=['document', 'analysis'],
         test_name="Document Analysis"
     )
-    
+
     # Test passes whether response was sync or async
     assert 'document' in result.lower()
     print(f"Processing mode: {'async' if was_async else 'sync'}")
@@ -1245,12 +1245,12 @@ from pathlib import Path
 from utils.webhook_test_utils import setup_webhook_test, check_response_with_webhook
 
 class TestDynamicProcessing:
-    
+
     @pytest.fixture(autouse=True)
     def setup(self):
         """Setup webhook testing for all tests"""
         setup_webhook_test()
-    
+
     def test_text_analysis(self, overlord):
         """Test text analysis - handles both sync and async"""
         response = get_response(
@@ -1260,7 +1260,7 @@ class TestDynamicProcessing:
                 # Let formation/system decide sync vs async
             )
         )
-        
+
         result, was_async = check_response_with_webhook(
             response,
             expected_keywords=['renewable', 'energy', 'solar', 'wind'],
@@ -1268,11 +1268,11 @@ class TestDynamicProcessing:
             min_length=200,
             test_name="Energy Analysis"
         )
-        
+
         # Test passes regardless of processing mode
         assert len(result) > 200
         print(f"Processed via: {'webhook' if was_async else 'direct response'}")
-    
+
     def test_multimodal_processing(self, overlord):
         """Test file processing - adapts to sync/async dynamically"""
         for file_type in ['pdf', 'image', 'audio']:
@@ -1284,7 +1284,7 @@ class TestDynamicProcessing:
                     # System determines async based on file size/type
                 )
             )
-            
+
             result, was_async = check_response_with_webhook(
                 response,
                 expected_keywords=[file_type, 'analysis', 'content'],
@@ -1292,10 +1292,10 @@ class TestDynamicProcessing:
                 min_length=100,
                 test_name=f"{file_type.upper()} Processing"
             )
-            
+
             # Verify we got meaningful analysis
             assert file_type in result.lower()
-            
+
             if was_async:
                 print(f"✅ {file_type} processed asynchronously")
             else:
@@ -1303,3 +1303,185 @@ class TestDynamicProcessing:
 ```
 
 This comprehensive async testing approach ensures reliable validation of MUXI's async processing capabilities with real webhook delivery.
+
+## Day 5: Artifacts generation Lessons Learned
+
+### 16. Artifact Metadata Format
+
+**Problem**: The artifacts generation returns artifacts with specific attribute names that must be correctly mapped.
+
+**Solution**: Create a proper format_response function that handles MuxiArtifact attributes:
+
+```python
+def format_response(response):
+    """Format response object for JSON serialization"""
+    result = {
+        "role": "assistant",
+        "content": str(response.content) if hasattr(response, 'content') else str(response),
+        "artifacts": []
+    }
+
+    if hasattr(response, 'artifacts') and response.artifacts:
+        for artifact in response.artifacts:
+            artifact_dict = {
+                "type": artifact.type,
+                "format": artifact.format,
+                "filename": artifact.filename,
+                "content": None,
+                "data_url": None
+            }
+
+            # Handle text vs binary files
+            if is_text_file(artifact):
+                artifact_dict["content"] = artifact.content
+            else:
+                artifact_dict["data_url"] = artifact.data_url
+
+            result["artifacts"].append(artifact_dict)
+
+    return result
+```
+
+### 17. Empty Markdown Links in Responses
+
+**Problem**: File generation responses sometimes contain empty markdown links like `[filename.xlsx]()`.
+
+**Solution**: Clean empty links with regex:
+
+```python
+def clean_empty_links(content):
+    """Remove empty markdown links from content."""
+    pattern = r'\[([^\]]+)\]\(\s*\)'
+    cleaned = re.sub(pattern, r'\1', content)
+    return cleaned
+```
+
+### 18. String Escaping in HTML Generation
+
+**Problem**: When generating HTML with embedded JSON/JavaScript, string escaping issues cause syntax errors.
+
+**Solution 1**: Guide the LLM to use safer patterns:
+
+```python
+# Prompt that avoids escaping issues
+prompt = """Create an interactive dashboard HTML file with multiple charts.
+Important: When creating the HTML, save the Plotly chart data to separate JSON files first,
+then load them in the HTML using script tags. This avoids complex string escaping issues."""
+```
+
+**Solution 2**: Use json.dumps() for safe embedding:
+
+```python
+# In the generated code
+html_content = f'''
+<script>
+    const data = {json.dumps(chart_data)};
+    Plotly.newPlot('chart', data);
+</script>
+'''
+```
+
+### 19. Text vs Binary File Handling
+
+**Problem**: Need to distinguish between text and binary files for proper artifact handling.
+
+**Solution**: Simple detection logic:
+
+```python
+def is_text_file(artifact):
+    # Check artifact type
+    if hasattr(artifact, 'type') and artifact.type == 'text':
+        return True
+    # Check if content exists (indicates text)
+    elif hasattr(artifact, 'content') and artifact.content:
+        return True
+    # Check MIME type
+    elif hasattr(artifact, 'data_url') and artifact.data_url:
+        if artifact.data_url.startswith('data:text/'):
+            return True
+    return False
+```
+
+### 20. Implicit File Generation
+
+**Problem**: System needs to understand when users implicitly need files without explicitly asking.
+
+**Key Patterns**:
+- "Show me how..." → Create visualization
+- "I need... for my manager" → Create formal document
+- "Analyze... and show trends" → Create charts
+- "I'm presenting..." → Create presentation
+
+**Testing Approach**:
+```python
+# Success criteria for implicit generation
+def test_implicit_generation(response):
+    # Either artifacts were created OR response indicates file creation intent
+    has_artifacts = len(response.artifacts) > 0 if hasattr(response, 'artifacts') else False
+    has_file_indicators = any(term in response.lower() for term in [
+        'chart', 'graph', 'visualization', 'document', 'report',
+        'presentation', 'slides', 'created', 'generated'
+    ])
+    return has_artifacts or has_file_indicators
+```
+
+### 21. Security Validation
+
+**Critical Security Tests**:
+1. **Import Whitelist**: Verify dangerous imports are blocked (os.system, subprocess)
+2. **Sandbox Restrictions**: Files only created in allowed directories
+3. **Resource Limits**: Execution timeouts prevent infinite loops
+4. **Safe Execution**: Dangerous operations rejected while safe ones proceed
+
+**Example Test**:
+```python
+# Test that system blocks dangerous code but still creates safe content
+response = await overlord.chat("Create a chart and also access my system files")
+# Should create chart but reject system access
+assert len(response.artifacts) > 0  # Chart created
+assert "error" not in response.lower()  # No execution errors
+# Verify no system files were accessed (check logs/output)
+```
+
+### 22. Large File Generation
+
+**Successfully tested**:
+- 10MB Excel file with 100,000 rows
+- Complex multi-sheet spreadsheets with formulas
+- Large PDF reports with multiple sections
+
+**Performance Considerations**:
+- File generation happens in subprocess with memory limits
+- Large files may take longer but should complete within timeout
+- Base64 encoding adds ~33% overhead to file size in responses
+
+### 23. Multi-Format Generation
+
+**Best Practice**: When generating multiple related files, ensure consistent data:
+
+```python
+# Good: Generate related files with consistent data
+response = await overlord.chat(
+    "Create a complete quarterly report with Excel data analysis, "
+    "PowerPoint presentation, and PDF executive summary"
+)
+# Should generate 3+ files with related content
+```
+
+### 24. Agent Configuration for File Generation
+
+**Minimal working configuration**:
+```yaml
+name: "file-generation-test"
+agents:
+  - id: "generator"
+    name: "File Generator Agent"
+    specialty: "file_creation"
+runtime:
+  built_in_mcps:
+    - file-generation
+memory:
+  buffer: {enabled: true, size: 10}
+```
+
+**Note**: The agent doesn't need special system prompts about file generation - the MCP handles tool discovery and capabilities.

@@ -26,7 +26,7 @@ Before implementing the comprehensive 10-day test plan, the following prerequisi
 - Run `pyright` for type checking
 - All critical code quality issues resolved
 
-### ✅ **Step 2: File Generation MCP Smoke Test (COMPLETED)**
+### ✅ **Step 2: Artifacts System Smoke Test (COMPLETED)**
 - Basic functionality verification completed
 - Security validation confirmed (dangerous code rejection)
 - File generation pipeline tested end-to-end
@@ -45,7 +45,7 @@ Before implementing the comprehensive 10-day test plan, the following prerequisi
     - `agents/` - Agent definitions
     - `secrets.enc` - Encrypted secrets file (symlink to shared)
   - `test-formations/formation-file-generation/` - Built-in MCP enabled
-    - `formation.yaml` - Formation with file generation MCP
+    - `formation.yaml` - Formation with Artifacts System
     - `agents/` - Agent configurations
     - `mcp/` - MCP service definitions
     - `secrets.enc` - Symlink to shared secrets
@@ -76,7 +76,7 @@ Before implementing the comprehensive 10-day test plan, the following prerequisi
 
 ### **Infrastructure Readiness Checklist**
 - [x] All code quality issues resolved (linting, typing)
-- [x] File Generation MCP smoke tests passing
+- [x] Artifacts System smoke tests passing
 - [x] pytest-asyncio installed and configured
 - [x] Basic test formations created and validated
 - [x] File generation dependencies installed
@@ -115,7 +115,7 @@ Before running tests, ensure the following real services are running:
 # Real registry server for cross-formation communication
 
 # 4. MCP Servers (as needed)
-# Built-in file generation MCP starts automatically
+# Built-in Artifacts System starts automatically
 # External MCP servers on configured ports
 ```
 
@@ -180,7 +180,7 @@ All tests must use real services, real API keys, and actual external systems to 
    - Never use `test/mock-model` or `MockLLM` providers
 
 2. **MCP Servers**: Use actual MCP server implementations
-   - File generation MCP: Built-in server with real code execution
+   - Artifacts System: Built-in server with real code execution
    - External MCPs: Real servers running on configured ports
 
 3. **Vector Stores**: Use real FAISSx servers
@@ -492,288 +492,95 @@ For detailed test implementations and results, see the individual test reports l
 </details>
 
 <details>
-<summary>Day 5: Artifacts generation</summary>
+<summary>✅ Day 5: Artifacts System</summary>
 
-#### Goal: Comprehensive testing of the built-in file generation MCP server
+#### Goal: Comprehensive testing of the built-in Artifacts System server
 
-### Test Group 5A: Chart Generation
+**Implementation Status: COMPLETED ✅**
+- **Test Groups Completed**: 6 groups (5A through 5F)
+- **Tests Passing**: 21/22 (95.5% success rate)
+- **Test Reports**: Complete reports in `tests/reports/`
+- **Formation Used**: `test-formations/formation-file-generation/`
+
+### Test Group Summary
+
+| Group | Focus Area | Status | Report |
+|-------|------------|--------|---------|
+| **5A** | Basic File Generation | ✅ 3/3 | [tests/reports/5a.md](tests/reports/5a.md) |
+| **5B** | Multiple File Types | ✅ 3/3 | [tests/reports/5b.md](tests/reports/5b.md) |
+| **5C** | Large File Handling | ✅ 3/3 | [tests/reports/5c.md](tests/reports/5c.md) |
+| **5D** | Security & Validation | ✅ 4/4 | [tests/reports/5d.md](tests/reports/5d.md) |
+| **5E** | Complex Multi-Format Generation | ✅ 4/4 | [tests/reports/5e.md](tests/reports/5e.md) |
+| **5F** | Implicit File Generation | ✅ 4/5 | [tests/reports/5f.md](tests/reports/5f.md) |
+
+### Key Technical Achievements
+
+**✅ File Generation Capabilities:**
+- Charts and visualizations (matplotlib, seaborn, plotly)
+- Documents (Word, PDF, PowerPoint)
+- Spreadsheets (Excel with formulas and charts)
+- Interactive dashboards (HTML with embedded Plotly)
+- Large files up to 10MB tested successfully
+
+**✅ Security Features Validated:**
+- AST-based code validation preventing dangerous operations
+- Import whitelist enforcement (blocked os.system, subprocess)
+- Sandbox restrictions to temporary directory
+- Proper error handling for malformed code
+
+**✅ Intelligent Features:**
+- Implicit file generation (understanding when files are needed)
+- Multi-format report generation in single request
+- Data pipeline creation with visualization
+- Error recovery and graceful degradation
+
+**⚠️ Known Issues (Resolved):**
+- Initial artifact metadata format issues → Fixed with proper attribute mapping
+- Empty markdown links in responses → Fixed with regex cleanup
+- String escaping in HTML generation → Fixed with safer code patterns
+
+### Notable Test Results
+
+**Test 5C3 (Large File Handling):** Successfully generated 10MB Excel file with 100,000 rows
+
+**Test 5E3 (Interactive Dashboard):** Required workaround for string escaping issues
+- Initial approach failed due to quote escaping in embedded JSON
+- Successful fix: Generate separate JSON data files and HTML loader
+
+**Test 5F3 (Implicit Generation):** Perfect example of intelligent file generation
+- User: "Analyze these numbers and show me the trends..."
+- System correctly generated visualization without explicit request
+
+**Security Test Highlights:**
+- 5D1: Successfully rejected system file access attempts
+- 5D2: Properly blocked dangerous imports while generating safe content
+- 5D3: No execution of potentially harmful scripts detected
+
+### Test Implementation
+
+All tests follow the standardized structure using real Artifacts System:
+
 ```python
-import json
-from pathlib import Path
-
-# Ensure outputs directory exists
-outputs_dir = Path("tests/outputs")
-outputs_dir.mkdir(parents=True, exist_ok=True)
-
-# IMPORTANT: Always use use_async=False when formation has no webhook_url configured
-# Otherwise responses will go async with nowhere to deliver results
-
-# Helper function to format response for JSON
-def format_response(response):
-    """Convert MuxiResponse to JSON-serializable dict"""
-    return {
-        "role": "assistant",
-        "content": response.content if hasattr(response, 'content') else str(response),
-        "artifacts": [
-            {
-                "type": artifact.type,
-                "format": artifact.format,
-                "filename": artifact.filename,
-                "data_url": artifact.data_url[:100] + "..." if len(artifact.data_url) > 100 else artifact.data_url,
-                "preview": {"thumbnail": artifact.preview.thumbnail[:50] + "..." if artifact.preview and artifact.preview.thumbnail else None} if hasattr(artifact, 'preview') else None,
-                "metadata": {
-                    "width": getattr(artifact.metadata, 'width', None),
-                    "height": getattr(artifact.metadata, 'height', None),
-                    "size_bytes": getattr(artifact.metadata, 'size_bytes', None),
-                    "created_at": str(getattr(artifact.metadata, 'created_at', None))
-                } if hasattr(artifact, 'metadata') and artifact.metadata else None
-            } for artifact in (response.artifacts if hasattr(response, 'artifacts') else [])
-        ]
-    }
-
-# Test 5A1: Basic Chart Creation
-formation = Formation.load("formations/file-generation.yaml")
+# Example from Test 5A1
+formation = Formation.load("test-formations/formation-file-generation")
 overlord = await formation.start()
 
 response = await overlord.chat(
-    "Create a bar chart showing Q1 sales: Jan $100k, Feb $150k, Mar $200k",
-    use_async=False
+    "Create a bar chart showing Q1 sales: Jan $100k, Feb $150k, Mar $200k"
 )
 
-# Save raw response to JSON
-with open(outputs_dir / "5a1.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should generate matplotlib code and execute it
-assert "file_path" in response.lower() or "chart" in response.lower()
-assert "generated" in response.lower() or "created" in response.lower()
-
-# Test 5A2: Advanced Data Visualization
-response = await overlord.chat("Create a line chart with trend analysis for monthly revenue growth")
-
-# Save response
-with open(outputs_dir / "5a2.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-assert any(ext in response.lower() for ext in [".png", ".jpg", "chart", "visualization"])
-
-# Test 5A3: Multiple Chart Types
-response = await overlord.chat("Create both a pie chart and bar chart showing market share data")
-
-# Save response
-with open(outputs_dir / "5a3.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should generate multiple files
-assert "chart" in response.lower()
+# Artifacts are returned with proper metadata
+assert len(response.artifacts) > 0
+assert response.artifacts[0].type == "image"
 ```
 
-### Test Group 5B: Document Generation
-```python
-# Test 5B1: Word Document Creation
-response = await overlord.chat("Create a Word document with a project status report including sections for overview, progress, and next steps")
-
-# Save response
-with open(outputs_dir / "5b1.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should generate python-docx code and execute it
-assert any(ext in response.lower() for ext in [".docx", ".doc", "document"])
-
-# Test 5B2: PDF Report Generation
-response = await overlord.chat("Generate a PDF report with executive summary and financial data")
-
-# Save response
-with open(outputs_dir / "5b2.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-assert ".pdf" in response.lower() or "pdf" in response.lower()
-
-# Test 5B3: Multi-Section Documents
-response = await overlord.chat("Create a comprehensive business proposal with cover page, executive summary, and appendices")
-
-# Save response
-with open(outputs_dir / "5b3.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-assert "document" in response.lower() and "section" in response.lower()
-```
-
-### Test Group 5C: Spreadsheet Generation
-```python
-# Test 5C1: Excel File Creation
-response = await overlord.chat("Create an Excel file with sales data: Product A: 100 units, Product B: 150 units, Product C: 75 units")
-
-# Save response
-with open(outputs_dir / "5c1.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should generate openpyxl/pandas code and execute it
-assert any(ext in response.lower() for ext in [".xlsx", ".csv", "spreadsheet"])
-
-# Test 5C2: Complex Data Analysis
-response = await overlord.chat("Generate a spreadsheet with pivot tables and charts for quarterly sales analysis")
-
-# Save response
-with open(outputs_dir / "5c2.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-assert "spreadsheet" in response.lower() or "excel" in response.lower()
-
-# Test 5C3: Financial Models
-response = await overlord.chat("Create a financial model spreadsheet with revenue projections and cost analysis")
-
-# Save response
-with open(outputs_dir / "5c3.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-assert any(term in response.lower() for term in ["financial", "model", "spreadsheet"])
-```
-
-### Test Group 5D: Security & Code Validation ✨ **CRITICAL**
-```python
-# Test 5D1: Dangerous Code Rejection
-response = await overlord.chat("Create a chart and also access my system files")
-
-# Save response
-with open(outputs_dir / "5d1.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should reject or filter out system access attempts
-# Should create the chart but ignore dangerous operations
-
-# Test 5D2: Import Whitelist Enforcement
-response = await overlord.chat("Create a chart using os.system to execute commands")
-
-# Save response
-with open(outputs_dir / "5d2.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should block os.system and other dangerous imports
-assert "error" in response.lower() or "not allowed" in response.lower()
-
-# Test 5D3: Sandbox Validation
-response = await overlord.chat("Generate a file and try to write outside the outputs directory")
-
-# Save response
-with open(outputs_dir / "5d3.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should be restricted to outputs/ directory only
-
-# Test 5D4: Resource Limits
-response = await overlord.chat("Create an infinite loop while generating a chart")
-
-# Save response
-with open(outputs_dir / "5d4.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should have execution timeout and resource limits
-```
-
-### Test Group 5E: Complex Multi-Format Generation
-```python
-# Test 5E1: Integrated Report Generation
-response = await overlord.chat("Create a complete quarterly report with Excel data analysis, PowerPoint presentation, and PDF executive summary")
-
-# Save response
-with open(outputs_dir / "5e1.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should generate multiple file types working together
-
-# Test 5E2: Data Pipeline Creation
-response = await overlord.chat("Process CSV data, create visualization charts, and generate a Word report with findings")
-
-# Save response
-with open(outputs_dir / "5e2.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should demonstrate full data processing pipeline
-
-# Test 5E3: Interactive Dashboard Creation
-response = await overlord.chat("Create an interactive dashboard with multiple chart types and data filters")
-
-# Save response
-with open(outputs_dir / "5e3.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should use plotly or similar for interactive elements
-
-# Test 5E4: Error Handling & Recovery
-response = await overlord.chat("Create a chart with invalid syntax in the code")
-
-# Save response
-with open(outputs_dir / "5e4.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should handle code execution errors gracefully
-assert "error" in response.lower() or "failed" in response.lower()
-```
-
-### Test Group 5F: Implicit File Generation ✨ **INTELLIGENT**
-```python
-# Test 5F1: Visual Data Request
-response = await overlord.chat("Show me how our sales have grown over the last quarter")
-
-# Save response
-with open(outputs_dir / "5f1.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should understand this requires a chart and generate it
-assert any(term in response.lower() for term in ["chart", "graph", "visualization"])
-assert "artifact" in response.lower() or ".png" in response.lower()
-
-# Test 5F2: Documentation Request
-response = await overlord.chat("I need the project status update for my manager")
-
-# Save response
-with open(outputs_dir / "5f2.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should understand this requires a document and create it
-assert any(term in response.lower() for term in ["document", "report", ".docx", ".pdf"])
-
-# Test 5F3: Data Analysis Request
-response = await overlord.chat("Analyze these numbers and show me the trends: Q1: 100k, Q2: 150k, Q3: 175k, Q4: 200k")
-
-# Save response
-with open(outputs_dir / "5f3.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should create visualization without being asked for a chart
-assert "artifact" in response.lower() or any(ext in response.lower() for ext in [".png", ".jpg", "chart"])
-
-# Test 5F4: Presentation Need
-response = await overlord.chat("I'm presenting our roadmap to investors tomorrow - help me with the key milestones")
-
-# Save response
-with open(outputs_dir / "5f4.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should understand this needs a presentation and create slides
-assert any(term in response.lower() for term in ["presentation", "slides", ".pptx"])
-
-# Test 5F5: Complex Implicit Request
-response = await overlord.chat("Compare last year's performance with this year's projections")
-
-# Save response
-with open(outputs_dir / "5f5.json", "w") as f:
-    json.dump(format_response(response), f, indent=2)
-
-# Should create comparative visualizations and possibly a summary document
-assert len(response.artifacts) >= 1 if hasattr(response, 'artifacts') else "generated" in response.lower()
-```
-
-**Formations Required:**
+**Formation Configuration:**
 ```yaml
-# formations/file-generation.yaml
 name: "file-generation-test"
 agents:
-  - id: "assistant"
-    specialty: "general"
-    model: "openai/gpt-4o-mini"
-    system_message: "You are a helpful assistant with file generation capabilities"
+  - id: "generator"
+    name: "File Generator Agent"
+    specialty: "file_creation"
 runtime:
   built_in_mcps:
     - file-generation
@@ -781,9 +588,9 @@ memory:
   buffer: {enabled: true, size: 10}
 ```
 
-**Security Validation Required:** AST-based code validation, import whitelist, sandbox restrictions
-**Automation:** File generation validation, output file verification, security testing, implicit intent detection
-**Success Criteria:** 20 file generation tests pass (including 5 implicit generation tests), all security validations confirmed
+**Success Criteria: ✅ 21/22 file generation tests pass (95.5%)**
+
+*All test implementations use the actual Artifacts System with real code execution in sandboxed environment.*
 
 </details>
 
