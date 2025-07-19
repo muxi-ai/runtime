@@ -266,7 +266,6 @@ src/muxi/runtime/utils/retry_manager.py
 src/muxi/runtime/utils/user_dirs.py
 src/muxi/runtime/utils/version.py
 src/muxi/runtime/utils/zmq_decrypt.py
-tests/test_artifact_system_integration.py
 tests/test_async_database.py
 tests/test_async_formation_fix.py
 tests/test_auto_suppress.py
