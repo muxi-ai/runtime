@@ -754,11 +754,13 @@ memory:
 ### **Phase 3: Advanced Coordination & Enterprise Features (Days 7-10)**
 
 <details>
-<summary>Day 7: Multi-Agent Coordination</summary>
+<summary>Day 7: Multi-Agent Coordination & SOP Enhancement</summary>
 
-#### Goal: Validate agent orchestration and task decomposition (moved from original Day 4)
+#### Goal: Validate agent orchestration and task decomposition, then enhance with SOP system
 
-### Test Group 7A: Task Decomposition
+### Part 1: Base Multi-Agent Coordination Testing
+
+### Test Group 7A: Task Decomposition (Current Capabilities)
 ```python
 # Test 7A1: Research and Write Task
 formation = Formation.load("formations/multi-specialist.yaml")
@@ -798,198 +800,75 @@ response = await overlord.chat("I need specialized legal advice about contracts"
 # Should communicate with external legal formation
 ```
 
-**Formations Required:** 6 multi-agent configurations
-**Automation:** Multi-process testing, A2A server management
-**Success Criteria:** 18 coordination tests pass, A2A communication verified
+### 🔧 **IMPLEMENTATION BREAK: SOP System**
+**Implement**: Standard Operating Procedures (SOP) coordinator for enhanced task decomposition
+**PRD**: [prd-sop-system.md](context/prds/prd-sop-system.md)
+**Duration**: 3-5 days
+
+### Part 2: Enhanced Multi-Agent Coordination with SOPs
+
+### Test Group 7C: SOP-Guided Task Decomposition
+```python
+# Test 7C1: Incident Response SOP
+# Create formation with sops/ directory containing incident-response.yaml
+formation = Formation.load("formations/sop-enabled.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("Production is down, customers are complaining")
+# Should follow SOP: assess → notify → investigate → fix → document
+# Verify proper agent coordination following SOP steps
+
+# Test 7C2: Customer Onboarding SOP
+response = await overlord.chat("New enterprise customer ACME Corp needs onboarding")
+# Should follow customer-onboarding.yaml SOP
+# Agents should be coordinated according to procedural steps
+
+# Test 7C3: No SOP Available
+response = await overlord.chat("Write a haiku about clouds")
+# Should fall back to normal task decomposition
+# No SOP should be loaded for creative tasks
+```
+
+### Test Group 7D: SOP Discovery and Relevance
+```python
+# Test 7D1: Semantic SOP Matching
+formation = Formation.load("formations/multi-sop.yaml")  # Has 10+ SOPs
+overlord = await formation.start()
+
+# Test multilingual semantic matching
+response = await overlord.chat("Seguridad breach detected")  # Spanish
+# Should still find security-incident.yaml SOP
+
+# Test 7D2: Ambiguous Request Resolution
+response = await overlord.chat("Handle the issue with the system")
+# Should identify most relevant SOP based on context
+
+# Test 7D3: SOP Performance
+# Load formation with 50+ SOPs
+start_time = time.time()
+response = await overlord.chat("Deploy new version to production")
+sop_search_time = time.time() - start_time
+assert sop_search_time < 0.1  # SOP search should add <100ms
+```
+
+**Formations Required:** 8 configurations (6 base + 2 SOP-enhanced)
+**Automation:** Multi-process testing, A2A server management, SOP file generation
+**Success Criteria:** 
+- Base: 18 coordination tests pass, A2A communication verified
+- Enhanced: 12 additional SOP tests pass, <100ms SOP search overhead
 
 </details>
 
 <details>
-<summary>Day 8: Thinking Visibility & Transparency</summary>
+<summary>Day 8: Clarification & Enhanced Information Flow</summary>
 
-#### Goal: Validate thinking visibility features for orchestration transparency
+#### Goal: Validate clarification patterns and context management, then enhance with multiple sequences
 
-### Test Group 8A: Thinking Model Detection
+### Part 1: Base Clarification Testing
+
+### Test Group 8A: Single Clarification Patterns (Current Capabilities)
 ```python
-# Test 8A1: Automatic Model Detection
-formation = Formation.load("formations/thinking-enabled.yaml")
-overlord = await formation.start()
-
-# Check if model detection happened during init
-assert overlord.model_supports_thinking is not None
-# For Claude 3.5 Sonnet, should be True
-if "claude-3.5-sonnet" in overlord.model:
-    assert overlord.model_supports_thinking == True
-
-# Test 8A2: Non-Thinking Model Detection
-formation_gpt = Formation.load("formations/thinking-gpt4.yaml")
-overlord_gpt = await formation_gpt.start()
-
-# GPT-4 should report as non-thinking
-if "gpt-4" in overlord_gpt.model:
-    assert overlord_gpt.model_supports_thinking == False
-
-# Test 8A3: Runtime Thinking Detection
-# Even if model says no, runtime detection should catch it
-response = await overlord.chat("Explain step by step how to solve x^2 + 5x + 6 = 0")
-# If response contains thinking tags, model_supports_thinking should be True
-if "<thinking>" in response:
-    assert overlord.model_supports_thinking == True
-```
-
-### Test Group 8B: Thinking Visibility Control
-```python
-# Test 8B1: Thinking Enabled (Default)
-formation = Formation.load("formations/thinking-default.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat("Analyze the pros and cons of microservices architecture")
-# With thinking enabled and a thinking model, tags should be visible
-if overlord.model_supports_thinking:
-    assert "<thinking>" in response or "thinking" not in response.lower()
-
-# Test 8B2: Thinking Disabled
-formation_no_think = Formation.load("formations/thinking-disabled.yaml")
-overlord_no_think = await formation_no_think.start()
-
-response = await overlord_no_think.chat("Analyze the pros and cons of microservices architecture")
-# Should strip thinking tags even from thinking models
-assert "<thinking>" not in response
-
-# Test 8B3: Thinking Configuration Override
-formation = Formation.load("formations/thinking-config.yaml")
-overlord = await formation.start()
-
-# Verify configuration loaded correctly
-assert overlord.thinking_enabled == False  # Based on formation config
-response = await overlord.chat("What's the best sorting algorithm for large datasets?")
-assert "<thinking>" not in response  # Should be stripped
-```
-
-### Test Group 8C: Response Format Handling
-```python
-# Test 8C1: Synchronous Response with Thinking
-formation = Formation.load("formations/thinking-sync.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat("Design a REST API for a blog system")
-# Check response structure based on thinking visibility
-if isinstance(response, dict):
-    if overlord.thinking_enabled and overlord.model_supports_thinking:
-        # Could have thinking in response content
-        assert "thinking" in response or "<thinking>" in str(response)
-
-# Test 8C2: Streaming Response with Thinking
-response_stream = await overlord.chat(
-    "Explain database normalization forms",
-    stream=True
-)
-chunks = []
-async for chunk in response_stream:
-    chunks.append(chunk)
-full_response = "".join(chunks)
-
-# Streaming should include thinking tags when enabled
-if overlord.thinking_enabled and overlord.model_supports_thinking:
-    assert "<thinking>" in full_response or not overlord.model_supports_thinking
-
-# Test 8C3: Webhook Response Format
-webhook_url = "http://localhost:8080/webhook"
-response = await overlord.chat(
-    "Create a deployment strategy for a new microservice",
-    webhook_url=webhook_url
-)
-# Webhook response format TBD based on implementation
-```
-
-### Test Group 8D: Multi-Agent Thinking
-```python
-# Test 8D1: Agent Thinking Extraction
-formation = Formation.load("formations/multi-agent-thinking.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat(
-    "I need help with both frontend React optimization and backend database scaling"
-)
-# Should coordinate multiple agents, potentially with thinking from each
-
-# Test 8D2: Thinking Consolidation
-response = await overlord.chat(
-    "Analyze our system architecture and suggest improvements for scalability and security"
-)
-# Should show consolidated thinking from multiple specialist agents
-assert len(response) > 1000  # Comprehensive response expected
-
-# Test 8D3: Mixed Thinking Models
-# Formation with some thinking agents and some non-thinking
-formation_mixed = Formation.load("formations/mixed-thinking-agents.yaml")
-overlord_mixed = await formation_mixed.start()
-
-response = await overlord_mixed.chat("Design a full-stack application")
-# Should handle mixed agent capabilities gracefully
-```
-
-### Test Group 8E: Edge Cases & Error Handling
-```python
-# Test 8E1: Malformed Thinking Tags
-# Simulate response with unclosed thinking tags
-test_response = "<thinking>This is my reasoning... but no closing tag"
-processed = overlord._strip_thinking_tags(test_response)
-assert "<thinking>" not in processed
-
-# Test 8E2: Nested Thinking Tags
-test_response = "<thinking>Outer thought <thinking>Inner thought</thinking> back to outer</thinking>"
-if not overlord.thinking_enabled:
-    processed = overlord._strip_thinking_tags(test_response)
-    assert "<thinking>" not in processed
-
-# Test 8E3: Thinking Detection Failure
-# Test with network error during model check
-formation_error = Formation.load("formations/thinking-check-error.yaml")
-# Should gracefully handle and fall back to runtime detection
-
-# Test 8E4: Very Long Thinking Sections
-long_thinking = "<thinking>" + "x" * 10000 + "</thinking>Short answer"
-processed = overlord._strip_thinking_tags(long_thinking)
-assert processed == "Short answer"
-assert len(processed) < 100  # Thinking successfully removed
-```
-
-**Formations Required:**
-```yaml
-# formations/thinking-enabled.yaml
-overlord:
-  model: "claude-3.5-sonnet"
-  thinking: true  # Default, thinking visible
-
-# formations/thinking-disabled.yaml
-overlord:
-  model: "claude-3.5-sonnet"
-  thinking: false  # Strip thinking tags
-
-# formations/thinking-gpt4.yaml
-overlord:
-  model: "openai/gpt-4"
-  thinking: true  # Won't matter, GPT-4 doesn't support thinking
-```
-
-**Success Criteria:**
-- Model detection works correctly for thinking/non-thinking models
-- Thinking visibility controlled by configuration
-- Runtime detection catches thinking models that report incorrectly
-- All response formats handle thinking appropriately
-- **15 thinking tests pass**, graceful handling of edge cases
-
-</details>
-
-<details>
-<summary>Day 9: Clarification & Information Flow</summary>
-
-#### Goal: Validate clarification patterns and context management
-
-### Test Group 9A: Clarification Patterns
-```python
-# Test 9A1: Ambiguous Request
+# Test 8A1: Ambiguous Request
 formation = Formation.load("formations/clarification.yaml")
 overlord = await formation.start()
 
@@ -1002,34 +881,267 @@ response = await overlord.chat("A Python web scraper")
 # Should now provide specific help
 assert "python" in response.lower()
 
-# Test 9A2: Multi-agent Clarification
+# Test 8A2: Multi-agent Clarification
 formation = Formation.load("formations/multi-clarification.yaml")
 overlord = await formation.start()
 
 response = await overlord.chat("I need help with the bug")
 # Should coordinate to identify which type of bug (code, process, etc.)
+
+# Test 8A3: Credential Selection Clarification
+response = await overlord.chat("List my repositories")
+# Should ask which account (GitHub, GitLab, etc.)
+assert any(word in response.lower() for word in ["which", "account", "github", "gitlab"])
 ```
 
-### Test Group 9B: Information Flow
+### Test Group 8B: Information Flow
 ```python
-# Test 9B1: Context Propagation
+# Test 8B1: Context Propagation
 response = await overlord.chat("I'm working on an e-commerce platform using React")
 response = await overlord.chat("What database should I use?")
 # Should consider e-commerce context in recommendation
 assert any(db in response.lower() for db in ["postgres", "mysql", "mongo"])
 
-# Test 9B2: Information Extraction
+# Test 8B2: Information Extraction
 response = await overlord.chat(
     "My budget is $5000 and timeline is 2 weeks for the MVP"
 )
 # System should extract and use these constraints
 response = await overlord.chat("What features should I prioritize?")
 # Should consider budget and timeline constraints
+
+# Test 8B3: Single Clarification Cancellation
+response = await overlord.chat("Deploy to production")
+# Should ask which environment/server
+response = await overlord.chat("Actually, nevermind, just show me the code")
+# Should cancel clarification and proceed with new request
 ```
 
-**Formations Required:** 4 clarification-enhanced configurations
-**Automation:** Conversation flow testing, context validation
-**Success Criteria:** 10 clarification tests pass, information extracted correctly
+### 🔧 **IMPLEMENTATION BREAK: Multiple Clarification Sequences**
+**Implement**: Clarification stack architecture for multi-turn clarifications
+**PRD**: [multiple-clarification-sequences.md](context/prds/multiple-clarification-sequences.md)
+**Duration**: 3-4 days
+
+### Part 2: Enhanced Clarification with Multiple Sequences
+
+### Test Group 8C: Multiple Clarification Sequences
+```python
+# Test 8C1: Credential Rejection Flow
+formation = Formation.load("formations/enhanced-clarification.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("List my GitHub repositories")
+# Should show available accounts
+assert "which account" in response.lower()
+
+response = await overlord.chat("None of these, I want to add a new account")
+# Should start sub-clarification for token
+assert "token" in response.lower() or "authenticate" in response.lower()
+
+response = await overlord.chat("ghp_abc123...")
+# Should complete both clarifications and list repos
+assert "repositories" in response.lower()
+
+# Test 8C2: Multi-Step Configuration
+response = await overlord.chat("Set up my development environment")
+# Should ask for cloud provider
+response = await overlord.chat("AWS")
+# Should ask for region
+response = await overlord.chat("us-east-1")
+# Should ask about database
+response = await overlord.chat("Yes, PostgreSQL")
+# Should complete setup with all collected information
+assert all(term in response.lower() for term in ["aws", "us-east-1", "postgresql"])
+
+# Test 8C3: Error Recovery Flow
+response = await overlord.chat("Deploy my application")
+response = await overlord.chat("production")
+# Simulate deployment failure
+# Should offer recovery options without losing context
+```
+
+### Test Group 8D: Clarification Stack Management
+```python
+# Test 8D1: Stack Depth Handling
+formation = Formation.load("formations/deep-clarification.yaml")
+overlord = await formation.start(
+
+# Create a 3-level deep clarification
+response = await overlord.chat("I need to process some data")
+# Level 1: What kind of data?
+response = await overlord.chat("CSV files from our system")
+# Level 2: Which system?
+response = await overlord.chat("The one we discussed yesterday")
+# Level 3: Need more context about yesterday
+response = await overlord.chat("The sales analytics system")
+# Should resolve all levels and process CSV from sales analytics
+
+# Test 8D2: Parallel Clarification Branches
+response = await overlord.chat("Compare data from two sources")
+# Should handle clarifications for both sources
+response = await overlord.chat("First source: database")
+# Should ask about second source while remembering first
+response = await overlord.chat("Second source: API")
+# Should proceed with comparison
+
+# Test 8D3: Clarification Timeout
+# Start a clarification
+response = await overlord.chat("Delete some files")
+# Wait for timeout period
+await asyncio.sleep(clarification_timeout + 1)
+response = await overlord.chat("Hello")
+# Should treat as new conversation, not clarification response
+```
+
+**Formations Required:** 6 configurations (4 base + 2 enhanced)
+**Automation:** Conversation flow testing, context validation, clarification stack verification
+**Success Criteria:** 
+- Base: 10 clarification tests pass, single clarification flows work correctly
+- Enhanced: 15 additional multi-sequence tests pass, stack management verified
+
+</details>
+
+<details>
+<summary>Day 9: Thinking Visibility & Transparency</summary>
+
+#### Goal: Validate thinking visibility features for orchestration transparency
+
+### Test Group 9A: Thinking Model Detection
+```python
+# Test 9A1: Automatic Model Detection
+formation = Formation.load("formations/thinking-enabled.yaml")
+overlord = await formation.start()
+
+# Check if model detection happened during init
+assert overlord.model_supports_thinking is not None
+# For Claude 3.5 Sonnet, should be True
+if "claude-3.5-sonnet" in overlord.model:
+    assert overlord.model_supports_thinking == True
+
+# Test 9A2: Non-Thinking Model Detection
+formation_gpt = Formation.load("formations/thinking-gpt4.yaml")
+overlord_gpt = await formation_gpt.start()
+
+# GPT-4 should report as non-thinking
+if "gpt-4" in overlord_gpt.model:
+    assert overlord_gpt.model_supports_thinking == False
+
+# Test 9A3: Runtime Thinking Detection
+# Even if model says no, runtime detection should catch it
+response = await overlord.chat("Explain step by step how to solve x^2 + 5x + 6 = 0")
+# If response contains thinking tags, model_supports_thinking should be True
+if "<thinking>" in response:
+    assert overlord.model_supports_thinking == True
+```
+
+### Test Group 9B: Thinking Visibility Control
+```python
+# Test 9B1: Thinking Enabled (Default)
+formation = Formation.load("formations/thinking-default.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("Analyze the pros and cons of microservices architecture")
+# With thinking enabled and a thinking model, tags should be visible
+if overlord.model_supports_thinking:
+    assert "<thinking>" in response or "thinking" not in response.lower()
+
+# Test 9B2: Thinking Disabled
+formation_no_think = Formation.load("formations/thinking-disabled.yaml")
+overlord_no_think = await formation_no_think.start()
+
+response = await overlord_no_think.chat("Analyze the pros and cons of microservices architecture")
+# Should strip thinking tags even from thinking models
+assert "<thinking>" not in response
+
+# Test 9B3: Thinking Configuration Override
+formation = Formation.load("formations/thinking-config.yaml")
+overlord = await formation.start()
+
+# Verify configuration loaded correctly
+assert overlord.thinking_enabled == False  # Based on formation config
+response = await overlord.chat("What's the best sorting algorithm for large datasets?")
+assert "<thinking>" not in response  # Should be stripped
+```
+
+### Test Group 9C: Response Format Handling
+```python
+# Test 9C1: Synchronous Response with Thinking
+formation = Formation.load("formations/thinking-sync.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("Design a REST API for a blog system")
+# Check response structure based on thinking visibility
+if isinstance(response, dict):
+    if overlord.thinking_enabled and overlord.model_supports_thinking:
+        # Could have thinking in response content
+        assert "thinking" in response or "<thinking>" in str(response)
+
+# Test 9C2: Streaming Response with Thinking
+response_stream = await overlord.chat(
+    "Explain database normalization forms",
+    stream=True
+)
+chunks = []
+async for chunk in response_stream:
+    chunks.append(chunk)
+full_response = "".join(chunks)
+
+# Streaming should include thinking tags when enabled
+if overlord.thinking_enabled and overlord.model_supports_thinking:
+    assert "<thinking>" in full_response or not overlord.model_supports_thinking
+```
+
+### Test Group 9D: Multi-Agent Thinking
+```python
+# Test 9D1: Agent Thinking Extraction
+formation = Formation.load("formations/multi-agent-thinking.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat(
+    "I need help with both frontend React optimization and backend database scaling"
+)
+# Should coordinate multiple agents, potentially with thinking from each
+
+# Test 9D2: Thinking Consolidation
+response = await overlord.chat(
+    "Analyze our system architecture and suggest improvements for scalability and security"
+)
+# Should show consolidated thinking from multiple specialist agents
+assert len(response) > 1000  # Comprehensive response expected
+
+# Test 9D3: Mixed Thinking Models
+# Formation with some thinking agents and some non-thinking
+formation_mixed = Formation.load("formations/mixed-thinking-agents.yaml")
+overlord_mixed = await formation_mixed.start()
+
+response = await overlord_mixed.chat("Design a full-stack application")
+# Should handle mixed agent capabilities gracefully
+```
+
+### Test Group 9E: Edge Cases & Error Handling
+```python
+# Test 9E1: Malformed Thinking Tags
+# Simulate response with unclosed thinking tags
+test_response = "<thinking>This is my reasoning... but no closing tag"
+processed = overlord._strip_thinking_tags(test_response)
+assert "<thinking>" not in processed
+
+# Test 9E2: Nested Thinking Tags
+test_response = "<thinking>Outer thought <thinking>Inner thought</thinking> back to outer</thinking>"
+if not overlord.thinking_enabled:
+    processed = overlord._strip_thinking_tags(test_response)
+    assert "<thinking>" not in processed
+
+# Test 9E3: Very Long Thinking Sections
+long_thinking = "<thinking>" + "x" * 10000 + "</thinking>Short answer"
+processed = overlord._strip_thinking_tags(long_thinking)
+assert processed == "Short answer"
+assert len(processed) < 100  # Thinking successfully removed
+```
+
+**Formations Required:** 8 thinking-enabled configurations
+**Automation:** Model detection, tag processing, streaming validation
+**Success Criteria:** 15 thinking tests pass, model detection validated, edge cases handled
 
 </details>
 
@@ -1038,11 +1150,14 @@ response = await overlord.chat("What features should I prioritize?")
 
 #### Goal: Implement and validate intelligent chunking, splitting, and optimization for large multimodal files (>100MB)
 
-PRD: [text](context/prds/large-file-multimodal-processing.md)
+### 🔧 **IMPLEMENTATION BREAK: Large File Multimodal Processing**
+**Implement**: Intelligent chunking strategies for video, audio, and documents
+**PRD**: [large-file-multimodal-processing.md](context/prds/large-file-multimodal-processing.md)
+**Duration**: 4-5 days
 
-### Test Group 9A: File Size Detection & Routing
+### Test Group 10A: File Size Detection & Routing
 ```python
-# Test 9A1: Size-based Processing Strategy Selection
+# Test 10A1: Size-based Processing Strategy Selection
 formation = Formation.load("formations/large-file-multimodal.yaml")
 overlord = await formation.start()
 
@@ -1062,7 +1177,7 @@ response = await overlord.chat(
 )
 assert "processing" in response.lower() or "chunks" in response.lower()
 
-# Test 9A2: Content Type Routing
+# Test 10A2: Content Type Routing
 large_audio = load_test_file("test-files/podcast_150mb.mp3")
 response = await overlord.chat(
     "Transcribe this podcast",
@@ -1070,7 +1185,7 @@ response = await overlord.chat(
 )
 # Should use audio-specific chunking strategy
 
-# Test 9A3: Very Large File Handling (>2GB)
+# Test 10A3: Very Large File Handling (>2GB)
 # Note: May use mock file metadata for testing
 response = await overlord.chat(
     "Process this movie file",
@@ -1079,9 +1194,9 @@ response = await overlord.chat(
 assert "sampling" in response.lower() or "key frames" in response.lower()
 ```
 
-### Test Group 9B: Video Chunking Implementation
+### Test Group 10B: Video Chunking Implementation
 ```python
-# Test 9B1: Video Segment Chunking
+# Test 10B1: Video Segment Chunking
 formation = Formation.load("formations/video-chunking.yaml")
 overlord = await formation.start()
 
@@ -1095,7 +1210,7 @@ response = await overlord.chat(
 assert "launch" in response.lower() or "iphone" in response.lower()
 assert len(response) > 500  # Detailed analysis
 
-# Test 9B2: Chunk Overlap & Continuity
+# Test 10B2: Chunk Overlap & Continuity
 response = await overlord.chat(
     "Create a timeline of events in this video",
     files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
@@ -1103,7 +1218,7 @@ response = await overlord.chat(
 # Should maintain temporal coherence across chunks
 assert "timeline" in response.lower() or any(time_word in response.lower() for time_word in ["0:00", "minute", "second"])
 
-# Test 9B3: Audio Track Separation
+# Test 10B3: Audio Track Separation
 response = await overlord.chat(
     "Transcribe all speech in this video presentation",
     files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
@@ -1111,7 +1226,7 @@ response = await overlord.chat(
 # Should extract and process audio separately for better quality
 assert len(response) > 1000  # Full transcription
 
-# Test 9B4: Key Frame Extraction
+# Test 10B4: Key Frame Extraction
 response = await overlord.chat(
     "Show me the key visual moments in this video",
     files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
@@ -1120,9 +1235,9 @@ response = await overlord.chat(
 assert any(visual_word in response.lower() for visual_word in ["scene", "slide", "visual", "shows"])
 ```
 
-### Test Group 9C: Audio Chunking & Processing
+### Test Group 10C: Audio Chunking & Processing
 ```python
-# Test 9C1: Large Audio File Chunking
+# Test 10C1: Large Audio File Chunking
 formation = Formation.load("formations/audio-chunking.yaml")
 overlord = await formation.start()
 
@@ -1135,7 +1250,7 @@ response = await overlord.chat(
 # Should chunk and process successfully
 assert "speaker" in response.lower() or len(response) > 2000
 
-# Test 9C2: Audio Overlap Processing
+# Test 10C2: Audio Overlap Processing
 podcast = load_test_file("test-files/podcast_2hour.mp3")
 response = await overlord.chat(
     "Summarize the key topics discussed in this podcast",
@@ -1144,7 +1259,7 @@ response = await overlord.chat(
 # Should maintain context across chunks
 assert "topic" in response.lower() and len(response) > 500
 
-# Test 9C3: Music vs Speech Detection
+# Test 10C3: Music vs Speech Detection
 mixed_audio = load_test_file("test-files/presentation_with_music.mp3")
 response = await overlord.chat(
     "Transcribe only the speech portions, ignoring background music",
@@ -1153,9 +1268,9 @@ response = await overlord.chat(
 # Should intelligently process speech segments
 ```
 
-### Test Group 9D: Document Chunking
+### Test Group 10D: Document Chunking
 ```python
-# Test 9D1: Large PDF Processing
+# Test 10D1: Large PDF Processing
 formation = Formation.load("formations/document-chunking.yaml")
 overlord = await formation.start()
 
@@ -1168,7 +1283,7 @@ response = await overlord.chat(
 # Should chunk by sections/pages
 assert any(fin_word in response.lower() for fin_word in ["revenue", "financial", "profit"])
 
-# Test 9D2: Smart Section Detection
+# Test 10D2: Smart Section Detection
 technical_manual = load_test_file("test-files/technical_manual_300pages.pdf")
 response = await overlord.chat(
     "Find the troubleshooting section and summarize common issues",
@@ -1177,7 +1292,7 @@ response = await overlord.chat(
 # Should intelligently identify relevant sections
 assert "troubleshoot" in response.lower() or "issue" in response.lower()
 
-# Test 9D3: Multi-Document Processing
+# Test 10D3: Multi-Document Processing
 docs = [
     {"filename": "doc1.pdf", "content": load_test_file("test-files/doc1_100pages.pdf"), "content_type": "application/pdf"},
     {"filename": "doc2.pdf", "content": load_test_file("test-files/doc2_150pages.pdf"), "content_type": "application/pdf"},
@@ -1187,9 +1302,9 @@ response = await overlord.chat("Compare these three documents and find common th
 # Should process multiple large documents efficiently
 ```
 
-### Test Group 9E: Result Fusion & Quality
+### Test Group 10E: Result Fusion & Quality
 ```python
-# Test 9E1: Chunk Result Merging
+# Test 10E1: Chunk Result Merging
 formation = Formation.load("formations/result-fusion.yaml")
 overlord = await formation.start()
 
@@ -1201,7 +1316,7 @@ response = await overlord.chat(
 # Should merge chunk analyses coherently
 assert all(element in response.lower() for element in ["transcript", "visual", "moment"])
 
-# Test 9E2: Temporal Coherence
+# Test 10E2: Temporal Coherence
 response = await overlord.chat(
     "Create a minute-by-minute breakdown of this presentation",
     files=[{"filename": "presentation.mp4", "content": medium_video, "content_type": "video/mp4"}]
@@ -1209,7 +1324,7 @@ response = await overlord.chat(
 # Should maintain time sequence across chunks
 assert response.count(":") > 10  # Multiple timestamp references
 
-# Test 9E3: Quality vs Speed Tradeoff
+# Test 10E3: Quality vs Speed Tradeoff
 # Fast mode - sampling
 response_fast = await overlord.chat(
     "Quick summary of this video",
@@ -1230,9 +1345,9 @@ assert len(response_full) > len(response_fast) * 1.5
 assert time_full < time_fast * 3  # Not more than 3x slower
 ```
 
-### Test Group 9F: Performance & Optimization
+### Test Group 10F: Performance & Optimization
 ```python
-# Test 9F1: Memory Efficiency
+# Test 10F1: Memory Efficiency
 formation = Formation.load("formations/memory-efficient.yaml")
 overlord = await formation.start()
 
@@ -1247,7 +1362,7 @@ peak_memory = get_peak_memory_usage()
 # Should not load entire file into memory at once
 assert peak_memory - initial_memory < 1000_000_000  # Less than 1GB increase
 
-# Test 9F2: Parallel Chunk Processing
+# Test 10F2: Parallel Chunk Processing
 start_time = time.time()
 response = await overlord.chat(
     "Analyze video and transcribe all speech",
@@ -1257,7 +1372,7 @@ processing_time = time.time() - start_time
 # Should process chunks in parallel
 assert processing_time < video_duration * 0.5  # Faster than real-time
 
-# Test 9F3: Caching & Reprocessing
+# Test 10F3: Caching & Reprocessing
 # First processing
 response1 = await overlord.chat(
     "Analyze this video",
@@ -1274,9 +1389,9 @@ time2 = measure_processing_time()
 assert time2 < time1 * 0.3  # Much faster due to caching
 ```
 
-### Test Group 9G: Error Handling & Edge Cases
+### Test Group 10G: Error Handling & Edge Cases
 ```python
-# Test 9G1: Corrupted File Handling
+# Test 10G1: Corrupted File Handling
 formation = Formation.load("formations/error-handling.yaml")
 overlord = await formation.start()
 
@@ -1289,7 +1404,7 @@ response = await overlord.chat(
 assert "error" in response.lower() or "unable" in response.lower()
 assert "corrupted" in response.lower() or "damaged" in response.lower()
 
-# Test 9G2: Processing Timeout Recovery
+# Test 10G2: Processing Timeout Recovery
 extremely_large = create_mock_file(size=5_000_000_000)  # 5GB
 response = await overlord.chat(
     "Process this entire file in detail",
@@ -1299,7 +1414,7 @@ response = await overlord.chat(
 # Should gracefully handle timeout with partial results
 assert "partial" in response.lower() or "timeout" in response.lower()
 
-# Test 9G3: Format Mismatch Handling
+# Test 10G3: Format Mismatch Handling
 response = await overlord.chat(
     "Analyze this video",
     files=[{"filename": "image.mp4", "content": jpeg_image, "content_type": "video/mp4"}]
@@ -1495,19 +1610,21 @@ response = await overlord.chat(
 - **Day 4:** 20+ MCP tests + credential tests pass ✅ (100% success rate, user isolation verified)
 - **Day 5:** 20 file generation tests pass (including implicit generation) + security validation confirmed
 - **Day 6:** 12 knowledge tests pass + all enhancement scenarios validated
-- **Day 7:** 18 coordination tests pass + A2A communication verified
-- **Day 8:** 15 thinking tests pass + model detection validated + edge cases handled
-- **Day 9:** 10 clarification tests pass + information flow validated
+- **Day 7:** Base: 18 coordination tests pass + A2A verified | Enhanced: 12 SOP tests pass
+- **Day 8:** Base: 10 clarification tests pass | Enhanced: 15 multi-sequence tests pass
+- **Day 9:** 15 thinking tests pass + model detection validated + edge cases handled
 - **Day 10:** 25+ large file tests pass + <3x performance overhead + memory efficient
 - **Day 11:** 8 async tests pass + webhook delivery verified
 - **Day 12:** 18 scheduler tests pass + performance targets met
 
 ### **Final Validation Checklist**
-- [ ] All 20 feature dimensions tested in combination
+- [ ] All 22 feature dimensions tested in combination (including SOPs and multi-clarification)
 - [ ] User credentials system fully validated with encryption & isolation
 - [ ] File generation tested across all major formats with security validation
 - [ ] Domain knowledge system tested with multiple agents and sources
 - [ ] Built-in MCP security validation (code filtering, safe execution)
+- [ ] SOP system enhances multi-agent coordination with procedural guidance
+- [ ] Multiple clarification sequences maintain intent across sub-clarifications
 - [ ] Thinking visibility with automatic model detection
 - [ ] Large file multimodal processing (>100MB files handled efficiently)
 - [ ] Intelligent chunking strategies for video, audio, and documents
@@ -1523,6 +1640,8 @@ response = await overlord.chat(
 - ✨ **Domain Knowledge System**: Agent-level knowledge loading and enhancement
 - ✨ **Knowledge Search & Retrieval**: Semantic search with relevance scoring
 - ✨ **Multi-Agent Knowledge Sharing**: Cross-agent knowledge coordination
+- ✨ **Standard Operating Procedures (SOPs)**: Overlord-level procedural guidance for task decomposition
+- ✨ **Multiple Clarification Sequences**: Stack-based clarification management with intent preservation
 - ✨ **Thinking Visibility**: Automatic model detection with configurable transparency
 - ✨ **Large File Multimodal Processing**: Intelligent chunking for >100MB files
 - ✨ **Video/Audio Chunking**: Overlapping segments with temporal coherence
@@ -1532,4 +1651,4 @@ response = await overlord.chat(
 - **85% Automated:** Functional tests, performance benchmarks, CI/CD
 - **15% Manual:** Complex integration validation, user experience testing
 
-**Total Test Coverage:** 1,200+ test combinations across 19 feature dimensions
+**Total Test Coverage:** 1,400+ test combinations across 22 feature dimensions
