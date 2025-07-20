@@ -48,6 +48,7 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Built-in MCP Servers**: File Generation MCP for secure creation of charts, documents, spreadsheets, images, and presentations through sandboxed Python execution
 - **Artifacts System**: Comprehensive file generation, tracking, and management with secure sandboxed execution, intelligent metadata extraction, session-based storage, and nanoid-based unique identifiers
 - **Knowledge Integration**: Enhanced knowledge base with directory/multi-path support and YAML configuration
+- **Standard Operating Procedures (SOPs)**: Overlord-level procedural guidance for consistent task execution and organizational best practices
 - **Security Layer**: Role-based access control and permission management
 - **A2A Communication**: Agent-to-Agent protocol for complex agent collaboration
 - **Multi-Modal Support**: Handle text, image, audio, video, and document content through unified services
@@ -73,6 +74,8 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 │  │    Overlord   │  Agent Pool  │  │  ← Orchestration layer
 │  ├──────────────────────────────┤  │
 │  │   Memory │ Services │ Tools  │  │  ← Core subsystems
+│  ├──────────────────────────────┤  │
+│  │  SOPs │ Knowledge │ Security │  │  ← Guidance systems
 │  └──────────────────────────────┘  │
 ├────────────────────────────────────┤
 │       LLM Providers (OneLLM)       │  ← External integrations
@@ -229,6 +232,27 @@ agents:
 runtime:
   built_in_mcps:
     - file-generation  # Create actual code files
+
+# Standard Operating Procedures (SOPs) in sops/ directory
+# sops/code-review.yaml
+id: code-review-v1
+title: Code Review Process
+description: Standard process for reviewing pull requests
+steps:
+  - step: Check code style and formatting
+    description: Verify code follows project conventions
+  - step: Review logic and algorithms
+    description: Analyze implementation correctness
+  - step: Test coverage assessment
+    description: Ensure adequate test coverage
+  - step: Security audit
+    description: Check for security vulnerabilities
+  - step: Performance review
+    description: Identify performance bottlenecks
+outcomes:
+  success:
+    - Code approved for merge
+    - Feedback documented
 ```
 
 ## 🧪 Testing Philosophy
@@ -296,7 +320,7 @@ await formation.reload()
 ```
 
 ### Overlord Orchestrator
-Intelligent message routing and agent coordination:
+Intelligent message routing and agent coordination with SOP guidance:
 
 ```python
 class Overlord:
@@ -304,21 +328,38 @@ class Overlord:
         # 1. Intent detection
         intent = await self.intent_detector.analyze(message)
 
-        # 2. Agent selection
-        agent = self.select_agent(intent, self.agents)
+        # 2. SOP matching (NEW)
+        relevant_sops = await self.sop_coordinator.search(message)
+        
+        # 3. Agent selection (enhanced with SOPs)
+        if relevant_sops:
+            # Use SOP to guide task decomposition
+            agents = self.select_agents_for_sop(relevant_sops[0])
+        else:
+            agent = self.select_agent(intent, self.agents)
 
-        # 3. Memory context
+        # 4. Memory context
         context = await self.memory.get_context(user_id)
 
-        # 4. Tool discovery
+        # 5. Tool discovery
         tools = await self.mcp_manager.get_tools_for_agent(agent)
 
-        # 5. Execute with agent
-        response = await agent.process(
-            message,
-            context=context,
-            tools=tools
-        )
+        # 6. Execute with agent(s)
+        if relevant_sops:
+            # Follow SOP steps with appropriate agents
+            response = await self.execute_sop(
+                relevant_sops[0],
+                agents,
+                message,
+                context,
+                tools
+            )
+        else:
+            response = await agent.process(
+                message,
+                context=context,
+                tools=tools
+            )
 
         return response
 ```
