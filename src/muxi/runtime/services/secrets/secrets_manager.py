@@ -12,27 +12,7 @@ import threading
 from typing import Dict, Any, Optional, Union, List
 from pathlib import Path
 from cryptography.fernet import Fernet
-
-# Import only what we need to avoid heavy dependencies
-try:
-    # Try to import from the already loaded observability module if available
-    from ..observability import observe, SystemEvents, EventLevel
-except ImportError:
-    # If observability is not available, define no-op versions
-    class SystemEvents:
-        SECRET_OPERATION_FAILED = "secret.operation.failed"
-        SECRET_OPERATION_COMPLETED = "secret.operation.completed"
-        SECRET_LISTING_FAILED = "secret.listing.failed"
-
-    class EventLevel:
-        ERROR = "error"
-        INFO = "info"
-        WARNING = "warning"
-        DEBUG = "debug"
-
-    def observe(*args, **kwargs):
-        # No-op when observability is not available
-        pass
+from .. import observability
 
 
 class SecretsManager:
@@ -76,9 +56,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Encryption initialization failed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secrets manager encryption initialization failed: {str(e)}",
                 data={
                     "operation_type": "encryption",
@@ -185,9 +165,9 @@ class SecretsManager:
                 return secret_value
 
             except Exception as e:
-                observe(
-                    event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                    level=EventLevel.ERROR,
+                observability.observe(
+                    event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                    level=observability.EventLevel.ERROR,
                     description=f"Sync secret retrieval failed for {name}: {str(e)}",
                     data={
                         "operation_type": "sync_retrieval",
@@ -236,9 +216,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret storage failed with exception
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret storage failed for {name}: {str(e)}",
                 data={
                     "operation_type": "storage",
@@ -272,9 +252,9 @@ class SecretsManager:
                 return secret_value
 
         except Exception as e:
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret retrieval failed for {name}: {str(e)}",
                 data={
                     "operation_type": "retrieval",
@@ -315,9 +295,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret deletion failed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret deletion failed for {name}: {str(e)}",
                 data={
                     "operation_type": "deletion",
@@ -347,9 +327,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret listing failed
-            observe(
-                event_type=SystemEvents.SECRET_LISTING_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_LISTING_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret listing failed: {str(e)}",
                 data={"error": str(e), "error_type": type(e).__name__, "success": False},
             )
@@ -384,9 +364,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret interpolation failed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret interpolation failed: {str(e)}",
                 data={
                     "operation_type": "interpolation",
@@ -441,9 +421,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret clearing failed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret clearing failed: {str(e)}",
                 data={
                     "operation_type": "clearing",
@@ -477,8 +457,8 @@ class SecretsManager:
                     errors.append({"name": name, "error": str(e)})
 
             # Observability: Secret import completed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_COMPLETED,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
                 level=(EventLevel.INFO if failed_count == 0 else EventLevel.WARNING),
                 description=(
                     f"Secret import completed: {imported_count} imported, " f"{failed_count} failed"
@@ -498,9 +478,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret import failed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret import failed: {str(e)}",
                 data={
                     "operation_type": "import",
@@ -530,9 +510,9 @@ class SecretsManager:
 
         except Exception as e:
             # Observability: Secret export failed
-            observe(
-                event_type=SystemEvents.SECRET_OPERATION_FAILED,
-                level=EventLevel.ERROR,
+            observability.observe(
+                event_type=observability.SystemEvents.SECRET_OPERATION_FAILED,
+                level=observability.EventLevel.ERROR,
                 description=f"Secret export failed: {str(e)}",
                 data={
                     "operation_type": "export",

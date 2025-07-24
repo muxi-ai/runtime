@@ -22,7 +22,7 @@ from .base import (
 )
 from ..protocol.message_handler import MCPMessageHandler
 from .auth import create_httpx_auth
-from ...observability import observability
+from ..services import observability
 
 
 class StreamableHTTPTransport(BaseTransport):
