@@ -201,16 +201,30 @@ class Agent:
             from .knowledge.handler import KnowledgeHandler
 
             # Get embedding function from model for semantic search
+            # Knowledge handler needs a function that handles multiple texts
             embedding_fn = None
-            if hasattr(self.model, "get_embedding"):
-                embedding_fn = self.model.get_embedding
+            if hasattr(self.model, "generate_embeddings"):
+                # Prefer batch embedding function for efficiency
+                embedding_fn = self.model.generate_embeddings
+            elif hasattr(self.model, "get_embeddings"):
+                embedding_fn = self.model.get_embeddings
             elif hasattr(self.model, "embed"):
-                embedding_fn = self.model.embed
+                # Fallback: wrap single embed in a batch handler
+                async def batch_embed(texts):
+                    embeddings = []
+                    for text in texts:
+                        embedding = await self.model.embed(text)
+                        embeddings.append(embedding)
+                    return embeddings
+                embedding_fn = batch_embed
 
             # Get formation config from overlord if available
             formation_config = None
             if hasattr(self.overlord, "formation_config") and self.overlord.formation_config:
                 formation_config = self.overlord.formation_config
+
+            # Get formation_id from overlord
+            formation_id = getattr(self.overlord, "formation_id", "default-formation")
 
             # Create knowledge handler using the factory method with formation config
             self.knowledge_handler = await KnowledgeHandler.from_agent_config(
@@ -220,6 +234,7 @@ class Agent:
                 formation_config=formation_config,
                 short_term_memory=getattr(self.overlord, "buffer_memory", None),
                 auto_inject_knowledge=True,
+                formation_id=formation_id,  # Pass formation_id explicitly
             )
 
             # Log successful knowledge initialization

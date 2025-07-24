@@ -1443,6 +1443,12 @@ Provide a helpful, conversational response that directly addresses what the user
             # Extract embeddings from response
             if isinstance(response, dict) and "data" in response:
                 embeddings = [item["embedding"] for item in response["data"]]
+            elif hasattr(response, "data"):
+                # Handle EmbeddingResponse object
+                embeddings = [item.embedding for item in response.data]
+            elif hasattr(response, "embeddings"):
+                # Another possible response format
+                embeddings = response.embeddings
             else:
                 # If it's already a list of lists, return it
                 embeddings = response

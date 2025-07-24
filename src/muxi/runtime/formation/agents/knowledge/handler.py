@@ -118,8 +118,8 @@ from ....utils.user_dirs import get_knowledge_dir
 from ....services.memory.short_term import ShortTermMemory
 
 # Document-specific namespace constants
-DOCUMENT_NAMESPACE = "documents"
-KNOWLEDGE_INJECTION_NAMESPACE = "knowledge"  # Keep existing behavior
+DOCUMENT_NAMESPACE = "knowledge"  # Changed from "documents" for clarity
+KNOWLEDGE_INJECTION_NAMESPACE = "knowledge_injection"  # For injected knowledge into memory
 
 
 class KnowledgeHandler:
@@ -298,62 +298,115 @@ class KnowledgeHandler:
             return
 
         try:
-            # Use FileKnowledge's hybrid architecture integration
-            document_chunks = await source.process_with_chunk_manager(
-                chunk_manager=self.chunk_manager, file_limit=self.max_files_per_source
-            )
+            source_path = getattr(source, "path", str(source))
 
-            # Limit total chunks processed
-            if len(document_chunks) > self.max_total_files:
-                print(
-                    f"Limiting chunks to {self.max_total_files} " f"(found {len(document_chunks)})"
-                )
-                document_chunks = document_chunks[: self.max_total_files]
+            # Step 1: Calculate hash for the source
+            source_hash = self._calculate_file_md5(source_path)
 
-            # Generate embeddings for all chunks
-            if document_chunks:
-                chunk_contents = [chunk.content for chunk in document_chunks]
-                embeddings = await generate_embeddings_fn(chunk_contents)
+            # Step 2: Check disk cache
+            cached_data = self._load_cached_embeddings(source_path, source_hash)
 
-                if not embeddings:
-                    print("Failed to generate embeddings for chunks")
-                    return
-
-                # Add chunks and embeddings to ShortTermMemory with documents namespace
+            if cached_data:
+                # Cache hit! Load embeddings from disk into ShortTermMemory
+                print(f"Loading cached embeddings for {source.name}")
                 chunks_added = 0
-                for chunk, embedding in zip(document_chunks, embeddings):
-                    try:
-                        metadata = {
-                            "document_id": chunk.document_id,
-                            "chunk_id": chunk.chunk_id,
-                            "knowledge_source": source.name,
-                            "description": source.description,
-                            **chunk.metadata,
-                        }
 
+                for cached_item in cached_data:
+                    try:
                         await self.short_term_memory.add_with_embedding(
-                            text=chunk.content,
-                            embedding=embedding,
-                            metadata=metadata,
+                            text=cached_item["content"],
+                            embedding=cached_item["embedding"],
+                            metadata=cached_item["metadata"],
                             namespace=DOCUMENT_NAMESPACE,
                         )
                         chunks_added += 1
                     except Exception as e:
-                        print(f"Failed to add chunk {chunk.chunk_id}: {e}")
+                        print(f"Failed to add cached chunk: {e}")
                         continue
 
-                print(f"✓ Processed {source.name}: {chunks_added} chunks added")
+                print(f"✓ Loaded {chunks_added} cached chunks for {source.name}")
+
+            else:
+                # Cache miss - need to generate embeddings
+                print(f"No valid cache found for {source.name}, generating embeddings...")
+
+                # Use FileKnowledge's hybrid architecture integration
+                document_chunks = await source.process_with_chunk_manager(
+                    chunk_manager=self.chunk_manager, file_limit=self.max_files_per_source
+                )
+
+                # Limit total chunks processed
+                if len(document_chunks) > self.max_total_files:
+                    print(
+                        f"Limiting chunks to {self.max_total_files} " f"(found {len(document_chunks)})"
+                    )
+                    document_chunks = document_chunks[: self.max_total_files]
+
+                # Generate embeddings for all chunks
+                if document_chunks:
+                    chunk_contents = [chunk.content for chunk in document_chunks]
+                    embeddings = await generate_embeddings_fn(chunk_contents)
+
+                    if not embeddings:
+                        print("Failed to generate embeddings for chunks")
+                        return
+
+                    # Prepare cache data while adding to ShortTermMemory
+                    cache_data = []
+                    chunks_added = 0
+
+                    for chunk, embedding in zip(document_chunks, embeddings):
+                        try:
+                            metadata = {
+                                "document_id": chunk.document_id,
+                                "chunk_id": chunk.chunk_id,
+                                "knowledge_source": source.name,
+                                "description": source.description,
+                                "source": source_path,  # Add source path for cache invalidation
+                                "content_hash": source_hash,  # Add hash for validation
+                                **chunk.metadata,
+                            }
+
+                            await self.short_term_memory.add_with_embedding(
+                                text=chunk.content,
+                                embedding=embedding,
+                                metadata=metadata,
+                                namespace=DOCUMENT_NAMESPACE,
+                            )
+                            chunks_added += 1
+
+                            # Prepare for cache
+                            cache_data.append({
+                                "content": chunk.content,
+                                "embedding": embedding,
+                                "metadata": metadata,
+                            })
+
+                        except Exception as e:
+                            print(f"Failed to add chunk {chunk.chunk_id}: {type(e).__name__}")
+                            print(f"Error details: {str(e)}")
+                            import traceback
+                            traceback.print_exc()
+                            continue
+
+                    print(f"✓ Processed {source.name}: {chunks_added} chunks added")
+
+                    # Step 3: Save to disk cache
+                    if cache_data:
+                        self._save_cached_embeddings(source_path, source_hash, cache_data)
 
             # Log successful knowledge source addition
+            chunks_added = locals().get("chunks_added", 0)
             observability.observe(
                 event_type=observability.ConversationEvents.CONTENT_PROCESSED,
                 level=observability.EventLevel.INFO,
                 description="Knowledge source addition completed with hybrid architecture",
                 data={
                     "source_path": getattr(source, "path", str(source)),
-                    "chunks_processed": len(document_chunks) if document_chunks else 0,
-                    "chunks_added": chunks_added if "chunks_added" in locals() else 0,
+                    "chunks_processed": len(document_chunks) if 'document_chunks' in locals() else chunks_added,
+                    "chunks_added": chunks_added,
                     "total_sources": len(self.sources),
+                    "from_cache": cached_data is not None,
                 },
             )
 
@@ -407,9 +460,11 @@ class KnowledgeHandler:
 
         try:
             # Generate query embedding
-            query_embedding = await generate_embeddings_fn(query)
-            if not query_embedding:
+            # The embedding function expects a list, so wrap single query
+            query_embeddings = await generate_embeddings_fn([query])
+            if not query_embeddings or len(query_embeddings) == 0:
                 raise ValueError("Failed to generate query embedding")
+            query_embedding = query_embeddings[0]  # Get first (and only) embedding
 
             # Convert to numpy array if needed
             if isinstance(query_embedding, list):
@@ -547,7 +602,8 @@ class KnowledgeHandler:
             # Create handler with performance limits
             handler = cls(
                 agent_id_or_sources=agent_id,
-                embedding_dimension=kwargs.get("embedding_dimension", 128),  # Smaller dimension
+                formation_id=kwargs.get("formation_id", "default-formation"),  # Use passed formation_id
+                embedding_dimension=kwargs.get("embedding_dimension", 1536),  # Match text-embedding-3-small
                 cache_dir=kwargs.get("cache_dir", get_knowledge_dir()),
                 mode=kwargs.get("mode", "local"),
                 remote=kwargs.get("remote"),

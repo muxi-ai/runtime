@@ -346,12 +346,17 @@ class ShortTermMemory:
 
         The buffer manages its own memory budget based on the configured limit
         rather than checking system-wide memory usage.
+
+        IMPORTANT: Only removes items with namespace="buffer" to protect knowledge
+        and uploaded documents from being evicted.
         """
         try:
             # Estimate current memory usage of the buffer (rough approximation)
             # Each item has text + metadata + embedding (if present)
             estimated_usage_mb = 0
-            for item in self.buffer:
+            buffer_namespace_indices = []  # Track indices of buffer namespace items
+
+            for i, item in enumerate(self.buffer):
                 # Rough estimate: text size + metadata size + embedding size
                 text_size = len(item["text"].encode("utf-8"))
                 metadata_size = len(str(item["metadata"]).encode("utf-8"))
@@ -362,23 +367,41 @@ class ShortTermMemory:
                 item_size_mb = (text_size + metadata_size + embedding_size) / (1024**2)
                 estimated_usage_mb += item_size_mb
 
+                # Track buffer namespace items for potential removal
+                if item.get("namespace", "buffer") == "buffer":
+                    buffer_namespace_indices.append(i)
+
             #  Debug - TODO: add observability
             #     f"Buffer memory usage: {estimated_usage_mb:.2f}MB, "
             #     f"configured limit: {self.max_memory_mb}MB"
             # )
 
-            # If we exceed the configured limit, remove oldest items
-            if estimated_usage_mb > self.max_memory_mb:
-                items_to_remove = max(1, len(self.buffer) // 4)  # Remove 25% of items
+            # If we exceed the configured limit, remove oldest items from buffer namespace only
+            if estimated_usage_mb > self.max_memory_mb and buffer_namespace_indices:
+                # Calculate how many buffer items to remove (25% of buffer items)
+                items_to_remove = max(1, len(buffer_namespace_indices) // 4)
                 #  Info - TODO: add observability
                 #     f"Buffer memory limit ({self.max_memory_mb}MB) exceeded. "
-                #     f"Removing {items_to_remove} oldest items"
+                #     f"Removing {items_to_remove} oldest items from buffer namespace"
                 # )
 
-                # Remove oldest items (from the left of deque)
-                for _ in range(min(items_to_remove, len(self.buffer))):
-                    if self.buffer:
-                        self.buffer.popleft()
+                # Remove oldest buffer namespace items
+                removed_count = 0
+                temp_buffer = list(self.buffer)
+
+                # Remove from the beginning (oldest items first)
+                for idx in buffer_namespace_indices:
+                    if removed_count >= items_to_remove:
+                        break
+                    # Mark for removal by setting to None
+                    temp_buffer[idx] = None
+                    removed_count += 1
+
+                # Rebuild buffer without None items
+                self.buffer.clear()
+                for item in temp_buffer:
+                    if item is not None:
+                        self.buffer.append(item)
 
                 # Rebuild the index after removing items
                 if self.model:
@@ -893,6 +916,11 @@ class ShortTermMemory:
                     embedding_np = np.array([embedding], dtype=np.float32)
                 else:
                     embedding_np = embedding.reshape(1, -1)
+
+                # Normalize embedding for better cosine similarity in FAISS
+                norm = np.linalg.norm(embedding_np[0])
+                if norm > 0:
+                    embedding_np = embedding_np / norm
 
                 self.index.add(embedding_np)
 
