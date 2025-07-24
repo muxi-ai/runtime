@@ -19,6 +19,8 @@ Event Routing:
 Note: This implementation follows the specification with dual event architecture.
 """
 
+import sys
+
 # Import all types and classes
 from ...datatypes.observability import (
     EventLevel,
@@ -176,3 +178,7 @@ def emit_event(
         description: Human-readable description
     """
     observe(event_type, level, data, description)
+
+
+# Create a module-like interface
+observability = sys.modules[__name__]
