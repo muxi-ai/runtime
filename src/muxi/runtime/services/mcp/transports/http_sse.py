@@ -22,7 +22,7 @@ from .base import (
 )
 from ..protocol.message_handler import MCPMessageHandler
 from .auth import create_httpx_auth
-from ..services import observability
+from ...observability import observability
 
 
 class HTTPSSETransport(BaseTransport):

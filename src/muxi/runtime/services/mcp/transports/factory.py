@@ -14,7 +14,7 @@ from .base import BaseTransport, MCPConnectionError
 from .http_sse import HTTPSSETransport
 from .streamable import StreamableHTTPTransport
 from .command import CommandLineTransport
-from ..services import observability
+from ... import observability
 
 # Module-level cache for SSE servers (persists for formation lifetime)
 _sse_server_cache: Set[str] = set()
