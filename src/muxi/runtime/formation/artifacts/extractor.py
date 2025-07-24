@@ -14,7 +14,7 @@ from typing import List
 from .processor import create_artifact_from_file
 from ...datatypes.artifacts import ArtifactMetadata, ArtifactPreview, MuxiArtifact
 from ...datatypes.clarification import ToolExecutionResult
-from ...observability import observability
+from ...services.observability import observability
 
 
 async def extract_artifacts_from_tool_results(
