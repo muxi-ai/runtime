@@ -7,8 +7,8 @@ This module contains tests for the memory implementations in the muxi framework.
 import unittest
 import numpy as np
 
-from src.muxi.memory.working import WorkingMemory
-from src.muxi.llm import LLM
+from src.muxi.services.memory.working import WorkingMemory
+from src.muxi.services.llm import LLM
 
 
 class TestWorkingMemory(unittest.IsolatedAsyncioTestCase):
