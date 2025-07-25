@@ -595,11 +595,44 @@ memory:
 </details>
 
 <details>
-<summary>Day 6: Domain Knowledge System</summary>
+<summary>✅ Day 6: Domain Knowledge System (Partial)</summary>
 
 #### Goal: Validate existing agent-level domain knowledge implementation (loading, caching, search, and isolation)
 
-### Test Group 6A: Knowledge Source Loading
+**Implementation Status: IN PROGRESS**
+- **Test Group 6A**: ✅ COMPLETED (2025-07-25)
+- **Test Groups 6B-6E**: Pending
+- **Tests Passing**: 2/2 in Group 6A (100% success rate)
+- **Test Reports**: [tests/reports/6a.md](tests/reports/6a.md)
+
+### Key Achievements in Test Group 6A
+
+**✅ Test Approach Updated:**
+- Moved from unit testing to proper chat flow integration testing
+- All tests now use `formation.load() → start_overlord() → overlord.chat()`
+- Tests validate actual user experience, not internal components
+
+**✅ Core Features Validated:**
+- Knowledge loading during formation start
+- Automatic embedding generation with OpenAI text-embedding-3-small
+- Content-based caching with MD5 hashes
+- Cache persistence in `~/.muxi/{formation_id}/cache/knowledge/`
+- Relative and absolute path support
+- Directory traversal with file limits
+- MarkItDown integration for multiple file formats (PDF, MD, TXT)
+
+**✅ Performance Results:**
+- Initial load: ~22 seconds for 197 chunks
+- Cached load: 2-3 seconds (10x improvement)
+- Zero API costs for unchanged knowledge on restart
+
+**✅ Issues Fixed During Testing:**
+1. Directory MD5 calculation (skip for dirs, calculate per-file)
+2. File limit bug (changed from hardcoded 1 to configurable)
+3. Content hash restoration for cache invalidation
+4. Test architecture refactoring to chat flow
+
+### Test Group 6A: Knowledge Source Loading ✅ COMPLETED
 ```python
 # Test 6A1: Relative Path Knowledge Loading
 formation = Formation.load("test-formations/formation-knowledge")
@@ -634,7 +667,7 @@ for agent in [automaze_agent, muxi_agent]:
         assert len(doc_memories) > 0  # Should have embeddings stored
 ```
 
-### Test Group 6B: Knowledge Caching & Change Detection
+### Test Group 6B: Knowledge Caching & Change Detection (PENDING)
 ```python
 # Test 6B1: Knowledge Caching Validation
 # Record initial load time
@@ -676,7 +709,7 @@ write_file(knowledge_file, original_content)
 # This would require modifying agent YAML and reloading
 ```
 
-### Test Group 6C: Knowledge Search & Retrieval
+### Test Group 6C: Knowledge Search & Retrieval (PENDING)
 ```python
 # Test 6C1: Domain-Specific Knowledge Search
 formation = Formation.load("test-formations/formation-knowledge")
@@ -707,7 +740,7 @@ assert len(response) > 200  # Detailed response
 assert "automaze" in response.lower()  # Company-specific answer
 ```
 
-### Test Group 6D: Agent Knowledge Isolation
+### Test Group 6D: Agent Knowledge Isolation (PENDING)
 ```python
 # Test 6D1: Agent-Specific Knowledge Access
 formation = Formation.load("test-formations/formation-knowledge")
@@ -758,7 +791,7 @@ for agent in [automaze_agent, muxi_agent]:
             assert agent.id in str(result.metadata.get("agent_id", ""))
 ```
 
-### Test Group 6E: Knowledge Loading Edge Cases
+### Test Group 6E: Knowledge Loading Edge Cases (PENDING)
 ```python
 # Test 6E1: Empty Knowledge Directory
 # Create formation with empty knowledge directory
@@ -808,11 +841,18 @@ def create_test_formation_with_empty_knowledge():
 
 **Automation:** Knowledge loading verification, caching validation, isolation testing
 **Success Criteria:** 15+ knowledge tests pass covering all scenarios:
-- ✅ Knowledge loads during init when configured in agent YAML
-- ✅ Embeddings created and cached during initialization
-- ✅ Cached embeddings used unless files/list changed
-- ✅ Relative and absolute path resolution works correctly
-- ✅ Agent knowledge isolation maintained (no cross-agent access)
+- ✅ Knowledge loads during init when configured in agent YAML (Test 6A0)
+- ✅ Embeddings created and cached during initialization (Test 6A0)
+- ✅ Cached embeddings used unless files/list changed (Test 6A0)
+- ✅ Relative and absolute path resolution works correctly (Test 6A1)
+- ⏳ Agent knowledge isolation maintained (Test 6D - pending)
+- ⏳ Knowledge search and retrieval (Test 6C - pending)
+- ⏳ Edge case handling (Test 6E - pending)
+
+### Day 6 Summary
+**Completed:** Test Group 6A (2/2 tests) - Core knowledge initialization with chat flow
+**Pending:** Test Groups 6B-6E - Would cover change detection, search, isolation, and edge cases
+**Key Achievement:** Successfully moved from unit testing to proper chat flow integration testing
 
 </details>
 
@@ -1673,8 +1713,8 @@ response = await overlord.chat(
 - **Day 2:** 20+/22+ memory tests pass ✅ (exceeded goal with advanced features)
 - **Day 3:** 34/36 multimodal tests pass ✅ (94% success rate, exceeded 15 test goal)
 - **Day 4:** 20+ MCP tests + credential tests pass ✅ (100% success rate, user isolation verified)
-- **Day 5:** 20 file generation tests pass (including implicit generation) + security validation confirmed
-- **Day 6:** 12 knowledge tests pass + all enhancement scenarios validated
+- **Day 5:** 21/22 file generation tests pass ✅ (95.5% success rate, security validation confirmed)
+- **Day 6:** 2/2 tests in Group 6A pass ✅ (partial - only Test Group 6A completed, 6B-6E pending)
 - **Day 7:** Base: 18 coordination tests pass + A2A verified | Enhanced: 12 SOP tests pass
 - **Day 8:** Base: 10 clarification tests pass | Enhanced: 15 multi-sequence tests pass
 - **Day 9:** 15 thinking tests pass + model detection validated + edge cases handled
