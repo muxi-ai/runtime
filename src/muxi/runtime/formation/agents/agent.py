@@ -44,11 +44,11 @@ import datetime
 import json
 import re
 import time
-from ...utils.id_generator import generate_nanoid
 from typing import Any, Dict, List, Optional, Union
 
-from ...datatypes.response import MuxiResponse
 from ..artifacts.extractor import extract_artifacts_from_tool_results
+from ...utils.id_generator import generate_nanoid
+from ...datatypes.response import MuxiResponse
 from ...datatypes.intent import IntentType, IntentDetectionContext
 from ...services.mcp.service import MCPService
 from ...services.llm import LLM
@@ -209,12 +209,28 @@ class Agent:
             elif hasattr(self.model, "get_embeddings"):
                 embedding_fn = self.model.get_embeddings
             elif hasattr(self.model, "embed"):
-                # Fallback: wrap single embed in a batch handler
+                # Fallback: wrap single embed in a batch handler with error handling
                 async def batch_embed(texts):
                     embeddings = []
-                    for text in texts:
-                        embedding = await self.model.embed(text)
-                        embeddings.append(embedding)
+                    for i, text in enumerate(texts):
+                        try:
+                            embedding = await self.model.embed(text)
+                            embeddings.append(embedding)
+                        except Exception as e:
+                            # Log error but continue processing other texts
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                description="Failed to generate embedding for text in batch",
+                                data={
+                                    "text_index": i,
+                                    "text_preview": text[:100] if text else "",
+                                    "error": str(e),
+                                    "error_type": type(e).__name__
+                                }
+                            )
+                            # Append None to maintain index alignment
+                            embeddings.append(None)
                     return embeddings
                 embedding_fn = batch_embed
 

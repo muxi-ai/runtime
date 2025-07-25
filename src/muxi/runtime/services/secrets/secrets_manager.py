@@ -459,7 +459,7 @@ class SecretsManager:
             # Observability: Secret import completed
             observability.observe(
                 event_type=observability.SystemEvents.SECRET_OPERATION_COMPLETED,
-                level=(EventLevel.INFO if failed_count == 0 else EventLevel.WARNING),
+                level=(observability.EventLevel.INFO if failed_count == 0 else observability.EventLevel.WARNING),
                 description=(
                     f"Secret import completed: {imported_count} imported, " f"{failed_count} failed"
                 ),

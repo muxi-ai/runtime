@@ -394,6 +394,19 @@ class KnowledgeHandler:
 
                     for chunk, embedding in zip(document_chunks, embeddings):
                         try:
+                            # Skip if embedding generation failed
+                            if embedding is None:
+                                observability.observe(
+                                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                    level=observability.EventLevel.WARNING,
+                                    description="Skipping chunk due to missing embedding",
+                                    data={
+                                        "chunk_id": chunk.chunk_id,
+                                        "source_name": source.name
+                                    }
+                                )
+                                continue
+                                
                             metadata = {
                                 "document_id": chunk.document_id,
                                 "chunk_id": chunk.chunk_id,
@@ -420,6 +433,7 @@ class KnowledgeHandler:
                             })
 
                         except Exception as e:
+                            import traceback
                             observability.observe(
                                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                                 level=observability.EventLevel.WARNING,
@@ -427,13 +441,11 @@ class KnowledgeHandler:
                                 data={
                                     "chunk_id": chunk.chunk_id,
                                     "error": str(e),
-                                    "error_type": type(e).__name__
+                                    "error_type": type(e).__name__,
+                                    "traceback": traceback.format_exc()
                                 }
                             )
-                            import traceback
-                            traceback.print_exc()
                             continue
-
                     observability.observe(
                         event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                         level=observability.EventLevel.INFO,
@@ -852,6 +864,19 @@ class KnowledgeHandler:
             # Add chunks and embeddings to ShortTermMemory with documents namespace
             chunks_added = 0
             for chunk, embedding in zip(document_chunks, embeddings):
+                # Skip if embedding generation failed
+                if embedding is None:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        description="Skipping chunk due to missing embedding",
+                        data={
+                            "chunk_id": chunk.chunk_id,
+                            "file_path": file_path
+                        }
+                    )
+                    continue
+                    
                 metadata = {
                     "document_id": chunk.document_id,
                     "chunk_id": chunk.chunk_id,

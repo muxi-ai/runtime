@@ -385,23 +385,19 @@ class ShortTermMemory:
                 #     f"Removing {items_to_remove} oldest items from buffer namespace"
                 # )
 
-                # Remove oldest buffer namespace items
-                removed_count = 0
-                temp_buffer = list(self.buffer)
+                # Remove oldest buffer namespace items efficiently
+                # Sort indices to remove oldest items first
+                buffer_namespace_indices.sort()
+                indices_to_remove = set(buffer_namespace_indices[:items_to_remove])
 
-                # Remove from the beginning (oldest items first)
-                for idx in buffer_namespace_indices:
-                    if removed_count >= items_to_remove:
-                        break
-                    # Mark for removal by setting to None
-                    temp_buffer[idx] = None
-                    removed_count += 1
+                # Create new deque with same maxlen, keeping only non-removed items
+                new_buffer = collections.deque(maxlen=self.buffer.maxlen)
+                for i, item in enumerate(self.buffer):
+                    if i not in indices_to_remove:
+                        new_buffer.append(item)
 
-                # Rebuild buffer without None items
-                self.buffer.clear()
-                for item in temp_buffer:
-                    if item is not None:
-                        self.buffer.append(item)
+                # Replace the buffer
+                self.buffer = new_buffer
 
                 # Rebuild the index after removing items
                 if self.model:
@@ -442,7 +438,7 @@ class ShortTermMemory:
             recent_items = list(self.buffer)
         else:
             # Use only the most recent items (up to max_size) - the context window
-            recent_items = list(self.buffer)[-self.max_size :]
+            recent_items = list(self.buffer)[-self.max_size:]
 
         # Apply filtering if specified
         if filter_metadata or namespace or session_id:

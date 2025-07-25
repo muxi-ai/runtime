@@ -2924,9 +2924,6 @@ class Overlord:
 
         except Exception as e:
             # Error processing image - logged via observability
-            import traceback
-
-            traceback.print_exc()
             return f"Failed to analyze image {attachment.get('filename')}: {str(e)}"
 
     async def _process_audio_content(self, attachment: Dict[str, Any]) -> str:
@@ -3007,9 +3004,6 @@ class Overlord:
 
         except Exception as e:
             # Error processing audio - logged via observability
-            import traceback
-
-            traceback.print_exc()
             return f"Failed to transcribe audio {attachment.get('filename')}: {str(e)}"
 
     def get_document_session_stats(self) -> Dict[str, Dict[str, Any]]:
@@ -3196,9 +3190,6 @@ class Overlord:
 
         except Exception as e:
             # Error processing video - logged via observability
-            import traceback
-
-            traceback.print_exc()
             return f"Failed to analyze video {attachment.get('filename')}: {str(e)}"
 
     # ===================================================================
@@ -3650,9 +3641,6 @@ class Overlord:
                                 except Exception as e:
                                     # Log the error for debugging
                                     print(f"[DEBUG] Credential name update failed: {e}")
-                                    import traceback
-
-                                    traceback.print_exc()
                                     # Silent failure - credential still works with generic name
                                     pass
 
