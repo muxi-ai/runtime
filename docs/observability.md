@@ -101,7 +101,7 @@ Use glob patterns to filter specific events:
 ### Basic Event Emission
 
 ```python
-from muxi.runtime.services import observability
+from muxi.services import observability
 
 # Simple event
 observability.observe(
@@ -154,13 +154,13 @@ logging:
       format: jsonl
       level: info
       events: ["request.*", "error.*"]
-      
+
     # File transport for audit logs
     - transport: file
       destination: /var/log/muxi-audit.jsonl
       format: jsonl
       events: ["security.*", "admin.*"]
-      
+
     # Multiple destinations
     - transport: stdout
       format: text
@@ -184,14 +184,14 @@ Streams support multiple authentication methods:
 auth:
   type: bearer
   token: "${{ secrets.API_TOKEN }}"
-  
+
 # OR
 auth:
   type: basic
   username: "${{ secrets.LOG_USER }}"
   password: "${{ secrets.LOG_PASS }}"
-  
-# OR  
+
+# OR
 auth:
   type: api_key
   header: "X-API-Key"
@@ -235,7 +235,7 @@ await observability_manager.force_health_check()
        },
        description=f"Agent {agent.id} timed out after 3 retries"
    )
-   
+
    # Bad
    observability.observe(
        event_type="error",
@@ -315,7 +315,7 @@ await observability_manager.force_health_check()
 2. Use sampling for high-frequency events:
    ```python
    import random
-   
+
    # Sample 10% of events
    if random.random() < 0.1:
        observability.observe(...)
@@ -387,9 +387,9 @@ logging:
       auth:
         type: bearer
         token: "${{ secrets.MONITOR_TOKEN }}"
-    
+
     # Error aggregation
-    - transport: stream  
+    - transport: stream
       destination: https://errors.example.com/intake
       format: splunk
       events: ["error.*", "*.failed"]
@@ -397,7 +397,7 @@ logging:
         type: api_key
         header: "X-Splunk-Token"
         key: "${{ secrets.SPLUNK_TOKEN }}"
-    
+
     # Audit trail
     - transport: file
       destination: /var/log/muxi/audit.jsonl
@@ -419,11 +419,11 @@ class AppEvents:
     USER_REGISTERED = "app.user.registered"
     USER_LOGIN = "app.user.login"
     USER_LOGOUT = "app.user.logout"
-    
+
     # Business events
     ORDER_PLACED = "app.order.placed"
     PAYMENT_PROCESSED = "app.payment.processed"
-    
+
     # Performance tracking
     SLOW_QUERY = "app.performance.slow_query"
     API_TIMEOUT = "app.performance.api_timeout"
@@ -450,7 +450,7 @@ If migrating from direct logging to MUXI observability:
    ```python
    # Old
    logger.info("Agent selected", extra={"agent": agent_id})
-   
+
    # New
    observability.observe(
        event_type=observability.ConversationEvents.AGENT_SELECTED,

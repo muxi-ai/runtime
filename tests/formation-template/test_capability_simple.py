@@ -8,8 +8,8 @@ from pathlib import Path
 # Add runtime to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from src.muxi.runtime.overlord import Overlord  # noqa: E402
-from src.muxi.runtime.secrets import SecretsManager  # noqa: E402
+from src.muxi.overlord import Overlord  # noqa: E402
+from src.muxi.secrets import SecretsManager  # noqa: E402
 
 
 async def test_capability_resolution():

@@ -8,9 +8,9 @@ from typing import Dict, Any, List, Optional
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime.formation.agents.agent import Agent
-from src.muxi.runtime.services.llm import LLM
-from src.muxi.runtime.services import observability
+from src.muxi.formation.agents.agent import Agent
+from src.muxi.services.llm import LLM
+from src.muxi.services import observability
 
 
 class MockOverlord:
@@ -18,7 +18,7 @@ class MockOverlord:
     def __init__(self):
         self.mcp_service = MockMCPService()
         self.secrets_interpolator = None
-        
+
     async def add_message_to_memory(self, **kwargs):
         pass
 
@@ -62,7 +62,7 @@ class MockMCPService:
                 }
             }
         }
-    
+
     async def invoke_tool(self, server_id: str, tool_name: str, parameters: Dict[str, Any], **kwargs):
         """Mock tool invocation"""
         if tool_name == "create_file":
@@ -83,13 +83,13 @@ class MockMCPService:
 
 async def main():
     # Skip observability initialization for this test
-    
+
     # Create LLM
     model = LLM(model="openai/gpt-4o-mini")
-    
+
     # Create mock overlord
     overlord = MockOverlord()
-    
+
     # Create agent with system message about tools
     agent = Agent(
         model=model,
@@ -97,17 +97,17 @@ async def main():
         system_message="You are a helpful assistant with access to filesystem tools. Use the create_file tool when asked to create files.",
         agent_id="test_agent"
     )
-    
+
     # Override the invoke_tool method to use our mock
     async def mock_invoke_tool(tool_name: str, parameters: Dict[str, Any], server_id: Optional[str] = None, **kwargs):
         """Mock tool invocation"""
         actual_server_id = server_id or "filesystem"
         return await overlord.mcp_service.invoke_tool(actual_server_id, tool_name, parameters)
-    
+
     agent.invoke_tool = mock_invoke_tool
-    
+
     print("Testing agent with MCP tools...")
-    
+
     # Send a message asking to create a file
     try:
         response = await agent.process_message(
@@ -118,9 +118,9 @@ async def main():
         import traceback
         traceback.print_exc()
         return
-    
+
     print(f"\nAgent response: {response.content}")
-    
+
     # Check if file was created
     import os
     if os.path.exists("/tmp/test_agent_file.txt"):

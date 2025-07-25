@@ -8,8 +8,8 @@ and determines if workflow orchestration is needed.
 import pytest
 from unittest.mock import AsyncMock, Mock
 
-from src.muxi.runtime.overlord.workflow.analyzer import RequestAnalyzer
-from src.muxi.runtime.overlord.workflow.types import RequestAnalysis
+from src.muxi.overlord.workflow.analyzer import RequestAnalyzer
+from src.muxi.overlord.workflow.types import RequestAnalysis
 
 
 class TestRequestAnalyzer:

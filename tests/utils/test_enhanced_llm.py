@@ -16,7 +16,7 @@ import pytest
 # Add current directory to Python path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.muxi.runtime.llm import (  # noqa: E402
+from src.muxi.llm import (  # noqa: E402
     LLM, LLMError, LLMErrorType, get_cache_stats, get_retry_stats,
     get_circuit_breaker_stats, clear_llm_cache, set_cache_ttl, reset_all_stats,
     OneLLMAuthenticationError, OneLLMRateLimitError
@@ -74,7 +74,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o")
 
         # Mock the ChatCompletion.create method
-        with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
+        with patch('muxi.llm.ChatCompletion.create') as mock_create:
             mock_create.return_value = {
                 "choices": [{"message": {"content": "Hello! How can I help you?"}}]
             }
@@ -100,7 +100,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o")
 
         # Mock the Embedding.create method
-        with patch('muxi.runtime.llm.Embedding.create') as mock_create:
+        with patch('muxi.llm.Embedding.create') as mock_create:
             mock_create.return_value = {
                 "data": [{"embedding": [0.1, 0.2, 0.3]}]
             }
@@ -120,7 +120,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o")
 
         # Mock the Embedding.create method
-        with patch('muxi.runtime.llm.Embedding.create') as mock_create:
+        with patch('muxi.llm.Embedding.create') as mock_create:
             mock_create.return_value = {
                 "data": [
                     {"embedding": [0.1, 0.2, 0.3]},
@@ -143,7 +143,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o")
 
         # Mock the ChatCompletion.create method
-        with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
+        with patch('muxi.llm.ChatCompletion.create') as mock_create:
             mock_create.return_value = {
                 "choices": [{"message": {"content": "Generated response"}}]
             }
@@ -165,7 +165,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o")
 
         # Mock the ChatCompletion.create method
-        with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
+        with patch('muxi.llm.ChatCompletion.create') as mock_create:
             mock_create.return_value = {
                 "choices": [{"message": {"content": "Cached response"}}]
             }
@@ -205,7 +205,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o")
 
         # Test authentication error
-        with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
+        with patch('muxi.llm.ChatCompletion.create') as mock_create:
             mock_create.side_effect = OneLLMAuthenticationError("Invalid API key")
 
             with self.assertRaises(LLMError) as exc_info:
@@ -220,7 +220,7 @@ class TestEnhancedLLM(unittest.TestCase):
         llm = LLM(model="openai/gpt-4o", max_retries=2)
 
         # Mock the ChatCompletion.create method to fail twice then succeed
-        with patch('muxi.runtime.llm.ChatCompletion.create') as mock_create:
+        with patch('muxi.llm.ChatCompletion.create') as mock_create:
             mock_create.side_effect = [
                 OneLLMRateLimitError("Rate limit"),
                 OneLLMRateLimitError("Rate limit"),
@@ -267,7 +267,7 @@ class TestEnhancedLLM(unittest.TestCase):
             await asyncio.sleep(0.2)  # Sleep longer than timeout
             return {"choices": [{"message": {"content": "Too slow"}}]}
 
-        with patch('muxi.runtime.llm.ChatCompletion.create', side_effect=slow_response):
+        with patch('muxi.llm.ChatCompletion.create', side_effect=slow_response):
             with self.assertRaises(LLMError) as exc_info:
                 await llm.chat([{"role": "user", "content": "test"}])
 
@@ -291,7 +291,7 @@ class TestEnhancedLLM(unittest.TestCase):
     def test_multimodal_chat_with_files(self):
         """Test chat method with file attachments."""
         async def run_test():
-            from src.muxi.runtime.llm import LLM
+            from src.muxi.llm import LLM
 
             llm = LLM(model="openai/gpt-4o")
 
@@ -302,7 +302,7 @@ class TestEnhancedLLM(unittest.TestCase):
 
             try:
                 # Mock the OneLLM response
-                with patch('src.muxi.runtime.llm.ChatCompletion.create') as mock_create:
+                with patch('src.muxi.llm.ChatCompletion.create') as mock_create:
                     mock_create.return_value = {
                         "choices": [{"message": {"content": "I can see the file content."}}]
                     }
@@ -329,7 +329,7 @@ class TestEnhancedLLM(unittest.TestCase):
     def test_multimodal_file_security_validation(self):
         """Test file security validation."""
         async def run_test():
-            from src.muxi.runtime.llm import FileProcessor
+            from src.muxi.llm import FileProcessor
 
             # Test with a normal file
             test_file = "normal_test.txt"
@@ -352,7 +352,7 @@ class TestEnhancedLLM(unittest.TestCase):
     def test_multimodal_file_processing_error_handling(self):
         """Test error handling in file processing."""
         async def run_test():
-            from src.muxi.runtime.llm import LLM
+            from src.muxi.llm import LLM
 
             llm = LLM(model="openai/gpt-4o")
 
@@ -367,7 +367,7 @@ class TestEnhancedLLM(unittest.TestCase):
     def test_multimodal_cache_behavior_with_files(self):
         """Test that files are not cached for security."""
         async def run_test():
-            from src.muxi.runtime.llm import LLM
+            from src.muxi.llm import LLM
 
             llm = LLM(model="openai/gpt-4o")
 
@@ -379,7 +379,7 @@ class TestEnhancedLLM(unittest.TestCase):
             try:
                 messages = [{"role": "user", "content": "Analyze this file."}]
 
-                with patch('src.muxi.runtime.llm.ChatCompletion.create') as mock_create:
+                with patch('src.muxi.llm.ChatCompletion.create') as mock_create:
                     mock_create.return_value = {
                         "choices": [{"message": {"content": "First response"}}]
                     }
@@ -407,7 +407,7 @@ class TestEnhancedLLM(unittest.TestCase):
     def test_file_format_detection(self):
         """Test file format detection and MIME type mapping."""
         async def run_test():
-            from src.muxi.runtime.llm import FileProcessor
+            from src.muxi.llm import FileProcessor
 
             # Test text file
             text_file = "test.txt"
@@ -430,7 +430,7 @@ class TestEnhancedLLM(unittest.TestCase):
     def test_multimodal_multiple_files(self):
         """Test processing multiple files at once."""
         async def run_test():
-            from src.muxi.runtime.llm import LLM
+            from src.muxi.llm import LLM
 
             llm = LLM(model="openai/gpt-4o")
 
@@ -441,7 +441,7 @@ class TestEnhancedLLM(unittest.TestCase):
                     f.write(f"Content of {file_name}")
 
             try:
-                with patch('src.muxi.runtime.llm.ChatCompletion.create') as mock_create:
+                with patch('src.muxi.llm.ChatCompletion.create') as mock_create:
                     mock_create.return_value = {
                         "choices": [{"message": {"content": "Analyzed multiple files"}}]
                     }

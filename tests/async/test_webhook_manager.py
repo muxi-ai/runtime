@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from aiohttp import ClientError, ClientTimeout, ServerTimeoutError
 from aiohttp.web_response import Response
 
-from src.muxi.runtime.overlord.async_patterns.webhook_manager import (
+from src.muxi.overlord.async_patterns.webhook_manager import (
     WebhookManager,
     WebhookPayload
 )

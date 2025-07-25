@@ -4,7 +4,7 @@ import traceback
 # Set up import path before importing muxi modules
 sys.path.insert(0, 'runtime')
 
-from src.muxi.runtime.knowledge.handler import KnowledgeHandler  # noqa: E402
+from src.muxi.knowledge.handler import KnowledgeHandler  # noqa: E402
 
 try:
     handler = KnowledgeHandler(

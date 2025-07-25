@@ -8,7 +8,7 @@ from onellm import ChatCompletion
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 async def test_direct_llm():
@@ -27,7 +27,7 @@ async def test_direct_llm():
                         "description": "The file path"
                     },
                     "content": {
-                        "type": "string", 
+                        "type": "string",
                         "description": "The file content"
                     }
                 },
@@ -35,15 +35,15 @@ async def test_direct_llm():
             }
         }
     }]
-    
+
     messages = [
         {"role": "system", "content": "You are a helpful assistant with access to file creation tools."},
         {"role": "user", "content": "Create a file at /tmp/test.txt with content 'Hello World'"}
     ]
-    
+
     print("Testing direct LLM call with tools...")
     print(f"Tools: {tools}")
-    
+
     try:
         response = await ChatCompletion.acreate(
             model="openai/gpt-4o-mini",
@@ -51,10 +51,10 @@ async def test_direct_llm():
             tools=tools,
             temperature=0.7
         )
-        
+
         print(f"\nResponse type: {type(response)}")
         print(f"Response: {response}")
-        
+
         if hasattr(response, "choices") and response.choices:
             message = response.choices[0].message
             print(f"\nMessage type: {type(message)}")
@@ -62,7 +62,7 @@ async def test_direct_llm():
             print(f"Has tool_calls: {hasattr(message, 'tool_calls')}")
             if hasattr(message, "tool_calls"):
                 print(f"Tool calls: {message.tool_calls}")
-                
+
     except Exception as e:
         print(f"Error: {e}")
         import traceback
@@ -72,15 +72,15 @@ async def test_direct_llm():
 async def test_formation_agent():
     """Test agent with MCP tools."""
     formation_path = Path("test-formations/formation-mcp")
-    
+
     # Load formation
     formation = Formation()
     formation.load(str(formation_path))
     overlord = formation.start_overlord()
-    
+
     # Wait for overlord to be ready
     await overlord.ensure_started()
-    
+
     print("\n\nTesting through formation agent...")
     response = await overlord.chat(
         user_id="test_user",
@@ -88,9 +88,9 @@ async def test_formation_agent():
         use_async=False,
         stream=False,
     )
-    
+
     print(f"Response: {response}")
-    
+
     # Stop overlord
     formation.stop_overlord(10.0)
 
@@ -98,7 +98,7 @@ async def test_formation_agent():
 async def main():
     # Test direct LLM first
     await test_direct_llm()
-    
+
     # Then test through agent
     await test_formation_agent()
 

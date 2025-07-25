@@ -1,7 +1,7 @@
 # Scheduler Formation API Reference
 
-**Version**: 1.1.0  
-**Date**: June 2025  
+**Version**: 1.1.0
+**Date**: June 2025
 **Status**: ✅ Complete Implementation
 
 ## Overview
@@ -15,7 +15,7 @@ The MUXI Scheduler provides a comprehensive API through the Formation class, ena
 All scheduler retrieval methods are available through the Formation instance after the overlord has been started.
 
 ```python
-from muxi.runtime.formation import Formation
+from muxi.formation import Formation
 
 # Initialize and start formation
 formation = Formation()
@@ -221,21 +221,21 @@ All job retrieval methods return job dictionaries with the following structure:
     "id": "sched_abc123def456",
     "user_id": "user123",
     "formation_id": "formation456",
-    
+
     # Job details
     "title": "Daily Email Check",
     "original_prompt": "Check my email every day at 9am",
     "execution_prompt": "Check user's email and summarize important messages",
-    
+
     # Scheduling
     "is_recurring": True,
     "cron_expression": "0 9 * * *",  # For recurring jobs
     "scheduled_for": None,           # For one-time jobs
     "exclusion_rules": [],
-    
+
     # Status
     "status": "ACTIVE",  # ACTIVE, PAUSED, COMPLETED
-    
+
     # Execution tracking
     "last_run_at": "2025-06-23T09:00:00Z",
     "last_run_status": "success",
@@ -243,11 +243,11 @@ All job retrieval methods return job dictionaries with the following structure:
     "total_runs": 15,
     "total_failures": 0,
     "consecutive_failures": 0,
-    
+
     # Timestamps
     "created_at": "2025-06-01T10:30:00Z",
     "updated_at": "2025-06-23T09:00:15Z",
-    
+
     # Metadata
     "metadata": {}
 }
@@ -261,7 +261,7 @@ All job retrieval methods return job dictionaries with the following structure:
 async def check_job_health(formation: Formation, user_id: str):
     """Check health of user's scheduled jobs."""
     jobs = await formation.get_user_jobs(user_id)
-    
+
     unhealthy_jobs = []
     for job in jobs:
         # Check for jobs with high failure rates
@@ -269,13 +269,13 @@ async def check_job_health(formation: Formation, user_id: str):
             failure_rate = job['total_failures'] / job['total_runs']
             if failure_rate > 0.2:  # More than 20% failures
                 unhealthy_jobs.append(job)
-        
+
         # Check for jobs that haven't run recently
         if job['status'] == 'ACTIVE' and job['last_run_at']:
             last_run = datetime.fromisoformat(job['last_run_at'].replace('Z', '+00:00'))
             if datetime.now(timezone.utc) - last_run > timedelta(days=7):
                 unhealthy_jobs.append(job)
-    
+
     return unhealthy_jobs
 ```
 
@@ -289,7 +289,7 @@ async def generate_job_report(formation: Formation, user_id: str):
         user_id=user_id,
         limit=100
     )
-    
+
     report = {
         "total_jobs": len(jobs),
         "active_jobs": len([j for j in jobs if j['status'] == 'ACTIVE']),
@@ -304,7 +304,7 @@ async def generate_job_report(formation: Formation, user_id: str):
             "deleted": len([e for e in audit_events if e['action'] == 'deleted']),
         }
     }
-    
+
     return report
 ```
 
@@ -314,25 +314,25 @@ async def generate_job_report(formation: Formation, user_id: str):
 async def analyze_job_changes(formation: Formation, job_id: str):
     """Analyze the change history of a job."""
     audit_trail = await formation.get_job_audit_trail(job_id)
-    
+
     # Find creation event
     creation_event = next(
         (e for e in audit_trail if e['action'] == 'created'),
         None
     )
-    
+
     # Count status changes
     status_changes = [
-        e for e in audit_trail 
+        e for e in audit_trail
         if e['action'] in ['paused', 'resumed']
     ]
-    
+
     # Check if job was replaced
     replacement = next(
         (e for e in audit_trail if e['action'] == 'replaced'),
         None
     )
-    
+
     analysis = {
         "created_at": creation_event['timestamp'] if creation_event else None,
         "created_by": creation_event['user_id'] if creation_event else None,
@@ -341,7 +341,7 @@ async def analyze_job_changes(formation: Formation, job_id: str):
         "replaced_by": replacement['changes']['replaced_by'] if replacement else None,
         "total_events": len(audit_trail)
     }
-    
+
     return analysis
 ```
 
@@ -354,7 +354,7 @@ All Formation scheduler methods can raise the following exceptions:
 Raised when trying to access scheduler methods before the overlord is started.
 
 ```python
-from muxi.runtime.datatypes.exceptions import OverlordStateError
+from muxi.datatypes.exceptions import OverlordStateError
 
 try:
     jobs = await formation.get_active_jobs()
@@ -389,20 +389,20 @@ async def process_all_jobs(formation: Formation):
     """Process jobs in batches."""
     batch_size = 100
     offset = 0
-    
+
     while True:
         batch = await formation.get_all_jobs(
             limit=batch_size,
             offset=offset
         )
-        
+
         if not batch:
             break
-            
+
         # Process batch
         for job in batch:
             await process_job(job)
-            
+
         offset += batch_size
 ```
 
@@ -420,21 +420,21 @@ class CachedSchedulerAPI:
         self.cache_ttl = cache_ttl
         self._cache = {}
         self._cache_times = {}
-    
+
     async def get_user_jobs_cached(self, user_id: str):
         """Get user jobs with caching."""
         cache_key = f"user_jobs_{user_id}"
-        
+
         # Check cache
         if cache_key in self._cache:
             if datetime.now() - self._cache_times[cache_key] < timedelta(seconds=self.cache_ttl):
                 return self._cache[cache_key]
-        
+
         # Fetch fresh data
         jobs = await self.formation.get_user_jobs(user_id)
         self._cache[cache_key] = jobs
         self._cache_times[cache_key] = datetime.now()
-        
+
         return jobs
 ```
 

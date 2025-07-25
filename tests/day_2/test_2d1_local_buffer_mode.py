@@ -5,7 +5,7 @@ import sys
 import os
 sys.path.insert(0, ".")
 import asyncio
-from src.muxi.runtime.formation.formation import Formation
+from src.muxi.formation.formation import Formation
 
 
 async def collect_stream(stream):
@@ -45,12 +45,12 @@ async def test_local_buffer_memory():
 
         # Add more context to test buffer
         print("\nTesting buffer overflow handling...")
-        
+
         # Fill the buffer with more messages
         for i in range(15):  # Buffer size is 10 with multiplier 5 = 50 total
             await overlord.chat(f"Message {i}: This is test content to fill the buffer.", user_id="alice"
             , use_async=False)
-        
+
         # Check if early context is still remembered
         response3 = await overlord.chat("Do you remember where I work?", user_id="alice"
         , use_async=False)
@@ -96,7 +96,7 @@ async def test_remote_buffer_memory():
         response1_text = await collect_stream(response1)
         print("  - Initial context added")
 
-        # Query context  
+        # Query context
         response2 = await overlord.chat("What's my profession?", user_id="bob"
         , use_async=False)
         response2_text = await collect_stream(response2)
@@ -107,7 +107,7 @@ async def test_remote_buffer_memory():
         response3 = await overlord.chat("I specialize in Python and machine learning.", user_id="bob"
         , use_async=False)
         response3_text = await collect_stream(response3)
-        
+
         response4 = await overlord.chat("What technical skills have I mentioned?", user_id="bob"
         , use_async=False)
         response4_text = await collect_stream(response4)
@@ -157,22 +157,22 @@ async def main():
     print("\n" + "=" * 60)
     print("📋 BUFFER MODE TEST SUMMARY")
     print("=" * 60)
-    
+
     local_passed = local_result.get("status") == "success"
     remote_passed = local_result.get("status") in ["success", "expected_failure"]
-    
+
     print(f"Local Buffer Mode: {'✅ PASS' if local_passed else '❌ FAIL'}")
     if local_passed:
         print(f"  - Context retention: {'✅' if local_result.get('context_retention') else '❌'}")
         print(f"  - Vector search: ✅")
-    
+
     print(f"\nRemote Buffer Mode: {'✅ PASS' if remote_passed else '❌ FAIL'}")
     if remote_result.get("status") == "success":
         print(f"  - Context retention: {'✅' if remote_result.get('context_retention') else '❌'}")
         print(f"  - Remote search: {'✅' if remote_result.get('remote_search') else '❌'}")
     elif remote_result.get("status") == "expected_failure":
         print("  - Expected failure (FAISSx server not running)")
-    
+
     print("\nMode Comparison:")
     print("  - Local: in-memory, fast, single-process")
     print("  - Remote: distributed, scalable, multi-process")

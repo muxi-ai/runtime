@@ -35,7 +35,7 @@ def main():
     try:
         import pytest_cov  # noqa: F401
         pytest_args.extend([
-            "--cov=muxi.runtime.overlord.async_patterns",
+            "--cov=muxi.overlord.async_patterns",
             "--cov-report=term-missing",
             "--cov-report=html:coverage_html"
         ])

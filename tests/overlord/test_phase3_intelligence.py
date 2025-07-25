@@ -10,7 +10,7 @@ import time
 from unittest.mock import Mock, AsyncMock, patch
 
 # Import Phase 3 components to test
-from src.muxi.runtime.overlord.intelligence import (
+from src.muxi.overlord.intelligence import (
     UserPreferenceEngine,
     PreferenceExtractor,
     UserBehaviorAnalyzer,
@@ -18,7 +18,7 @@ from src.muxi.runtime.overlord.intelligence import (
     AdaptiveResponseGenerator
 )
 
-from src.muxi.runtime.overlord.intelligence.types import (
+from src.muxi.overlord.intelligence.types import (
     UserPreferences,
     ConversationContext,
     AdaptedResponse,
@@ -74,7 +74,7 @@ class TestPhase3Types:
 
     def test_adapted_response_creation(self):
         """Test AdaptedResponse object creation and properties"""
-        from src.muxi.runtime.overlord.intelligence.types import AdaptationDetails
+        from src.muxi.overlord.intelligence.types import AdaptationDetails
 
         # Create test adaptation details
         adaptation_detail = AdaptationDetails(
@@ -124,7 +124,7 @@ class TestPhase3Types:
 
     def test_adapted_response_adaptation_summary(self):
         """Test AdaptedResponse adaptation_summary property method"""
-        from src.muxi.runtime.overlord.intelligence.types import AdaptationDetails
+        from src.muxi.overlord.intelligence.types import AdaptationDetails
 
         # Create multiple adaptation details
         adaptations = [

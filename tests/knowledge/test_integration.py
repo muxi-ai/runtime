@@ -16,7 +16,7 @@ import os
 import time
 from typing import List
 
-from muxi.runtime.formation.agents.knowledge import KnowledgeHandler, FileKnowledge
+from muxi.formation.agents.knowledge import KnowledgeHandler, FileKnowledge
 
 
 class TestEndToEndWorkflows:

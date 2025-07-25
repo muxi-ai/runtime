@@ -36,11 +36,11 @@ async def test_storage_experience_integration():
 
     try:
         # Import components from both layers
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
         )
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentSummarizer,
             DocumentAcknowledgmentGenerator,
         )
@@ -108,11 +108,11 @@ async def test_experience_workflow_integration():
 
     try:
         # Import components from both layers
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentSummarizer,
             # DocumentErrorHandler,
         )
-        from src.muxi.runtime.formation.documents.workflow import (
+        from src.muxi.formation.documents.workflow import (
             DocumentWorkflowIntegrator,
             DocumentContextPreserver,
         )
@@ -179,11 +179,11 @@ async def test_storage_workflow_integration():
 
     try:
         # Import components from both layers
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager,
             DocumentReferenceSystem,
         )
-        from src.muxi.runtime.formation.documents.workflow import (
+        from src.muxi.formation.documents.workflow import (
             DocumentCrossReferenceManager,
             DocumentWorkflowIntegrator,
         )
@@ -250,15 +250,15 @@ async def test_three_layer_integration():
 
     try:
         # Import components from all three layers
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
         )
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentSummarizer,
             DocumentAcknowledgmentGenerator,
         )
-        from src.muxi.runtime.formation.documents.workflow import (
+        from src.muxi.formation.documents.workflow import (
             DocumentWorkflowIntegrator,
             DocumentContextPreserver,
         )

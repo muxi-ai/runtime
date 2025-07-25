@@ -6,7 +6,7 @@ clear error messages for common configuration issues.
 """
 
 import pytest
-from src.muxi.runtime.services.observability.transports.stream import StreamTransport
+from src.muxi.services.observability.transports.stream import StreamTransport
 from unittest.mock import patch
 
 
@@ -264,7 +264,7 @@ class TestStreamTransportConfigurationValidation:
 
         # Mock TokenEncryption to raise an exception
         with patch(
-            "src.muxi.runtime.services.observability.transports.stream.TokenEncryption"
+            "src.muxi.services.observability.transports.stream.TokenEncryption"
         ) as mock_encryption:
             mock_encryption.side_effect = Exception("Encryption setup failed")
 

@@ -224,7 +224,7 @@ Concurrent Connections:        10+ simultaneous
 ### Connection Errors
 
 ```python
-from muxi.runtime.services.mcp.base import MCPConnectionError, MCPTimeoutError
+from muxi.services.mcp.base import MCPConnectionError, MCPTimeoutError
 
 try:
     await service.register_mcp_server(

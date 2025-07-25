@@ -93,7 +93,7 @@ async def test_document_storage_layer():
 
     try:
         # Import all document storage components
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
             DocumentSemanticIndex,
@@ -244,7 +244,7 @@ async def test_document_experience_layer():
 
     try:
         # Import document experience components
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentAcknowledgmentGenerator,
             DocumentSummarizer,
             DocumentErrorHandler
@@ -371,7 +371,7 @@ async def test_document_workflow_layer():
 
     try:
         # Import document workflow components
-        from src.muxi.runtime.formation.documents.workflow import (
+        from src.muxi.formation.documents.workflow import (
             DocumentWorkflowIntegrator,
             DocumentCrossReferenceManager,
             DocumentContextPreserver
@@ -506,7 +506,7 @@ async def test_unified_configuration():
     print("\n🧪 Testing Unified Configuration Schema Integration")
 
     try:
-        from src.muxi.runtime.config.document_processing import DocumentProcessingConfig
+        from src.muxi.config.document_processing import DocumentProcessingConfig
 
         # Test unified schema configuration
         doc_config = DocumentProcessingConfig(TEST_CONFIG["llm"])
@@ -541,14 +541,14 @@ async def test_integration_workflow():
 
     try:
         # Import all components for integration test
-        from src.muxi.runtime.config.document_processing import DocumentProcessingConfig
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.config.document_processing import DocumentProcessingConfig
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager, DocumentMetadataStore
         )
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentAcknowledgmentGenerator, DocumentSummarizer
         )
-        from src.muxi.runtime.formation.documents.workflow import DocumentWorkflowIntegrator
+        from src.muxi.formation.documents.workflow import DocumentWorkflowIntegrator
 
         print("✅ All components imported for integration test")
 

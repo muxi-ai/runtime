@@ -111,7 +111,7 @@ class DocumentProcessingConfig:
     def get_settings(self) -> Dict[str, Any]:
         """
         Return a dictionary summarizing the current document processing configuration.
-        
+
         Returns:
             A dictionary containing:
                 - enabled (bool): Whether document processing is enabled.

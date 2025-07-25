@@ -13,8 +13,8 @@ from pathlib import Path
 
 sys.path.insert(0, '../..')
 
-from src.muxi.runtime.formation import Formation
-from src.muxi.runtime.utils.user_dirs import get_knowledge_dir
+from src.muxi.formation import Formation
+from src.muxi.utils.user_dirs import get_knowledge_dir
 
 
 def test_core_knowledge_mechanics():
@@ -47,7 +47,7 @@ def test_core_knowledge_mechanics():
 
             # Test that knowledge works by asking questions
             print("\nTesting knowledge through chat...")
-            
+
             # Ask MUXI agent about pricing (should use knowledge)
             response1 = await overlord1.chat(
                 "What are the pricing tiers for MUXI?",
@@ -56,14 +56,14 @@ def test_core_knowledge_mechanics():
                 session_id="test_session_1",
                 stream=False
             )
-            
+
             print(f"\n👤 User: What are the pricing tiers for MUXI?")
             if isinstance(response1, dict):
                 response_text = response1.get('response', str(response1))
             else:
                 response_text = str(response1)
             print(f"🤖 MUXI: {response_text[:200]}...")
-            
+
             # Verify response indicates knowledge was used
             assert len(response_text) > 100, "Response too short, knowledge likely not loaded"
             assert any(word in response_text.lower() for word in ["tier", "price", "plan", "basic", "professional"]), \
@@ -98,22 +98,22 @@ def test_core_knowledge_mechanics():
 
             # Test knowledge again - should be faster due to cache
             print("\nTesting knowledge through chat (should use cache)...")
-            
+
             response2 = await overlord2.chat(
                 "Tell me about MUXI's business model",
-                agent_name="muxi", 
+                agent_name="muxi",
                 user_id="test_user",
                 session_id="test_session_2",
                 stream=False
             )
-            
+
             print(f"\n👤 User: Tell me about MUXI's business model")
             if isinstance(response2, dict):
                 response_text = response2.get('response', str(response2))
             else:
                 response_text = str(response2)
             print(f"🤖 MUXI: {response_text[:200]}...")
-            
+
             # Verify response indicates knowledge was loaded from cache
             assert len(response_text) > 100, "Response too short, knowledge likely not loaded from cache"
             print("✓ MUXI successfully used cached knowledge on second run")
@@ -122,18 +122,18 @@ def test_core_knowledge_mechanics():
             response3 = await overlord2.chat(
                 "What services does Automaze provide?",
                 agent_name="automaze",
-                user_id="test_user", 
+                user_id="test_user",
                 session_id="test_session_3",
                 stream=False
             )
-            
+
             print(f"\n👤 User: What services does Automaze provide?")
             if isinstance(response3, dict):
                 response_text = response3.get('response', str(response3))
             else:
                 response_text = str(response3)
             print(f"🤖 Automaze: {response_text[:200]}...")
-            
+
             assert len(response_text) > 100, "Response too short, knowledge search likely not working"
             print("✓ Knowledge search working correctly with cached embeddings")
 
@@ -149,7 +149,7 @@ def test_core_knowledge_mechanics():
             print("✓ Cached embeddings used on second run")
             print("✓ Knowledge search works correctly")
             print("\n✅ Test 6A0 PASSED: Core knowledge mechanics verified through chat flow")
-            
+
             return True
 
         except Exception as e:

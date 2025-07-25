@@ -5,10 +5,10 @@ Test for real MCP SDK implementation.
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from src.muxi.runtime.services.mcp.protocol.message_handler import MCPMessageHandler
-from src.muxi.runtime.services.mcp.transports.streamable import StreamableHTTPTransport
-from src.muxi.runtime.services.mcp.transports.http_sse import HTTPSSETransport
-from src.muxi.runtime.services.mcp.transports.command import CommandLineTransport
+from src.muxi.services.mcp.protocol.message_handler import MCPMessageHandler
+from src.muxi.services.mcp.transports.streamable import StreamableHTTPTransport
+from src.muxi.services.mcp.transports.http_sse import HTTPSSETransport
+from src.muxi.services.mcp.transports.command import CommandLineTransport
 
 
 class TestMCPMessageHandler:
@@ -85,7 +85,7 @@ class TestStreamableHTTPTransport:
         assert transport.session_id is None
         assert not transport.connected
 
-    @patch('src.muxi.runtime.services.mcp.transports.streamable.streamablehttp_client')
+    @patch('src.muxi.services.mcp.transports.streamable.streamablehttp_client')
     async def test_connect_success(self, mock_client, transport):
         """Test successful connection."""
         # Mock the context manager
@@ -103,7 +103,7 @@ class TestStreamableHTTPTransport:
         assert transport.connected is True
         assert transport.session_id is not None
 
-    @patch('src.muxi.runtime.services.mcp.transports.streamable.streamablehttp_client')
+    @patch('src.muxi.services.mcp.transports.streamable.streamablehttp_client')
     async def test_connect_failure(self, mock_client, transport):
         """Test connection failure."""
         mock_client.side_effect = Exception("Connection failed")
@@ -130,7 +130,7 @@ class TestHTTPSSETransport:
         assert transport.session is None
         assert not transport.connected
 
-    @patch('src.muxi.runtime.services.mcp.transports.http_sse.sse_client')
+    @patch('src.muxi.services.mcp.transports.http_sse.sse_client')
     async def test_connect_success(self, mock_client, transport):
         """Test successful connection."""
         # Mock the context manager
@@ -164,7 +164,7 @@ class TestCommandLineTransport:
         assert transport.session is None
         assert not transport.connected
 
-    @patch('src.muxi.runtime.services.mcp.transports.command.stdio_client')
+    @patch('src.muxi.services.mcp.transports.command.stdio_client')
     async def test_connect_success(self, mock_client, transport):
         """Test successful connection."""
         # Mock the context manager

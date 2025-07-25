@@ -107,7 +107,7 @@ class TestVisibility:
 def get_response_universal(coro):
     """Universal helper to get response from async chat - handles all response types"""
     result = asyncio.run(coro)
-    
+
     # Handle different response types
     if isinstance(result, dict) and "request_id" in result:
         # Async response - return a placeholder message
@@ -139,7 +139,7 @@ def is_async_response(response):
 def assert_response_valid(response, min_length=50, required_words=None, context=""):
     """Assert that a response is valid, handling both sync and async responses"""
     assert response, f"Should receive a response{' for ' + context if context else ''}"
-    
+
     if is_async_response(response):
         # This is an async processing response
         assert "Processing async request" in response, "Should indicate async processing"
@@ -147,12 +147,12 @@ def assert_response_valid(response, min_length=50, required_words=None, context=
     else:
         # This is a sync response with actual content
         assert len(response) >= min_length, f"Response should be at least {min_length} chars{' for ' + context if context else ''}"
-        
+
         if required_words:
             response_lower = response.lower()
             found = any(word.lower() in response_lower for word in required_words)
             assert found, f"Response should contain one of: {required_words}{' for ' + context if context else ''}"
-        
+
         return False  # Not async
 
 
@@ -197,7 +197,7 @@ def capture_observability_events(visibility: TestVisibility):
     global _original_observe
 
     try:
-        from src.muxi.runtime.services import observability
+        from src.muxi.services import observability
 
         if _original_observe is None:
             _original_observe = observability.observe
@@ -224,7 +224,7 @@ def restore_observability():
     global _original_observe
     if _original_observe:
         try:
-            from src.muxi.runtime.services import observability
+            from src.muxi.services import observability
 
             observability.observe = _original_observe
         except Exception:

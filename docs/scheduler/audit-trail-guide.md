@@ -47,7 +47,7 @@ Each audit entry contains:
 ### Get Job-Specific Audit Trail
 
 ```python
-from muxi.runtime.formation import Formation
+from muxi.formation import Formation
 
 # Initialize formation
 formation = Formation()

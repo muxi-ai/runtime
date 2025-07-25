@@ -9,7 +9,7 @@ This test verifies the enhanced coordination features that are always enabled:
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from src.muxi.runtime.formation.agents import Agent
+from src.muxi.formation.agents import Agent
 
 
 class TestTask33Completion:

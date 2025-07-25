@@ -11,8 +11,8 @@ import aiohttp
 from unittest.mock import AsyncMock, MagicMock
 import time
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.llm import LLM
+from src.muxi.overlord import Overlord
+from src.muxi.llm import LLM
 
 
 class MockExternalAgent:

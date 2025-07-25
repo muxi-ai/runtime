@@ -14,7 +14,7 @@
 #
 # Usage Pattern:
 #
-#   from muxi.runtime import Formation
+#   from muxi import Formation
 #
 #   formation = Formation()
 #   formation.load("my-formation.yaml")
@@ -696,7 +696,7 @@ class Formation:
                         if secret_value is None:
                             raise ValueError(
                                 f"Secret '{secret_name}' not found in secrets manager. "
-                                f"Please add it using: python -m muxi.runtime.utils.secrets add {secret_name}"
+                                f"Please add it using: python -m muxi.utils.secrets add {secret_name}"
                             )
                         value = value.replace(f"${{{{ secrets.{secret_name} }}}}", secret_value)
                         interpolated_secrets.add(secret_name)

@@ -32,11 +32,11 @@ logger = logging.getLogger(__name__)
 # Load MCP classes
 try:
     # Try direct import
-    from src.muxi.runtime.services.mcp.handler import (
+    from src.muxi.services.mcp.handler import (
         MCPHandler,
         MCPServerClient
     )
-    from src.muxi.runtime.services.mcp.transports import (
+    from src.muxi.services.mcp.transports import (
         HTTPSSETransport,
         CommandLineTransport,
         MCPTransportFactory,

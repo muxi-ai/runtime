@@ -7,8 +7,8 @@ import tempfile
 import os
 from unittest.mock import MagicMock, patch
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.config.validation import ValidationResult, FormationValidator
+from src.muxi.overlord import Overlord
+from src.muxi.config.validation import ValidationResult, FormationValidator
 
 
 class TestFormationIntegration:
@@ -79,7 +79,7 @@ class TestFormationIntegration:
         assert "✅ Formation configuration is valid" in validation_result['summary']
 
     @pytest.mark.asyncio
-    @patch('src.muxi.runtime.overlord.Overlord.create_model')
+    @patch('src.muxi.overlord.Overlord.create_model')
     async def test_overlord_load_formation_from_path(self, mock_create_model, temp_formation_file):
         """Test Overlord loading formation from path."""
         # Mock the model creation

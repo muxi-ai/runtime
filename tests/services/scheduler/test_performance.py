@@ -10,10 +10,10 @@ import asyncio
 import time
 from unittest.mock import Mock, patch, AsyncMock
 
-from src.muxi.runtime.services.scheduler.service import SchedulerService
-from src.muxi.runtime.services.scheduler.batch_processor import JobBatchProcessor
-from src.muxi.runtime.services.scheduler.cache import SchedulerCache
-from src.muxi.runtime.services.scheduler.circuit_breaker import LLMCircuitBreaker, CircuitBreakerError
+from src.muxi.services.scheduler.service import SchedulerService
+from src.muxi.services.scheduler.batch_processor import JobBatchProcessor
+from src.muxi.services.scheduler.cache import SchedulerCache
+from src.muxi.services.scheduler.circuit_breaker import LLMCircuitBreaker, CircuitBreakerError
 
 
 class TestSchedulerPerformance:
@@ -128,7 +128,7 @@ class TestSchedulerPerformance:
             "scheduler": {"enabled": True, "check_interval_minutes": 1}
         }
 
-        with patch("muxi.runtime.services.scheduler.service.get_database_manager"):
+        with patch("muxi.services.scheduler.service.get_database_manager"):
             scheduler = SchedulerService(mock_overlord)
 
             # Simulate some activity

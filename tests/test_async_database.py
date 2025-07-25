@@ -11,8 +11,8 @@ from typing import List
 import pytest
 import tempfile
 
-from muxi.runtime.services.db import DatabaseManager
-from muxi.runtime.services.memory.long_term import LongTermMemory, User, Memory, Collection
+from muxi.services.db import DatabaseManager
+from muxi.services.memory.long_term import LongTermMemory, User, Memory, Collection
 
 
 class MockEmbeddingModel:
@@ -21,12 +21,12 @@ class MockEmbeddingModel:
     async def embed(self, text: str) -> List[float]:
         """
         Asynchronously generates a fixed-size embedding vector for the input text.
-        
+
         The embedding is a 1536-dimensional list of floats, where each dimension corresponds to the normalized ordinal value of a character in the input text (up to 1536 characters). Remaining dimensions are filled with zeros.
-        
+
         Parameters:
             text (str): The input text to embed.
-        
+
         Returns:
             List[float]: A 1536-dimensional embedding vector representing the input text.
         """
@@ -41,7 +41,7 @@ class MockEmbeddingModel:
 async def test_async_database_operations():
     """
     Test asynchronous creation and retrieval of a user record in a temporary SQLite database.
-    
+
     Verifies that a user can be created and queried using async database operations, ensuring correct data persistence and retrieval.
     """
     # Create temporary SQLite database
@@ -52,7 +52,7 @@ async def test_async_database_operations():
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
 
     # Create tables
-    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    from muxi.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
 
     # Test async session creation
@@ -84,7 +84,7 @@ async def test_async_database_operations():
 async def test_async_memory_operations():
     """
     Test asynchronous memory storage and retrieval using the LongTermMemory service.
-    
+
     This test adds multiple memory entries asynchronously and verifies that search operations return the expected results, including correct result count and required fields. It also prints the duration of async operations and asserts that asynchronous operations are faster than synchronous ones for concurrent tasks.
     """
     # Create temporary SQLite database
@@ -95,11 +95,11 @@ async def test_async_memory_operations():
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
 
     # Create tables
-    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    from muxi.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
 
     # Create tables
-    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    from muxi.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
     embedding_model = MockEmbeddingModel()
     memory = LongTermMemory(
@@ -148,7 +148,7 @@ async def test_async_memory_operations():
 async def test_async_vs_sync_performance():
     """
     Measures and compares the performance of synchronous and asynchronous database operations for creating multiple user records.
-    
+
     The test creates 50 user records synchronously and asynchronously in a temporary SQLite database, prints the durations and speedup, and asserts that asynchronous operations are not significantly slower than synchronous ones.
     """
     # Create temporary SQLite database
@@ -158,7 +158,7 @@ async def test_async_vs_sync_performance():
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
 
     # Create tables
-    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    from muxi.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
 
     # Test sync operations
@@ -207,7 +207,7 @@ async def test_async_vs_sync_performance():
 async def test_async_model_mixin_methods():
     """
     Test the asynchronous CRUD helper methods provided by AsyncModelMixin on the User model.
-    
+
     This test verifies that the async `create`, `get`, `update`, `get_all`, and `delete` methods function correctly within an async database session, ensuring proper creation, retrieval, updating, listing, and deletion of User records.
     """
     # Create temporary SQLite database
@@ -217,7 +217,7 @@ async def test_async_model_mixin_methods():
     db_manager = DatabaseManager(f"sqlite:///{db_path}")
 
     # Create tables
-    from muxi.runtime.services.memory.long_term import Base as MemoryBase
+    from muxi.services.memory.long_term import Base as MemoryBase
     db_manager.create_tables(MemoryBase.metadata)
 
     async with db_manager.get_async_session() as session:

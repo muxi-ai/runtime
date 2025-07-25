@@ -8,20 +8,20 @@ import sys
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime import Formation  # noqa: E402
+from src.muxi import Formation  # noqa: E402
 
 
 async def test_mcp_init():
     """Test MCP initialization without chat."""
     print("Starting MCP init test...")
-    
+
     formation = Formation()
     await formation.load("test-formations/formation-mcp")
     print("✅ Formation loaded")
-    
+
     overlord = await formation.start_overlord()
     print("✅ Overlord started")
-    
+
     # Check MCP service
     if hasattr(overlord, 'mcp_service') and overlord.mcp_service:
         # Use handlers instead of servers
@@ -30,7 +30,7 @@ async def test_mcp_init():
         for server_id in overlord.mcp_service.handlers:
             conn = overlord.mcp_service.connections.get(server_id, {})
             print(f"  - {server_id}: {conn.get('transport_type', 'command')}")
-    
+
     print("\nStopping...")
     await formation.stop_overlord()
     print("✅ Done")

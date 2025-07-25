@@ -17,7 +17,7 @@ from datetime import datetime
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, project_root)
 
-from src.muxi.runtime.overlord.overlord import Overlord
+from src.muxi.overlord.overlord import Overlord
 
 
 async def test_direct_clarification_webhook():

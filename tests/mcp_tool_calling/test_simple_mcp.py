@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 async def run_test():

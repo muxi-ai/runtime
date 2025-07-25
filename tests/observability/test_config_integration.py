@@ -10,8 +10,8 @@ import tempfile
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
-from muxi.runtime.observability.manager import ObservabilityManager
-from muxi.runtime.observability.types import EventLevel, SystemEvents
+from muxi.observability.manager import ObservabilityManager
+from muxi.observability.types import EventLevel, SystemEvents
 
 
 async def test_config_integration():

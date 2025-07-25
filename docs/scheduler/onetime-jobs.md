@@ -35,7 +35,7 @@ Users can now schedule tasks that execute once at a specific time, in addition t
 The scheduler uses pattern matching and LLM analysis to detect job types:
 
 ```python
-from muxi.runtime.services.scheduler.parser import ScheduleParser
+from muxi.services.scheduler.parser import ScheduleParser
 
 parser = ScheduleParser()
 
@@ -43,7 +43,7 @@ parser = ScheduleParser()
 job_type = await parser._detect_job_type("remind me tomorrow")
 # Returns: "one_time"
 
-job_type = await parser._detect_job_type("remind me daily")  
+job_type = await parser._detect_job_type("remind me daily")
 # Returns: "recurring"
 ```
 
@@ -54,7 +54,7 @@ For one-time jobs, the system parses specific dates and times:
 ```python
 # Parse specific datetime
 result = await parser._parse_specific_datetime(
-    "tomorrow at 2pm", 
+    "tomorrow at 2pm",
     timezone="America/New_York"
 )
 
@@ -72,7 +72,7 @@ result = await parser._parse_specific_datetime(
 Create jobs programmatically with the enhanced API:
 
 ```python
-from muxi.runtime.services.scheduler.manager import JobManager
+from muxi.services.scheduler.manager import JobManager
 from datetime import datetime, timedelta
 import pytz
 
@@ -80,7 +80,7 @@ import pytz
 scheduled_time = datetime.now(pytz.UTC) + timedelta(days=1)
 job_id = await job_manager.create_job(
     user_id="user123",
-    formation_id="formation456", 
+    formation_id="formation456",
     title="One-time Reminder",
     original_prompt="remind me tomorrow",
     execution_prompt="Don't forget your appointment!",
@@ -92,7 +92,7 @@ job_id = await job_manager.create_job(
 job_id = await job_manager.create_job(
     user_id="user123",
     formation_id="formation456",
-    title="Daily Reminder", 
+    title="Daily Reminder",
     original_prompt="remind me daily",
     execution_prompt="Daily reminder message",
     cron_expression="0 9 * * *",
@@ -111,7 +111,7 @@ ALTER TABLE scheduled_jobs ADD COLUMN scheduled_for TIMESTAMP WITH TIME ZONE NUL
 ALTER TABLE scheduled_jobs ALTER COLUMN cron_expression DROP NOT NULL;
 
 -- Updated status constraint to include 'COMPLETED'
-ALTER TABLE scheduled_jobs ADD CONSTRAINT scheduled_jobs_status_check 
+ALTER TABLE scheduled_jobs ADD CONSTRAINT scheduled_jobs_status_check
 CHECK (status IN ('ACTIVE', 'PAUSED', 'COMPLETED'));
 ```
 
@@ -139,24 +139,24 @@ class ScheduleParser:
     async def parse_schedule(self, schedule_text: str, timezone: str = "UTC") -> Union[str, Dict[str, Any]]:
         """
         Parse natural language schedule.
-        
+
         Returns:
             For recurring jobs: Cron expression string
             For one-time jobs: Dict with job type and scheduled datetime
         """
-    
+
     async def _detect_job_type(self, schedule_text: str) -> str:
         """
         Detect whether request is for one-time or recurring job.
-        
+
         Returns:
             "one_time" or "recurring"
         """
-    
+
     async def _parse_specific_datetime(self, schedule_text: str, timezone: str = "UTC") -> Optional[Dict[str, Any]]:
         """
         Parse specific datetime for one-time jobs.
-        
+
         Returns:
             Dict with job type and scheduled datetime, or None if parsing fails
         """
@@ -179,7 +179,7 @@ class JobManager:
         exclusion_rules: List[Dict[str, Any]] = None,
     ) -> str:
         """Create a new scheduled job (recurring or one-time)."""
-    
+
     async def complete_onetime_job(self, job_id: str) -> bool:
         """Mark a one-time job as completed."""
 ```
@@ -218,31 +218,31 @@ Existing recurring jobs continue to work without changes. They are automatically
 
 ```python
 import asyncio
-from muxi.runtime.formation import Formation
+from muxi.formation import Formation
 
 async def demo_onetime_jobs():
     # Load formation with scheduler enabled
     formation = Formation()
     await formation.load("formation.yaml")
     overlord = await formation.start_overlord()
-    
+
     # Schedule one-time tasks using natural language
     response1 = await overlord.chat(
         "Remind me to call the dentist tomorrow at 3pm",
         user_id="user123"
     )
-    
+
     response2 = await overlord.chat(
         "Send me a project update next Friday morning",
-        user_id="user123" 
+        user_id="user123"
     )
-    
+
     # Schedule recurring tasks (existing functionality)
     response3 = await overlord.chat(
         "Send me daily weather updates every morning at 7am",
         user_id="user123"
     )
-    
+
     print("All jobs scheduled successfully!")
     return [response1, response2, response3]
 
@@ -252,15 +252,15 @@ asyncio.run(demo_onetime_jobs())
 ### Programmatic Usage
 
 ```python
-from muxi.runtime.services.scheduler.parser import ScheduleParser
-from muxi.runtime.services.scheduler.manager import JobManager
+from muxi.services.scheduler.parser import ScheduleParser
+from muxi.services.scheduler.manager import JobManager
 from datetime import datetime, timedelta
 import pytz
 
 async def create_mixed_jobs():
     parser = ScheduleParser()
     job_manager = JobManager(db_manager)
-    
+
     # Parse and create one-time job
     result = await parser.parse_schedule("tomorrow at 2pm", "UTC")
     if result["job_type"] == "one_time":
@@ -273,12 +273,12 @@ async def create_mixed_jobs():
             scheduled_for=result["scheduled_for"],
             is_recurring=False,
         )
-    
+
     # Create recurring job
     cron_expr = await parser.parse_schedule("every day at 9am", "UTC")
     job_id = await job_manager.create_job(
         user_id="user123",
-        formation_id="formation456", 
+        formation_id="formation456",
         title="Daily Task",
         original_prompt="every day at 9am",
         execution_prompt="Execute daily task",
@@ -289,19 +289,19 @@ async def create_mixed_jobs():
 
 ## Benefits
 
-✅ **Natural Language**: Users can request one-time tasks naturally  
-✅ **Intelligent Detection**: System automatically determines job type  
-✅ **Complete Lifecycle**: One-time jobs automatically complete after execution  
-✅ **Backwards Compatible**: Existing recurring jobs continue to work  
-✅ **Unified API**: Same interface for both job types  
-✅ **Database Optimized**: Efficient queries with proper indexing  
+✅ **Natural Language**: Users can request one-time tasks naturally
+✅ **Intelligent Detection**: System automatically determines job type
+✅ **Complete Lifecycle**: One-time jobs automatically complete after execution
+✅ **Backwards Compatible**: Existing recurring jobs continue to work
+✅ **Unified API**: Same interface for both job types
+✅ **Database Optimized**: Efficient queries with proper indexing
 
 ## Supported Patterns
 
 ### One-Time Indicators
 - "tomorrow", "next week", "next month"
 - "on [specific date]"
-- "in X days/weeks/months"  
+- "in X days/weeks/months"
 - "this [day of week]"
 - "next [day of week]"
 

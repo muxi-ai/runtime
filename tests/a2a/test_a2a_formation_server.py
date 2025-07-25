@@ -10,9 +10,9 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock
 import aiohttp
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.llm import LLM
-from src.muxi.runtime.a2a.server import A2AServer
+from src.muxi.overlord import Overlord
+from src.muxi.llm import LLM
+from src.muxi.a2a.server import A2AServer
 
 
 @pytest.fixture

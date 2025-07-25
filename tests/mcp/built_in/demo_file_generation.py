@@ -12,14 +12,14 @@ from pathlib import Path
 # Add runtime source to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.runtime.services.mcp.built_in import file_generation
+from muxi.services.mcp.built_in import file_generation
 
 
 def main():
     """Demonstrate file generation capability."""
     print("🎨 File Generation MCP Demo")
     print("=" * 40)
-    
+
     # Example: Generate a visualization
     demo_code = '''
 import matplotlib.pyplot as plt
@@ -52,31 +52,31 @@ print("Visualization saved as sales_visualization.png")
     print("-" * 40)
     print(demo_code)
     print("-" * 40)
-    
+
     # Create temporary directory for output
     with tempfile.TemporaryDirectory() as tmpdir:
         os.chdir(tmpdir)
-        
+
         # Validate the code
         is_valid, error = file_generation.validate_code(demo_code)
         print(f"\n🔍 Code validation: {'✅ Valid' if is_valid else f'❌ Invalid: {error}'}")
-        
+
         if is_valid:
             # Generate the file
             print("\n🚀 Generating file...")
             result = file_generation.generate_file(demo_code)
-            
+
             if "error" in result:
                 print(f"❌ Generation failed: {result['error']}")
             else:
                 print(f"✅ Success! Generated: {result['filename']}")
                 print(f"📁 File location: {result['file_path']}")
                 print(f"📏 File size: {Path(result['file_path']).stat().st_size:,} bytes")
-                
+
                 if result.get('stdout'):
                     print(f"\n📋 Output from code execution:")
                     print(result['stdout'])
-    
+
     print("\n✨ Demo completed!")
 
 

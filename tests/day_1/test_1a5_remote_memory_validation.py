@@ -26,17 +26,17 @@ memory:
       tenant: "test-tenant"
       # Missing url - should fail
 """
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
-        
-        from src.muxi.runtime.formation.formation import Formation
+
+        from src.muxi.formation.formation import Formation
         formation = Formation()
-        
+
         with pytest.raises(Exception) as exc_info:
             await formation.load(str(formation_path))
-        
+
         error_msg = str(exc_info.value).lower()
         assert "url" in error_msg or "required" in error_msg, \
             f"Expected error about missing URL, got: {exc_info.value}"
@@ -56,17 +56,17 @@ memory:
       url: "tcp://localhost:45678"
       # Missing tenant - should fail
 """
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
-        
-        from src.muxi.runtime.formation.formation import Formation
+
+        from src.muxi.formation.formation import Formation
         formation = Formation()
-        
+
         with pytest.raises(Exception) as exc_info:
             await formation.load(str(formation_path))
-        
+
         error_msg = str(exc_info.value).lower()
         assert "tenant" in error_msg or "required" in error_msg, \
             f"Expected error about missing tenant, got: {exc_info.value}"
@@ -86,17 +86,17 @@ memory:
       url: "tcp://localhost:45678"
       tenant: "test-tenant"
 """
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
-        
-        from src.muxi.runtime.formation.formation import Formation
+
+        from src.muxi.formation.formation import Formation
         formation = Formation()
-        
+
         with pytest.raises(Exception) as exc_info:
             await formation.load(str(formation_path))
-        
+
         error_msg = str(exc_info.value).lower()
         assert ("auto" in error_msg and "remote" in error_msg) or \
                ("max_memory_mb" in error_msg and "explicit" in error_msg), \
@@ -122,21 +122,21 @@ memory:
       url: "tcp://localhost:45678"
       tenant: "test-tenant"
 """
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
-        
-        from src.muxi.runtime.formation.formation import Formation
+
+        from src.muxi.formation.formation import Formation
         formation = Formation()
-        
+
         # Should load without errors
         await formation.load(str(formation_path))
-        
+
         # Verify configuration
         memory_config = formation.config.get("memory", {})
         working_config = memory_config.get("working", {})
-        
+
         assert working_config.get("mode") == "remote"
         assert working_config.get("max_memory_mb") == 512
         assert working_config.get("remote", {}).get("url") == "tcp://localhost:45678"
@@ -159,21 +159,21 @@ memory:
     mode: "local"
     max_memory_mb: "auto"  # Should be allowed for local mode
 """
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
-        
-        from src.muxi.runtime.formation.formation import Formation
+
+        from src.muxi.formation.formation import Formation
         formation = Formation()
-        
+
         # Should load without errors
         await formation.load(str(formation_path))
-        
+
         # Verify configuration
         memory_config = formation.config.get("memory", {})
         working_config = memory_config.get("working", {})
-        
+
         assert working_config.get("mode") == "local"
         assert working_config.get("max_memory_mb") == "auto"
 
@@ -198,22 +198,22 @@ memory:
       tenant: "auth-tenant"
       api_key: "test-api-key"  # Optional auth
 """
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         formation_path = Path(tmpdir) / "formation.yaml"
         formation_path.write_text(formation_yaml)
-        
-        from src.muxi.runtime.formation.formation import Formation
+
+        from src.muxi.formation.formation import Formation
         formation = Formation()
-        
+
         # Should load without errors
         await formation.load(str(formation_path))
-        
+
         # Verify configuration
         memory_config = formation.config.get("memory", {})
         working_config = memory_config.get("working", {})
         remote_config = working_config.get("remote", {})
-        
+
         assert working_config.get("mode") == "remote"
         assert working_config.get("max_memory_mb") == 1024
         assert remote_config.get("url") == "tcp://localhost:65432"
@@ -225,7 +225,7 @@ if __name__ == "__main__":
     async def run_tests():
         print("🧪 Testing Remote Memory Configuration Validation")
         print("=" * 60)
-        
+
         tests = [
             ("URL requirement", test_remote_memory_requires_url),
             ("Tenant requirement", test_remote_memory_requires_tenant),
@@ -234,10 +234,10 @@ if __name__ == "__main__":
             ("Local mode allows auto", test_local_memory_allows_auto),
             ("Remote with auth", test_remote_memory_with_auth)
         ]
-        
+
         passed = 0
         failed = 0
-        
+
         for test_name, test_func in tests:
             try:
                 await test_func()
@@ -249,14 +249,14 @@ if __name__ == "__main__":
             except Exception as e:
                 print(f"❌ {test_name}: Unexpected error: {e}")
                 failed += 1
-        
+
         print("\n" + "=" * 60)
         print(f"Results: {passed} passed, {failed} failed")
-        
+
         if failed == 0:
             print("✅ All remote memory validation tests passed!")
         else:
             print("❌ Some tests failed")
             exit(1)
-    
+
     asyncio.run(run_tests())

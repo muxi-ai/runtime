@@ -6,15 +6,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from muxi.runtime.datatypes.async_operations import (
+from muxi.datatypes.async_operations import (
     TimeoutConfig,
     OperationContext,
     AsyncOperationResult,
     OperationStatus,
 )
-from muxi.runtime.datatypes.workflow import TaskInput, SubTask, Workflow, generate_workflow_id
-from muxi.runtime.datatypes.errors import ErrorCodeInfo, create_error_details
-from muxi.runtime.datatypes.task_status import TaskStatus
+from muxi.datatypes.workflow import TaskInput, SubTask, Workflow, generate_workflow_id
+from muxi.datatypes.errors import ErrorCodeInfo, create_error_details
+from muxi.datatypes.task_status import TaskStatus
 
 print("Testing Pydantic V2 migrations...")
 
@@ -91,7 +91,7 @@ except Exception as e:
 print("\nTest 12: AsyncOperationResult validation")
 try:
     invalid_result = AsyncOperationResult(
-        operation_id="test_op", 
+        operation_id="test_op",
         status="INVALID_STATUS",  # This should fail
         result={}
     )
@@ -103,9 +103,9 @@ except Exception as e:
 print("\nTest 13: OperationContext validation")
 try:
     invalid_context = OperationContext(
-        operation_id="", 
-        operation_type="test", 
-        description="Test", 
+        operation_id="",
+        operation_type="test",
+        description="Test",
         timeout=-1.0
     )
     print("✗ ERROR: OperationContext should reject negative timeout!")
@@ -114,9 +114,9 @@ except Exception as e:
 
 try:
     invalid_context = OperationContext(
-        operation_id="test_op", 
-        operation_type="", 
-        description="Test", 
+        operation_id="test_op",
+        operation_type="",
+        description="Test",
         timeout=30.0
     )
     print("✗ ERROR: OperationContext should reject empty operation_type!")
@@ -211,7 +211,7 @@ print("\nTest 20: Model validation from dict")
 try:
     valid_dict = {
         "operation_id": "dict_test",
-        "status": "IN_PROGRESS", 
+        "status": "IN_PROGRESS",
         "result": {"progress": 50}
     }
     result_from_dict = AsyncOperationResult.model_validate(valid_dict)

@@ -19,14 +19,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
 
 # Import all the MCP components we're testing
 try:
-    from muxi.runtime.services.mcp.resources.discovery import MCPResourceDiscovery
-    from muxi.runtime.services.mcp.resources.manager import MCPResourceManager
-    from muxi.runtime.services.mcp.prompts.discovery import MCPPromptDiscovery
-    from muxi.runtime.services.mcp.prompts.manager import MCPPromptManager
-    from muxi.runtime.services.mcp.sampling.client import MCPSamplingClient
-    from muxi.runtime.services.mcp.sampling.manager import MCPSamplingManager
-    from muxi.runtime.services.mcp.protocol.health import MCPHealthMonitor
-    from muxi.runtime.services.mcp.protocol.logging import MCPLoggingClient
+    from muxi.services.mcp.resources.discovery import MCPResourceDiscovery
+    from muxi.services.mcp.resources.manager import MCPResourceManager
+    from muxi.services.mcp.prompts.discovery import MCPPromptDiscovery
+    from muxi.services.mcp.prompts.manager import MCPPromptManager
+    from muxi.services.mcp.sampling.client import MCPSamplingClient
+    from muxi.services.mcp.sampling.manager import MCPSamplingManager
+    from muxi.services.mcp.protocol.health import MCPHealthMonitor
+    from muxi.services.mcp.protocol.logging import MCPLoggingClient
 except ImportError as e:
     pytest.skip(f"Could not import MCP modules: {e}", allow_module_level=True)
 

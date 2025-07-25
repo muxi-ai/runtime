@@ -12,7 +12,7 @@ import asyncio
 
 # Test imports
 try:
-    from src.muxi.runtime.overlord.caching import IntelligentCacheManager
+    from src.muxi.overlord.caching import IntelligentCacheManager
     print("✓ Cache imports successful")
 except ImportError as e:
     print(f"✗ Cache import failed: {e}")

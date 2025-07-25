@@ -7,8 +7,8 @@ These tests verify that the Overlord implementation works correctly.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.muxi.runtime.formation.overlord import Overlord
-from src.muxi.runtime.datatypes.response import MuxiResponse
+from src.muxi.formation.overlord import Overlord
+from src.muxi.datatypes.response import MuxiResponse
 
 
 class TestOverlord:
@@ -222,7 +222,7 @@ class TestOverlord:
     @pytest.mark.asyncio
     async def test_remove_agent(self):
         """Test that an agent can be removed using Formation."""
-        from src.muxi.runtime.formation.formation import Formation
+        from src.muxi.formation.formation import Formation
 
         # Create formation and start the overlord
         formation = Formation()

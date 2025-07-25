@@ -14,28 +14,28 @@ from datetime import datetime, timedelta
 # Add the runtime path so we can import muxi
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from muxi.runtime.services.scheduler.manager import JobManager
-from muxi.runtime.services.db import get_database_manager
+from muxi.services.scheduler.manager import JobManager
+from muxi.services.db import get_database_manager
 
 
 async def test_postgres_multiuser():
     """Test PostgreSQL with multiple users to verify isolation."""
     print("👥 PostgreSQL Multi-User Real-World Test")
     print("=" * 60)
-    
+
     postgres_url = "postgresql://ran@127.0.0.1/muxi_framework"
-    
+
     try:
         # Initialize database manager
         db_manager = get_database_manager(postgres_url)
         job_manager = JobManager(db_manager)
         await job_manager.initialize()
-        
+
         print("✅ Connected to PostgreSQL database")
-        
+
         # Create jobs for different users
         print("\n📝 Creating jobs for different users...")
-        
+
         # User A: Recurring job (every minute for testing)
         user_a_job_id = await job_manager.create_job(
             user_id="alice_test",
@@ -46,7 +46,7 @@ async def test_postgres_multiuser():
             cron_expression="* * * * *",  # Every minute
             is_recurring=True,
         )
-        
+
         # User B: One-time job (in 2 minutes)
         scheduled_time = datetime.now() + timedelta(minutes=2)
         user_b_job_id = await job_manager.create_job(
@@ -58,31 +58,31 @@ async def test_postgres_multiuser():
             scheduled_for=scheduled_time,
             is_recurring=False,
         )
-        
+
         print(f"✅ Created Alice's recurring job: {user_a_job_id}")
         print(f"✅ Created Bob's one-time job: {user_b_job_id}")
-        
+
         # Verify user isolation
         print("\n🔍 Verifying user isolation...")
-        
+
         alice_jobs = await job_manager.get_user_jobs("alice_test")
         bob_jobs = await job_manager.get_user_jobs("bob_test")
-        
+
         print(f"📊 Alice has {len(alice_jobs)} job(s):")
         for job in alice_jobs:
             job_type = "recurring" if job['is_recurring'] else "one-time"
             print(f"  - {job['title']} ({job_type})")
-        
+
         print(f"📊 Bob has {len(bob_jobs)} job(s):")
         for job in bob_jobs:
             job_type = "recurring" if job['is_recurring'] else "one-time"
             scheduled_info = f"scheduled for {job['scheduled_for']}" if job['scheduled_for'] else f"cron: {job['cron_expression']}"
             print(f"  - {job['title']} ({job_type}, {scheduled_info})")
-        
+
         # Verify job types are correct
         alice_has_recurring = any(job['is_recurring'] for job in alice_jobs)
         bob_has_onetime = any(not job['is_recurring'] for job in bob_jobs)
-        
+
         if alice_has_recurring and bob_has_onetime and len(alice_jobs) > 0 and len(bob_jobs) > 0:
             print("\n🎉 SUCCESS: Multi-user isolation working correctly!")
             print("  ✅ Alice has recurring jobs")
@@ -90,19 +90,19 @@ async def test_postgres_multiuser():
             print("  ✅ Jobs are properly isolated by user_id")
             print("  ✅ Database migration is working")
             print("  ✅ One-time job support is functional")
-            
+
             # Show when Bob's job will execute
             bob_job = bob_jobs[0]
             time_until = bob_job['scheduled_for'] - datetime.now()
             minutes_until = int(time_until.total_seconds() / 60)
             print(f"\n⏰ Bob's job will execute in ~{minutes_until} minutes")
             print(f"   Scheduled for: {bob_job['scheduled_for']}")
-            
+
             return True
         else:
             print("\n❌ FAILED: User isolation not working correctly")
             return False
-            
+
     except Exception as e:
         print(f"\n❌ Test failed with error: {e}")
         import traceback
@@ -115,13 +115,13 @@ async def main():
     print("🚀 Real-World PostgreSQL Multi-User Test")
     print("Testing the key requirements:")
     print("1. Schedule recurring jobs (every minute)")
-    print("2. Schedule one-time jobs (in 2 minutes)")  
+    print("2. Schedule one-time jobs (in 2 minutes)")
     print("3. Test with PostgreSQL for multi-user support")
     print("4. Verify user isolation")
     print()
-    
+
     success = await test_postgres_multiuser()
-    
+
     if success:
         print("\n🎊 ALL REQUIREMENTS SATISFIED!")
         print("The scheduler is production-ready with:")

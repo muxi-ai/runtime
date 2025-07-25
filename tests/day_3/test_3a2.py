@@ -11,26 +11,26 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import pytest
-from src.muxi.runtime.formation.formation import Formation
+from src.muxi.formation.formation import Formation
 
 
 async def test_image_ocr():
     """Test image OCR capabilities"""
     print("\n=== Test 3A2.1: Image OCR ===")
-    
+
     # Load formation
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
     formation = Formation()
     await formation.load(str(formation_path))
     overlord = await formation.start_overlord()
-    
+
     print("✓ Overlord started")
-    
+
     # Read test image from test-docs
     test_image_path = Path(__file__).parent.parent.parent / "test-docs" / "slide.png"
     with open(test_image_path, "rb") as f:
         image_content = f.read()
-    
+
     # Prepare files
     files = [{
         "filename": "slide.png",
@@ -38,7 +38,7 @@ async def test_image_ocr():
         "content_type": "image/png",
         "size": len(image_content)
     }]
-    
+
     # Test OCR
     test_cases = [
         {
@@ -57,11 +57,11 @@ async def test_image_ocr():
             "expected": ["summary", "content", "image"],
         }
     ]
-    
+
     for test in test_cases:
         print(f"\n🖼️ Test: {test['name']}")
         print(f"   Message: {test['message']}")
-        
+
         # Send request with sync forced
         response = await overlord.chat(
             user_id="test_user",
@@ -70,22 +70,22 @@ async def test_image_ocr():
             use_async=False,  # Force sync for immediate response
             stream=False,  # Disable streaming for direct response
         )
-        
+
         # Extract response content
         result = response.content if hasattr(response, 'content') else str(response)
-        
+
         print(f"   Response length: {len(result)} chars")
         print(f"   Response preview: {result[:150]}...")
-        
+
         # Verify response
         result_lower = result.lower()
         found_keywords = [kw for kw in test['expected'] if kw in result_lower]
-        
+
         assert len(found_keywords) >= 2, \
             f"Expected at least 2 keywords from {test['expected']}, found: {found_keywords}"
-        
+
         print(f"   ✅ Found keywords: {found_keywords}")
-    
+
     # Cleanup
     await formation.stop_overlord()
     print("\n✅ All OCR tests passed!")
@@ -94,20 +94,20 @@ async def test_image_ocr():
 async def test_visual_analysis():
     """Test visual analysis capabilities"""
     print("\n=== Test 3A2.2: Visual Analysis ===")
-    
+
     # Load formation
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
     formation = Formation()
     await formation.load(str(formation_path))
     overlord = await formation.start_overlord()
-    
+
     print("✓ Overlord started")
-    
+
     # Read test image from test-docs
     test_image_path = Path(__file__).parent.parent.parent / "test-docs" / "chart.png"
     with open(test_image_path, "rb") as f:
         image_content = f.read()
-    
+
     # Prepare files
     files = [{
         "filename": "chart.png",
@@ -115,7 +115,7 @@ async def test_visual_analysis():
         "content_type": "image/png",
         "size": len(image_content)
     }]
-    
+
     # Test visual analysis
     test_cases = [
         {
@@ -134,11 +134,11 @@ async def test_visual_analysis():
             "expected": ["element", "component", "key"],
         }
     ]
-    
+
     for test in test_cases:
         print(f"\n📊 Test: {test['name']}")
         print(f"   Message: {test['message']}")
-        
+
         # Send request with sync forced
         response = await overlord.chat(
             user_id="test_user",
@@ -147,21 +147,21 @@ async def test_visual_analysis():
             use_async=False,  # Force sync
             stream=False,  # Disable streaming
         )
-        
+
         result = response.content if hasattr(response, 'content') else str(response)
-        
+
         print(f"   Response length: {len(result)} chars")
         print(f"   Response preview: {result[:150]}...")
-        
+
         # Verify response
         result_lower = result.lower()
         found_keywords = [kw for kw in test['expected'] if kw in result_lower]
-        
+
         assert len(found_keywords) >= 2, \
             f"Expected at least 2 keywords from {test['expected']}, found: {found_keywords}"
-        
+
         print(f"   ✅ Found keywords: {found_keywords}")
-    
+
     # Cleanup
     await formation.stop_overlord()
     print("\n✅ All visual analysis tests passed!")
@@ -170,24 +170,24 @@ async def test_visual_analysis():
 async def test_multiple_images():
     """Test processing multiple images"""
     print("\n=== Test 3A2.3: Multiple Image Processing ===")
-    
+
     # Load formation
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
     formation = Formation()
     await formation.load(str(formation_path))
     overlord = await formation.start_overlord()
-    
+
     print("✓ Overlord started")
-    
+
     # Read multiple test images from test-docs
     image1_path = Path(__file__).parent.parent.parent / "test-docs" / "chart.png"
     image2_path = Path(__file__).parent.parent.parent / "test-docs" / "photo.jpg"
-    
+
     with open(image1_path, "rb") as f:
         image1_content = f.read()
     with open(image2_path, "rb") as f:
         image2_content = f.read()
-    
+
     files = [
         {
             "filename": "chart.png",
@@ -202,9 +202,9 @@ async def test_multiple_images():
             "size": len(image2_content)
         }
     ]
-    
+
     print(f"📁 Testing with {len(files)} images")
-    
+
     # Test combined analysis
     response = await overlord.chat(
         user_id="test_user",
@@ -213,18 +213,18 @@ async def test_multiple_images():
         use_async=False,
         stream=False,
     )
-    
+
     result = response.content if hasattr(response, 'content') else str(response)
     print(f"\n📄 Response length: {len(result)} chars")
     print(f"📄 Response preview: {result[:200]}...")
-    
+
     # Verify response mentions multiple images
     result_lower = result.lower()
     assert any(word in result_lower for word in ["first", "second", "both", "image", "comparison"]), \
         "Should discuss multiple images"
-    
+
     print("✅ Multiple image processing successful!")
-    
+
     # Cleanup
     await formation.stop_overlord()
 
@@ -232,14 +232,14 @@ async def test_multiple_images():
 if __name__ == "__main__":
     print("🧪 Running Test 3A2: Image OCR and Visual Analysis (Sync Mode)")
     print("=" * 60)
-    
+
     # Run tests sequentially
     asyncio.run(test_image_ocr())
     print("\n" + "="*60 + "\n")
-    
+
     asyncio.run(test_visual_analysis())
     print("\n" + "="*60 + "\n")
-    
+
     asyncio.run(test_multiple_images())
-    
+
     print("\n🎉 All Test 3A2 tests completed successfully!")

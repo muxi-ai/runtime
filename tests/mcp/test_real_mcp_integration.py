@@ -11,10 +11,10 @@ import os
 from typing import Dict, Any
 
 from tests.mcp.test_server_manager import MCPTestServerManager
-from src.muxi.runtime.services.mcp.transports.factory import MCPTransportFactory
-from src.muxi.runtime.services.mcp.tools.discovery import MCPToolDiscovery
-from src.muxi.runtime.services.mcp.tools.executor import MCPToolExecutor
-from src.muxi.runtime.services.mcp.protocol.message_handler import MCPMessageHandler
+from src.muxi.services.mcp.transports.factory import MCPTransportFactory
+from src.muxi.services.mcp.tools.discovery import MCPToolDiscovery
+from src.muxi.services.mcp.tools.executor import MCPToolExecutor
+from src.muxi.services.mcp.protocol.message_handler import MCPMessageHandler
 
 
 @pytest.mark.asyncio

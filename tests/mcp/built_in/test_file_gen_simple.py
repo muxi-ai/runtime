@@ -12,7 +12,7 @@ from pathlib import Path
 # Add runtime source to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.runtime.services.mcp.built_in import file_generation
+from muxi.services.mcp.built_in import file_generation
 
 
 def test_direct_file_generation():
@@ -20,7 +20,7 @@ def test_direct_file_generation():
     print("=" * 60)
     print("File Generation MCP - Direct Test")
     print("=" * 60)
-    
+
     # Test 1: Generate a bar chart
     print("\n📊 Test 1: Generating a bar chart...")
     chart_code = '''
@@ -45,14 +45,14 @@ plt.grid(axis='y', alpha=0.3)
 plt.tight_layout()
 plt.savefig('revenue_chart.png', dpi=150)
 '''
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         os.chdir(tmpdir)
-        
+
         # Validate code
         is_valid, error = file_generation.validate_code(chart_code)
         print(f"Code validation: {'✅ Valid' if is_valid else f'❌ Invalid: {error}'}")
-        
+
         if is_valid:
             # Generate file
             result = file_generation.generate_file(chart_code)
@@ -61,7 +61,7 @@ plt.savefig('revenue_chart.png', dpi=150)
             else:
                 print(f"✅ Generated: {result['filename']} at {result['file_path']}")
                 print(f"   File size: {Path(result['file_path']).stat().st_size} bytes")
-        
+
         # Test 2: Generate JSON data
         print("\n📄 Test 2: Generating JSON data file...")
         json_code = '''
@@ -77,10 +77,10 @@ users = [
 with open('users.json', 'w') as f:
     json.dump(users, f, indent=2)
 '''
-        
+
         is_valid, error = file_generation.validate_code(json_code)
         print(f"Code validation: {'✅ Valid' if is_valid else f'❌ Invalid: {error}'}")
-        
+
         if is_valid:
             result = file_generation.generate_file(json_code)
             if "error" in result:
@@ -93,7 +93,7 @@ with open('users.json', 'w') as f:
                     print(f"   Content: {len(content)} users")
                     for user in content:
                         print(f"   - {user['name']} ({user['email']})")
-        
+
         # Test 3: Generate CSV
         print("\n📊 Test 3: Generating CSV file...")
         csv_code = '''
@@ -113,10 +113,10 @@ with open('sales_report.csv', 'w', newline='') as f:
     writer = csv.writer(f)
     writer.writerows(sales_data)
 '''
-        
+
         is_valid, error = file_generation.validate_code(csv_code)
         print(f"Code validation: {'✅ Valid' if is_valid else f'❌ Invalid: {error}'}")
-        
+
         if is_valid:
             result = file_generation.generate_file(csv_code)
             if "error" in result:
@@ -128,17 +128,17 @@ with open('sales_report.csv', 'w', newline='') as f:
                     for i, line in enumerate(f):
                         if i < 3:
                             print(f"   {line.strip()}")
-        
+
         # Test 4: Test security - should fail
         print("\n🔒 Test 4: Security validation (should fail)...")
         unsafe_code = '''
 import os
 os.system('ls')
 '''
-        
+
         is_valid, error = file_generation.validate_code(unsafe_code)
         print(f"Code validation: {'✅ Valid' if is_valid else f'❌ Invalid: {error}'}")
-        
+
         # Show generated files
         print("\n📁 Generated files in output directory:")
         outputs_dir = Path(tmpdir) / "outputs"
@@ -148,7 +148,7 @@ os.system('ls')
                 print(f"  - {file.name} ({file.stat().st_size} bytes)")
         else:
             print("  No outputs directory found")
-        
+
         print("\n✅ All tests completed!")
 
 

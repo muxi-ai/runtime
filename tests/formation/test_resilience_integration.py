@@ -5,15 +5,15 @@ Integration test demonstrating the FALLBACK_AGENT strategy in action.
 import pytest
 from unittest.mock import MagicMock
 
-from muxi.runtime.formation.overlord.active_agents_tracker import ActiveAgentsTracker
-from muxi.runtime.formation.resilience.resilient_workflow_manager import ResilientWorkflowManager
-from muxi.runtime.datatypes.resilience import (
+from muxi.formation.overlord.active_agents_tracker import ActiveAgentsTracker
+from muxi.formation.resilience.resilient_workflow_manager import ResilientWorkflowManager
+from muxi.datatypes.resilience import (
     ResilienceConfig,
     ErrorContext,
     ErrorType,
     ErrorSeverity,
 )
-from muxi.runtime.datatypes.exceptions import NoAvailableAgentsError
+from muxi.datatypes.exceptions import NoAvailableAgentsError
 
 
 class TestResilienceFallbackIntegration:

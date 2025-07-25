@@ -13,7 +13,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../src"))
 
 try:
-    from muxi.runtime.datatypes.task_status import TaskStatus
+    from muxi.datatypes.task_status import TaskStatus
 
     IMPORTS_AVAILABLE = True
 except ImportError as e:
@@ -134,7 +134,7 @@ class TestTaskStatusIntegration:
 
     def test_parallel_task_node_integration(self):
         """Test TaskStatus works with parallel TaskNode."""
-        from muxi.runtime.datatypes.parallel import TaskNode
+        from muxi.datatypes.parallel import TaskNode
 
         task = TaskNode(
             task_id="test_task", description="Test task", required_capabilities=["test"]
@@ -158,7 +158,7 @@ class TestTaskStatusIntegration:
 
     def test_workflow_sub_task_integration(self):
         """Test TaskStatus works with workflow SubTask."""
-        from muxi.runtime.datatypes.workflow import SubTask
+        from muxi.datatypes.workflow import SubTask
 
         task = SubTask(id="test_task", description="Test task", required_capabilities=["test"])
 

@@ -19,7 +19,7 @@ from unittest.mock import patch
 # Import the observability system components
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src/muxi/runtime'))
 
-from src.muxi.runtime.observability import (  # noqa: E402
+from src.muxi.observability import (  # noqa: E402
     EventLogger, ObservabilityManager, RequestContextManager,
     RequestContext, ConversationEventType, SystemEventType, EventLevel
 )

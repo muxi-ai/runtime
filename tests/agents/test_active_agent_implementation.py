@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import after path modification
 try:
-    from src.muxi.runtime.config.formation_loader import FormationLoader
-    from src.muxi.runtime.overlord import Overlord
+    from src.muxi.config.formation_loader import FormationLoader
+    from src.muxi.overlord import Overlord
 except ImportError:
     print("❌ Could not import runtime modules. Check working directory.")
     sys.exit(1)

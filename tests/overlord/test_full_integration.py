@@ -118,7 +118,7 @@ async def test_document_storage_integration():
 
     try:
         # Import storage components
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager,
             DocumentMetadataStore,
             DocumentSemanticIndex,
@@ -265,7 +265,7 @@ async def test_document_experience_integration():
 
     try:
         # Import experience components
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentAcknowledgmentGenerator,
             DocumentSummarizer,
             DocumentErrorHandler
@@ -421,7 +421,7 @@ async def test_document_workflow_integration():
 
     try:
         # Import workflow components
-        from src.muxi.runtime.formation.documents.workflow import (
+        from src.muxi.formation.documents.workflow import (
             DocumentWorkflowIntegrator,
             DocumentCrossReferenceManager,
             DocumentContextPreserver
@@ -641,13 +641,13 @@ async def test_end_to_end_integration():
 
     try:
         # Import all components for full integration test
-        from src.muxi.runtime.formation.documents.storage import (
+        from src.muxi.formation.documents.storage import (
             DocumentChunkManager, DocumentMetadataStore, DocumentSemanticIndex, DocumentReferenceSystem
         )
-        from src.muxi.runtime.formation.documents.experience import (
+        from src.muxi.formation.documents.experience import (
             DocumentAcknowledgmentGenerator, DocumentSummarizer, DocumentErrorHandler
         )
-        from src.muxi.runtime.formation.documents.workflow import (
+        from src.muxi.formation.documents.workflow import (
             DocumentWorkflowIntegrator, DocumentCrossReferenceManager, DocumentContextPreserver
         )
 

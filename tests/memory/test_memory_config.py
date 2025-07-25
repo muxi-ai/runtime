@@ -9,7 +9,7 @@ import os
 # Add parent directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.config.validation import FormationValidator
 
 
 def test_memory_config_validation():

@@ -28,7 +28,7 @@ sys.path.insert(0, root_dir)
 
 try:
     # Try to import directly from the package
-    from src.muxi.runtime.services.mcp.handler import (
+    from src.muxi.services.mcp.handler import (
         MCPTransportFactory,
         HTTPSSETransport,
         CommandLineTransport,

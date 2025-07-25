@@ -12,8 +12,8 @@ import yaml
 from unittest.mock import Mock, AsyncMock, patch
 
 # Import the classes we're testing
-from src.muxi.runtime.formation.formation import Formation
-from src.muxi.runtime.datatypes.exceptions import (
+from src.muxi.formation.formation import Formation
+from src.muxi.datatypes.exceptions import (
     OverlordStateError,
     MCPServerNotFoundError,
     ConfigurationNotFoundError
@@ -72,7 +72,7 @@ class TestSchemaLoading:
 
         try:
             # Mock FormationLoader
-            with patch('src.muxi.runtime.formation.formation.FormationLoader') as mock_loader:
+            with patch('src.muxi.formation.formation.FormationLoader') as mock_loader:
                 mock_instance = Mock()
                 mock_instance.load = AsyncMock(return_value=valid_agent_schema)
                 mock_loader.return_value = mock_instance
@@ -90,7 +90,7 @@ class TestSchemaLoading:
 
     async def test_resolve_schema_file_not_found(self, formation):
         """Test behavior when schema file doesn't exist."""
-        with patch('src.muxi.runtime.formation.formation.FormationLoader') as mock_loader:
+        with patch('src.muxi.formation.formation.FormationLoader') as mock_loader:
             mock_instance = Mock()
             mock_instance.load = AsyncMock(side_effect=ConfigurationNotFoundError("not_found.yaml"))
             mock_loader.return_value = mock_instance

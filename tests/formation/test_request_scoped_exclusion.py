@@ -6,10 +6,10 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from muxi.runtime.formation.overlord.active_agents_tracker import ActiveAgentsTracker
-from muxi.runtime.formation.overlord.agent_router import AgentRouter
-from muxi.runtime.formation.resilience.resilient_workflow_manager import ResilientWorkflowManager
-from muxi.runtime.datatypes.resilience import (
+from muxi.formation.overlord.active_agents_tracker import ActiveAgentsTracker
+from muxi.formation.overlord.agent_router import AgentRouter
+from muxi.formation.resilience.resilient_workflow_manager import ResilientWorkflowManager
+from muxi.datatypes.resilience import (
     RecoveryStrategy,
     ErrorContext,
     ErrorType,

@@ -14,7 +14,7 @@ from pathlib import Path
 # Add runtime source to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.runtime import Formation
+from muxi import Formation
 
 
 async def test_file_generation():

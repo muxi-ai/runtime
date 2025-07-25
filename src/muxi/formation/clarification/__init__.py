@@ -24,7 +24,7 @@ Planning Workflow Detection & Continuity
 - PlanningContinuationManager: Manages planning workflow sessions
 
 Usage:
-    from muxi.runtime.formation.clarification import (
+    from muxi.formation.clarification import (
         InformationAnalyzer,
         ClarificationManager,
         ClarificationQuestionGenerator

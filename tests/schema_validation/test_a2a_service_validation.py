@@ -9,7 +9,7 @@ and error conditions.
 import tempfile
 import yaml
 from pathlib import Path
-from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.config.validation import FormationValidator
 
 
 class TestA2AServiceValidation:

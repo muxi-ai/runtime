@@ -11,7 +11,7 @@ import yaml
 import pytest
 import time
 
-from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.config.validation import FormationValidator
 
 
 class TestPhase6ComprehensiveSchemaValidation:

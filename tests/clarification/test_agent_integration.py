@@ -8,8 +8,8 @@ without breaking existing Agent functionality.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.muxi.runtime.formation.agents import Agent
-from src.muxi.runtime.datatypes.response import MuxiResponse
+from src.muxi.formation.agents import Agent
+from src.muxi.datatypes.response import MuxiResponse
 
 
 class TestAgentClarificationIntegration:

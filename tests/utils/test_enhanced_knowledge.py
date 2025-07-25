@@ -10,8 +10,8 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'runtime'))
 
 # Now import the muxi modules
-from src.muxi.runtime.knowledge.base import FileKnowledge  # noqa: E402
-from src.muxi.runtime.knowledge.handler import KnowledgeHandler  # noqa: E402
+from src.muxi.knowledge.base import FileKnowledge  # noqa: E402
+from src.muxi.knowledge.handler import KnowledgeHandler  # noqa: E402
 
 
 def mock_embedding_fn(text):

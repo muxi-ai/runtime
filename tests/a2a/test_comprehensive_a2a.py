@@ -22,9 +22,9 @@ from typing import Dict, Any
 # Add the runtime directory to Python path
 sys.path.insert(0, "..")  # noqa: E402
 
-from src.muxi.runtime.overlord import Overlord  # noqa: E402
-from src.muxi.runtime.llm import LLM  # noqa: E402
-from src.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+from src.muxi.overlord import Overlord  # noqa: E402
+from src.muxi.llm import LLM  # noqa: E402
+from src.muxi.a2a.registry_client import A2ARegistryClient  # noqa: E402
 
 
 class ComprehensiveA2ATest:

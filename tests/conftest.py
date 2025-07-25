@@ -16,8 +16,8 @@ import sys
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from muxi.runtime.formation import Formation
-from muxi.runtime.services.secrets import SecretsManager
+from muxi.formation import Formation
+from muxi.services.secrets import SecretsManager
 
 
 @pytest.fixture(scope="session")
@@ -39,15 +39,15 @@ async def temp_formation_dir() -> AsyncGenerator[Path, None]:
     """Create a temporary formation directory for testing."""
     temp_dir = tempfile.mkdtemp(prefix="muxi_test_formation_")
     temp_path = Path(temp_dir)
-    
+
     # Create standard formation subdirectories
     (temp_path / "agents").mkdir()
     (temp_path / "mcp").mkdir()
     (temp_path / "a2a").mkdir()
     (temp_path / "knowledge").mkdir()
-    
+
     yield temp_path
-    
+
     # Cleanup
     shutil.rmtree(temp_dir)
 
@@ -58,11 +58,11 @@ async def formation_with_secrets(temp_formation_dir: Path) -> AsyncGenerator[Pat
     # Initialize secrets
     secrets_manager = SecretsManager(temp_formation_dir)
     await secrets_manager.initialize_encryption()
-    
+
     # Add test secrets
     await secrets_manager.store_secret("TEST_API_KEY", "test-key-value")
     await secrets_manager.store_secret("TEST_SECRET", "test-secret-value")
-    
+
     yield temp_formation_dir
 
 
@@ -81,12 +81,12 @@ agents:
     model: "gpt-4"
     role: "general"
     provider: "openai"
-    
+
 memory:
   buffer:
     enabled: true
     max_messages: 50
-    
+
 observability:
   level: "info"
   output: "stdout"
@@ -112,7 +112,7 @@ agents:
     specialties:
       - "data analysis"
       - "web research"
-      
+
   - id: "writer"
     name: "Writing Agent"
     model: "claude-3-opus-20240229"
@@ -121,12 +121,12 @@ agents:
     specialties:
       - "technical writing"
       - "documentation"
-      
+
 memory:
   buffer:
     enabled: true
     max_messages: 100
-    
+
 a2a:
   enabled: true
   internal_communication: true
@@ -149,7 +149,7 @@ agents:
     model: "gpt-4"
     role: "general"
     provider: "openai"
-    
+
 mcp_servers:
   - id: "file_generation"
     type: "builtin"
@@ -158,7 +158,7 @@ mcp_servers:
       allowed_directories:
         - "./output"
       max_file_size: 10485760  # 10MB
-      
+
 memory:
   buffer:
     enabled: true

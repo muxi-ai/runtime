@@ -58,7 +58,7 @@ The clean_exit functionality is built into Formation with three methods:
 Use when you want a **graceful shutdown** that properly cleans up resources:
 ```python
 import asyncio
-from src.muxi.runtime import Formation
+from src.muxi import Formation
 
 async def main():
     formation = Formation()

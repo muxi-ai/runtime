@@ -36,7 +36,7 @@ class OpenTelemetryFormatter(BaseFormatter):
                         "resource": log_record["resource"],
                         "scopeLogs": [
                             {
-                                "scope": {"name": "muxi.runtime.observability"},
+                                "scope": {"name": "muxi.observability"},
                                 "logRecords": [log_record],
                             }
                         ],
@@ -77,7 +77,7 @@ class OpenTelemetryFormatter(BaseFormatter):
                         },
                         "scopeLogs": [
                             {
-                                "scope": {"name": "muxi.runtime.observability"},
+                                "scope": {"name": "muxi.observability"},
                                 "logRecords": log_records,
                             }
                         ],

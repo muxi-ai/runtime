@@ -5,8 +5,8 @@ This is a temporary fix for testing until the bug is fixed in the main code.
 """
 
 import os
-from src.muxi.runtime.formation import Formation
-from src.muxi.runtime.services.secrets import SecretsManager
+from src.muxi.formation import Formation
+from src.muxi.services.secrets import SecretsManager
 
 # Save original load method
 _original_load = Formation.load

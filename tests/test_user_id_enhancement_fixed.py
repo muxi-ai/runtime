@@ -8,8 +8,8 @@ user ID format and maps it to internal integer IDs for compatibility.
 
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.overlord import Overlord
+from src.muxi.memory.short_term import ShortTermMemory
 
 
 class TestUserIdEnhancement:
@@ -131,7 +131,7 @@ class TestUserIdEnhancement:
 
         overlord.long_term_memory.db.cursor.return_value = mock_cursor
 
-        with patch('src.muxi.runtime.utils.id_generator.generate_nanoid') as mock_nanoid:
+        with patch('src.muxi.utils.id_generator.generate_nanoid') as mock_nanoid:
             mock_nanoid.return_value = "test_nano_id"
 
             result = await overlord._find_or_create_user("new_user", "newhash")

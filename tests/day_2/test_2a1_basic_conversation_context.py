@@ -6,7 +6,7 @@ import os
 
 sys.path.insert(0, ".")
 import asyncio  # noqa: E402
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 async def test_formation_buffer_config():
@@ -100,7 +100,7 @@ async def test_buffer_memory_functionality():
         # Wait for async storage to complete
         print("  - Waiting 5 seconds for buffer memory storage...")
         await asyncio.sleep(5)
-        
+
         # Second message - ask what was just said
         response2 = await overlord.chat(
             "What did I just say?",

@@ -7,7 +7,7 @@ sys.path.insert(0, ".")
 import asyncio  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 def test_mcp_failure_handling():

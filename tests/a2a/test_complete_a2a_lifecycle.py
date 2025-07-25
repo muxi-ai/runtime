@@ -15,8 +15,8 @@ import yaml
 # Add the runtime directory to Python path
 sys.path.insert(0, '..')
 
-from src.muxi.runtime.overlord import Overlord  # noqa: E402
-from src.muxi.runtime.llm import LLM  # noqa: E402
+from src.muxi.overlord import Overlord  # noqa: E402
+from src.muxi.llm import LLM  # noqa: E402
 
 
 async def test_complete_a2a_lifecycle():
@@ -171,7 +171,7 @@ async def test_complete_a2a_lifecycle():
     # Check registry one final time
     # Note: We can't use the overlord's client anymore since it's shut down
     # So we'll create a fresh client for this check
-    from src.muxi.runtime.a2a.registry_client import A2ARegistryClient  # noqa: E402
+    from src.muxi.a2a.registry_client import A2ARegistryClient  # noqa: E402
 
     fresh_client = A2ARegistryClient(
         registries=formation_config['a2a']['registries']

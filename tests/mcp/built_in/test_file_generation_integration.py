@@ -17,7 +17,7 @@ import sys
 # Add the runtime source to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
-from muxi.runtime import Formation
+from muxi import Formation  # noqa: F402
 
 
 class TestFileGenerationIntegration:
@@ -91,8 +91,8 @@ class TestFileGenerationIntegration:
                 return server_id
 
             # Start overlord (which should register built-in MCPs)
-            from unittest.mock import patch, MagicMock
-            with patch('muxi.runtime.services.mcp.service.MCPService.register_mcp_server', mock_register):
+            from unittest.mock import patch
+            with patch('muxi.services.mcp.service.MCPService.register_mcp_server', mock_register):
                 overlord = formation.start_overlord()
 
                 # Check that file-generation MCP was registered
@@ -158,7 +158,7 @@ class TestFileGenerationIntegration:
 
             # Start overlord
             from unittest.mock import patch
-            with patch('muxi.runtime.services.mcp.service.MCPService.register_mcp_server', mock_register):
+            with patch('muxi.services.mcp.service.MCPService.register_mcp_server', mock_register):
                 overlord = formation.start_overlord()
 
                 # Check that no built-in MCPs were registered
@@ -212,7 +212,7 @@ class TestFileGenerationIntegration:
                 return server_id
 
             from unittest.mock import patch
-            with patch('muxi.runtime.services.mcp.service.MCPService.register_mcp_server', mock_register):
+            with patch('muxi.services.mcp.service.MCPService.register_mcp_server', mock_register):
                 overlord = formation.start_overlord()
 
                 # Check only specified MCPs were registered

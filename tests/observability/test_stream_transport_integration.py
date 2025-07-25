@@ -7,8 +7,8 @@ for encrypted ZMQ streams.
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from src.muxi.runtime.services.observability.transports.stream import StreamTransport
-from src.muxi.runtime.services.observability.transports.token_encryption import TokenEncryption
+from src.muxi.services.observability.transports.stream import StreamTransport
+from src.muxi.services.observability.transports.token_encryption import TokenEncryption
 
 
 class TestStreamTransportEncryptionIntegration:

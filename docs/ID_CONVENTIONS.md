@@ -54,12 +54,12 @@ All IDs in MUXI Runtime use a consistent format:
 
 ## Implementation
 
-All ID generation uses the centralized `generate_nanoid()` function from `muxi.runtime.utils.id_generator`.
+All ID generation uses the centralized `generate_nanoid()` function from `muxi.utils.id_generator`.
 
 ### Basic Usage
 
 ```python
-from muxi.runtime.utils.id_generator import generate_nanoid
+from muxi.utils.id_generator import generate_nanoid
 
 # Standard ID (21 characters)
 agent_id = f"agt_{generate_nanoid()}"

@@ -18,7 +18,7 @@ import time
 # Add runtime path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from src.muxi.runtime.overlord.resilience import (
+from src.muxi.overlord.resilience import (
     ResilientWorkflowManager,
     ResilienceConfig,
     ErrorClassifier,
@@ -31,7 +31,7 @@ from src.muxi.runtime.overlord.resilience import (
     WorkflowException,
     ResilientWorkflowResult,
 )
-from src.muxi.runtime.overlord.resilience.resilience_types import (
+from src.muxi.overlord.resilience.resilience_types import (
     CircuitBreakerConfig,
     ErrorContext,
 )

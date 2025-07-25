@@ -10,9 +10,9 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
 # Direct imports to avoid full runtime initialization
-from muxi.runtime.observability.transports.stdout import StdoutTransport
-from muxi.runtime.observability.transports.file import FileTransport
-from muxi.runtime.observability.transports.stream import StreamTransport
+from muxi.observability.transports.stdout import StdoutTransport
+from muxi.observability.transports.file import FileTransport
+from muxi.observability.transports.stream import StreamTransport
 
 
 async def test_stdout_transport():
@@ -125,7 +125,7 @@ async def test_formatters():
     print("Testing formatters...")
 
     try:
-        from muxi.runtime.observability.formatters import create_formatter
+        from muxi.observability.formatters import create_formatter
 
         # Test JSON Lines formatter
         formatter = create_formatter("jsonl")

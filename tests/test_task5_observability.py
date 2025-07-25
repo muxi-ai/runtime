@@ -14,7 +14,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src'))
 
 try:
-    from src.muxi.runtime.observability import (
+    from src.muxi.observability import (
         EventLogger, ObservabilityManager, RequestContextManager,
         RequestContext, ConversationEventType, EventLevel
     )

@@ -11,7 +11,7 @@ import sys
 # Add path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from src.muxi.runtime.a2a.auth import A2AAuthManager, AuthType  # noqa: E402
+from src.muxi.a2a.auth import A2AAuthManager, AuthType  # noqa: E402
 
 # Set up logging to see what's happening
 logging.basicConfig(level=logging.DEBUG)

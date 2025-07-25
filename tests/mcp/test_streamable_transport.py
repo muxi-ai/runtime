@@ -17,8 +17,8 @@ import json
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
 # Import muxi modules after path modification
-from muxi.runtime.services.mcp.transports.streamable import StreamableHTTPTransport
-from muxi.runtime.services.mcp.transports.base import (
+from muxi.services.mcp.transports.streamable import StreamableHTTPTransport
+from muxi.services.mcp.transports.base import (
     MCPConnectionError,
     MCPTimeoutError,
     MCPRequestError,

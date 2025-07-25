@@ -2,8 +2,8 @@ import sys
 import asyncio
 sys.path.append('.')
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.llm import LLM
+from src.muxi.overlord import Overlord
+from src.muxi.llm import LLM
 
 async def test_registry_separation():
     """Test that outbound and inbound registries are used correctly"""

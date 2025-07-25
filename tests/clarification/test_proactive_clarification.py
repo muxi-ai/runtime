@@ -12,7 +12,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from typing import List
 
-from src.muxi.runtime.clarification import (
+from src.muxi.clarification import (
     ProactiveClarificationIntentDetector,
     ClarificationModeManager,
     ProactiveRequest,

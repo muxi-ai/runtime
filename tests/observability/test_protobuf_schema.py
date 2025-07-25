@@ -5,7 +5,7 @@ Tests for Protobuf Schema Management and Validation Framework
 import pytest
 from datetime import datetime
 
-from src.muxi.runtime.services.observability.protobuf_schema import (
+from src.muxi.services.observability.protobuf_schema import (
     ProtobufSchemaManager,
     ValidationResult,
     ValidationError

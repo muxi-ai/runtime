@@ -4,7 +4,7 @@ import asyncio
 
 import logging
 from concurrent.futures import ThreadPoolExecutor
-from src.muxi.runtime.formation import Formation
+from src.muxi.formation import Formation
 
 logging.basicConfig(
     level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"

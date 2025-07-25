@@ -6,7 +6,7 @@ import asyncio
 import pytest
 from unittest.mock import patch, MagicMock
 
-from src.muxi.runtime.overlord import Overlord
+from src.muxi.overlord import Overlord
 
 
 @pytest.mark.asyncio
@@ -40,7 +40,7 @@ async def test_memory():
 
     overlord = Overlord(formation_config=formation_config)
 
-    with patch('src.muxi.runtime.overlord.LLM') as mock_llm_class:
+    with patch('src.muxi.overlord.LLM') as mock_llm_class:
         mock_llm = MagicMock()
         mock_llm_class.return_value = mock_llm
 

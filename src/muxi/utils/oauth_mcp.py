@@ -35,9 +35,9 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         query_params = parse_qs(parsed.query)
 
         # Check for access token in query params (implicit flow)
-        if 'access_token' in query_params:
-            self.server.oauth_token = query_params['access_token'][0]
-            self.server.token_type = 'access_token'
+        if "access_token" in query_params:
+            self.server.oauth_token = query_params["access_token"][0]
+            self.server.token_type = "access_token"
             self.send_success_response()
             return
 
@@ -45,23 +45,23 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
         # Note: Fragment is not sent to server, so we'll handle this client-side
         if parsed.fragment:
             fragment_params = parse_qs(parsed.fragment)
-            if 'access_token' in fragment_params:
-                self.server.oauth_token = fragment_params['access_token'][0]
-                self.server.token_type = 'access_token'
+            if "access_token" in fragment_params:
+                self.server.oauth_token = fragment_params["access_token"][0]
+                self.server.token_type = "access_token"
                 self.send_success_response()
                 return
 
         # Check for authorization code (authorization code flow)
-        if 'code' in query_params:
-            self.server.oauth_token = query_params['code'][0]
-            self.server.token_type = 'authorization_code'
+        if "code" in query_params:
+            self.server.oauth_token = query_params["code"][0]
+            self.server.token_type = "authorization_code"
             self.send_success_response()
             return
 
         # Check for error
-        if 'error' in query_params:
-            error = query_params['error'][0]
-            error_desc = query_params.get('error_description', ['Unknown error'])[0]
+        if "error" in query_params:
+            error = query_params["error"][0]
+            error_desc = query_params.get("error_description", ["Unknown error"])[0]
             self.server.oauth_error = f"{error}: {error_desc}"
             self.send_error_response(error_desc)
             return
@@ -72,7 +72,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
     def send_success_response(self):
         """Send success response to browser."""
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
+        self.send_header("Content-type", "text/html")
         self.end_headers()
 
         html = """
@@ -100,14 +100,16 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </div>
         </body>
         </html>
-        """.format(logo=MUXI_LOGO_URL)
+        """.format(
+            logo=MUXI_LOGO_URL
+        )
 
         self.wfile.write(html.encode())
 
     def send_error_response(self, error_message):
         """Send error response to browser."""
         self.send_response(400)
-        self.send_header('Content-type', 'text/html')
+        self.send_header("Content-type", "text/html")
         self.end_headers()
 
         html = """
@@ -134,14 +136,16 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </div>
         </body>
         </html>
-        """.format(logo=MUXI_LOGO_URL, error=error_message)
+        """.format(
+            logo=MUXI_LOGO_URL, error=error_message
+        )
 
         self.wfile.write(html.encode())
 
     def send_fragment_extractor(self):
         """Send JavaScript to extract token from fragment."""
         self.send_response(200)
-        self.send_header('Content-type', 'text/html')
+        self.send_header("Content-type", "text/html")
         self.end_headers()
 
         html = """
@@ -180,7 +184,9 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             </script>
         </body>
         </html>
-        """.format(logo=MUXI_LOGO_URL)
+        """.format(
+            logo=MUXI_LOGO_URL
+        )
 
         self.wfile.write(html.encode())
 
@@ -192,7 +198,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
 def find_available_port():
     """Find an available port for the callback server."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('', 0))
+        s.bind(("", 0))
         s.listen(1)
         port = s.getsockname()[1]
     return port
@@ -201,7 +207,7 @@ def find_available_port():
 def start_callback_server():
     """Start the OAuth callback server."""
     port = find_available_port()
-    server = HTTPServer(('localhost', port), OAuthCallbackHandler)
+    server = HTTPServer(("localhost", port), OAuthCallbackHandler)
     server.oauth_token = None
     server.oauth_error = None
     server.token_type = None
@@ -225,7 +231,7 @@ def exchange_code_for_token(code, oauth_config, client_info, callback_port, code
     params = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": f"http://localhost:{callback_port}/callback"
+        "redirect_uri": f"http://localhost:{callback_port}/callback",
     }
 
     # Add client_id
@@ -243,9 +249,7 @@ def exchange_code_for_token(code, oauth_config, client_info, callback_port, code
     try:
         data = urlencode(params).encode()
         req = urllib.request.Request(
-            token_endpoint,
-            data=data,
-            headers={'Content-Type': 'application/x-www-form-urlencoded'}
+            token_endpoint, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"}
         )
 
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -265,17 +269,17 @@ def wait_for_token(server, timeout=300):
     while time.time() - start_time < timeout:
         if server.oauth_token:
             # If we got a code, exchange it for a token
-            if server.token_type == 'authorization_code':
-                if hasattr(server, 'oauth_config'):
+            if server.token_type == "authorization_code":
+                if hasattr(server, "oauth_config"):
                     token = exchange_code_for_token(
                         server.oauth_token,
                         server.oauth_config,
                         server.client_info,
                         server.server_address[1],
-                        getattr(server, 'code_verifier', None)
+                        getattr(server, "code_verifier", None),
                     )
                     if token:
-                        return token, 'access_token'
+                        return token, "access_token"
                     else:
                         # Return the code if exchange failed
                         return server.oauth_token, server.token_type
@@ -300,26 +304,27 @@ def discover_oauth_config(mcp_url, debug=False):
 
     try:
         req = urllib.request.Request(mcp_url)
-        req.add_header('Accept', 'text/event-stream')
-        req.add_header('User-Agent', 'muxi-mcp-oauth/1.0')
+        req.add_header("Accept", "text/event-stream")
+        req.add_header("User-Agent", "muxi-mcp-oauth/1.0")
 
         try:
             with urllib.request.urlopen(req, timeout=5) as response:
                 # No auth required
                 if debug:
-                    print(f"✅ MCP server accessible without authentication")
+                    print("✅ MCP server accessible without authentication")
                 return None
         except urllib.error.HTTPError as e:
             if e.code == 401:
                 # Check WWW-Authenticate header
-                auth_header = e.headers.get('WWW-Authenticate', '')
-                if 'Bearer' in auth_header and 'realm=' in auth_header:
+                auth_header = e.headers.get("WWW-Authenticate", "")
+                if "Bearer" in auth_header and "realm=" in auth_header:
                     requires_oauth = True
                     # Extract realm
                     import re
+
                     realm_match = re.search(r'realm="([^"]+)"', auth_header)
                     if not realm_match:
-                        realm_match = re.search(r'realm=(\S+)', auth_header)
+                        realm_match = re.search(r"realm=(\S+)", auth_header)
                     if realm_match:
                         realm_value = realm_match.group(1)
                         if debug:
@@ -333,21 +338,21 @@ def discover_oauth_config(mcp_url, debug=False):
         return None
 
     # Check if realm is a URL (RFC 9728 compliant)
-    if realm_value and realm_value.startswith(('http://', 'https://')):
+    if realm_value and realm_value.startswith(("http://", "https://")):
         try:
             # Fetch protected resource metadata
             req = urllib.request.Request(realm_value)
-            req.add_header('Accept', 'application/json')
+            req.add_header("Accept", "application/json")
 
             with urllib.request.urlopen(req, timeout=10) as response:
                 if response.status == 200:
                     metadata = json.loads(response.read().decode())
-                    auth_server = metadata.get('authorization_servers', [None])[0]
+                    auth_server = metadata.get("authorization_servers", [None])[0]
                     if auth_server:
                         # Fetch auth server metadata
                         auth_metadata_url = f"{auth_server}/.well-known/oauth-authorization-server"
                         req = urllib.request.Request(auth_metadata_url)
-                        req.add_header('Accept', 'application/json')
+                        req.add_header("Accept", "application/json")
 
                         with urllib.request.urlopen(req, timeout=10) as response:
                             if response.status == 200:
@@ -360,7 +365,7 @@ def discover_oauth_config(mcp_url, debug=False):
     well_known_url = urljoin(base_url, "/.well-known/oauth-authorization-server")
     try:
         req = urllib.request.Request(well_known_url)
-        req.add_header('Accept', 'application/json')
+        req.add_header("Accept", "application/json")
 
         with urllib.request.urlopen(req, timeout=5) as response:
             if response.status == 200:
@@ -372,7 +377,7 @@ def discover_oauth_config(mcp_url, debug=False):
 
     # If we get here, we know OAuth is required but can't discover the configuration
     # Use generic OAuth endpoints based on common patterns
-    print(f"⚠️  OAuth required but configuration not discoverable")
+    print("⚠️  OAuth required but configuration not discoverable")
     print(f"   Using generic OAuth endpoints for {provider_name}")
 
     # Common OAuth endpoint patterns
@@ -383,7 +388,7 @@ def discover_oauth_config(mcp_url, debug=False):
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],
-        "generic": True
+        "generic": True,
     }
 
     # Try common OAuth patterns
@@ -391,35 +396,32 @@ def discover_oauth_config(mcp_url, debug=False):
         # Pattern 1: OAuth subdomain
         {
             "auth": f"https://oauth.{parsed.netloc}/authorize",
-            "token": f"https://oauth.{parsed.netloc}/token"
+            "token": f"https://oauth.{parsed.netloc}/token",
         },
         # Pattern 2: Auth subdomain
         {
             "auth": f"https://auth.{parsed.netloc}/authorize",
-            "token": f"https://auth.{parsed.netloc}/oauth/token"
+            "token": f"https://auth.{parsed.netloc}/oauth/token",
         },
         # Pattern 3: OAuth2 subdomain
         {
             "auth": f"https://oauth2.{parsed.netloc}/oauth2/auth",
-            "token": f"https://oauth2.{parsed.netloc}/oauth2/token"
+            "token": f"https://oauth2.{parsed.netloc}/oauth2/token",
         },
         # Pattern 4: Same domain with paths
-        {
-            "auth": f"{base_url}/oauth/authorize",
-            "token": f"{base_url}/oauth/token"
-        },
+        {"auth": f"{base_url}/oauth/authorize", "token": f"{base_url}/oauth/token"},
         # Pattern 5: API subdomain
         {
             "auth": f"https://api.{parsed.netloc}/oauth/authorize",
-            "token": f"https://api.{parsed.netloc}/oauth/token"
-        }
+            "token": f"https://api.{parsed.netloc}/oauth/token",
+        },
     ]
 
     # Test which pattern might work (just check if auth endpoint exists)
     for pattern in common_patterns:
         try:
             req = urllib.request.Request(pattern["auth"])
-            req.add_header('User-Agent', 'muxi-mcp-oauth/1.0')
+            req.add_header("User-Agent", "muxi-mcp-oauth/1.0")
             with urllib.request.urlopen(req, timeout=2) as response:
                 # If we get any response (even error), the endpoint exists
                 generic_config["authorization_endpoint"] = pattern["auth"]
@@ -431,7 +433,10 @@ def discover_oauth_config(mcp_url, debug=False):
 
     # If no patterns worked, provide instructions
     if not generic_config["authorization_endpoint"]:
-        generic_config["note"] = f"Could not determine OAuth endpoints for {provider_name}. You may need to check their documentation."
+        generic_config["note"] = (
+            f"Could not determine OAuth endpoints for {provider_name}. "
+            "You may need to check their documentation."
+        )
         generic_config["requires_client_id"] = True
 
     return generic_config
@@ -442,7 +447,7 @@ def register_oauth_client(config, callback_port):
     if not config or "registration_endpoint" not in config:
         return None
 
-    print(f"📝 Attempting dynamic client registration...")
+    print("📝 Attempting dynamic client registration...")
 
     client_metadata = {
         "client_name": "MUXI Runtime",
@@ -450,14 +455,14 @@ def register_oauth_client(config, callback_port):
         "redirect_uris": [f"http://localhost:{callback_port}/callback"],
         "grant_types": ["authorization_code", "implicit"],
         "response_types": ["code", "token"],
-        "scope": "read write"
+        "scope": "read write",
     }
 
     try:
         req = urllib.request.Request(
             config["registration_endpoint"],
             data=json.dumps(client_metadata).encode(),
-            headers={'Content-Type': 'application/json'}
+            headers={"Content-Type": "application/json"},
         )
 
         with urllib.request.urlopen(req, timeout=10) as response:
@@ -495,19 +500,26 @@ def build_authorization_url(oauth_config, client_info, callback_port):
     params = {
         "response_type": response_type,
         "redirect_uri": f"http://localhost:{callback_port}/callback",
-        "scope": scope
+        "scope": scope,
     }
 
     # Add PKCE if using code flow and supported
-    if response_type == "code" and "S256" in oauth_config.get("code_challenge_methods_supported", []):
+    if response_type == "code" and "S256" in oauth_config.get(
+        "code_challenge_methods_supported", []
+    ):
         # Generate PKCE challenge
         import secrets
         import hashlib
         import base64
-        code_verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).decode('utf-8').rstrip('=')
-        code_challenge = base64.urlsafe_b64encode(
-            hashlib.sha256(code_verifier.encode('utf-8')).digest()
-        ).decode('utf-8').rstrip('=')
+
+        code_verifier = (
+            base64.urlsafe_b64encode(secrets.token_bytes(32)).decode("utf-8").rstrip("=")
+        )
+        code_challenge = (
+            base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("utf-8")).digest())
+            .decode("utf-8")
+            .rstrip("=")
+        )
         params["code_challenge"] = code_challenge
         params["code_challenge_method"] = "S256"
         # Store verifier for later
@@ -524,7 +536,7 @@ def build_authorization_url(oauth_config, client_info, callback_port):
     parsed = urlparse(auth_endpoint)
     query_params = parse_qs(parsed.query, keep_blank_values=True)
     # Don't include internal params in URL
-    url_params = {k: [v] for k, v in params.items() if not k.startswith('_')}
+    url_params = {k: [v] for k, v in params.items() if not k.startswith("_")}
     query_params.update(url_params)
 
     new_query = urlencode(query_params, doseq=True)
@@ -535,22 +547,22 @@ def build_authorization_url(oauth_config, client_info, callback_port):
 
 def display_usage(token):
     """Display token and usage instructions."""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("🔑 Your access token:")
-    print("="*60)
+    print("=" * 60)
     print(token)
-    print("="*60)
+    print("=" * 60)
 
     print("\n📝 To use this token in your MCP configuration:\n")
     print("1. Add the token as a secret:")
     print("   cd /path/to/formation")
-    print(f'   python -m muxi.runtime.utils.add_secret MCP_TOKEN "{token}"')
+    print(f'   python -m muxi.utils.add_secret MCP_TOKEN "{token}"')
 
     print("\n2. Configure your MCP server (mcp/server.yaml):")
     print("   auth:")
     print('     type: "bearer"')
     print('     token: "${{ secrets.MCP_TOKEN }}"')
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
 
 
 def main():
@@ -563,11 +575,12 @@ Example:
   %(prog)s https://mcp.asana.com/sse
   %(prog)s "https://provider.com/oauth/authorize?client_id=123&response_type=token"
         """,
-        formatter_class=argparse.RawDescriptionHelpFormatter
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("url", help="MCP server URL or OAuth authorization URL")
-    parser.add_argument("--timeout", type=int, default=300,
-                       help="Timeout in seconds (default: 300)")
+    parser.add_argument(
+        "--timeout", type=int, default=300, help="Timeout in seconds (default: 300)"
+    )
     parser.add_argument("--client-id", help="Use specific client ID (skip dynamic registration)")
     parser.add_argument("--debug", action="store_true", help="Show debug information")
 
@@ -590,7 +603,7 @@ Example:
             # Update with our callback port
             parsed = urlparse(auth_url)
             query_params = parse_qs(parsed.query, keep_blank_values=True)
-            query_params['redirect_uri'] = [f'http://localhost:{port}/callback']
+            query_params["redirect_uri"] = [f"http://localhost:{port}/callback"]
             new_query = urlencode(query_params, doseq=True)
             auth_url = parsed._replace(query=new_query).geturl()
         else:
@@ -647,7 +660,7 @@ Example:
             server.code_verifier = code_verifier
 
         # Open browser
-        print(f"\n🌐 Opening browser for authorization...")
+        print("\n🌐 Opening browser for authorization...")
         print(f"   URL: {auth_url}")
         webbrowser.open(auth_url)
 
@@ -658,7 +671,7 @@ Example:
         # Success!
         print("\n✅ Authorization successful!")
 
-        if token_type == 'authorization_code':
+        if token_type == "authorization_code":
             print("\n⚠️  Note: Received authorization code (not access token)")
             print("   You may need to exchange this code for an access token")
             print("   Check your OAuth provider's documentation")

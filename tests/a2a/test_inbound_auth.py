@@ -16,7 +16,7 @@ from pathlib import Path
 runtime_path = Path(__file__).parent.parent / "runtime"
 sys.path.insert(0, str(runtime_path))
 
-from src.muxi.runtime.a2a.inbound_auth import (  # noqa: E402
+from src.muxi.a2a.inbound_auth import (  # noqa: E402
     A2AInboundAuthenticator,
     InboundAuthType,
 )

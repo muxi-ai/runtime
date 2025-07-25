@@ -19,8 +19,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from muxi.runtime.observability.health import HealthManager, HealthMonitor, HealthStatusAPI
-from muxi.runtime.observability.manager import ObservabilityManager
+from muxi.observability.health import HealthManager, HealthMonitor, HealthStatusAPI
+from muxi.observability.manager import ObservabilityManager
 
 
 class TestHealthMonitoringIntegration:
@@ -303,7 +303,7 @@ class TestHealthMonitoringIntegration:
     async def test_health_monitoring_with_multitasking_fallback(self, health_monitor):
         """Test health monitoring works even without multitasking library."""
         # This test verifies the fallback behavior when multitasking is not available
-        with patch('muxi.runtime.observability.health_monitor.MULTITASKING_AVAILABLE', False):
+        with patch('muxi.observability.health_monitor.MULTITASKING_AVAILABLE', False):
             destinations = ["https://api.example.com/events"]
 
             await health_monitor.start(destinations)

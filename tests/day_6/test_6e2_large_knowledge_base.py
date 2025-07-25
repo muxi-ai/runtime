@@ -11,29 +11,29 @@ import time
 
 sys.path.insert(0, '../..')
 
-from src.muxi.runtime.formation import Formation
+from src.muxi.formation import Formation
 
 
 async def test_large_knowledge_base():
     """Test performance with many knowledge files"""
-    
+
     print("\n=== Test 6E2: Large Knowledge Base Performance ===")
     print("This test verifies performance with many knowledge files\n")
-    
+
     # Create a temporary directory with many files
     temp_dir = tempfile.mkdtemp()
     large_knowledge_dir = os.path.join(temp_dir, "large-knowledge")
     os.makedirs(large_knowledge_dir)
-    
+
     try:
         # Create many small knowledge files
         num_files = 20  # Create 20 knowledge files
         print(f"Creating {num_files} knowledge files...")
-        
+
         for i in range(num_files):
             filename = f"knowledge_{i:03d}.md"
             filepath = os.path.join(large_knowledge_dir, filename)
-            
+
             # Create content for each file
             content = f"""# Knowledge Document {i}
 
@@ -62,12 +62,12 @@ Topic {i} specific details:
 - Configuration option {i}-2
 - Configuration option {i}-3
 """
-            
+
             with open(filepath, 'w') as f:
                 f.write(content)
-        
+
         print(f"✓ Created {num_files} knowledge files")
-        
+
         # Create agent config with large knowledge base
         agent_yaml = f"""
 schema: "1.0.0"
@@ -86,49 +86,49 @@ knowledge:
   - path: "{large_knowledge_dir}"
     description: "Large knowledge base with {num_files} files"
 """
-        
+
         # Write temporary agent config
         agent_config_path = os.path.join(temp_dir, "test-large.yaml")
         with open(agent_config_path, 'w') as f:
             f.write(agent_yaml)
-        
+
         # Copy the test formation and add our agent
         test_formation_dir = os.path.join(temp_dir, "formation-test")
         shutil.copytree("../../test-formations/formation-knowledge", test_formation_dir)
-        
+
         agents_dir = os.path.join(test_formation_dir, "agents")
         shutil.copy(agent_config_path, os.path.join(agents_dir, "test-large.yaml"))
-        
+
         print("\n--- Test 1: Formation Loading Performance ---")
         print(f"Loading formation with {num_files} knowledge files...")
-        
+
         start_time = time.time()
-        
+
         formation = Formation()
         await formation.load(os.path.join(test_formation_dir, "formation.yaml"))
         overlord = await formation.start_overlord()
-        
+
         load_time = time.time() - start_time
         print(f"✓ Formation loaded in {load_time:.2f} seconds")
-        
+
         # Check if our test agent was loaded
         test_agent = overlord.agents.get("test-large")
         if not test_agent:
             print("❌ Test agent not found")
             return False
-        
+
         # Reasonable loading time check (should be under 30 seconds even with many files)
         if load_time < 30:
             print(f"✅ Test 1 PASSED: Formation loaded in reasonable time ({load_time:.2f}s)")
         else:
             print(f"⚠ Test 1 WARNING: Formation loading took {load_time:.2f}s (expected < 30s)")
-        
+
         # Test 2: First Query Performance
         print("\n--- Test 2: First Query Performance ---")
         print("👤 User: What topics are covered in your knowledge base?")
-        
+
         query_start = time.time()
-        
+
         response1 = await overlord.chat(
             "What topics are covered in your knowledge base?",
             agent_name="test-large",
@@ -136,30 +136,30 @@ knowledge:
             session_id="test_6e2_session_1",
             stream=False
         )
-        
+
         query_time = time.time() - query_start
-        
+
         # Extract response content
         if hasattr(response1, 'content'):
             response_text = response1.content
         else:
             response_text = str(response1)
-        
+
         print(f"\n🤖 Test Large Agent: {response_text[:300]}...")
         print(f"\n✓ First query completed in {query_time:.2f} seconds")
-        
+
         # First query might be slower due to initialization
         if query_time < 20:
             print(f"✅ Test 2 PASSED: First query completed in reasonable time ({query_time:.2f}s)")
         else:
             print(f"⚠ Test 2 WARNING: First query took {query_time:.2f}s (expected < 20s)")
-        
+
         # Test 3: Subsequent Query Performance
         print("\n--- Test 3: Subsequent Query Performance ---")
         print("👤 User: Tell me about topic 5")
-        
+
         query_start = time.time()
-        
+
         response2 = await overlord.chat(
             "Tell me about topic 5",
             agent_name="test-large",
@@ -167,51 +167,51 @@ knowledge:
             session_id="test_6e2_session_2",
             stream=False
         )
-        
+
         query_time = time.time() - query_start
-        
+
         # Extract response content
         if hasattr(response2, 'content'):
             response_text = response2.content
         else:
             response_text = str(response2)
-        
+
         print(f"\n🤖 Test Large Agent: {response_text[:300]}...")
         print(f"\n✓ Subsequent query completed in {query_time:.2f} seconds")
-        
+
         # Subsequent queries should be faster
         if query_time < 10:
             print(f"✅ Test 3 PASSED: Subsequent query fast ({query_time:.2f}s)")
         else:
             print(f"⚠ Test 3 WARNING: Subsequent query took {query_time:.2f}s (expected < 10s)")
-        
+
         # Test 4: Knowledge System State
         print("\n--- Test 4: Knowledge System State ---")
-        
+
         await test_agent._ensure_knowledge_initialized()
-        
+
         if hasattr(test_agent, 'knowledge_handler') and test_agent.knowledge_handler:
             sources = test_agent.knowledge_handler.sources
             print(f"\nKnowledge sources: {len(sources)}")
-            
+
             # Count total files loaded
             files_loaded = 0
             for source in sources:
                 if hasattr(source, 'files'):
                     files_loaded += len(source.files)
                     print(f"  - Source with {len(source.files)} files")
-            
+
             print(f"Total files loaded: {files_loaded}")
-            
+
             # Should have loaded our files (might be limited by max_files_per_source)
             if files_loaded > 0:
                 print(f"✅ Test 4 PASSED: Successfully loaded {files_loaded} files")
             else:
                 print("❌ Test 4 FAILED: No files loaded")
-        
+
         # Test 5: Memory usage check (basic)
         print("\n--- Test 5: System Stability ---")
-        
+
         # Make several more queries to ensure stability
         for i in range(3):
             query_start = time.time()
@@ -224,11 +224,11 @@ knowledge:
             )
             query_time = time.time() - query_start
             print(f"  Query {i+1}: {query_time:.2f}s")
-        
+
         print("✅ Test 5 PASSED: System remained stable with multiple queries")
-        
+
         await formation.stop_overlord()
-        
+
         # Summary
         print(f"\n\n=== Test 6E2 Summary ===")
         print(f"✅ Successfully loaded formation with {num_files} knowledge files")
@@ -236,9 +236,9 @@ knowledge:
         print(f"✅ Queries performed within acceptable time limits")
         print(f"✅ System remained stable under load")
         print(f"\n✅ Test 6E2 PASSED: Large knowledge base handled efficiently")
-        
+
         return True
-        
+
     except Exception as e:
         print(f"\n❌ Test failed: {e}")
         import traceback

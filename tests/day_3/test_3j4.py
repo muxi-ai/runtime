@@ -11,35 +11,35 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 import pytest
-from src.muxi.runtime.formation.formation import Formation
+from src.muxi.formation.formation import Formation
 
 
 async def test_3j4_main():
     """Test invalid format detection"""
     print("\n=== Test 3J4: Invalid Format Detection ===")
-    
+
     # Load formation
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multimodal"
     formation = Formation()
     await formation.load(str(formation_path))
     overlord = await formation.start_overlord()
-    
+
     print("✓ Overlord started")
 
     # Read the invalid format file
     invalid_format_path = Path(__file__).parent.parent.parent / "test-docs" / "invalid_format.jpg"
     with open(invalid_format_path, "rb") as f:
         invalid_content = f.read()
-    
+
     print(f"✓ Loaded invalid format file: {len(invalid_content)} bytes")
-    
+
     files = [{
         "filename": "invalid_format.jpg",
         "content": invalid_content,
         "content_type": "image/jpeg",
         "size": len(invalid_content)
     }]
-    
+
     # Test invalid format detection
     print("\n📊 Testing invalid format detection...")
     response = await overlord.chat(
@@ -49,15 +49,15 @@ async def test_3j4_main():
         use_async=False,
         stream=False,
     )
-    
+
     result = response.content if hasattr(response, 'content') else str(response)
     print(f"📄 Response length: {len(result)} chars")
     print(f"📄 Response preview: {result[:200]}...")
-    
+
     # Verify response
     assert len(result) > 50, "Response should be substantial"
     print("✅ Invalid Format Detection test passed!")
-    
+
     # Cleanup
     await formation.stop_overlord()
 
@@ -65,7 +65,7 @@ async def test_3j4_main():
 if __name__ == "__main__":
     print("🧪 Running Test 3J4: Invalid Format Detection (Sync Mode)")
     print("=" * 60)
-    
+
     asyncio.run(test_3j4_main())
-    
+
     print("\n🎉 Test 3J4 completed successfully!")

@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime import Formation  # noqa: E402
+from src.muxi import Formation  # noqa: E402
 
 
 async def test_sync_shutdown():

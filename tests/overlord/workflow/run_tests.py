@@ -57,7 +57,7 @@ class TestRunner:
 
         if coverage:
             cmd.extend(
-                ["--cov=muxi.runtime.overlord.workflow", "--cov-report=html", "--cov-report=term"]
+                ["--cov=muxi.overlord.workflow", "--cov-report=html", "--cov-report=term"]
             )
 
         cmd.extend(test_files)

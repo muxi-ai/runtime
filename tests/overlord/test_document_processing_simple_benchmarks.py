@@ -24,7 +24,7 @@ sys.modules['spacy'] = type('MockSpacy', (), {
     '__version__': '3.7.0'
 })()
 
-from src.muxi.runtime.formation.documents.storage import DocumentChunkManager
+from src.muxi.formation.documents.storage import DocumentChunkManager
 
 
 class SimpleDocumentBenchmark:

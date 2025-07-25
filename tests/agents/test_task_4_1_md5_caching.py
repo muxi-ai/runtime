@@ -9,8 +9,8 @@ import pytest
 import tempfile
 import os
 from unittest.mock import AsyncMock, patch
-from muxi.runtime.formation.agents.knowledge.handler import KnowledgeHandler
-from muxi.runtime.formation.agents.knowledge.base import FileKnowledge
+from muxi.formation.agents.knowledge.handler import KnowledgeHandler
+from muxi.formation.agents.knowledge.base import FileKnowledge
 
 
 class TestTask41MD5Caching:
@@ -106,8 +106,8 @@ class TestTask41MD5Caching:
         # Should return empty string
         assert md5_hash == ""
 
-    @patch('muxi.runtime.formation.agents.knowledge.handler.DocumentSemanticIndex')
-    @patch('muxi.runtime.formation.agents.knowledge.handler.DocumentChunkManager')
+    @patch('muxi.formation.agents.knowledge.handler.DocumentSemanticIndex')
+    @patch('muxi.formation.agents.knowledge.handler.DocumentChunkManager')
     async def test_md5_based_cache_behavior(
         self, mock_chunk_manager, mock_semantic_index, temp_knowledge_file, mock_embedding_fn
     ):

@@ -4,7 +4,7 @@ Unit tests for the error classification utility.
 
 import unittest
 import asyncio
-from src.muxi.runtime.utils.error_classifier import (
+from src.muxi.utils.error_classifier import (
     classify_error_code,
     is_retryable_error,
     get_http_status_for_error,

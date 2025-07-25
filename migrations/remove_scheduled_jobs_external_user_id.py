@@ -8,7 +8,7 @@ we can get the external_user_id through a JOIN when needed.
 
 import asyncio
 from sqlalchemy import text
-from src.muxi.runtime.services.db import get_database_manager
+from src.muxi.services.db import get_database_manager
 
 
 async def migrate_up(connection_string: str):

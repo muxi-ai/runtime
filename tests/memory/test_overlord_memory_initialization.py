@@ -12,7 +12,7 @@ from unittest.mock import patch, MagicMock
 # Add parent directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.overlord import Overlord  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -50,7 +50,7 @@ async def test_memory_initialization():
     overlord = Overlord(formation_config=formation_config)
 
     # Mock the LLM creation to avoid needing real API keys
-    with patch("src.muxi.runtime.overlord.LLM") as mock_llm_class:
+    with patch("src.muxi.overlord.LLM") as mock_llm_class:
         mock_llm = MagicMock()
         mock_llm_class.return_value = mock_llm
 
@@ -127,7 +127,7 @@ async def test_remote_buffer_memory():
 
     overlord = Overlord(formation_config=formation_config)
 
-    with patch("src.muxi.runtime.overlord.LLM") as mock_llm_class:
+    with patch("src.muxi.overlord.LLM") as mock_llm_class:
         mock_llm = MagicMock()
         mock_llm_class.return_value = mock_llm
 

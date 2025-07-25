@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 
 sys.path.append(".")
-from src.muxi.runtime import Formation  # noqa: E402
+from src.muxi import Formation  # noqa: E402
 
 
 async def test():

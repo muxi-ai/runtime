@@ -10,7 +10,7 @@ import tempfile
 import yaml
 import pytest
 
-from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.config.validation import FormationValidator
 
 
 class TestPhase6SchemaValidatorAudit:

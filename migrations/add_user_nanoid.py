@@ -9,7 +9,7 @@ and dashboards without revealing internal database IDs.
 import asyncio
 import nanoid
 from sqlalchemy import text
-from src.muxi.runtime.services.db import get_database_manager
+from src.muxi.services.db import get_database_manager
 
 
 async def migrate_up(connection_string: str):
@@ -48,26 +48,26 @@ async def migrate_up(connection_string: str):
             # Add unique constraint if it doesn't exist
             # First check if constraint already exists (PostgreSQL)
             result = await session.execute(text("""
-                SELECT COUNT(*) FROM information_schema.table_constraints 
-                WHERE table_name = 'users' 
+                SELECT COUNT(*) FROM information_schema.table_constraints
+                WHERE table_name = 'users'
                 AND constraint_name = 'uq_users_public_id'
                 AND constraint_type = 'UNIQUE'
             """))
             constraint_exists = result.scalar() > 0
-            
+
             if not constraint_exists:
                 # Also check SQLite style
                 try:
                     result = await session.execute(text("""
-                        SELECT sql FROM sqlite_master 
-                        WHERE type = 'index' 
+                        SELECT sql FROM sqlite_master
+                        WHERE type = 'index'
                         AND name = 'uq_users_public_id'
                     """))
                     constraint_exists = result.scalar() is not None
                 except Exception:
                     # Not SQLite, continue with PostgreSQL approach
                     pass
-            
+
             if not constraint_exists:
                 await session.execute(text("""
                     ALTER TABLE users

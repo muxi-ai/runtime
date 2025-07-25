@@ -11,13 +11,13 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 
 # Import migrated datatypes
-from muxi.runtime.datatypes.async_operations import (
+from muxi.datatypes.async_operations import (
     TimeoutConfig,
     OperationContext,
     AsyncOperationResult,
     OperationStatus,
 )
-from muxi.runtime.datatypes.workflow import (
+from muxi.datatypes.workflow import (
     TaskInput,
     TaskOutput,
     SubTask,
@@ -29,12 +29,12 @@ from muxi.runtime.datatypes.workflow import (
     generate_workflow_id,
     generate_task_id,
 )
-from muxi.runtime.datatypes.errors import (
+from muxi.datatypes.errors import (
     ErrorCodeInfo,
     ErrorDetails,
     create_error_details,
 )
-from muxi.runtime.datatypes.task_status import TaskStatus
+from muxi.datatypes.task_status import TaskStatus
 
 
 def test_timeout_config():

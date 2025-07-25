@@ -10,9 +10,9 @@ import pytest
 import time
 from unittest.mock import Mock, AsyncMock, patch
 
-from src.muxi.runtime.formation.overlord.overlord import Overlord
-from src.muxi.runtime.formation.background.request_tracker import RequestStatus
-from src.muxi.runtime.datatypes.response import MuxiResponse
+from src.muxi.formation.overlord.overlord import Overlord
+from src.muxi.formation.background.request_tracker import RequestStatus
+from src.muxi.datatypes.response import MuxiResponse
 
 
 class TestAsyncIntegration:
@@ -282,7 +282,7 @@ class TestAsyncIntegration:
 
             if use_async is True or (use_async is None and 35.0 >= 30):
                 # Track request start
-                from src.muxi.runtime.formation.background.request_tracker import RequestState
+                from src.muxi.formation.background.request_tracker import RequestState
                 state = RequestState(
                     id=request_id,
                     status=RequestStatus.PROCESSING,

@@ -13,7 +13,7 @@ from pathlib import Path
 # Add the runtime directory to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from muxi.runtime.utils.response_converter import (
+from muxi.utils.response_converter import (
     create_unified_response,
     extract_user_content,
     create_error_response

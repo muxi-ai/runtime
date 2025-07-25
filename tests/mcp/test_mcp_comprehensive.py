@@ -26,11 +26,11 @@ sys.path.insert(0, root_dir)
 # Import after sys.path modification
 try:
     # Try direct import
-    from src.muxi.runtime.services.mcp.handler import (  # noqa: E402
+    from src.muxi.services.mcp.handler import (  # noqa: E402
         MCPHandler,
         MCPServerClient
     )
-    from src.muxi.runtime.services.mcp.transports import (  # noqa: E402
+    from src.muxi.services.mcp.transports import (  # noqa: E402
         HTTPSSETransport,
         CommandLineTransport,
         MCPTransportFactory,
@@ -141,7 +141,7 @@ class TestHTTPSSETransport(unittest.IsolatedAsyncioTestCase):
 
         # Set up patches for MCP SDK sse_client
         self.sse_client_patcher = patch(
-            'src.muxi.runtime.services.mcp.transports.http_sse.sse_client'
+            'src.muxi.services.mcp.transports.http_sse.sse_client'
         )
         self.mock_sse_client = self.sse_client_patcher.start()
 
@@ -157,7 +157,7 @@ class TestHTTPSSETransport(unittest.IsolatedAsyncioTestCase):
         self.mock_sse_client.return_value = self.mock_session
 
         # Mock message handler
-        handler_patch_path = 'src.muxi.runtime.services.mcp.transports.http_sse.MCPMessageHandler'
+        handler_patch_path = 'src.muxi.services.mcp.transports.http_sse.MCPMessageHandler'
         self.message_handler_patcher = patch(handler_patch_path)
         self.mock_message_handler_class = self.message_handler_patcher.start()
         self.mock_message_handler = MagicMock()
@@ -237,7 +237,7 @@ class TestCommandLineTransport(unittest.IsolatedAsyncioTestCase):
         self.transport = CommandLineTransport(transport_cmd)
 
         # Set up patches for MCP SDK stdio_client
-        base_path = 'src.muxi.runtime.services.mcp.transports.command'
+        base_path = 'src.muxi.services.mcp.transports.command'
         patch_path = f'{base_path}.stdio_client'
         self.stdio_client_patcher = patch(patch_path)
         self.mock_stdio_client = self.stdio_client_patcher.start()
@@ -341,7 +341,7 @@ class TestMCPServerClient(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         """Set up test fixtures."""
         # Create patchers
-        self.factory_patcher = patch('src.muxi.runtime.services.mcp.handler.MCPTransportFactory')
+        self.factory_patcher = patch('src.muxi.services.mcp.handler.MCPTransportFactory')
         self.mock_factory = self.factory_patcher.start()
 
         # Set up mock transport
@@ -449,7 +449,7 @@ class TestMCPHandler(unittest.IsolatedAsyncioTestCase):
         self.handler = MCPHandler(model=self.mock_model)
 
         # Set up client patch
-        self.client_patcher = patch('src.muxi.runtime.services.mcp.handler.MCPServerClient')
+        self.client_patcher = patch('src.muxi.services.mcp.handler.MCPServerClient')
         self.mock_client_class = self.client_patcher.start()
         self.mock_client = MagicMock()
         self.mock_client.connect = AsyncMock(return_value=True)

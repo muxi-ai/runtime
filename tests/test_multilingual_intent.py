@@ -7,9 +7,9 @@ detect intents in multiple languages without hardcoded keywords.
 """
 
 import asyncio
-from src.muxi.runtime.services.intent import IntentDetectionService
-from src.muxi.runtime.services.llm import LLM
-from src.muxi.runtime.datatypes.intent import IntentType, IntentDetectionContext
+from src.muxi.services.intent import IntentDetectionService
+from src.muxi.services.llm import LLM
+from src.muxi.datatypes.intent import IntentType, IntentDetectionContext
 
 
 async def test_multilingual_intent():

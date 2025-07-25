@@ -7,7 +7,7 @@ sys.path.insert(0, ".")
 import asyncio  # noqa: E402
 from concurrent.futures import ThreadPoolExecutor  # noqa: E402
 
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 def test_multiple_users_permissions():
@@ -31,7 +31,7 @@ def test_multiple_users_permissions():
                         return response.content
                     else:
                         return str(response)
-                
+
                 # Load formation with MCP enabled
                 formation = Formation()
                 await formation.load("test-formations/formation-mcp")
@@ -47,7 +47,7 @@ def test_multiple_users_permissions():
                     use_async=False,
                     stream=False
                 )
-                
+
                 response1 = await handle_response(response1)
                 print(f"User1 Response: {response1}")
                 response1_lower = response1.lower()
@@ -68,7 +68,7 @@ def test_multiple_users_permissions():
                     use_async=False,
                     stream=False
                 )
-                
+
                 response2 = await handle_response(response2)
                 print(f"User2 Response: {response2}")
                 response2_lower = response2.lower()
@@ -97,12 +97,12 @@ def test_multiple_users_permissions():
                 print("\n3. Testing repository-level isolation...")
                 # User1 context
                 response1 = await overlord.chat(
-                    "List issues in my private repository", 
-                    user_id="user1", 
+                    "List issues in my private repository",
+                    user_id="user1",
                     use_async=False,
                     stream=False
                 )
-                
+
                 response1 = await handle_response(response1)
                 print(f"User1 Private Repo Response: {response1}")
 
@@ -113,7 +113,7 @@ def test_multiple_users_permissions():
                     use_async=False,
                     stream=False
                 )
-                
+
                 response2 = await handle_response(response2)
                 print(f"User2 Private Repo Response: {response2}")
 
@@ -131,7 +131,7 @@ def test_multiple_users_permissions():
                     use_async=False,
                     stream=False
                 )
-                
+
                 response = await handle_response(response)
                 print(f"User2 Org Response: {response}")
 
@@ -152,7 +152,7 @@ def test_multiple_users_permissions():
                     use_async=False,
                     stream=False
                 )
-                
+
                 response = await handle_response(response)
                 print(f"User2 Trick Attempt Response: {response}")
 
@@ -176,7 +176,7 @@ def test_multiple_users_permissions():
                     use_async=False,
                     stream=False
                 )
-                
+
                 response = await handle_response(response)
                 print(f"User2 Credential Query Response: {response}")
 

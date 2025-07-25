@@ -1,6 +1,6 @@
 import sys
 sys.path.insert(0, '../..')
-from src.muxi.runtime.overlord import Overlord  # noqa: E402
+from src.muxi.overlord import Overlord  # noqa: E402
 print('✅ Successfully imported Overlord!')
 print('🔍 Checking if get_model_for_capability method exists...')
 methods = [method for method in dir(Overlord) if 'capability' in method.lower()]

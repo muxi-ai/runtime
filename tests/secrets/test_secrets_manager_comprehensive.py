@@ -17,7 +17,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from src.muxi.runtime.secrets import SecretsManager
+from src.muxi.secrets import SecretsManager
 
 # Add runtime to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent / "runtime"))

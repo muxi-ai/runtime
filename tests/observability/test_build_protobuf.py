@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from src.muxi.runtime.services.observability.build_protobuf import (
+from src.muxi.services.observability.build_protobuf import (
     ProtobufCodeGenerator,
     generate_protobuf_code
 )
@@ -334,7 +334,7 @@ class TestIntegrationWithRealSchema:
 
         # Try to import the generated module
         try:
-            from src.muxi.runtime.services.observability.proto import observability_pb2
+            from src.muxi.services.observability.proto import observability_pb2
 
             # Check that expected classes exist
             assert hasattr(observability_pb2, 'ObservabilityEvent')

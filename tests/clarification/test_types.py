@@ -7,7 +7,7 @@ Tests the core data classes and enums used throughout the clarification system.
 import pytest
 from dataclasses import fields
 
-from src.muxi.runtime.datatypes import (
+from src.muxi.datatypes import (
     ClarificationRequest,
     ClarificationResult,
     ClarificationResultStatus,
@@ -269,7 +269,7 @@ class TestExceptions:
 
     def test_exception_inheritance(self):
         """Test that all clarification exceptions inherit from ClarificationError"""
-        from src.muxi.runtime.datatypes import (
+        from src.muxi.datatypes import (
             InformationAnalysisError,
             QuestionGenerationError,
             ParameterExtractionError,

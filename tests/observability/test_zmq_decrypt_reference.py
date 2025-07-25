@@ -6,8 +6,8 @@ Tests full encrypt/decrypt cycle and server-side functionality.
 
 import pytest
 from unittest.mock import patch
-from src.muxi.runtime.services.observability.transports.token_encryption import TokenEncryption
-from src.muxi.runtime.utils.zmq_decrypt import (
+from src.muxi.services.observability.transports.token_encryption import TokenEncryption
+from src.muxi.utils.zmq_decrypt import (
     decrypt_zmq_message,
     AuthenticationError,
     DecryptionError

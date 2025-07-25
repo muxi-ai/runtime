@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from typing import Dict, List, Any, Optional
 
-from src.muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.memory.short_term import ShortTermMemory
 
 
 class SimpleEmbeddingModel:

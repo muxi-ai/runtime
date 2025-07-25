@@ -8,7 +8,7 @@ import json
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 async def run_async_test():
@@ -156,7 +156,7 @@ async def run_async_test():
 
         # Check if we found repositories
         found_repos = any(word in response_str for word in ["repository", "repositories", "repo", "repos"])
-        
+
         # Check for clarification request
         has_clarification = "clarification" in response_str or "missing_credential" in response_str
 

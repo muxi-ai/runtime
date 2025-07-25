@@ -21,8 +21,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from typing import List, Dict, Any
 
 # Import the classes we're testing
-from muxi.runtime.formation.agents.knowledge import KnowledgeHandler, FileKnowledge
-from muxi.runtime.formation.memory import ShortTermMemory
+from muxi.formation.agents.knowledge import KnowledgeHandler, FileKnowledge
+from muxi.formation.memory import ShortTermMemory
 
 
 class TestKnowledgeHandler:

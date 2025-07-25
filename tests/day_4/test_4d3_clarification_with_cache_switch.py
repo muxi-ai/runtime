@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime.formation.formation import Formation  # noqa: E402
+from src.muxi.formation.formation import Formation  # noqa: E402
 
 
 async def run_async_test():
@@ -47,7 +47,7 @@ async def run_async_test():
             overlord._buffer_memory.clear()
 
         # Clear MCP credential cache
-        from src.muxi.runtime.services.mcp.service import MCPService
+        from src.muxi.services.mcp.service import MCPService
         mcp_service = MCPService.get_instance()
         mcp_service.clear_user_credentials_cache()
 

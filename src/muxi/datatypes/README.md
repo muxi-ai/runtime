@@ -57,7 +57,7 @@ As of June 2025, all dataclasses have been migrated to Pydantic V2 models:
 
 ### Creating Models
 ```python
-from muxi.runtime.datatypes.async_operations import TimeoutConfig
+from muxi.datatypes.async_operations import TimeoutConfig
 
 config = TimeoutConfig(
     default_timeout=60.0,

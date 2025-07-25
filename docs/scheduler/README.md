@@ -1,7 +1,7 @@
 # MUXI Scheduler Documentation
 
-**Version**: 1.0.0 Production Release  
-**Date**: June 2025  
+**Version**: 1.0.0 Production Release
+**Date**: June 2025
 **Status**: ✅ Complete Implementation
 
 ## Overview
@@ -65,7 +65,7 @@ memory:
 
 ```python
 # Using the MUXI Runtime
-from muxi.runtime.formation import Formation
+from muxi.formation import Formation
 import asyncio
 
 async def main():
@@ -79,7 +79,7 @@ async def main():
         "Schedule a task to check my email every hour during business hours",
         user_id="your_user_id"
     )
-    
+
     await formation.stop_overlord()  # Must await!
 
 # Run the async function
@@ -114,22 +114,22 @@ The scheduler uses a unified database architecture that shares connections with 
 # SQLAlchemy Model
 class ScheduledJob(Base):
     __tablename__ = 'scheduled_jobs'
-    
+
     # Primary identification
     id = Column(String(255), primary_key=True)
     user_id = Column(String(255), nullable=False, index=True)
     formation_id = Column(String(255), nullable=False, index=True)
-    
+
     # Job content
     title = Column(String(500), nullable=False)
     original_prompt = Column(Text, nullable=False)
     execution_prompt = Column(Text, nullable=False)
-    
+
     # Scheduling configuration
     cron_expression = Column(String(255), nullable=False, index=True)
     exclusion_rules = Column(JSONType, default=list)
     status = Column(String(20), nullable=False, default='ACTIVE', index=True)
-    
+
     # Execution tracking
     last_run_at = Column(DateTime, nullable=True)
     last_run_status = Column(String(20), nullable=True)
@@ -236,13 +236,13 @@ class SchedulerService:
         formation_id: Optional[str] = None
     ) -> str:
         """Create a new scheduled job."""
-        
+
     async def get_job(self, job_id: str) -> Optional[ScheduledJob]:
         """Get a specific job by ID."""
-        
+
     async def delete_job(self, job_id: str) -> bool:
         """Delete a scheduled job."""
-        
+
     async def get_user_jobs(self, user_id: str) -> List[ScheduledJob]:
         """Get all jobs for a specific user."""
 ```
@@ -255,10 +255,10 @@ Database operations and job lifecycle management.
 class JobManager:
     async def create_job(self, job_data: Dict[str, Any]) -> str:
         """Create job in database."""
-        
+
     async def get_active_jobs(self) -> List[ScheduledJob]:
         """Get all active jobs for execution."""
-        
+
     async def update_execution_status(
         self,
         job_id: str,
@@ -266,7 +266,7 @@ class JobManager:
         failure_message: Optional[str] = None
     ) -> None:
         """Update job execution results."""
-        
+
     async def get_job_statistics(self, job_id: str) -> Dict[str, Any]:
         """Get detailed execution statistics."""
 ```
@@ -281,7 +281,7 @@ The scheduler includes comprehensive failure handling:
 # Automatic job pausing after consecutive failures
 if job.consecutive_failures >= self.max_failures_before_pause:
     await self.job_manager.update_job_status(job.id, 'PAUSED')
-    
+
 # Detailed failure tracking
 await self.job_manager.update_execution_status(
     job_id=job.id,
@@ -369,7 +369,7 @@ python -m pytest tests/scheduler/ --cov=src/muxi/runtime/services/scheduler
    ```python
    # Good
    "Check for urgent emails from clients and summarize any issues"
-   
+
    # Avoid
    "Do something with emails"
    ```
@@ -378,7 +378,7 @@ python -m pytest tests/scheduler/ --cov=src/muxi/runtime/services/scheduler
    ```python
    # Reasonable for email checking
    "0 */2 * * *"  # Every 2 hours
-   
+
    # Too frequent for most tasks
    "* * * * *"    # Every minute
    ```
@@ -454,7 +454,7 @@ Enable debug logging for detailed execution information:
 
 ```python
 import logging
-logging.getLogger('muxi.runtime.services.scheduler').setLevel(logging.DEBUG)
+logging.getLogger('muxi.services.scheduler').setLevel(logging.DEBUG)
 ```
 
 ## Migration Guide
@@ -507,7 +507,7 @@ formation_jobs = await scheduler.job_manager.get_jobs_for_formation(formation_id
 ### Scalability
 
 - **Job Discovery**: O(n) where n = total active jobs
-- **Database Operations**: Indexed queries for optimal performance  
+- **Database Operations**: Indexed queries for optimal performance
 - **Execution**: Concurrent with configurable limits
 - **Memory Usage**: Minimal footprint with connection pooling
 

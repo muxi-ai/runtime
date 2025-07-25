@@ -7,14 +7,14 @@ import json
 
 sys.path.insert(0, ".")
 
-from src.muxi.runtime.services.mcp.service import MCPService
-from src.muxi.runtime.services.llm import LLM
+from src.muxi.services.mcp.service import MCPService
+from src.muxi.services.llm import LLM
 
 
 async def main():
     # Initialize MCP service
     mcp_service = MCPService.get_instance()
-    
+
     # Register a simple filesystem MCP server
     print("Registering filesystem MCP server...")
     try:
@@ -28,7 +28,7 @@ async def main():
     except Exception as e:
         print(f"❌ Failed to register MCP server: {e}")
         return
-    
+
     # List available tools
     print("\nListing available tools...")
     tools = await mcp_service.list_tools()
@@ -37,7 +37,7 @@ async def main():
         print(f"\n{server_id}: {len(server_tools)} tools")
         for tool_name in list(server_tools.keys())[:3]:
             print(f"  - {tool_name}")
-    
+
     # Test tool invocation directly
     print("\n\nTesting direct tool invocation...")
     try:
@@ -52,7 +52,7 @@ async def main():
         print(f"✅ Tool invocation result: {json.dumps(result, indent=2)}")
     except Exception as e:
         print(f"❌ Tool invocation failed: {e}")
-    
+
     # Clean up
     await mcp_service.unregister_server("filesystem")
     print("\n✅ Test complete!")

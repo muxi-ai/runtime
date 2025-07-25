@@ -6,7 +6,7 @@ Tests client-side encryption functionality and key derivation.
 
 import time
 from unittest.mock import patch
-from src.muxi.runtime.services.observability.transports.token_encryption import TokenEncryption
+from src.muxi.services.observability.transports.token_encryption import TokenEncryption
 
 
 class TestTokenEncryption:

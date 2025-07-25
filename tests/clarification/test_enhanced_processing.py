@@ -8,9 +8,9 @@ and enhanced execution flow.
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from src.muxi.runtime.clarification.tool_processor import EnhancedToolProcessor
-from src.muxi.runtime.clarification.types import ToolInformationAnalysis
-from src.muxi.runtime.mcp.parser import ToolCall
+from src.muxi.clarification.tool_processor import EnhancedToolProcessor
+from src.muxi.clarification.types import ToolInformationAnalysis
+from src.muxi.mcp.parser import ToolCall
 
 
 class TestEnhancedToolProcessor:

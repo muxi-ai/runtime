@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.muxi.runtime.knowledge.base import KnowledgeHandler, KnowledgeSource, FileKnowledge
+from src.muxi.knowledge.base import KnowledgeHandler, KnowledgeSource, FileKnowledge
 
 
 class TestKnowledgeSource(KnowledgeSource):

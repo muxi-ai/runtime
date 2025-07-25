@@ -10,7 +10,7 @@ This test verifies that the automatic context propagation works correctly:
 import asyncio
 import pytest
 
-from muxi.runtime.observability import (
+from muxi.observability import (
     RequestContextManager,
     get_current_request_context,
     emit_event,

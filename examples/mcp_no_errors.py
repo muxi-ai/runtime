@@ -2,7 +2,7 @@
 """Example: Using MCP servers without async generator errors"""
 
 import asyncio
-from src.muxi.runtime.formation import Formation
+from src.muxi.formation import Formation
 
 
 async def main():

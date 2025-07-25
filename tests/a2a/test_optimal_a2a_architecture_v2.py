@@ -19,8 +19,8 @@ from unittest.mock import AsyncMock, MagicMock
 # Add parent directory to path for imports
 sys.path.append('..')
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.llm import LLM
+from src.muxi.overlord import Overlord
+from src.muxi.llm import LLM
 
 
 @pytest.fixture
@@ -267,7 +267,7 @@ async def test_architectural_performance_improvement():
 async def test_real_agent_collaboration():
     """Test: Real agent-to-agent collaboration using actual OpenAI models"""
     import os
-    from src.muxi.runtime.models.providers.openai import OpenAIModel
+    from src.muxi.models.providers.openai import OpenAIModel
 
     # Skip if no API key
     if not os.getenv('OPENAI_API_KEY'):

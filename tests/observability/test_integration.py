@@ -11,9 +11,9 @@ from pathlib import Path
 # Add the src directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
-from muxi.runtime.observability.manager import ObservabilityManager
-from muxi.runtime.observability.stream_processor import StreamProcessor
-from muxi.runtime.observability.types import EventLevel, SystemEvents, ConversationEvents
+from muxi.observability.manager import ObservabilityManager
+from muxi.observability.stream_processor import StreamProcessor
+from muxi.observability.types import EventLevel, SystemEvents, ConversationEvents
 
 
 async def test_observability_manager_integration():
@@ -131,7 +131,7 @@ async def test_formatter_integration():
     """Test different formatters with transports."""
     print("Testing formatter integration...")
 
-    from muxi.runtime.observability.formatters import create_formatter
+    from muxi.observability.formatters import create_formatter
 
     # Test different formatters
     formatters = ["jsonl", "text", "datadog_json", "splunk_hec"]
@@ -161,7 +161,7 @@ async def test_trail_transport_config():
     """Test the trail transport preset configuration."""
     print("Testing trail transport configuration...")
 
-    from muxi.runtime.observability.transports.stream import StreamTransport
+    from muxi.observability.transports.stream import StreamTransport
 
     # Test trail preset
     config = {

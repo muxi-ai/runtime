@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Any, Dict
 from unittest.mock import Mock, AsyncMock
 
-from src.muxi.runtime.services.observability.protobuf_service import (
+from src.muxi.services.observability.protobuf_service import (
     ProtobufObservabilityService,
     ServiceRegistry
 )

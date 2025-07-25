@@ -14,10 +14,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
 
 import pytest
 
-from muxi.runtime.observability.transports.base import TransportStatus
-from muxi.runtime.observability.transports.stdout import StdoutTransport
-from muxi.runtime.observability.transports.file import FileTransport
-from muxi.runtime.observability.transports.stream import StreamTransport
+from muxi.observability.transports.base import TransportStatus
+from muxi.observability.transports.stdout import StdoutTransport
+from muxi.observability.transports.file import FileTransport
+from muxi.observability.transports.stream import StreamTransport
 
 
 class TestStdoutTransport:

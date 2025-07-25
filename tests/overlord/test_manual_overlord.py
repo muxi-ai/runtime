@@ -8,7 +8,7 @@ import os
 # Add parent directory to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from src.muxi.runtime.overlord import Overlord
+from src.muxi.overlord import Overlord
 
 
 def test_new_overlord_schema():

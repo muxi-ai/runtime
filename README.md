@@ -137,7 +137,7 @@ memory:
 Run it directly:
 
 ```python
-from muxi.runtime import Formation
+from muxi import Formation
 import asyncio
 
 async def main():
@@ -303,7 +303,7 @@ src/muxi/runtime/
 The heart of the runtime - loads YAML and creates live AI systems:
 
 ```python
-from muxi.runtime import Formation
+from muxi import Formation
 
 # Load formation (like docker load)
 formation = Formation()
@@ -330,7 +330,7 @@ class Overlord:
 
         # 2. SOP matching (NEW)
         relevant_sops = await self.sop_coordinator.search(message)
-        
+
         # 3. Agent selection (enhanced with SOPs)
         if relevant_sops:
             # Use SOP to guide task decomposition
@@ -370,7 +370,7 @@ class Overlord:
 
 ```python
 # Buffer Memory - Recent context with vector similarity
-from muxi.runtime.memory import ShortTermMemory
+from muxi.memory import ShortTermMemory
 
 # Note: ShortTermMemory configuration is typically done in formation.yaml
 # This is just showing the internal API for contributors
@@ -381,7 +381,7 @@ memory = ShortTermMemory(
 )
 
 # Persistent Memory - Long-term storage
-from muxi.runtime.memory import LongTermMemory
+from muxi.memory import LongTermMemory
 
 memory = LongTermMemory("postgresql://localhost/muxi")
 await memory.store_user_preference("theme", "dark", user_id="123")

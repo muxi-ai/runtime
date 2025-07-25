@@ -10,9 +10,9 @@ import asyncio
 import os
 from dotenv import load_dotenv
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.llm import LLM, set_llm_api_key
-from src.muxi.runtime.knowledge.base import FileKnowledge
+from src.muxi.overlord import Overlord
+from src.muxi.llm import LLM, set_llm_api_key
+from src.muxi.knowledge.base import FileKnowledge
 
 
 async def main():

@@ -20,8 +20,8 @@ current_dir = Path(__file__).parent.absolute()
 runtime_dir = current_dir.parent
 sys.path.insert(0, str(runtime_dir))
 
-from src.muxi.runtime.overlord import Overlord  # noqa: E402
-from src.muxi.runtime.config.validation import validate_formation  # noqa: E402
+from src.muxi.overlord import Overlord  # noqa: E402
+from src.muxi.config.validation import validate_formation  # noqa: E402
 
 
 def create_sample_formation():

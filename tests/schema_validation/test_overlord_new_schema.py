@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from src.muxi.runtime.overlord import Overlord
-from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.overlord import Overlord
+from src.muxi.config.validation import FormationValidator
 
 
 class TestOverlordNewSchema:
@@ -162,7 +162,7 @@ class TestOverlordNewSchema:
         assert len(result.errors) == 0
 
     @pytest.mark.asyncio
-    @patch('src.muxi.runtime.overlord.Overlord.create_model')
+    @patch('src.muxi.overlord.Overlord.create_model')
     async def test_overlord_initialization_new_schema(self, mock_create_model,
                                                      new_schema_formation):
         """Test overlord initialization with new schema."""
@@ -184,7 +184,7 @@ class TestOverlordNewSchema:
         assert overlord.routing_system_message == 'You are the MUXI Overlord routing messages.'
 
     @pytest.mark.asyncio
-    @patch('src.muxi.runtime.overlord.Overlord.create_model')
+    @patch('src.muxi.overlord.Overlord.create_model')
     async def test_overlord_initialization_legacy_schema(self, mock_create_model,
                                                         legacy_overlord_formation):
         """Test overlord initialization with legacy schema."""
@@ -206,7 +206,7 @@ class TestOverlordNewSchema:
         assert overlord.routing_system_message == 'Legacy system message'
 
     @pytest.mark.asyncio
-    @patch('muxi.runtime.overlord.Overlord.create_model')
+    @patch('muxi.overlord.Overlord.create_model')
     async def test_overlord_initialization_no_config(self, mock_create_model):
         """Test overlord initialization with no overlord config."""
         mock_model = MagicMock()
@@ -240,7 +240,7 @@ class TestOverlordNewSchema:
         assert len(overlord._default_system_prompt) > 0
 
     @pytest.mark.asyncio
-    @patch('muxi.runtime.overlord.Overlord.create_model')
+    @patch('muxi.overlord.Overlord.create_model')
     async def test_llm_configuration_loading(self, mock_create_model, new_schema_formation):
         """Test LLM configuration loading with new schema."""
         mock_model = MagicMock()
@@ -264,7 +264,7 @@ class TestOverlordNewSchema:
         assert overlord._global_api_keys['openai'] == '${{ secrets.OPENAI_API_KEY }}'
 
     @pytest.mark.asyncio
-    @patch('muxi.runtime.overlord.Overlord.create_model')
+    @patch('muxi.overlord.Overlord.create_model')
     async def test_capability_model_resolution(self, mock_create_model, new_schema_formation):
         """Test model resolution by capability."""
         mock_model = MagicMock()

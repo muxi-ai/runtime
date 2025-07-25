@@ -4,9 +4,9 @@ Test for real MCP tool discovery and execution.
 
 import pytest
 
-from src.muxi.runtime.services.mcp.tools.discovery import MCPToolDiscovery
-from src.muxi.runtime.services.mcp.tools.executor import MCPToolExecutor
-from src.muxi.runtime.services.mcp.transports.base import BaseTransport, MCPRequestError
+from src.muxi.services.mcp.tools.discovery import MCPToolDiscovery
+from src.muxi.services.mcp.tools.executor import MCPToolExecutor
+from src.muxi.services.mcp.transports.base import BaseTransport, MCPRequestError
 
 
 class MockTransport(BaseTransport):

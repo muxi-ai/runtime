@@ -22,7 +22,7 @@ USER_CREDENTIAL_PATTERN = re.compile(r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-
 def extract_user_credential_placeholders(obj: Any, found_credentials: set, path: str = "") -> None:
     """
     Recursively extract all user credential placeholders from a configuration object.
-    
+
     Args:
         obj: The configuration object to scan
         found_credentials: Set to store found credential service names and paths
@@ -2399,7 +2399,7 @@ def validate_user_credentials_requirements(
                 error_msg = "MCP servers require initialization credentials:\n"
                 for service, secret, location in missing_secrets:
                     error_msg += f"\n  • {location} uses ${{{{ user.credentials.{service} }}}} but {secret} is missing."
-                    error_msg += f"\n    To fix: python -m muxi.runtime.utils.secrets add {secret} <{service}_token>\n"
+                    error_msg += f"\n    To fix: python -m muxi.utils.secrets add {secret} <{service}_token>\n"
 
                 raise ValueError(error_msg)
 
@@ -2499,7 +2499,7 @@ async def validate_user_credentials_requirements_async(
                 error_msg = "MCP servers require initialization credentials:\n"
                 for service, secret, location in missing_secrets:
                     error_msg += f"\n  • {location} uses ${{{{ user.credentials.{service} }}}} but {secret} is missing."
-                    error_msg += f"\n    To fix: python -m muxi.runtime.utils.secrets add {secret} <{service}_token>\n"
+                    error_msg += f"\n    To fix: python -m muxi.utils.secrets add {secret} <{service}_token>\n"
 
                 raise ValueError(error_msg)
 

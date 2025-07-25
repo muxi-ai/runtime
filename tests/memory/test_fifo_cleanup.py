@@ -2,7 +2,7 @@
 # PYTHONPATH=/Users/ran/Projects/muxi/code/runtime python tests/memory/test_fifo_cleanup.py
 import asyncio
 import time
-from src.muxi.runtime.memory.short_term import ShortTermMemory
+from src.muxi.memory.short_term import ShortTermMemory
 
 
 async def test_fifo_cleanup():

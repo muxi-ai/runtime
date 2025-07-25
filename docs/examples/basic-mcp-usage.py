@@ -12,8 +12,8 @@ Prerequisites:
 
 import asyncio
 import time
-from muxi.runtime.services.mcp.service import MCPService
-from muxi.runtime.services.mcp.base import MCPConnectionError
+from muxi.services.mcp.service import MCPService
+from muxi.services.mcp.base import MCPConnectionError
 
 
 async def example_1_basic_filesystem_server():

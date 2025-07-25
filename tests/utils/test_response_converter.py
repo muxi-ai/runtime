@@ -4,7 +4,7 @@ Unit tests for the response conversion utilities.
 
 import unittest
 from unittest.mock import patch, MagicMock
-from src.muxi.runtime.utils.response_converter import (
+from src.muxi.utils.response_converter import (
     convert_onellm_to_muxi_content,
     extract_user_content,
     create_unified_response,
@@ -324,8 +324,8 @@ class TestResponseConverter(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    @patch('src.muxi.runtime.utils.response_converter.classify_error_code')
-    @patch('src.muxi.runtime.utils.response_converter.get_error_info')
+    @patch('src.muxi.utils.response_converter.classify_error_code')
+    @patch('src.muxi.utils.response_converter.get_error_info')
     @patch('traceback.format_exc')
     def test_create_error_response(self, mock_traceback, mock_get_error_info, mock_classify):
         """Test creating error response from exception."""
@@ -350,8 +350,8 @@ class TestResponseConverter(unittest.TestCase):
         mock_classify.assert_called_once_with(exception)
         mock_get_error_info.assert_called_once_with("TIMEOUT")
 
-    @patch('src.muxi.runtime.utils.response_converter.classify_error_code')
-    @patch('src.muxi.runtime.utils.response_converter.get_error_info')
+    @patch('src.muxi.utils.response_converter.classify_error_code')
+    @patch('src.muxi.utils.response_converter.get_error_info')
     def test_create_error_response_no_trace(self, mock_get_error_info, mock_classify):
         """Test creating error response without trace."""
         # Setup mocks
@@ -372,8 +372,8 @@ class TestResponseConverter(unittest.TestCase):
 
         self.assertEqual(result, expected)
 
-    @patch('src.muxi.runtime.utils.response_converter.classify_error_code')
-    @patch('src.muxi.runtime.utils.response_converter.get_error_info')
+    @patch('src.muxi.utils.response_converter.classify_error_code')
+    @patch('src.muxi.utils.response_converter.get_error_info')
     def test_create_error_response_unknown_error(self, mock_get_error_info, mock_classify):
         """Test creating error response for unknown error code."""
         # Setup mocks

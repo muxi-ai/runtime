@@ -1,6 +1,6 @@
 import tempfile
 import yaml
-from src.muxi.runtime.config.validation import FormationValidator
+from src.muxi.config.validation import FormationValidator
 
 
 def test_valid_agent_knowledge_config_basic():
