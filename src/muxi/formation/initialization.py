@@ -17,7 +17,7 @@ from ..datatypes.exceptions import ConfigurationValidationError
 from ..datatypes.memory import BufferMemoryConfig, WorkingMemoryConfig
 from ..datatypes.observability import EventLevel
 from ..services import observability
-from ..services.memory.short_term import ShortTermMemory
+from ..services.memory.working import WorkingMemory
 from ..services.observability.context import set_event_logger
 from ..services.observability.logger import EventLogger
 from .config.document_processing import DocumentProcessingConfig
@@ -269,7 +269,7 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         if vector_search:
             embedding_model_name = _resolve_embedding_model_name(formation=formation)
             if embedding_model_name:
-                # Pass the model name to ShortTermMemory
+                # Pass the model name to WorkingMemory
                 # It will create the LLM instance lazily when needed
                 embedding_model = embedding_model_name
             else:
@@ -280,7 +280,7 @@ def _initialize_buffer_memory(formation, buffer_config: Dict[str, Any]) -> None:
         formation_id = getattr(formation, "formation_id", "default-formation")
 
         # Create buffer memory instance
-        formation._buffer_memory = ShortTermMemory(
+        formation._buffer_memory = WorkingMemory(
             formation_id=formation_id,
             max_size=size,
             buffer_multiplier=multiplier,
@@ -793,7 +793,7 @@ async def initialize_buffer_memory(formation, overlord, buffer_config: Dict[str,
                 vector_search = False
 
         # Create buffer memory instance
-        buffer_memory = ShortTermMemory(
+        buffer_memory = WorkingMemory(
             formation_id=overlord.formation_id,
             max_size=size,
             buffer_multiplier=multiplier,

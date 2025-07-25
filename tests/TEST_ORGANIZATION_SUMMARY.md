@@ -27,7 +27,7 @@
 ### Master Test Runner
 - **Location**: `/tests/run_all_tests.py`
 - **Purpose**: Runs all days of tests in sequence
-- **Features**: 
+- **Features**:
   - Color-coded output
   - Summary statistics
   - Handles both pytest and standalone scripts
@@ -58,7 +58,7 @@ python run_day2_tests.py
 
 2. **Day 2 Tests**: Primarily focused on memory systems with comprehensive coverage of buffer, SQLite, PostgreSQL, and FAISSx integrations
 
-3. **Test Naming Convention**: 
+3. **Test Naming Convention**:
    - Format: `test_[day][group][number]_description.py`
    - Example: `test_2a1_basic_conversation_context.py`
 
@@ -74,6 +74,6 @@ python run_day2_tests.py
 6. **Important Testing Patterns Discovered**:
    - Always use real LLM providers (never mocks) for accurate testing
    - Real embeddings are crucial for vector search quality
-   - Embedding normalization is built into ShortTermMemory class
+   - Embedding normalization is built into WorkingMemory class
    - Use ThreadPoolExecutor pattern to avoid event loop conflicts
    - Store all secrets in encrypted `secrets.enc` files

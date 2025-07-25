@@ -11,7 +11,7 @@ Components:
 
 Note: These components are deprecated for agent knowledge use cases.
 Agent knowledge systems should use the hybrid architecture with DocumentChunkManager
-and ShortTermMemory from the formation module instead.
+and WorkingMemory from the formation module instead.
 """
 
 import warnings
@@ -26,7 +26,7 @@ def _deprecated_warning(component_name: str) -> None:
     """Issue deprecation warning for document workflow components."""
     warnings.warn(
         f"{component_name} is deprecated for agent knowledge use cases. "
-        f"Use DocumentChunkManager and ShortTermMemory from the formation module instead.",
+        f"Use DocumentChunkManager and WorkingMemory from the formation module instead.",
         DeprecationWarning,
         stacklevel=3
     )

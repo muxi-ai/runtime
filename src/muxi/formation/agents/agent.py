@@ -248,7 +248,7 @@ class Agent:
                 knowledge_config=knowledge_config,
                 generate_embeddings_fn=embedding_fn,
                 formation_config=formation_config,
-                short_term_memory=getattr(self.overlord, "buffer_memory", None),
+                working_memory=getattr(self.overlord, "buffer_memory", None),
                 auto_inject_knowledge=True,
                 formation_id=formation_id,  # Pass formation_id explicitly
             )

@@ -22,7 +22,7 @@ from typing import List, Dict, Any
 
 # Import the classes we're testing
 from muxi.formation.agents.knowledge import KnowledgeHandler, FileKnowledge
-from muxi.formation.memory import ShortTermMemory
+from muxi.formation.memory import WorkingMemory
 
 
 class TestKnowledgeHandler:
@@ -488,8 +488,8 @@ class TestMemoryIntegration(TestKnowledgeHandler):
 
     @pytest.fixture
     def mock_memory(self):
-        """Mock ShortTermMemory for testing"""
-        memory = MagicMock(spec=ShortTermMemory)
+        """Mock WorkingMemory for testing"""
+        memory = MagicMock(spec=WorkingMemory)
         memory.add_entry = AsyncMock()
         return memory
 
@@ -498,11 +498,11 @@ class TestMemoryIntegration(TestKnowledgeHandler):
         handler = KnowledgeHandler(
             agent_id_or_sources=agent_id,
             embedding_dimension=embedding_dimension,
-            short_term_memory=mock_memory,
+            working_memory=mock_memory,
             auto_inject_knowledge=True
         )
 
-        assert handler.short_term_memory is mock_memory
+        assert handler.working_memory is mock_memory
         assert handler.auto_inject_knowledge is True
 
     async def test_automatic_knowledge_injection(self, agent_id, embedding_dimension, mock_memory, mock_embedding_fn, temp_knowledge_file):
@@ -510,7 +510,7 @@ class TestMemoryIntegration(TestKnowledgeHandler):
         handler = KnowledgeHandler(
             agent_id_or_sources=agent_id,
             embedding_dimension=embedding_dimension,
-            short_term_memory=mock_memory,
+            working_memory=mock_memory,
             auto_inject_knowledge=True
         )
 

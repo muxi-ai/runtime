@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Integration test for ShortTermMemory with buffer_multiplier
+Integration test for WorkingMemory with buffer_multiplier
 
-This file contains integration tests for the ShortTermMemory class
+This file contains integration tests for the WorkingMemory class
 with varying buffer_multiplier values, using a simplified model to
 demonstrate the difference between context window size and total capacity.
 """
@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 from typing import Dict, List, Any, Optional
 
-from src.muxi.memory.short_term import ShortTermMemory
+from src.muxi.memory.working import WorkingMemory
 
 
 class SimpleEmbeddingModel:
@@ -64,8 +64,8 @@ class SimpleEmbeddingModel:
         return vec.astype("float32")  # Ensure float32 type for FAISS
 
 
-class TestShortTermMemory(ShortTermMemory):
-    """Test-friendly version of ShortTermMemory that can simulate specific search results."""
+class TestWorkingMemory(WorkingMemory):
+    """Test-friendly version of WorkingMemory that can simulate specific search results."""
 
     def set_test_embedding_map(self, map_dict):
         """Set a specific embedding map for testing."""
@@ -260,7 +260,7 @@ class TestShortTermMemory(ShortTermMemory):
 
 
 class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
-    """Integration tests for ShortTermMemory with buffer_multiplier."""
+    """Integration tests for WorkingMemory with buffer_multiplier."""
 
     async def asyncSetUp(self):
         """Set up test environment."""
@@ -268,21 +268,21 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
         self.model = SimpleEmbeddingModel(dimension=4)
 
         # Create buffer memories with different multipliers but same max_size
-        self.small_buffer = TestShortTermMemory(
+        self.small_buffer = TestWorkingMemory(
             max_size=5,  # Context window size of 5
             buffer_multiplier=2,  # Total capacity of 10
             model=self.model,
             dimension=4,
         )
 
-        self.medium_buffer = TestShortTermMemory(
+        self.medium_buffer = TestWorkingMemory(
             max_size=5,  # Context window size of 5
             buffer_multiplier=5,  # Total capacity of 25
             model=self.model,
             dimension=4,
         )
 
-        self.large_buffer = TestShortTermMemory(
+        self.large_buffer = TestWorkingMemory(
             max_size=5,  # Context window size of 5
             buffer_multiplier=10,  # Total capacity of 50
             model=self.model,
@@ -388,7 +388,7 @@ class TestBufferIntegration(unittest.IsolatedAsyncioTestCase):
     async def test_buffer_multiplier_with_hybrid_scoring(self):
         """Test that buffer_multiplier allows finding older relevant content with hybrid scoring."""
         # Create a new buffer with a default scoring to test hybrid scoring
-        hybrid_buffer = TestShortTermMemory(
+        hybrid_buffer = TestWorkingMemory(
             max_size=5,  # Context window size of 5
             buffer_multiplier=8,  # Total capacity of 40
             model=self.model,

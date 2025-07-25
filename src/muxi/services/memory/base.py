@@ -29,7 +29,7 @@
 # - Simplified testing and mocking
 # - Clear extension points for custom memory systems
 #
-# All concrete memory implementations (ShortTermMemory, LongTermMemory, etc.)
+# All concrete memory implementations (WorkingMemory, LongTermMemory, etc.)
 # must inherit from BaseMemory and implement its abstract methods.
 #
 # Example usage:

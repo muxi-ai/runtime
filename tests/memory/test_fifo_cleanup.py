@@ -2,13 +2,13 @@
 # PYTHONPATH=/Users/ran/Projects/muxi/code/runtime python tests/memory/test_fifo_cleanup.py
 import asyncio
 import time
-from src.muxi.memory.short_term import ShortTermMemory
+from src.muxi.memory.working import WorkingMemory
 
 
 async def test_fifo_cleanup():
-    print('Creating ShortTermMemory with 0.01MB limit...')
+    print('Creating WorkingMemory with 0.01MB limit...')
     # Create with very small memory limit to trigger cleanup
-    buffer = ShortTermMemory(
+    buffer = WorkingMemory(
         max_size=5,
         buffer_multiplier=10,
         max_memory_mb=0.01,  # Very small limit (0.01MB = 10KB)

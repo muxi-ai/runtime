@@ -13,7 +13,7 @@
 # 1. Vector Storage
 #    - Efficient storage of document embeddings
 #    - FAISSx index for fast similarity search
-#    - Persistence through ShortTermMemory
+#    - Persistence through WorkingMemory
 #
 # 2. Document Management
 #    - Loading and chunking of documents via DocumentChunkManager
@@ -33,7 +33,7 @@
 #    - Batch processing for improved throughput
 #
 # 5. Memory Integration
-#    - Automatic injection of knowledge into short-term memory
+#    - Automatic injection of knowledge into working memory
 #    - Unified search across knowledge and memory
 #    - Context-aware knowledge retrieval
 #
@@ -45,7 +45,7 @@
 # - Enhance agent memory with relevant knowledge
 #
 # This implementation uses the hybrid architecture with DocumentChunkManager
-# and ShortTermMemory for unified document processing and search.
+# and WorkingMemory for unified document processing and search.
 #
 # Supports both local and remote FAISSx modes:
 # - Local mode: Uses local FAISSx client with file-based persistence
@@ -69,7 +69,7 @@
 #           "api_key": "your_api_key",
 #           "tenant": "your_tenant"
 #       },
-#       short_term_memory=memory_instance,
+#       working_memory=memory_instance,
 #       auto_inject_knowledge=True
 #   )
 #
@@ -113,8 +113,8 @@ from .base import FileKnowledge
 from ....services import observability
 from ....utils.user_dirs import get_knowledge_dir
 
-# Short-term memory integration
-from ....services.memory.short_term import ShortTermMemory
+# Working memory integration
+from ....services.memory.working import WorkingMemory
 
 # Document-specific namespace constants
 DOCUMENT_NAMESPACE = "knowledge"  # Changed from "documents" for clarity
@@ -127,7 +127,7 @@ class KnowledgeHandler:
 
     The KnowledgeHandler manages a collection of knowledge sources and provides
     a unified interface for searching across all of them. It uses the hybrid
-    architecture with DocumentChunkManager and ShortTermMemory for
+    architecture with DocumentChunkManager and WorkingMemory for
     document processing and FAISSx for vector-based similarity search.
     """
 
@@ -142,8 +142,8 @@ class KnowledgeHandler:
         max_files_per_source: int = 10,
         max_total_files: int = 50,
         formation_config: Optional[Dict[str, Any]] = None,
-        # Short-term memory integration
-        short_term_memory: Optional[ShortTermMemory] = None,
+        # Working memory integration
+        working_memory: Optional[WorkingMemory] = None,
         auto_inject_knowledge: bool = True,
     ):
         """
@@ -159,10 +159,10 @@ class KnowledgeHandler:
         self.max_total_files = max_total_files
         self.formation_config = formation_config
 
-        # Short-term memory integration
-        self.short_term_memory = short_term_memory
+        # Working memory integration
+        self.working_memory = working_memory
         self.auto_inject_knowledge = auto_inject_knowledge
-        self._knowledge_buffer_enabled = short_term_memory is not None and auto_inject_knowledge
+        self._knowledge_buffer_enabled = working_memory is not None and auto_inject_knowledge
 
         # Store embedding function for later use
         self._generate_embeddings_fn = None
@@ -215,12 +215,12 @@ class KnowledgeHandler:
         # Keep DocumentChunkManager - it's essential!
         self.chunk_manager = DocumentChunkManager(document_config=document_config)
 
-        # Now using ShortTermMemory directly instead of DocumentSemanticIndex
-        # Documents will use ShortTermMemory with "documents" namespace
+        # Now using WorkingMemory directly instead of DocumentSemanticIndex
+        # Documents will use WorkingMemory with "documents" namespace
 
-        # Ensure we have ShortTermMemory for document storage
-        if not self.short_term_memory:
-            self.short_term_memory = ShortTermMemory(
+        # Ensure we have WorkingMemory for document storage
+        if not self.working_memory:
+            self.working_memory = WorkingMemory(
                 formation_id=self.formation_id,
                 max_size=2000,  # Large context window for documents
                 buffer_multiplier=20,  # 40,000 total capacity for documents
@@ -316,7 +316,7 @@ class KnowledgeHandler:
             cached_data = self._load_cached_embeddings(source_path, source_hash)
 
             if cached_data:
-                # Cache hit! Load embeddings from disk into ShortTermMemory
+                # Cache hit! Load embeddings from disk into WorkingMemory
                 observability.observe(
                     event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
                     level=observability.EventLevel.DEBUG,
@@ -327,7 +327,7 @@ class KnowledgeHandler:
 
                 for cached_item in cached_data:
                     try:
-                        await self.short_term_memory.add_with_embedding(
+                        await self.working_memory.add_with_embedding(
                             text=cached_item["content"],
                             embedding=cached_item["embedding"],
                             metadata=cached_item["metadata"],
@@ -383,7 +383,7 @@ class KnowledgeHandler:
                         )
                         return
 
-                    # Prepare cache data while adding to ShortTermMemory
+                    # Prepare cache data while adding to WorkingMemory
                     cache_data = []
                     chunks_added = 0
 
@@ -412,7 +412,7 @@ class KnowledgeHandler:
                                 **chunk.metadata,
                             }
 
-                            await self.short_term_memory.add_with_embedding(
+                            await self.working_memory.add_with_embedding(
                                 text=chunk.content,
                                 embedding=embedding,
                                 metadata=metadata,
@@ -510,7 +510,7 @@ class KnowledgeHandler:
                 "query_length": len(query),
                 "top_k": top_k,
                 "has_embedding_function": generate_embeddings_fn is not None,
-                "has_short_term_memory": self.short_term_memory is not None,
+                "has_working_memory": self.working_memory is not None,
             },
         )
 
@@ -545,8 +545,8 @@ class KnowledgeHandler:
             # Use standard search parameters
             search_k = top_k
 
-            # Use ShortTermMemory for document search with documents namespace
-            memory_results = await self.short_term_memory.search(
+            # Use WorkingMemory for document search with documents namespace
+            memory_results = await self.working_memory.search(
                 query="",  # Empty since we provide vector
                 query_vector=query_vector.tolist(),
                 limit=search_k * 2,  # Get more results for filtering
@@ -578,7 +578,7 @@ class KnowledgeHandler:
                 if len(results) >= top_k:
                     break
 
-            # Inject knowledge results into short-term memory
+            # Inject knowledge results into working memory
             await self._inject_knowledge_into_memory(
                 knowledge_results=results, query=query, agent_id=str(self.agent_id_or_sources)
             )
@@ -701,8 +701,8 @@ class KnowledgeHandler:
                 max_total_files=kwargs.get("max_total_files", 10),  # Very conservative
                 # Pass formation config for document processing
                 formation_config=formation_config,
-                # Short-term memory integration
-                short_term_memory=kwargs.get("short_term_memory"),
+                # Working memory integration
+                working_memory=kwargs.get("working_memory"),
                 auto_inject_knowledge=kwargs.get("auto_inject_knowledge", True),
             )
 
@@ -720,10 +720,10 @@ class KnowledgeHandler:
             await handler.load_sources_from_config(sources_config, generate_embeddings_fn)
 
             source_count = len(handler.sources)
-            # Get document count from ShortTermMemory documents namespace
+            # Get document count from WorkingMemory documents namespace
             doc_count = 0
-            if handler.short_term_memory:
-                all_docs = handler.short_term_memory.get_items_by_metadata(
+            if handler.working_memory:
+                all_docs = handler.working_memory.get_items_by_metadata(
                     metadata_filter={}, namespace=DOCUMENT_NAMESPACE
                 )
                 doc_count = len(all_docs)
@@ -758,7 +758,7 @@ class KnowledgeHandler:
         Add a file to the knowledge base using hybrid architecture.
 
         This method processes a file from a knowledge source, chunks its content using
-        DocumentChunkManager, generates embeddings, and adds them to ShortTermMemory
+        DocumentChunkManager, generates embeddings, and adds them to WorkingMemory
         for future retrieval.
 
         Args:
@@ -796,8 +796,8 @@ class KnowledgeHandler:
                 # File not found or error reading file
                 return 0
 
-            # Check if document already exists in ShortTermMemory with same content hash
-            existing_docs = self.short_term_memory.get_items_by_metadata(
+            # Check if document already exists in WorkingMemory with same content hash
+            existing_docs = self.working_memory.get_items_by_metadata(
                 metadata_filter={"source": file_path, "content_hash": file_md5},
                 namespace=DOCUMENT_NAMESPACE,
             )
@@ -859,7 +859,7 @@ class KnowledgeHandler:
                 )
                 return 0
 
-            # Add chunks and embeddings to ShortTermMemory with documents namespace
+            # Add chunks and embeddings to WorkingMemory with documents namespace
             chunks_added = 0
             for chunk, embedding in zip(document_chunks, embeddings):
                 # Skip if embedding generation failed
@@ -884,7 +884,7 @@ class KnowledgeHandler:
                     **chunk.metadata,
                 }
 
-                await self.short_term_memory.add_with_embedding(
+                await self.working_memory.add_with_embedding(
                     text=chunk.content,
                     embedding=embedding,
                     metadata=metadata,
@@ -933,7 +933,7 @@ class KnowledgeHandler:
         Remove a file from the knowledge base using hybrid architecture.
 
         This method removes all chunks associated with a specific file from
-        ShortTermMemory.
+        WorkingMemory.
 
         Args:
             file_path: Path to the file to remove from the knowledge base
@@ -950,8 +950,8 @@ class KnowledgeHandler:
         )
 
         try:
-            # Remove documents from ShortTermMemory by source metadata
-            removed_count = self.short_term_memory.remove_by_metadata(
+            # Remove documents from WorkingMemory by source metadata
+            removed_count = self.working_memory.remove_by_metadata(
                 metadata_filter={"source": file_path}, namespace=DOCUMENT_NAMESPACE
             )
 
@@ -999,8 +999,8 @@ class KnowledgeHandler:
         Returns:
             List[str]: List of file paths in the knowledge base
         """
-        # Get unique source paths from ShortTermMemory documents namespace
-        all_documents = self.short_term_memory.get_items_by_metadata(
+        # Get unique source paths from WorkingMemory documents namespace
+        all_documents = self.working_memory.get_items_by_metadata(
             metadata_filter={}, namespace=DOCUMENT_NAMESPACE  # Get all documents
         )
         sources = set()
@@ -1019,12 +1019,12 @@ class KnowledgeHandler:
         Returns:
             Number of sources cleaned up
         """
-        if not self.short_term_memory:
+        if not self.working_memory:
             return 0
 
         # Get all currently loaded sources from memory
         loaded_sources = set()
-        all_items = self.short_term_memory.get_items_by_metadata(
+        all_items = self.working_memory.get_items_by_metadata(
             metadata_filter={},
             namespace=DOCUMENT_NAMESPACE
         )
@@ -1053,8 +1053,8 @@ class KnowledgeHandler:
                 data={"source_path": deleted_source}
             )
 
-            # 1. Remove from ShortTermMemory/FAISS
-            removed_count = self.short_term_memory.remove_by_metadata(
+            # 1. Remove from WorkingMemory/FAISS
+            removed_count = self.working_memory.remove_by_metadata(
                 metadata_filter={"source": deleted_source},
                 namespace=DOCUMENT_NAMESPACE
             )
@@ -1155,8 +1155,8 @@ class KnowledgeHandler:
                 existing_items = []
                 old_items = []
 
-                if self.short_term_memory:
-                    existing_items = self.short_term_memory.get_items_by_metadata(
+                if self.working_memory:
+                    existing_items = self.working_memory.get_items_by_metadata(
                         metadata_filter={
                             "source": source_path,
                             "content_hash": current_hash
@@ -1183,7 +1183,7 @@ class KnowledgeHandler:
                         continue
 
                     # Check if this is an update (file exists with different hash)
-                    old_items = self.short_term_memory.get_items_by_metadata(
+                    old_items = self.working_memory.get_items_by_metadata(
                         metadata_filter={"source": source_path},
                         namespace=DOCUMENT_NAMESPACE
                     )
@@ -1199,8 +1199,8 @@ class KnowledgeHandler:
                         }
                     )
                     # Remove old embeddings
-                    if self.short_term_memory:
-                        self.short_term_memory.remove_by_metadata(
+                    if self.working_memory:
+                        self.working_memory.remove_by_metadata(
                             metadata_filter={"source": source_path},
                             namespace=DOCUMENT_NAMESPACE
                         )
@@ -1264,10 +1264,10 @@ class KnowledgeHandler:
         agent_id: Optional[str] = None,
     ) -> None:
         """
-        Inject knowledge search results into short-term memory for persistence.
+        Inject knowledge search results into working memory for persistence.
 
         Automatically stores knowledge results
-        in the formation's short-term memory system, enabling:
+        in the formation's working memory system, enabling:
         - Knowledge context persistence across conversations
         - Unified search covering both knowledge and conversation content
         - Proper attribution and tagging of knowledge sources
@@ -1306,16 +1306,16 @@ class KnowledgeHandler:
                 # Remove None values from metadata
                 memory_metadata = {k: v for k, v in memory_metadata.items() if v is not None}
 
-                # Add to short-term memory with knowledge namespace
-                await self.short_term_memory.add(
+                # Add to working memory with knowledge namespace
+                await self.working_memory.add(
                     text=content, metadata=memory_metadata, namespace=KNOWLEDGE_BUFFER_NAMESPACE
                 )
 
             # Log successful knowledge injection
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATED,
                 level=observability.EventLevel.INFO,
-                description="Knowledge results injected into short-term memory",
+                description="Knowledge results injected into working memory",
                 data={
                     "results_count": len(knowledge_results),
                     "query": query[:100],
@@ -1327,9 +1327,9 @@ class KnowledgeHandler:
         except Exception as e:
             # Log error but don't fail the knowledge search
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,
                 level=observability.EventLevel.WARNING,
-                description="Failed to inject knowledge into short-term memory",
+                description="Failed to inject knowledge into working memory",
                 data={
                     "error": str(e),
                     "query": query[:100],
@@ -1350,7 +1350,7 @@ class KnowledgeHandler:
         memory_limit: Optional[int] = None,
     ) -> Dict[str, List[Dict[str, Any]]]:
         """
-        Unified search across both knowledge sources and short-term memory.
+        Unified search across both knowledge sources and working memory.
 
         Provides comprehensive search capability
         providing agents with both domain knowledge and conversational context
@@ -1360,7 +1360,7 @@ class KnowledgeHandler:
             query: The search query string
             top_k: Maximum number of results to return per source type
             generate_embeddings_fn: Function to generate embeddings for semantic search
-            include_memory: Whether to include short-term memory in search
+            include_memory: Whether to include working memory in search
             memory_weight: Weight for memory results vs knowledge results (0.0-1.0)
 
         Returns:
@@ -1378,10 +1378,10 @@ class KnowledgeHandler:
             )
             results["knowledge"] = knowledge_results
 
-            # Search short-term memory if available and requested
-            if include_memory and self.short_term_memory:
+            # Search working memory if available and requested
+            if include_memory and self.working_memory:
                 try:
-                    memory_results = await self.short_term_memory.search(
+                    memory_results = await self.working_memory.search(
                         query=query,
                         limit=memory_limit or top_k,
                         filter_metadata=None,
@@ -1398,7 +1398,7 @@ class KnowledgeHandler:
                                 "source": "memory",
                                 "metadata": {
                                     **result.get("metadata", {}),
-                                    "source_type": "short_term_memory",
+                                    "source_type": "working_memory",
                                     "timestamp": result.get("metadata", {}).get("timestamp"),
                                 },
                             }
@@ -1409,9 +1409,9 @@ class KnowledgeHandler:
                 except Exception as e:
                     # Log memory search error but continue
                     observability.observe(
-                        event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
+                        event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,
                         level=observability.EventLevel.WARNING,
-                        description="Failed to search short-term memory in unified search",
+                        description="Failed to search working memory in unified search",
                         data={
                             "error": str(e),
                             "query": query[:100],

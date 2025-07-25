@@ -601,7 +601,7 @@ class SQLiteMemory(BaseMemory):
         if results and observability:
             orders = [m.get("metadata", {}).get("order") for m in results]
             observability.observe(
-                event_type="MEMORY_SHORT_TERM_LOOKUP",
+                event_type="MEMORY_WORKING_LOOKUP",
                 level="debug",
                 description=f"Retrieved {len(results)} recent memories with orders: {orders[:5]}",
             )

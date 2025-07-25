@@ -77,9 +77,9 @@ class KnowledgeChangeDetectionTest:
             for cache_file in cache_dir.glob("*.cache"):
                 info["cache_files"].append(cache_file.name)
 
-        # Check buffer (ShortTermMemory)
-        if agent.knowledge_handler.short_term_memory:
-            stm = agent.knowledge_handler.short_term_memory
+        # Check buffer (WorkingMemory)
+        if agent.knowledge_handler.working_memory:
+            stm = agent.knowledge_handler.working_memory
             # Get all knowledge namespace items
             for item in stm.buffer:
                 if item.get("namespace") == "knowledge":

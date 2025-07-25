@@ -6,7 +6,7 @@ sys.path.insert(0, '.')
 import asyncio
 import time
 import os
-from src.muxi.services.memory.short_term import ShortTermMemory
+from src.muxi.services.memory.working import WorkingMemory
 from src.muxi.formation.formation import Formation
 
 
@@ -15,7 +15,7 @@ async def test_fifo_memory_management():
     print("\n=== Testing FIFO Memory Management ===")
 
     # Create buffer with small memory limit
-    buffer = ShortTermMemory(
+    buffer = WorkingMemory(
         formation_id="test_formation",
         max_size=5,
         buffer_multiplier=4,  # Total capacity = 20
@@ -69,7 +69,7 @@ async def test_buffer_vector_search():
     try:
         # Create a buffer memory with embedding model name
         # It will create the LLM instance lazily
-        buffer = ShortTermMemory(
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=10,
             buffer_multiplier=5,

@@ -91,7 +91,7 @@ from ...services import observability
 from ...datatypes.response import MuxiResponse
 from ...datatypes.clarification import ClarificationRequest, ClarificationResponse
 from ...services.mcp.service import MCPService
-from ...services.memory.short_term import ShortTermMemory
+from ...services.memory.working import WorkingMemory
 from ...services.memory.long_term import LongTermMemory
 from ...services.memory.memobase import Memobase
 from ...services.llm import LLM
@@ -247,7 +247,7 @@ class Overlord:
         agents (Dict[str, Agent]): Dictionary of registered agents, keyed by agent_id
         agent_descriptions (Dict[str, str]): Descriptions of agents used for routing
         default_agent_id (Optional[str]): ID of the default agent for unrouted messages
-        buffer_memory (Optional[ShortTermMemory]): Short-term memory for recent context
+        buffer_memory (Optional[WorkingMemory]): Working memory for recent context
         long_term_memory (Optional[Union[LongTermMemory, Memobase]]): Persistent memory system
         auto_extract_user_info (bool): Whether to automatically extract user information
         extraction_model (Optional[Model]): Model used for information extraction
@@ -281,7 +281,7 @@ class Overlord:
         configured_services: Optional[Dict[str, Any]] = None,
         api_keys: Optional[Dict[str, str]] = None,
         # Intelligence-specific parameters
-        buffer_memory: Optional[ShortTermMemory] = None,
+        buffer_memory: Optional[WorkingMemory] = None,
         long_term_memory: Optional[Union[LongTermMemory, Memobase]] = None,
         auto_extract_user_info: bool = True,
         extraction_model: Optional[LLM] = None,
@@ -303,7 +303,7 @@ class Overlord:
             configured_services: Pre-configured service instances from Formation
             api_keys: Pre-generated API keys from Formation
 
-            buffer_memory: Optional buffer memory for short-term context across all agents.
+            buffer_memory: Optional buffer memory for working context across all agents.
             long_term_memory: Optional long-term memory for persistent storage across all agents.
             auto_extract_user_info: Whether to automatically extract user information from conversations.
             extraction_model: Optional model to use for automatic information extraction.
@@ -1545,7 +1545,7 @@ class Overlord:
         """
         Add a message to the overlord's buffer memory.
 
-        This method stores a message in the short-term buffer memory, which maintains
+        This method stores a message in the working buffer memory, which maintains
         context for ongoing conversations. The buffer memory provides recent message
         history and context for agents during conversation.
 
@@ -2288,7 +2288,7 @@ class Overlord:
         Document Storage Foundation
         - Parse and chunk documents using DocumentChunkManager
         - Store in enhanced buffer memory with DocumentAwareBufferMemory
-        - Index for semantic search with ShortTermMemory
+        - Index for semantic search with WorkingMemory
 
         Document User Experience
         - Generate persona-consistent acknowledgments
@@ -3393,7 +3393,7 @@ class Overlord:
                     request_id=request_id,
                 )
                 observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATED,
+                    event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATED,
                     level=observability.EventLevel.DEBUG,
                     data={
                         "request_id": request_id,
@@ -3405,7 +3405,7 @@ class Overlord:
             except Exception as e:
                 # Log error but don't fail the async request
                 observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
+                    event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "request_id": request_id,

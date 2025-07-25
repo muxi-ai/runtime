@@ -37,7 +37,7 @@ class RemoteBufferConfig(BaseModel):
 
 
 class BufferMemoryConfig(BaseModel):
-    """Configuration for buffer memory (short-term memory) system."""
+    """Configuration for buffer memory (working memory) system."""
 
     enabled: bool = Field(True, description="Whether buffer memory is enabled")
     size: int = Field(10, description="Number of messages to keep in the buffer")

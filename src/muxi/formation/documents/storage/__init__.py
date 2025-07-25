@@ -13,7 +13,7 @@ Core Components:
 - DocumentReferenceSystem: Cross-document reference management
 
 Integration:
-- Extends existing ShortTermMemory for seamless integration
+- Extends existing WorkingMemory for seamless integration
 - Leverages FAISS/FAISSx for high-performance semantic search
 - Maintains document lifecycle with FIFO eviction strategies
 - Supports multiple chunking strategies (adaptive, semantic, fixed)

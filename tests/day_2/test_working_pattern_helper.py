@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test the exact pattern used by ShortTermMemory"""
+"""Test the exact pattern used by WorkingMemory"""
 
 import sys
 import asyncio
@@ -7,12 +7,12 @@ sys.path.insert(0, '.')
 import time
 import numpy as np
 
-async def test_shorttermemory_exact_pattern():
-    """Replicate the exact pattern used by ShortTermMemory"""
-    print("=== Replicating ShortTermMemory Pattern ===")
+async def test_workingemory_exact_pattern():
+    """Replicate the exact pattern used by WorkingMemory"""
+    print("=== Replicating WorkingMemory Pattern ===")
 
     try:
-        # Import exactly as ShortTermMemory does
+        # Import exactly as WorkingMemory does
         from faissx import client as faiss
 
         print("1. Setting up remote configuration...")
@@ -24,7 +24,7 @@ async def test_shorttermemory_exact_pattern():
         }
         dimension = 1536
 
-        # Configure FAISS for remote mode (exact ShortTermMemory code)
+        # Configure FAISS for remote mode (exact WorkingMemory code)
         if mode == "remote" and remote:
             print(f"   Calling faiss.configure() with:")
             print(f"   - server: {remote.get('url')}")
@@ -38,12 +38,12 @@ async def test_shorttermemory_exact_pattern():
             )
             print("✓ faiss.configure() completed")
 
-        # Initialize vector storage (exact ShortTermMemory code)
+        # Initialize vector storage (exact WorkingMemory code)
         print("2. Creating IndexFlatL2...")
         index = faiss.IndexFlatL2(dimension)
         print(f"✓ Index created: {type(index)}")
 
-        # Test add operation (similar to ShortTermMemory._add_embedding)
+        # Test add operation (similar to WorkingMemory._add_embedding)
         print("3. Testing add operation...")
         embedding = [0.1] * dimension  # Mock embedding
         embedding_array = np.array([embedding], dtype=np.float32)
@@ -55,7 +55,7 @@ async def test_shorttermemory_exact_pattern():
         print(f"✓ Add completed in {add_end - add_start:.3f}s")
         print(f"  Index count: {index.ntotal}")
 
-        # Test search operation (similar to ShortTermMemory._vector_search_faiss)
+        # Test search operation (similar to WorkingMemory._vector_search_faiss)
         print("4. Testing search operation...")
         query_embedding = [0.1] * dimension
         query_array = np.array([query_embedding], dtype=np.float32)
@@ -110,9 +110,9 @@ async def test_multiple_configure_calls():
         print(f"❌ Multiple configure test failed: {e}")
         return {"status": "failed", "error": str(e)}
 
-async def test_with_actual_shorttermemory():
-    """Test with actual ShortTermMemory class"""
-    print("\n=== Testing Actual ShortTermMemory Class ===")
+async def test_with_actual_workingemory():
+    """Test with actual WorkingMemory class"""
+    print("\n=== Testing Actual WorkingMemory Class ===")
 
     try:
         # Mock LLM
@@ -120,10 +120,10 @@ async def test_with_actual_shorttermemory():
             async def embed(self, text):
                 return [0.1] * 1536
 
-        from src.muxi.services.memory.short_term import ShortTermMemory
+        from src.muxi.services.memory.working import WorkingMemory
 
-        print("1. Creating ShortTermMemory with remote mode...")
-        buffer = ShortTermMemory(
+        print("1. Creating WorkingMemory with remote mode...")
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=3,
             buffer_multiplier=2,
@@ -133,7 +133,7 @@ async def test_with_actual_shorttermemory():
             remote={"url": "tcp://localhost:45678"}
         )
 
-        print(f"✓ ShortTermMemory created")
+        print(f"✓ WorkingMemory created")
         print(f"  Mode: {buffer.mode}")
         print(f"  Remote config: {buffer.remote}")
         print(f"  Index type: {type(buffer.index)}")
@@ -171,21 +171,21 @@ async def test_with_actual_shorttermemory():
         }
 
     except Exception as e:
-        print(f"❌ ShortTermMemory test failed: {e}")
+        print(f"❌ WorkingMemory test failed: {e}")
         import traceback
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
 
 def main():
     """Run all pattern tests"""
-    print("🔍 TESTING SHORTTERMEMORY FAISSX PATTERN")
+    print("🔍 TESTING WORKING MEMORY FAISSX PATTERN")
     print("=" * 60)
-    print("Goal: Replicate exact ShortTermMemory usage and find the issue")
+    print("Goal: Replicate exact WorkingMemory usage and find the issue")
 
     # Run tests
-    pattern_result = test_shorttermemory_exact_pattern()
+    pattern_result = test_workingemory_exact_pattern()
     configure_result = test_multiple_configure_calls()
-    shorttermemory_result = test_with_actual_shorttermemory()
+    workingemory_result = test_with_actual_workingemory()
 
     # Summary
     print("\n" + "=" * 60)
@@ -199,28 +199,28 @@ def main():
 
     print(f"Multiple Configure: {'✅ PASS' if configure_result.get('status') == 'success' else '❌ FAIL'}")
 
-    print(f"Actual ShortTermMemory: {'✅ PASS' if shorttermemory_result.get('status') == 'success' else '❌ FAIL'}")
-    if shorttermemory_result.get("status") == "success":
-        print(f"  - Remote index class: {shorttermemory_result.get('is_remote_class')}")
-        print(f"  - Add time: {shorttermemory_result.get('add_time', 0):.3f}s")
-        print(f"  - Search time: {shorttermemory_result.get('search_time', 0):.3f}s")
+    print(f"Actual WorkingMemory: {'✅ PASS' if workingemory_result.get('status') == 'success' else '❌ FAIL'}")
+    if workingemory_result.get("status") == "success":
+        print(f"  - Remote index class: {workingemory_result.get('is_remote_class')}")
+        print(f"  - Add time: {workingemory_result.get('add_time', 0):.3f}s")
+        print(f"  - Search time: {workingemory_result.get('search_time', 0):.3f}s")
 
     # Conclusions
     all_passed = all([
         pattern_result.get("status") == "success",
         configure_result.get("status") == "success",
-        shorttermemory_result.get("status") == "success"
+        workingemory_result.get("status") == "success"
     ])
 
     print(f"\n🎯 CONCLUSIONS:")
     if all_passed:
-        remote_class = shorttermemory_result.get('is_remote_class', False)
+        remote_class = workingemory_result.get('is_remote_class', False)
         if remote_class:
-            print("✅ ShortTermMemory IS using remote FAISSx indexes")
+            print("✅ WorkingMemory IS using remote FAISSx indexes")
             print("✅ The remote configuration is working correctly")
             print("🔍 If no server logs, check server logging configuration")
         else:
-            print("❌ ShortTermMemory is NOT using remote FAISSx indexes")
+            print("❌ WorkingMemory is NOT using remote FAISSx indexes")
             print("🐛 This explains the fallback to local behavior")
     else:
         print("❌ Pattern replication failed - configuration issues detected")
@@ -229,7 +229,7 @@ def main():
     print("1. Check FAISSx server logs during this test")
     print("2. If logs appear, remote operations are working")
     print("3. If no logs, investigate FAISSx server configuration")
-    print("4. Consider adding debug logging to ShortTermMemory")
+    print("4. Consider adding debug logging to WorkingMemory")
 
 if __name__ == "__main__":
     main()

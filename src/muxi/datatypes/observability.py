@@ -466,21 +466,21 @@ class ConversationEvents(Enum):
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================
-    # Short-term memory operations
-    MEMORY_SHORT_TERM_LOOKUP = "memory.short_term.lookup"
-    # When searching short-term memory
+    # Working memory operations
+    MEMORY_WORKING_LOOKUP = "memory.working.lookup"
+    # When searching working memory
 
-    MEMORY_SHORT_TERM_RETRIEVED = "memory.short_term.retrieved"
-    # When data is retrieved from short-term memory
+    MEMORY_WORKING_RETRIEVED = "memory.working.retrieved"
+    # When data is retrieved from working memory
 
-    MEMORY_SHORT_TERM_UPDATED = "memory.short_term.updated"
-    # When data is updated in short-term memory
+    MEMORY_WORKING_UPDATED = "memory.working.updated"
+    # When data is updated in working memory
 
-    MEMORY_SHORT_TERM_UPDATE_FAILED = "memory.short_term.update_failed"
-    # When short-term memory update fails
+    MEMORY_WORKING_UPDATE_FAILED = "memory.working.update_failed"
+    # When working memory update fails
 
-    MEMORY_SHORT_TERM_RETRIEVAL_FAILED = "memory.short_term.retrieval_failed"
-    # When short-term memory retrieval fails
+    MEMORY_WORKING_RETRIEVAL_FAILED = "memory.working.retrieval_failed"
+    # When working memory retrieval fails
 
     MEMORY_AUTO_EXTRACTED = "memory.auto.extracted"
     # When memory is auto-extracted

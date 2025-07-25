@@ -7,7 +7,7 @@ sys.path.insert(0, '.')
 import asyncio
 import time
 
-from src.muxi.services.memory.short_term import ShortTermMemory
+from src.muxi.services.memory.working import WorkingMemory
 from src.muxi.services.secrets.secrets_manager import SecretsManager
 from src.muxi.services.llm.llm import LLM
 
@@ -44,7 +44,7 @@ async def test_multi_user_faissx():
 
     try:
         # Create buffer for multi-user testing
-        buffer = ShortTermMemory(
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=10,
             buffer_multiplier=3,
@@ -160,7 +160,7 @@ async def test_tenant_isolation():
 
     try:
         # Create buffers for different tenants
-        tenant1_buffer = ShortTermMemory(
+        tenant1_buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
@@ -173,7 +173,7 @@ async def test_tenant_isolation():
             }
         )
 
-        tenant2_buffer = ShortTermMemory(
+        tenant2_buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
@@ -295,7 +295,7 @@ async def test_user_search_relevance():
 
     try:
         # Create buffer for relevance testing
-        buffer = ShortTermMemory(
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=20,
             buffer_multiplier=2,

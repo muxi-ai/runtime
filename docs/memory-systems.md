@@ -11,7 +11,7 @@ MUXI Runtime provides a sophisticated multi-tier memory architecture designed fo
 ```
 ┌────────────────────────────────────────────────────┐
 │                    Buffer Memory                   │
-│  (Short-term, Fast Access, Recent Context)         │
+│  (Working, Fast Access, Recent Context)         │
 └────────────────────────────────────────────────────┘
                            ↓
 ┌────────────────────────────────────────────────────┐

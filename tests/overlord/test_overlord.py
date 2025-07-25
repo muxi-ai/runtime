@@ -29,7 +29,7 @@ class TestOverlord:
     def mock_buffer_memory(self):
         """Create a mock buffer memory for testing."""
         # Creating a custom class to define methods for the mock
-        class MockShortTermMemory:
+        class MockWorkingMemory:
             def add(self, message, metadata):
                 return True
 
@@ -40,7 +40,7 @@ class TestOverlord:
                 return None
 
         # Create and return the mock
-        mock = MagicMock(spec=MockShortTermMemory())
+        mock = MagicMock(spec=MockWorkingMemory())
         mock.add.return_value = True
         mock.search.return_value = [(0.9, {"text": "Memory content"})]
         mock.clear.return_value = None

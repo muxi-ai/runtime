@@ -358,7 +358,7 @@ class CircuitBreaker:
         if self.failure_count >= self.failure_threshold:
             self.state = "open"
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_LOOKUP,
                 level=observability.EventLevel.WARNING,
                 data={"failure_count": self.failure_count, "threshold": self.failure_threshold},
                 description="Circuit breaker opened due to repeated failures",

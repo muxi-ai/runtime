@@ -450,7 +450,7 @@ memory:
 For optimal vector search results:
 
 1. **Always use real embeddings** (not mocks)
-2. **Embedding normalization is built into ShortTermMemory**
+2. **Embedding normalization is built into WorkingMemory**
 3. **No special models needed** - standard OpenAI embeddings work great
 
 Example of testing vector search relevance:
@@ -1146,7 +1146,7 @@ def test_large_file_async(overlord):
 ```python
 # Solution: Check observability events are correct
 # The error "MEMORY_STORE_FAILED" was due to incorrect event names
-# Fixed by using: MEMORY_SHORT_TERM_UPDATED
+# Fixed by using: MEMORY_WORKING_UPDATED
 ```
 
 **Issue 2: Test continues after webhook**
@@ -1624,7 +1624,7 @@ async def test_knowledge_integration():
     formation = Formation()
     await formation.load("formation-with-knowledge.yaml")
     overlord = await formation.start_overlord()
-    
+
     # Test knowledge access via chat
     response = await overlord.chat(
         "What information do you have about our pricing?",
@@ -1632,7 +1632,7 @@ async def test_knowledge_integration():
         user_id="test_user",
         stream=False
     )
-    
+
     # Verify knowledge was used
     assert "pricing" in response.content.lower()
     assert len(response.content) > 100  # Substantial response
@@ -1641,7 +1641,7 @@ async def test_knowledge_integration():
 ### 32. Knowledge System Architecture Insights
 
 **Embedding Storage**:
-- Uses ShortTermMemory for persistence
+- Uses WorkingMemory for persistence
 - Namespaced by agent: `knowledge:{agent_id}:{path}:{hash}`
 - Supports both in-memory and persistent storage
 

@@ -202,7 +202,7 @@ src/muxi/runtime/services/memory/context_memory.py
 src/muxi/runtime/services/memory/extractor.py
 src/muxi/runtime/services/memory/long_term.py
 src/muxi/runtime/services/memory/memobase.py
-src/muxi/runtime/services/memory/short_term.py
+src/muxi/runtime/services/memory/working.py
 src/muxi/runtime/services/memory/sqlite.py
 src/muxi/runtime/services/multimodal/__init__.py
 src/muxi/runtime/services/multimodal/fusion_engine.py

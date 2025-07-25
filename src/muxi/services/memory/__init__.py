@@ -10,7 +10,7 @@
 # The memory package provides various memory implementations for storing and
 # retrieving information in the Muxi framework. This includes:
 #
-# 1. Short-Term Memory (ShortTermMemory)
+# 1. Working Memory (WorkingMemory)
 #    - Stores recent conversation history
 #    - Implements semantic search via vector embeddings
 #    - Balances recency and relevance for context retrieval
@@ -44,9 +44,9 @@
 # Example usage:
 #
 #   # Create a buffer memory for conversation history
-#   from .memory import ShortTermMemory
+#   from .memory import WorkingMemory
 #
-#   buffer = ShortTermMemory(
+#   buffer = WorkingMemory(
 #       max_size=10,              # Context window size
 #       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
 #       model=embedding_model     # For vector search
@@ -60,7 +60,7 @@
 # =============================================================================
 
 from .base import BaseMemory
-from .short_term import ShortTermMemory
+from .working import WorkingMemory
 from .long_term import LongTermMemory
 from .memobase import Memobase
 from .sqlite import SQLiteMemory
@@ -68,7 +68,7 @@ from .context_memory import ContextMemory
 
 __all__ = [
     "BaseMemory",
-    "ShortTermMemory",
+    "WorkingMemory",
     "LongTermMemory",
     "Memobase",
     "SQLiteMemory",

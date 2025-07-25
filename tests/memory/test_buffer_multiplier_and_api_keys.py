@@ -3,7 +3,7 @@
 Tests for buffer_multiplier parameter and API key handling
 
 This file contains tests for:
-1. ShortTermMemory with buffer_multiplier parameter
+1. WorkingMemory with buffer_multiplier parameter
 2. API key provision to Overlord
 3. API key provision to muxi facade
 """
@@ -20,14 +20,14 @@ import numpy as np
 import yaml
 
 # Use direct imports instead of from muxi import muxi
-from src.muxi.memory.short_term import ShortTermMemory
+from src.muxi.memory.working import WorkingMemory
 from src.muxi.overlord import Overlord
 # Mock the muxi facade for testing
 # We'll patch its functionality directly in the test methods
 
 
 class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
-    """Tests for the buffer_multiplier parameter in ShortTermMemory."""
+    """Tests for the buffer_multiplier parameter in WorkingMemory."""
 
     def setUp(self):
         """Set up test fixtures."""
@@ -38,15 +38,15 @@ class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
 
     async def test_buffer_capacity(self):
         """Test that buffer_multiplier correctly affects buffer capacity."""
-        # Create ShortTermMemory with different multipliers
-        small_buffer = ShortTermMemory(
+        # Create WorkingMemory with different multipliers
+        small_buffer = WorkingMemory(
             max_size=3,
             buffer_multiplier=2,  # Total capacity = 6
             model=self.mock_model,
             dimension=5
         )
 
-        large_buffer = ShortTermMemory(
+        large_buffer = WorkingMemory(
             max_size=3,
             buffer_multiplier=10,  # Total capacity = 30
             model=self.mock_model,
@@ -76,15 +76,15 @@ class TestBufferMultiplier(unittest.IsolatedAsyncioTestCase):
 
     async def test_recency_search_window(self):
         """Test that _recency_search correctly limits its results."""
-        # Create ShortTermMemory with different multipliers
-        small_buffer = ShortTermMemory(
+        # Create WorkingMemory with different multipliers
+        small_buffer = WorkingMemory(
             max_size=3,
             buffer_multiplier=2,  # Total capacity = 6
             model=self.mock_model,
             dimension=5
         )
 
-        large_buffer = ShortTermMemory(
+        large_buffer = WorkingMemory(
             max_size=3,
             buffer_multiplier=10,  # Total capacity = 30
             model=self.mock_model,
@@ -136,7 +136,7 @@ class TestAPIKeys(unittest.TestCase):
         self.assertEqual(overlord.client_api_key, self.client_api_key)
         self.assertEqual(overlord.admin_api_key, self.admin_api_key)
 
-    @patch("muxi.memory.short_term.ShortTermMemory")
+    @patch("muxi.memory.working.WorkingMemory")
     def test_muxi_facade_api_keys(self, mock_buffer):
         """Test that API keys can be provided to the muxi facade."""
         # Since we can't import muxi directly, we'll mock the core functionality
@@ -144,8 +144,8 @@ class TestAPIKeys(unittest.TestCase):
             # Mock a muxi function that creates an overlord
             def mock_muxi(buffer_size=10, buffer_multiplier=10,
                           client_api_key=None, admin_api_key=None):
-                # Create a ShortTermMemory instance to trigger the mock
-                ShortTermMemory(max_size=buffer_size, buffer_multiplier=buffer_multiplier)
+                # Create a WorkingMemory instance to trigger the mock
+                WorkingMemory(max_size=buffer_size, buffer_multiplier=buffer_multiplier)
                 # Return an overlord with the buffer
                 return mock_overlord(
                     buffer_memory=mock_buffer(),
@@ -166,13 +166,13 @@ class TestAPIKeys(unittest.TestCase):
             self.assertEqual(kwargs.get("client_api_key"), self.client_api_key)
             self.assertEqual(kwargs.get("admin_api_key"), self.admin_api_key)
 
-    @patch("muxi.memory.short_term.ShortTermMemory")
+    @patch("muxi.memory.working.WorkingMemory")
     def test_muxi_buffer_parameters(self, mock_buffer):
         """Test that buffer_size and buffer_multiplier are correctly passed to muxi facade."""
         # Mock the muxi function directly
         def mock_muxi(buffer_size=10, buffer_multiplier=10):
-            # Actually create a ShortTermMemory instance to trigger the mock
-            ShortTermMemory(max_size=buffer_size, buffer_multiplier=buffer_multiplier)
+            # Actually create a WorkingMemory instance to trigger the mock
+            WorkingMemory(max_size=buffer_size, buffer_multiplier=buffer_multiplier)
             return mock_buffer()
 
         # Call our mock function
@@ -181,7 +181,7 @@ class TestAPIKeys(unittest.TestCase):
             buffer_multiplier=8
         )
 
-        # Check that ShortTermMemory was created with the correct parameters
+        # Check that WorkingMemory was created with the correct parameters
         mock_buffer.assert_called()
 
 
@@ -232,7 +232,7 @@ class TestBufferConfigFromFiles(unittest.TestCase):
         """Clean up temporary files."""
         shutil.rmtree(self.temp_dir)
 
-    @patch("muxi.memory.short_term.ShortTermMemory")
+    @patch("muxi.memory.working.WorkingMemory")
     def test_yaml_config_buffer_params(self, mock_buffer):
         """Test that buffer parameters from YAML config are correctly applied."""
         # Mock the config loader
@@ -262,8 +262,8 @@ class TestBufferConfigFromFiles(unittest.TestCase):
                 memory_config = normalized.get("memory", {})
                 buffer_config = memory_config.get("buffer", {})
 
-                # Actually create a ShortTermMemory to trigger the mock
-                ShortTermMemory(
+                # Actually create a WorkingMemory to trigger the mock
+                WorkingMemory(
                     max_size=buffer_config.get("window_size", 5),
                     buffer_multiplier=buffer_config.get("buffer_multiplier", 10)
                 )
@@ -273,10 +273,10 @@ class TestBufferConfigFromFiles(unittest.TestCase):
             # Call our mock function with the config file
             mock_muxi(config_file=self.yaml_path)
 
-            # Check that ShortTermMemory was created
+            # Check that WorkingMemory was created
             mock_buffer.assert_called()
 
-    @patch("muxi.memory.short_term.ShortTermMemory")
+    @patch("muxi.memory.working.WorkingMemory")
     def test_json_config_buffer_params(self, mock_buffer):
         """Test that buffer parameters from JSON config are correctly applied."""
         # Mock the config loader similar to the YAML test
@@ -305,8 +305,8 @@ class TestBufferConfigFromFiles(unittest.TestCase):
                 memory_config = normalized.get("memory", {})
                 buffer_config = memory_config.get("buffer", {})
 
-                # Actually create a ShortTermMemory to trigger the mock
-                ShortTermMemory(
+                # Actually create a WorkingMemory to trigger the mock
+                WorkingMemory(
                     max_size=buffer_config.get("window_size", 5),
                     buffer_multiplier=buffer_config.get("buffer_multiplier", 10)
                 )
@@ -316,7 +316,7 @@ class TestBufferConfigFromFiles(unittest.TestCase):
             # Call our mock function with the config file
             mock_muxi(config_file=self.json_path)
 
-            # Check that ShortTermMemory was created
+            # Check that WorkingMemory was created
             mock_buffer.assert_called()
 
 

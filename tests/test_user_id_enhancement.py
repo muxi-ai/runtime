@@ -9,7 +9,7 @@ user ID format and maps it to internal integer IDs for compatibility.
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from src.muxi.overlord import Overlord
-from src.muxi.memory.short_term import ShortTermMemory
+from src.muxi.memory.working import WorkingMemory
 
 
 class TestUserIdEnhancement:
@@ -18,7 +18,7 @@ class TestUserIdEnhancement:
     @pytest.fixture
     def mock_memory(self):
         """Create mock memory systems for testing."""
-        buffer_memory = Mock(spec=ShortTermMemory)
+        buffer_memory = Mock(spec=WorkingMemory)
         buffer_memory.add = AsyncMock()
         buffer_memory.search = AsyncMock(return_value=[])
 

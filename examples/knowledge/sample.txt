@@ -2,7 +2,7 @@ The MUXI Framework is an open-source toolkit for building AI assistants and agen
 
 Key features of the MUXI Framework include:
 1. Agent-based architecture
-2. Memory systems for short-term and long-term context
+2. Memory systems for working and long-term context
 3. Knowledge integration for domain-specific information
 4. Multi-agent collaboration capabilities
 5. Tool integration for enhanced capabilities

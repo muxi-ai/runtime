@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 
 from src.muxi.overlord import Overlord
 from src.muxi.llm import LLM, set_llm_api_key
-from src.muxi.memory.short_term import ShortTermMemory
+from src.muxi.memory.working import WorkingMemory
 
 # Load environment variables
 load_dotenv()
@@ -30,7 +30,7 @@ async def main():
     routing_model = LLM(model="openai/gpt-4o-mini", temperature=0.2)
 
     # Create memory systems
-    buffer_memory = ShortTermMemory(
+    buffer_memory = WorkingMemory(
         max_size=10,               # Context window size
         buffer_multiplier=10,      # Total capacity = 10 × 10 = 100 messages
     )

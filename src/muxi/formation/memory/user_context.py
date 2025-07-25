@@ -147,6 +147,6 @@ class UserContextManager:
         )
 
         #  Info - TODO: add observability
-        # ConversationEvents.MEMORY_SHORT_TERM_UPDATED
+        # ConversationEvents.MEMORY_WORKING_UPDATED
 
         return context

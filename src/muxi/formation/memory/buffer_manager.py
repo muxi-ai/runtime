@@ -36,7 +36,7 @@ class BufferMemoryManager:
         """
         Add a message to the overlord's buffer memory.
 
-        This method stores a message in the short-term buffer memory, which maintains
+        This method stores a message in the working buffer memory, which maintains
         context for ongoing conversations. The buffer memory provides recent message
         history and context for agents during conversation.
 
@@ -74,7 +74,7 @@ class BufferMemoryManager:
         try:
             await self.overlord.buffer_memory.add(text=message, metadata=full_metadata)
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATED,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": agent_id,
@@ -85,7 +85,7 @@ class BufferMemoryManager:
             return True
         except Exception as e:
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_UPDATE_FAILED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "error": str(e),
@@ -126,7 +126,7 @@ class BufferMemoryManager:
         try:
             # Emit memory search started event
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_LOOKUP,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "query": query[:100],
@@ -144,7 +144,7 @@ class BufferMemoryManager:
 
             # Emit memory search completed event
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "query": query[:100],
@@ -163,7 +163,7 @@ class BufferMemoryManager:
                     {
                         "text": item.get(
                             "text", ""
-                        ),  # ShortTermMemory returns 'text' not 'content'
+                        ),  # WorkingMemory returns 'text' not 'content'
                         "metadata": item.get("metadata", {}),
                         "distance": 1.0 - score,  # Convert score to distance
                         "source": "buffer",
@@ -174,7 +174,7 @@ class BufferMemoryManager:
 
         except Exception as e:
             #  Warning - TODO: add observability
-            # ConversationEvents.MEMORY_SHORT_TERM_RETRIEVAL_FAILED
+            # ConversationEvents.MEMORY_WORKING_RETRIEVAL_FAILED
             _ = e  # remove this after implementing observability
             return []
 
@@ -202,7 +202,7 @@ class BufferMemoryManager:
             )
         except Exception as e:
             #  Buffer memory clear error - TODO: add observability
-            #  MEMORY_SHORT_TERM_LOOKUP
+            #  MEMORY_WORKING_LOOKUP
             _ = e  # remove this after implementing observability
 
     async def add_message_to_buffer(

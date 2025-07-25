@@ -10,7 +10,7 @@ sys.path.insert(0, '.')
 import asyncio
 import time
 import numpy as np
-from src.muxi.services.memory.short_term import ShortTermMemory
+from src.muxi.services.memory.working import WorkingMemory
 
 # Mock LLM for testing
 class MockLLM:
@@ -66,9 +66,9 @@ async def test_faissx_no_auth_with_tenant():
         print(f"✓ Search completed")
         print(f"  Results: {len(indices[0])} matches found")
 
-        # Test with ShortTermMemory
-        print("\n5. Testing ShortTermMemory integration...")
-        buffer = ShortTermMemory(
+        # Test with WorkingMemory
+        print("\n5. Testing WorkingMemory integration...")
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
@@ -85,7 +85,7 @@ async def test_faissx_no_auth_with_tenant():
         await buffer.add("Test message for tenant", {"source": "no-auth"})
         results = await buffer.search("test", limit=1)
 
-        print(f"✓ ShortTermMemory working with tenant ID")
+        print(f"✓ WorkingMemory working with tenant ID")
         print(f"  Buffer items: {len(buffer)}")
         print(f"  Search results: {len(results)}")
 
@@ -155,9 +155,9 @@ async def test_faissx_with_full_auth():
         print(f"✓ Search completed")
         print(f"  Results: {len(indices[0])} matches found")
 
-        # Test with ShortTermMemory
-        print("\n5. Testing ShortTermMemory with full auth...")
-        buffer = ShortTermMemory(
+        # Test with WorkingMemory
+        print("\n5. Testing WorkingMemory with full auth...")
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
@@ -174,7 +174,7 @@ async def test_faissx_with_full_auth():
         await buffer.add("Authenticated message", {"source": "full-auth"})
         results = await buffer.search("authenticated", limit=1)
 
-        print(f"✓ ShortTermMemory working with full auth")
+        print(f"✓ WorkingMemory working with full auth")
         print(f"  Buffer items: {len(buffer)}")
         print(f"  Search results: {len(results)}")
 
@@ -345,7 +345,7 @@ async def main():
         print("\nKey findings:")
         print("- Port 45678: Requires only tenant ID (no auth)")
         print("- Port 65432: Requires both API key and tenant ID")
-        print("- ShortTermMemory integrates correctly with both")
+        print("- WorkingMemory integrates correctly with both")
         print("- Multi-tenancy is supported in both modes")
     else:
         print("⚠️  PARTIAL SUCCESS")

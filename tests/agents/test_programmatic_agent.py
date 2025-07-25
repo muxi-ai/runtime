@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 
 from src.muxi.services.llm import LLM
 from src.muxi.formation.overlord import Overlord
-from src.muxi.services.memory.short_term import ShortTermMemory
+from src.muxi.services.memory.working import WorkingMemory
 from src.muxi.datatypes.response import MuxiResponse
 
 
@@ -31,7 +31,7 @@ async def test_programmatic_agent():
         return
 
     # Create a buffer memory
-    buffer_memory = ShortTermMemory(
+    buffer_memory = WorkingMemory(
         max_size=10,             # Context window size
         buffer_multiplier=10     # Total capacity = 10 × 10 = 100 messages
     )

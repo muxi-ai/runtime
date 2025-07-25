@@ -160,9 +160,9 @@ def test_faissx_auth_operations():
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
 
-async def test_shorttermemory_with_auth():
-    """Test ShortTermMemory with authenticated FAISSx"""
-    print("\n=== Testing ShortTermMemory with Auth ===")
+async def test_workingemory_with_auth():
+    """Test WorkingMemory with authenticated FAISSx"""
+    print("\n=== Testing WorkingMemory with Auth ===")
 
     try:
         # Mock LLM
@@ -173,10 +173,10 @@ async def test_shorttermemory_with_auth():
                 embedding = [text_hash / 1000.0] + [0.1] * 1535
                 return embedding
 
-        from src.muxi.services.memory.short_term import ShortTermMemory
+        from src.muxi.services.memory.working import WorkingMemory
 
-        print("1. Creating ShortTermMemory with authenticated remote...")
-        buffer = ShortTermMemory(
+        print("1. Creating WorkingMemory with authenticated remote...")
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=3,
             buffer_multiplier=2,
@@ -190,18 +190,18 @@ async def test_shorttermemory_with_auth():
             }
         )
 
-        print(f"✓ ShortTermMemory created with auth")
+        print(f"✓ WorkingMemory created with auth")
         print(f"  Mode: {buffer.mode}")
         print(f"  Remote config: {buffer.remote}")
 
-        # Test adding data through ShortTermMemory
-        print("2. Adding authenticated data via ShortTermMemory...")
+        # Test adding data through WorkingMemory
+        print("2. Adding authenticated data via WorkingMemory...")
         await buffer.add("Authenticated test message about AI", {"auth": "test"})
         await buffer.add("Another authenticated message", {"auth": "test"})
 
         print(f"✓ Added 2 messages to authenticated buffer")
 
-        # Test search through ShortTermMemory
+        # Test search through WorkingMemory
         print("3. Searching authenticated buffer...")
         results = await buffer.search("AI artificial intelligence", limit=2)
 
@@ -218,7 +218,7 @@ async def test_shorttermemory_with_auth():
         }
 
     except Exception as e:
-        print(f"❌ ShortTermMemory auth test failed: {e}")
+        print(f"❌ WorkingMemory auth test failed: {e}")
         import traceback
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
@@ -238,7 +238,7 @@ async def main():
     # Run tests
     connection_result = test_faissx_auth_connection()
     operations_result = test_faissx_auth_operations()
-    shorttermemory_result = await test_shorttermemory_with_auth()
+    workingemory_result = await test_workingemory_with_auth()
 
     # Summary
     print("\n" + "=" * 50)
@@ -258,16 +258,16 @@ async def main():
         print(f"  - Correct match: {operations_result.get('correct_match')}")
         print(f"  - Perfect match: {operations_result.get('perfect_match')}")
 
-    print(f"ShortTermMemory Auth: {'✅ PASS' if shorttermemory_result.get('status') == 'success' else '❌ FAIL'}")
-    if shorttermemory_result.get("status") == "success":
-        print(f"  - Messages added: {shorttermemory_result.get('messages_added')}")
-        print(f"  - Search results: {shorttermemory_result.get('search_results')}")
+    print(f"WorkingMemory Auth: {'✅ PASS' if workingemory_result.get('status') == 'success' else '❌ FAIL'}")
+    if workingemory_result.get("status") == "success":
+        print(f"  - Messages added: {workingemory_result.get('messages_added')}")
+        print(f"  - Search results: {workingemory_result.get('search_results')}")
 
     # Overall result
     all_passed = all([
         connection_result.get("status") == "success",
         operations_result.get("status") == "success",
-        shorttermemory_result.get("status") == "success"
+        workingemory_result.get("status") == "success"
     ])
 
     print(f"\n🎯 OVERALL RESULT: {'✅ ALL AUTH TESTS PASSED' if all_passed else '❌ SOME AUTH TESTS FAILED'}")
@@ -276,7 +276,7 @@ async def main():
         print("\n🔐 AUTHENTICATION FULLY WORKING!")
         print("✅ FAISSx server accepts API key authentication")
         print("✅ Authenticated index creation, add, and search operations work")
-        print("✅ ShortTermMemory integrates with authenticated FAISSx")
+        print("✅ WorkingMemory integrates with authenticated FAISSx")
         print("✅ Complete authenticated remote memory operations confirmed")
 
     print(f"\n📊 Check FAISSx auth server logs (port 65432) for:")
@@ -288,7 +288,7 @@ async def main():
     return {
         "connection": connection_result,
         "operations": operations_result,
-        "shorttermemory": shorttermemory_result,
+        "workingemory": workingemory_result,
         "all_passed": all_passed
     }
 

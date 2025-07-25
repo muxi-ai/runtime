@@ -53,7 +53,7 @@ Apply normal agent selection logic to choose the appropriate specialist, then ex
 
 ### Memory and context
 
-* **Session Memory Management**: Maintain short-term buffer memory during the session (backend handles cleanup).
+* **Session Memory Management**: Maintain working buffer memory during the session (backend handles cleanup).
 * **Document Indexing**: Index user-provided documents for ephemeral semantic search.
 * **Context Preservation**: Maintain conversation context across multi-step workflows for response coherence.
 * **Adaptive Communication**: Learn and adapt to user communication patterns within session boundaries.

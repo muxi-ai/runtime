@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 
 from src.muxi.overlord import Overlord
-from src.muxi.memory.short_term import ShortTermMemory
+from src.muxi.memory.working import WorkingMemory
 from src.muxi.llm import LLM, set_llm_api_key
 
 # Load environment variables from .env file
@@ -29,7 +29,7 @@ async def main():
     )
 
     # Create a memory system for the overlord
-    buffer_memory = ShortTermMemory(
+    buffer_memory = WorkingMemory(
         max_size=10,               # Context window size
         buffer_multiplier=10,      # Total capacity = 10 × 10 = 100 messages
     )

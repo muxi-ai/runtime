@@ -286,7 +286,7 @@ src/muxi/runtime/
 │   ├── base.py        # Base agent class
 │   └── registry.py    # Agent discovery and registration
 ├── memory/             # Memory subsystems
-│   ├── buffer.py      # Short-term FIFO + vector memory
+│   ├── buffer.py      # Working FIFO + vector memory
 │   ├── persistent.py  # Long-term PostgreSQL/SQLite storage
 │   └── vector.py      # FAISSx integration
 ├── services/           # Core services
@@ -370,11 +370,11 @@ class Overlord:
 
 ```python
 # Buffer Memory - Recent context with vector similarity
-from muxi.memory import ShortTermMemory
+from muxi.memory import WorkingMemory
 
-# Note: ShortTermMemory configuration is typically done in formation.yaml
+# Note: WorkingMemory configuration is typically done in formation.yaml
 # This is just showing the internal API for contributors
-memory = ShortTermMemory(
+memory = WorkingMemory(
     buffer_size=20,
     buffer_multiplier=10,
     vector_search_enabled=True

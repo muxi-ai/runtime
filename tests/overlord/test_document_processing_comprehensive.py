@@ -14,7 +14,7 @@ For agent knowledge systems, use:
 The following components tested here are deprecated for agent knowledge:
 - DocumentWorkflowIntegrator: Use agent knowledge system's built-in capabilities
 - DocumentCrossReferenceManager: Use agent knowledge system's built-in capabilities
-- DocumentContextPreserver: Use agent knowledge system's short-term memory integration
+- DocumentContextPreserver: Use agent knowledge system's working memory integration
 
 Comprehensive Document Processing Implementation Test Suite
 

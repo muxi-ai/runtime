@@ -53,7 +53,7 @@ Based on the MUXI Runtime Comprehensive Test Plan, here's the mapping of test gr
 
 ## Helper/Debug Tests
 These support the main test groups:
-- `test_shortterm_pattern_helper.py` - Short-term memory patterns
+- `test_working_pattern_helper.py` - Working memory patterns
 - `test_faissx_configure_helper.py` - FAISSx configuration testing
 - `test_faissx_debugging_helper.py` - FAISSx debugging utilities
 - `test_faissx_read_helper.py` - FAISSx read verification
@@ -110,7 +110,7 @@ These support the main test groups:
 
 ## Helper/Debug Tests
 These support the main test groups:
-- `test_shortterm_pattern_helper.py` - Short-term memory patterns
+- `test_working_pattern_helper.py` - Working memory patterns
 - `test_faissx_configure_helper.py` - FAISSx configuration testing
 - `test_faissx_debugging_helper.py` - FAISSx debugging utilities
 - `test_faissx_read_helper.py` - FAISSx read verification

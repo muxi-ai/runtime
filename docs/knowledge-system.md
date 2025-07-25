@@ -27,7 +27,7 @@ DocumentChunkManager (adaptive chunking)
 LLM Embeddings API
     ↓
 ┌─────────────────┐     ┌──────────────────┐
-│  Disk Cache     │ ←→  │ ShortTermMemory  │
+│  Disk Cache     │ ←→  │ WorkingMemory  │
 │ (JSON files)    │     │    (FAISS)       │
 └─────────────────┘     └──────────────────┘
 ```
@@ -37,7 +37,7 @@ LLM Embeddings API
 1. **FileKnowledge**: Loads content from files and directories
 2. **DocumentChunkManager**: Intelligently chunks documents for embedding
 3. **KnowledgeHandler**: Orchestrates loading, caching, and searching
-4. **ShortTermMemory**: Provides vector search via FAISS
+4. **WorkingMemory**: Provides vector search via FAISS
 5. **Disk Cache**: Persists embeddings to avoid regeneration
 
 ## Configuration
@@ -110,7 +110,7 @@ agents:
    - Check disk cache by MD5 hash
    - If cached: Load embeddings from disk
    - If not cached: Generate embeddings and save to cache
-4. Populate ShortTermMemory with embeddings
+4. Populate WorkingMemory with embeddings
 ```
 
 ### 2. Incremental Updates
@@ -120,7 +120,7 @@ agents:
    - Remove embeddings for deleted files
    - Skip unchanged files (same MD5)
    - Regenerate only for new/modified files
-2. Update ShortTermMemory incrementally
+2. Update WorkingMemory incrementally
 ```
 
 ## Cache Management
@@ -153,7 +153,7 @@ agents:
 ## Memory Management
 
 ### Namespace Protection
-Knowledge uses the `"knowledge"` namespace in ShortTermMemory, protected from FIFO eviction which only affects the `"buffer"` namespace.
+Knowledge uses the `"knowledge"` namespace in WorkingMemory, protected from FIFO eviction which only affects the `"buffer"` namespace.
 
 ### Knowledge Injection
 Search results can be temporarily injected into memory using the `"knowledge_injection"` namespace for context enhancement.
@@ -238,7 +238,7 @@ results = await self.knowledge_handler.unified_search(
 ### Speed Improvements
 - **Before**: 30-60 seconds for full regeneration
 - **After**: <5 seconds for cache loading
-- **Test Results**: 
+- **Test Results**:
   - Formation load: ~1.14 seconds with 20 knowledge files
   - First query: ~12 seconds (includes knowledge initialization)
   - Subsequent queries: ~9 seconds

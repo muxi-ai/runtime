@@ -7,7 +7,7 @@
 # Usage:        Used by the Overlord to maintain conversation context
 # Author:       Muxi Framework Team
 #
-# The Buffer Memory is a sophisticated short-term memory system that combines:
+# The Buffer Memory is a sophisticated working memory system that combines:
 #
 # 1. Recency-Based Memory
 #    - Maintains a fixed-size context window of recent messages
@@ -24,7 +24,7 @@
 #    - Configurable recency bias for different use cases
 #    - Graceful fallback to recency-only if vector search unavailable
 #
-# The ShortTermMemory uses a two-tiered size system:
+# The WorkingMemory uses a two-tiered size system:
 #   - context_window (max_size): The number of recent messages to include
 #   - buffer_multiplier: Total buffer capacity = max_size × buffer_multiplier
 #
@@ -35,14 +35,14 @@
 #
 #   # Create buffer memory with semantic search (local mode)
 #   model = OpenAIModel(model="text-embedding-3-small")
-#   buffer = ShortTermMemory(
+#   buffer = WorkingMemory(
 #       max_size=10,              # Context window size
 #       buffer_multiplier=10,     # Total capacity = 10 × 10 = 100
 #       model=model               # For generating embeddings
 #   )
 #
 #   # Create buffer memory with remote FAISS/FAISSx server
-#   buffer = ShortTermMemory(
+#   buffer = WorkingMemory(
 #       max_size=10,
 #       buffer_multiplier=10,
 #       model=model,
@@ -90,11 +90,11 @@ except ValueError:
     pass
 
 
-class ShortTermMemory:
+class WorkingMemory:
     """
-    Short-term memory system with buffer management and vector search capabilities.
+    Working memory system with buffer management and vector search capabilities.
 
-    ShortTermMemory provides a hybrid memory system that combines recency-based retrieval
+    WorkingMemory provides a hybrid memory system that combines recency-based retrieval
     with semantic search powered by FAISS/FAISSx. It maintains a buffer of messages with
     associated metadata and vector embeddings for efficient contextual search.
 
@@ -123,7 +123,7 @@ class ShortTermMemory:
         fifo_interval_min: int = 5,
     ):
         """
-        Initialize short-term memory with vector search capabilities.
+        Initialize working memory with vector search capabilities.
 
         Args:
             formation_id: The formation ID for scoping data
@@ -524,7 +524,7 @@ class ShortTermMemory:
 
         # Emit memory retrieval started event
         observability.observe(
-            event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_LOOKUP,
+            event_type=observability.ConversationEvents.MEMORY_WORKING_LOOKUP,
             level=observability.EventLevel.INFO,
             data={
                 "query_length": len(query),
@@ -537,7 +537,7 @@ class ShortTermMemory:
                 "buffer_size": len(self.buffer),
                 "has_vector_search": self.model is not None,
             },
-            description="Short-term memory search started",
+            description="Working memory search started",
         )
 
         # If we don't have a model, return most recent messages
@@ -553,7 +553,7 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event for recency-only search
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "results_count": len(recency_results),
@@ -561,7 +561,7 @@ class ShortTermMemory:
                     "query_length": len(query),
                     "buffer_size": len(self.buffer),
                 },
-                description="Short-term memory search completed (recency-only)",
+                description="Working memory search completed (recency-only)",
             )
 
             return recency_results
@@ -598,7 +598,7 @@ class ShortTermMemory:
 
                 # Emit memory retrieval completed event for embedding failure fallback
                 observability.observe(
-                    event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
+                    event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "results_count": len(embedding_fallback_results),
@@ -608,7 +608,7 @@ class ShortTermMemory:
                         "buffer_size": len(self.buffer),
                     },
                     description=(
-                        "Short-term memory search completed " "(embedding failure fallback)"
+                        "Working memory search completed " "(embedding failure fallback)"
                     ),
                 )
 
@@ -705,7 +705,7 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "results_count": len(final_results),
@@ -723,7 +723,7 @@ class ShortTermMemory:
                         else 0
                     ),
                 },
-                description="Short-term memory search completed",
+                description="Working memory search completed",
             )
 
             return final_results
@@ -737,7 +737,7 @@ class ShortTermMemory:
 
             # Emit memory retrieval completed event for fallback
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_RETRIEVED,
+                event_type=observability.ConversationEvents.MEMORY_WORKING_RETRIEVED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "results_count": len(fallback_results),
@@ -746,7 +746,7 @@ class ShortTermMemory:
                     "query_length": len(query),
                     "buffer_size": len(self.buffer),
                 },
-                description="Short-term memory search completed with fallback",
+                description="Working memory search completed with fallback",
             )
 
             return fallback_results
@@ -991,7 +991,7 @@ class ShortTermMemory:
 
 
 @multitasking.task
-def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
+def fifo_cleanup_task(buffer_memory: "WorkingMemory") -> None:
     """
     Background task for periodic FIFO memory cleanup.
 
@@ -999,7 +999,7 @@ def fifo_cleanup_task(buffer_memory: "ShortTermMemory") -> None:
     call the check_memory_usage_and_cleanup method on the buffer.
 
     Args:
-        buffer_memory: The ShortTermMemory instance to clean up
+        buffer_memory: The WorkingMemory instance to clean up
     """
     import time
 

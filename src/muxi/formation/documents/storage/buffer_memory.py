@@ -1,7 +1,7 @@
 """
 Document-Aware Buffer Memory Implementation
 
-This module extends ShortTermMemory with document processing capabilities,
+This module extends WorkingMemory with document processing capabilities,
 providing temporal scope and lifecycle management for document content.
 
 Features:
@@ -54,7 +54,7 @@ class DocumentAwareBufferMemory:
     semantic search across document chunks, and integration with the
     document storage foundation layer.
 
-    This class dynamically inherits from ShortTermMemory to avoid circular imports.
+    This class dynamically inherits from WorkingMemory to avoid circular imports.
     """
 
     def __init__(
@@ -88,10 +88,10 @@ class DocumentAwareBufferMemory:
             chunk_config: Configuration for document chunking
             metadata_storage_path: Path for document metadata storage
         """
-        # Initialize the underlying short-term memory
-        from ....services.memory.short_term import ShortTermMemory
+        # Initialize the underlying working memory
+        from ....services.memory.working import WorkingMemory
 
-        self._short_term_memory = ShortTermMemory(
+        self._working_memory = WorkingMemory(
             formation_id=formation_id,
             max_size=max_size,
             buffer_multiplier=buffer_multiplier,
@@ -118,8 +118,8 @@ class DocumentAwareBufferMemory:
             "fifo_interval_min",
             "has_vector_search",
         ]:
-            if hasattr(self._short_term_memory, attr):
-                setattr(self, attr, getattr(self._short_term_memory, attr))
+            if hasattr(self._working_memory, attr):
+                setattr(self, attr, getattr(self._working_memory, attr))
 
         # Document-specific components
         from ...config.document_processing import DocumentProcessingConfig

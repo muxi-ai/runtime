@@ -295,7 +295,7 @@ class WorkflowSynthesizer:
 
         else:
             recommendations.append("Prioritize your most important criteria")
-            recommendations.append("Consider both short-term and long-term implications")
+            recommendations.append("Consider both working and long-term implications")
 
         return recommendations[:3]  # Limit to 3 recommendations
 

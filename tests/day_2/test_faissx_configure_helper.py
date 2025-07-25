@@ -205,7 +205,7 @@ def main():
         print("❓ If no server logs, there may be a silent fallback mechanism")
     else:
         print("❌ FAISSx configuration has issues")
-        print("💡 This explains why ShortTermMemory falls back to local FAISS")
+        print("💡 This explains why WorkingMemory falls back to local FAISS")
 
     print(f"\n🔍 DEBUGGING STEPS:")
     print("1. Monitor FAISSx server logs at tcp://localhost:45678 during this test")

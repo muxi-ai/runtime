@@ -6,7 +6,7 @@ sys.path.insert(0, '.')
 import asyncio
 import time
 
-from src.muxi.services.memory.short_term import ShortTermMemory
+from src.muxi.services.memory.working import WorkingMemory
 
 class MockLLM:
     """Mock LLM with logging"""
@@ -32,8 +32,8 @@ async def test_no_auth_faissx_detailed():
     mock_llm = MockLLM()
 
     try:
-        print("\n1. Creating ShortTermMemory with remote mode...")
-        buffer = ShortTermMemory(
+        print("\n1. Creating WorkingMemory with remote mode...")
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=3,
             buffer_multiplier=2,
@@ -151,7 +151,7 @@ async def test_local_vs_remote_comparison():
     try:
         # Create local buffer
         print("\n1. Creating LOCAL buffer...")
-        local_buffer = ShortTermMemory(
+        local_buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=3, buffer_multiplier=2, dimension=1536,
             model=mock_llm_local, mode="local"
@@ -159,7 +159,7 @@ async def test_local_vs_remote_comparison():
 
         # Create remote buffer
         print("2. Creating REMOTE buffer...")
-        remote_buffer = ShortTermMemory(
+        remote_buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=3, buffer_multiplier=2, dimension=1536,
             model=mock_llm_remote, mode="remote",
@@ -260,7 +260,7 @@ async def main():
     print(f"\n🔬 NEXT STEPS:")
     print(f"- Check FAISSx server logs on port 45678 during this test")
     print(f"- If no logs appear, the connection may be falling back to local FAISS")
-    print(f"- Consider adding debug logging to ShortTermMemory remote operations")
+    print(f"- Consider adding debug logging to WorkingMemory remote operations")
 
 if __name__ == "__main__":
     asyncio.run(main())

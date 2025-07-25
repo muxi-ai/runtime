@@ -239,7 +239,7 @@ class InformationRequirements:
                         "description": "Time horizon for investments",
                         "required": True,
                         "examples": [
-                            "short-term (< 2 years)",
+                            "working (< 2 years)",
                             "medium-term (2-10 years)",
                             "long-term (> 10 years)",
                         ],

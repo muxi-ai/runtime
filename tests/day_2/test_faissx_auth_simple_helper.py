@@ -3,7 +3,7 @@
 
 import asyncio
 import os
-from muxi.services.memory.short_term import ShortTermMemory
+from muxi.services.memory.working import WorkingMemory
 from muxi.datatypes.memory import BufferMemoryConfig, RemoteBufferConfig
 
 async def test_faissx_auth_connection():
@@ -33,8 +33,8 @@ async def test_faissx_auth_connection():
     )
 
     try:
-        # Create short-term memory with auth config
-        memory = ShortTermMemory(
+        # Create working memory with auth config
+        memory = WorkingMemory(
             formation_id="test_formation",
             max_size=buffer_config.size,
             buffer_multiplier=buffer_config.multiplier,
@@ -45,7 +45,7 @@ async def test_faissx_auth_connection():
             embedding_model=None  # Will use mock embeddings
         )
 
-        print("\n✅ ShortTermMemory created successfully with auth config")
+        print("\n✅ WorkingMemory created successfully with auth config")
         print(f"Mode: {memory.mode}")
         print(f"Remote URL: {memory.remote_config.get('url') if memory.remote_config else 'N/A'}")
         print(f"Has API Key: {'Yes' if memory.remote_config and memory.remote_config.get('api_key') else 'No'}")

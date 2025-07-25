@@ -94,9 +94,9 @@ def test_faissx_read_write_cycle():
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
 
-async def test_shorttermemory_read_verification():
-    """Test that ShortTermMemory actually reads back correct data"""
-    print("\n=== Testing ShortTermMemory Read Verification ===")
+async def test_workingemory_read_verification():
+    """Test that WorkingMemory actually reads back correct data"""
+    print("\n=== Testing WorkingMemory Read Verification ===")
 
     try:
         # Mock LLM that returns predictable embeddings
@@ -116,11 +116,11 @@ async def test_shorttermemory_read_verification():
                 else:
                     return [0.5] * 1536  # Default
 
-        from src.muxi.services.memory.short_term import ShortTermMemory
+        from src.muxi.services.memory.working import WorkingMemory
 
-        print("1. Creating ShortTermMemory with predictable embeddings...")
+        print("1. Creating WorkingMemory with predictable embeddings...")
         predictable_llm = PredictableLLM()
-        buffer = ShortTermMemory(
+        buffer = WorkingMemory(
             formation_id="test_formation",
             max_size=5,
             buffer_multiplier=2,
@@ -173,7 +173,7 @@ async def test_shorttermemory_read_verification():
         }
 
     except Exception as e:
-        print(f"❌ ShortTermMemory read test failed: {e}")
+        print(f"❌ WorkingMemory read test failed: {e}")
         import traceback
         traceback.print_exc()
         return {"status": "failed", "error": str(e)}
@@ -187,8 +187,8 @@ async def main():
     # Test direct FAISSx read/write
     cycle_result = test_faissx_read_write_cycle()
 
-    # Test ShortTermMemory read capability
-    shorttermemory_result = await test_shorttermemory_read_verification()
+    # Test WorkingMemory read capability
+    workingemory_result = await test_workingemory_read_verification()
 
     # Summary
     print("\n" + "=" * 50)
@@ -204,31 +204,31 @@ async def main():
         print(f"  - Second search correct: {cycle_result.get('second_search_correct')}")
         print(f"  - Second search perfect match: {cycle_result.get('second_search_perfect')}")
 
-    print(f"ShortTermMemory Read: {'✅ PASS' if shorttermemory_result.get('status') == 'success' else '❌ FAIL'}")
-    if shorttermemory_result.get("status") == "success":
-        print(f"  - LLM embed calls: {shorttermemory_result.get('llm_calls')}")
-        print(f"  - Python search results: {shorttermemory_result.get('python_results')}")
-        print(f"  - JS search results: {shorttermemory_result.get('js_results')}")
-        print(f"  - Python search correct: {shorttermemory_result.get('python_correct')}")
-        print(f"  - JS search correct: {shorttermemory_result.get('js_correct')}")
+    print(f"WorkingMemory Read: {'✅ PASS' if workingemory_result.get('status') == 'success' else '❌ FAIL'}")
+    if workingemory_result.get("status") == "success":
+        print(f"  - LLM embed calls: {workingemory_result.get('llm_calls')}")
+        print(f"  - Python search results: {workingemory_result.get('python_results')}")
+        print(f"  - JS search results: {workingemory_result.get('js_results')}")
+        print(f"  - Python search correct: {workingemory_result.get('python_correct')}")
+        print(f"  - JS search correct: {workingemory_result.get('js_correct')}")
 
     # Final conclusion
     both_working = (
         cycle_result.get("status") == "success" and
-        shorttermemory_result.get("status") == "success"
+        workingemory_result.get("status") == "success"
     )
 
     reads_working = (
         cycle_result.get("first_search_correct", False) and
         cycle_result.get("second_search_correct", False) and
-        shorttermemory_result.get("python_correct", False)
+        workingemory_result.get("python_correct", False)
     )
 
     print(f"\n🎯 FINAL VERDICT:")
     if both_working and reads_working:
         print("✅ FAISSx READ OPERATIONS CONFIRMED!")
         print("✅ We successfully write TO and read FROM remote FAISSx")
-        print("✅ ShortTermMemory retrieves correct data via vector similarity")
+        print("✅ WorkingMemory retrieves correct data via vector similarity")
         print("✅ Complete bidirectional remote memory operations working")
     elif both_working:
         print("⚠️  FAISSx operations work but read verification needs investigation")

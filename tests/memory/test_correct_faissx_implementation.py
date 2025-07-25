@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script to verify corrected FAISSx implementation in ShortTermMemory and KnowledgeHandler.
+Test script to verify corrected FAISSx implementation in WorkingMemory and KnowledgeHandler.
 
 This test verifies that:
 1. Local mode works correctly (no configuration needed)
@@ -25,7 +25,7 @@ sys.path.insert(0, "runtime")
 
 from src.muxi.knowledge.base import FileKnowledge  # noqa: E402
 from src.muxi.knowledge.handler import KnowledgeHandler  # noqa: E402
-from src.muxi.memory.short_term import ShortTermMemory  # noqa: E402
+from src.muxi.memory.working import WorkingMemory  # noqa: E402
 
 
 # Mock embedding function for testing
@@ -80,11 +80,11 @@ async def test_faissx_direct():
 
 
 async def test_buffer_memory_local():
-    """Test ShortTermMemory in local mode"""
-    print("=== Testing ShortTermMemory (Local Mode) ===")
+    """Test WorkingMemory in local mode"""
+    print("=== Testing WorkingMemory (Local Mode) ===")
     try:
         # Create local buffer memory
-        buffer = ShortTermMemory(
+        buffer = WorkingMemory(
             max_size=5,
             dimension=1536,
             mode="local"
@@ -106,20 +106,20 @@ async def test_buffer_memory_local():
         recent = buffer.get_recent(3)
         print(f"✓ Retrieved {len(recent)} recent items")
 
-        print("✓ ShortTermMemory local mode test passed")
+        print("✓ WorkingMemory local mode test passed")
         return True
 
     except Exception as e:
-        print(f"❌ ShortTermMemory local mode test failed: {e}")
+        print(f"❌ WorkingMemory local mode test failed: {e}")
         return False
 
 
 async def test_buffer_memory_remote():
-    """Test ShortTermMemory in remote mode"""
-    print("=== Testing ShortTermMemory (Remote Mode) ===")
+    """Test WorkingMemory in remote mode"""
+    print("=== Testing WorkingMemory (Remote Mode) ===")
     try:
         # Create remote buffer memory
-        buffer = ShortTermMemory(
+        buffer = WorkingMemory(
             max_size=5,
             dimension=1536,
             mode="remote",
@@ -146,11 +146,11 @@ async def test_buffer_memory_remote():
         recent = buffer.get_recent(3)
         print(f"✓ Retrieved {len(recent)} recent items from remote buffer")
 
-        print("✓ ShortTermMemory remote mode test passed")
+        print("✓ WorkingMemory remote mode test passed")
         return True
 
     except Exception as e:
-        print(f"❌ ShortTermMemory remote mode test failed: {e}")
+        print(f"❌ WorkingMemory remote mode test failed: {e}")
         return False
 
 
@@ -254,8 +254,8 @@ async def main():
 
     tests = [
         ("FAISSx Direct", test_faissx_direct),
-        ("ShortTermMemory Local", test_buffer_memory_local),
-        ("ShortTermMemory Remote", test_buffer_memory_remote),
+        ("WorkingMemory Local", test_buffer_memory_local),
+        ("WorkingMemory Remote", test_buffer_memory_remote),
         ("KnowledgeHandler Local", test_knowledge_handler_local),
         ("KnowledgeHandler Remote", test_knowledge_handler_remote)
     ]
