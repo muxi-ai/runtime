@@ -246,7 +246,12 @@ class KnowledgeHandler:
         )
 
         if len(self.sources) >= 10:  # Limit total sources
-            print(f"Skipping source - already have {len(self.sources)} sources")
+            observability.observe(
+                event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+                level=observability.EventLevel.WARNING,
+                description="Source limit reached, skipping additional source",
+                data={"current_sources": len(self.sources), "max_sources": 10}
+            )
 
             # Log source limit reached
             observability.observe(
@@ -283,7 +288,12 @@ class KnowledgeHandler:
         self.sources.append(source)
 
         if generate_embeddings_fn is None:
-            print("No embedding function provided, skipping content processing")
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.WARNING,
+                description="No embedding function provided, content processing skipped",
+                data={"source_path": getattr(source, "path", str(source))}
+            )
 
             # Log no embedding function
             observability.observe(
@@ -299,6 +309,8 @@ class KnowledgeHandler:
 
         try:
             source_path = getattr(source, "path", str(source))
+            # Ensure absolute path for consistency
+            source_path = os.path.abspath(source_path)
 
             # Step 1: Calculate hash for the source
             source_hash = self._calculate_file_md5(source_path)
@@ -308,7 +320,12 @@ class KnowledgeHandler:
 
             if cached_data:
                 # Cache hit! Load embeddings from disk into ShortTermMemory
-                print(f"Loading cached embeddings for {source.name}")
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.DEBUG,
+                    description="Loading embeddings from cache",
+                    data={"source_name": source.name, "source_hash": source_hash[:8]}
+                )
                 chunks_added = 0
 
                 for cached_item in cached_data:
@@ -321,14 +338,29 @@ class KnowledgeHandler:
                         )
                         chunks_added += 1
                     except Exception as e:
-                        print(f"Failed to add cached chunk: {e}")
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            description="Failed to add cached chunk to memory",
+                            data={"error": str(e), "error_type": type(e).__name__}
+                        )
                         continue
 
-                print(f"✓ Loaded {chunks_added} cached chunks for {source.name}")
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.INFO,
+                    description="Successfully loaded embeddings from cache",
+                    data={"source_name": source.name, "chunks_loaded": chunks_added, "from_cache": True}
+                )
 
             else:
                 # Cache miss - need to generate embeddings
-                print(f"No valid cache found for {source.name}, generating embeddings...")
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.DEBUG,
+                    description="Cache miss - generating new embeddings",
+                    data={"source_name": source.name}
+                )
 
                 # Use FileKnowledge's hybrid architecture integration
                 document_chunks = await source.process_with_chunk_manager(
@@ -348,7 +380,12 @@ class KnowledgeHandler:
                     embeddings = await generate_embeddings_fn(chunk_contents)
 
                     if not embeddings:
-                        print("Failed to generate embeddings for chunks")
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.ERROR,
+                            description="Failed to generate embeddings",
+                            data={"source_name": source.name, "chunks_count": len(chunk_contents)}
+                        )
                         return
 
                     # Prepare cache data while adding to ShortTermMemory
@@ -383,13 +420,30 @@ class KnowledgeHandler:
                             })
 
                         except Exception as e:
-                            print(f"Failed to add chunk {chunk.chunk_id}: {type(e).__name__}")
-                            print(f"Error details: {str(e)}")
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                description="Failed to add chunk to memory",
+                                data={
+                                    "chunk_id": chunk.chunk_id,
+                                    "error": str(e),
+                                    "error_type": type(e).__name__
+                                }
+                            )
                             import traceback
                             traceback.print_exc()
                             continue
 
-                    print(f"✓ Processed {source.name}: {chunks_added} chunks added")
+                    observability.observe(
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                        level=observability.EventLevel.INFO,
+                        description="Successfully processed knowledge source",
+                        data={
+                            "source_name": source.name,
+                            "chunks_added": chunks_added,
+                            "from_cache": False
+                        }
+                    )
 
                     # Step 3: Save to disk cache
                     if cache_data:
@@ -411,7 +465,12 @@ class KnowledgeHandler:
             )
 
         except Exception as e:
-            print(f"Failed to add knowledge source: {e}")
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
+                level=observability.EventLevel.ERROR,
+                description="Failed to add knowledge source",
+                data={"source_path": source_path, "error": str(e), "error_type": type(e).__name__}
+            )
 
             # Log knowledge source addition error
             observability.observe(
@@ -533,7 +592,12 @@ class KnowledgeHandler:
             return results
 
         except Exception as e:
-            print(f"Knowledge search failed: {e}")
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                description="Knowledge search failed",
+                data={"query": query[:100], "error": str(e), "error_type": type(e).__name__}
+            )
             # Log search error
             observability.observe(
                 event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
@@ -572,7 +636,12 @@ class KnowledgeHandler:
 
         # Check if knowledge is enabled
         if not knowledge_config.get("enabled", False):
-            print(f"Knowledge is disabled for agent {agent_id}")
+            observability.observe(
+                event_type=observability.ConversationEvents.SESSION_CREATED,
+                level=observability.EventLevel.DEBUG,
+                description="Knowledge disabled for agent",
+                data={"agent_id": agent_id}
+            )
 
             # Log knowledge disabled
             observability.observe(
@@ -585,7 +654,12 @@ class KnowledgeHandler:
 
         sources_config = knowledge_config.get("sources", [])
         if not sources_config:
-            print(f"No knowledge sources configured for agent {agent_id}")
+            observability.observe(
+                event_type=observability.ConversationEvents.SESSION_CREATED,
+                level=observability.EventLevel.WARNING,
+                description="No knowledge sources configured for agent",
+                data={"agent_id": agent_id}
+            )
 
             # Log no sources
             observability.observe(
@@ -596,7 +670,12 @@ class KnowledgeHandler:
             )
             return None
 
-        print(f"Loading {len(sources_config)} knowledge sources for agent {agent_id}")
+        observability.observe(
+            event_type=observability.ConversationEvents.SESSION_CREATED,
+            level=observability.EventLevel.INFO,
+            description="Loading knowledge sources for agent",
+            data={"agent_id": agent_id, "sources_count": len(sources_config)}
+        )
 
         try:
             # Create handler with performance limits
@@ -616,56 +695,15 @@ class KnowledgeHandler:
                 auto_inject_knowledge=kwargs.get("auto_inject_knowledge", True),
             )
 
-            # Process sources with limits
-            for i, source_config in enumerate(sources_config):
-                if i >= 3:  # Limit to max 3 sources for performance
-                    skipped = len(sources_config) - 3
-                    print(f"Limiting to 3 sources for performance (skipping {skipped} sources)")
+            # Apply reasonable file size limits to prevent memory issues
+            for source_config in sources_config:
+                # Keep some reasonable limits per source to prevent OOM
+                source_config["max_files"] = source_config.get("max_files", 100)  # Increased from 3
+                max_size = source_config.get("max_file_size", 10 * 1024 * 1024)  # 10MB default
+                source_config["max_file_size"] = min(max_size, 50 * 1024 * 1024)  # 50MB max
 
-                    # Log source limit
-                    observability.observe(
-                        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
-                        level=observability.EventLevel.WARNING,
-                        description="Knowledge sources limited for performance",
-                        data={
-                            "agent_id": agent_id,
-                            "total_sources": len(sources_config),
-                            "processed_sources": 3,
-                            "skipped_sources": skipped,
-                        },
-                    )
-                    break
-
-                try:
-                    # Add performance limits to source config
-                    limited_config = source_config.copy()
-                    limited_config["max_files"] = min(limited_config.get("max_files", 5), 3)
-                    max_size = limited_config.get("max_file_size", 1024 * 1024)
-                    limited_config["max_file_size"] = min(max_size, 50 * 1024)  # 50KB max
-
-                    source = FileKnowledge.from_config(limited_config)
-                    await handler.add_knowledge_source(source, generate_embeddings_fn)
-
-                    source_count = min(len(sources_config), 3)
-                    print(f"✓ Loaded source {i+1}/{source_count}: {source.path}")
-
-                except Exception as e:
-                    source_path = source_config.get("path", "unknown")
-                    print(f"Failed to load source {source_path}: {e}")
-
-                    # Log source loading error
-                    observability.observe(
-                        event_type=observability.ErrorEvents.RETRY_ATTEMPTED,
-                        level=observability.EventLevel.ERROR,
-                        description="Failed to load knowledge source from config",
-                        data={
-                            "agent_id": agent_id,
-                            "source_path": source_path,
-                            "error": str(e),
-                            "error_type": type(e).__name__,
-                        },
-                    )
-                    continue
+            # Load ALL sources with smart invalidation
+            await handler.load_sources_from_config(sources_config, generate_embeddings_fn)
 
             source_count = len(handler.sources)
             # Get document count from ShortTermMemory documents namespace
@@ -803,7 +841,12 @@ class KnowledgeHandler:
             embeddings = await generate_embeddings_fn(chunk_contents)
 
             if not embeddings:
-                print(f"Failed to generate embeddings for {file_path}")
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    description="Failed to generate embeddings for file",
+                    data={"file_path": file_path}
+                )
                 return 0
 
             # Add chunks and embeddings to ShortTermMemory with documents namespace
@@ -939,21 +982,211 @@ class KnowledgeHandler:
                 sources.add(doc["metadata"]["source"])
         return list(sources)
 
+    async def cleanup_deleted_sources(self, current_sources_config: List[Dict[str, Any]]) -> int:
+        """
+        Remove embeddings for files that no longer exist in config.
+
+        Args:
+            current_sources_config: List of current source configurations
+
+        Returns:
+            Number of sources cleaned up
+        """
+        if not self.short_term_memory:
+            return 0
+
+        # Get all currently loaded sources from memory
+        loaded_sources = set()
+        all_items = self.short_term_memory.get_items_by_metadata(
+            metadata_filter={},
+            namespace=DOCUMENT_NAMESPACE
+        )
+
+        for item in all_items:
+            source_path = item.get("metadata", {}).get("source")
+            if source_path:
+                loaded_sources.add(source_path)
+
+        # Get sources from current config
+        config_sources = {
+            os.path.abspath(config.get("path"))
+            for config in current_sources_config
+            if config.get("path")
+        }
+
+        # Find deleted sources
+        deleted_sources = loaded_sources - config_sources
+        cleanup_count = 0
+
+        for deleted_source in deleted_sources:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.INFO,
+                description="Removing deleted knowledge source",
+                data={"source_path": deleted_source}
+            )
+
+            # 1. Remove from ShortTermMemory/FAISS
+            removed_count = self.short_term_memory.remove_by_metadata(
+                metadata_filter={"source": deleted_source},
+                namespace=DOCUMENT_NAMESPACE
+            )
+
+            # 2. Remove cache file
+            cache_file = self._get_cache_file_path(deleted_source)
+            if os.path.exists(cache_file):
+                try:
+                    os.remove(cache_file)
+                    observability.observe(
+                        event_type=observability.SystemEvents.RESOURCE_ALLOCATED,
+                        level=observability.EventLevel.DEBUG,
+                        description="Cache file removed",
+                        data={"cache_file": os.path.basename(cache_file)}
+                    )
+                except Exception as e:
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        description="Failed to remove cache file",
+                        data={"cache_file": cache_file, "error": str(e)}
+                    )
+
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.DEBUG,
+                description="Embeddings removed from memory",
+                data={"source_path": deleted_source, "embeddings_removed": removed_count}
+            )
+            cleanup_count += 1
+
+            # Log cleanup
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.INFO,
+                description="Cleaned up deleted knowledge source",
+                data={
+                    "source_path": deleted_source,
+                    "embeddings_removed": removed_count,
+                    "cache_removed": os.path.exists(cache_file)
+                },
+            )
+
+        return cleanup_count
+
     async def load_sources_from_config(
         self, knowledge_sources: List[Dict[str, Any]], generate_embeddings_fn
     ) -> None:
         """
-        Load multiple knowledge sources from configuration.
+        Load multiple knowledge sources from configuration with smart invalidation.
+
+        Only regenerates embeddings for new or modified files, skips unchanged files.
 
         Args:
             knowledge_sources: List of source configurations
             generate_embeddings_fn: Function to generate embeddings
         """
+        # First, clean up any deleted sources
+        cleanup_count = await self.cleanup_deleted_sources(knowledge_sources)
+        if cleanup_count > 0:
+            observability.observe(
+                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                level=observability.EventLevel.INFO,
+                description="Deleted sources cleanup completed",
+                data={"sources_cleaned": cleanup_count}
+            )
+
+        # Process each source with smart loading
+        skipped_count = 0
+        processed_count = 0
+
         for source_config in knowledge_sources:
             try:
+                source_path = source_config.get("path", "")
+                if not source_path or not os.path.exists(source_path):
+                    continue
+
+                # Make path absolute for consistency
+                source_path = os.path.abspath(source_path)
+
+                # Calculate current file hash
+                current_hash = self._calculate_file_md5(source_path)
+
+                # Check if file already loaded with same hash (only if memory exists)
+                existing_items = []
+                old_items = []
+
+                if self.short_term_memory:
+                    existing_items = self.short_term_memory.get_items_by_metadata(
+                        metadata_filter={
+                            "source": source_path,
+                            "content_hash": current_hash
+                        },
+                        namespace=DOCUMENT_NAMESPACE
+                    )
+
+                    if existing_items:
+                        # File unchanged - skip regeneration
+                        observability.observe(
+                            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                            level=observability.EventLevel.DEBUG,
+                            description="Knowledge source unchanged - using cache",
+                            data={
+                                "source_name": os.path.basename(source_path),
+                                "content_hash": current_hash[:8],
+                                "action": "skipped"
+                            }
+                        )
+                        skipped_count += 1
+                        # Still need to add to sources list for search functionality
+                        knowledge_source = FileKnowledge.from_config(source_config)
+                        self.sources.append(knowledge_source)
+                        continue
+
+                    # Check if this is an update (file exists with different hash)
+                    old_items = self.short_term_memory.get_items_by_metadata(
+                        metadata_filter={"source": source_path},
+                        namespace=DOCUMENT_NAMESPACE
+                    )
+
+                if old_items:
+                    observability.observe(
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                        level=observability.EventLevel.INFO,
+                        description="Knowledge source changed - regenerating embeddings",
+                        data={
+                            "source_name": os.path.basename(source_path),
+                            "action": "regenerate"
+                        }
+                    )
+                    # Remove old embeddings
+                    if self.short_term_memory:
+                        self.short_term_memory.remove_by_metadata(
+                            metadata_filter={"source": source_path},
+                            namespace=DOCUMENT_NAMESPACE
+                        )
+                    # Remove old cache file
+                    cache_file = self._get_cache_file_path(source_path)
+                    if os.path.exists(cache_file):
+                        try:
+                            os.remove(cache_file)
+                        except Exception:
+                            pass
+                else:
+                    observability.observe(
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                        level=observability.EventLevel.INFO,
+                        description="New knowledge source - generating embeddings",
+                        data={
+                            "source_name": os.path.basename(source_path),
+                            "action": "new"
+                        }
+                    )
+
+                # Generate embeddings only for this changed/new file
                 knowledge_source = FileKnowledge.from_config(source_config)
                 await self.add_file(knowledge_source, generate_embeddings_fn)
-                #  Info - TODO: add observability
+                processed_count += 1
+
             except Exception as e:
                 source_path = source_config.get("path", "unknown")
                 #  Error - TODO: add observability
@@ -968,6 +1201,21 @@ class KnowledgeHandler:
                     },
                 )
                 continue
+
+        # Log comprehensive summary
+        observability.observe(
+            event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+            level=observability.EventLevel.INFO,
+            description="Knowledge loading completed",
+            data={
+                "summary": {
+                    "skipped_unchanged": skipped_count,
+                    "processed_new_or_changed": processed_count,
+                    "cleaned_deleted": cleanup_count,
+                    "total_sources": skipped_count + processed_count
+                }
+            }
+        )
 
     async def _inject_knowledge_into_memory(
         self,
@@ -1025,7 +1273,7 @@ class KnowledgeHandler:
 
             # Log successful knowledge injection
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_STORED,
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATED,
                 level=observability.EventLevel.INFO,
                 description="Knowledge results injected into short-term memory",
                 data={
@@ -1039,7 +1287,7 @@ class KnowledgeHandler:
         except Exception as e:
             # Log error but don't fail the knowledge search
             observability.observe(
-                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_ERROR,
+                event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
                 level=observability.EventLevel.WARNING,
                 description="Failed to inject knowledge into short-term memory",
                 data={
@@ -1121,7 +1369,7 @@ class KnowledgeHandler:
                 except Exception as e:
                     # Log memory search error but continue
                     observability.observe(
-                        event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_ERROR,
+                        event_type=observability.ConversationEvents.MEMORY_SHORT_TERM_UPDATE_FAILED,
                         level=observability.EventLevel.WARNING,
                         description="Failed to search short-term memory in unified search",
                         data={
