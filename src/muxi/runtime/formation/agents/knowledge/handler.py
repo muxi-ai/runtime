@@ -109,7 +109,6 @@ import numpy as np
 # Hybrid architecture imports
 from ...documents.storage.chunk_manager import DocumentChunkManager
 
-from ....utils import load_document
 from .base import FileKnowledge
 from ....services import observability
 from ....utils.user_dirs import get_knowledge_dir
@@ -119,7 +118,7 @@ from ....services.memory.short_term import ShortTermMemory
 
 # Document-specific namespace constants
 DOCUMENT_NAMESPACE = "knowledge"  # Changed from "documents" for clarity
-KNOWLEDGE_INJECTION_NAMESPACE = "knowledge_injection"  # For injected knowledge into memory
+KNOWLEDGE_BUFFER_NAMESPACE = "knowledge_buffer"  # For injected knowledge into memory
 
 
 class KnowledgeHandler:
@@ -163,7 +162,7 @@ class KnowledgeHandler:
         # Short-term memory integration
         self.short_term_memory = short_term_memory
         self.auto_inject_knowledge = auto_inject_knowledge
-        self._knowledge_injection_enabled = short_term_memory is not None and auto_inject_knowledge
+        self._knowledge_buffer_enabled = short_term_memory is not None and auto_inject_knowledge
 
         # Create cache directory if it doesn't exist
         os.makedirs(cache_dir, exist_ok=True)
@@ -192,7 +191,7 @@ class KnowledgeHandler:
                 "max_files_per_source": max_files_per_source,
                 "max_total_files": max_total_files,
                 "hybrid_components": True,
-                "memory_integration": self._knowledge_injection_enabled,
+                "memory_integration": self._knowledge_buffer_enabled,
                 "auto_inject_knowledge": auto_inject_knowledge,
             },
         )
@@ -268,11 +267,6 @@ class KnowledgeHandler:
 
         # Only support FileKnowledge sources with hybrid architecture
         if not isinstance(source, FileKnowledge):
-            print(
-                f"Unsupported source type: {type(source).__name__}. "
-                f"Only FileKnowledge is supported."
-            )
-
             # Log unsupported source type
             observability.observe(
                 event_type=observability.ConversationEvents.CONTENT_PROCESSED,
@@ -369,10 +363,8 @@ class KnowledgeHandler:
 
                 # Limit total chunks processed
                 if len(document_chunks) > self.max_total_files:
-                    print(
-                        f"Limiting chunks to {self.max_total_files} " f"(found {len(document_chunks)})"
-                    )
-                    document_chunks = document_chunks[: self.max_total_files]
+
+                    document_chunks = document_chunks[:self.max_total_files]
 
                 # Generate embeddings for all chunks
                 if document_chunks:
@@ -406,7 +398,7 @@ class KnowledgeHandler:
                                     }
                                 )
                                 continue
-                                
+
                             metadata = {
                                 "document_id": chunk.document_id,
                                 "chunk_id": chunk.chunk_id,
@@ -726,10 +718,6 @@ class KnowledgeHandler:
                 )
                 doc_count = len(all_docs)
 
-            print(
-                f"✓ KnowledgeHandler created with {source_count} sources and {doc_count} documents"
-            )
-
             # Log successful handler creation
             observability.observe(
                 event_type=observability.ConversationEvents.SESSION_CREATED,
@@ -787,53 +775,40 @@ class KnowledgeHandler:
             },
         )
 
-        # Calculate MD5 hash for content-based caching
-        file_md5 = self._calculate_file_md5(file_path)
-        if not file_md5:
-            # File not found or error reading file
-            return 0
+        # For directories, skip MD5 calculation since we can't hash a directory
+        # Individual files will have their own content hashes
+        if os.path.isdir(file_path):
+            file_md5 = None  # Will calculate MD5 for individual files later
+        else:
+            # Calculate MD5 hash for content-based caching
+            file_md5 = self._calculate_file_md5(file_path)
+            if not file_md5:
+                # File not found or error reading file
+                return 0
 
-        # Check if document already exists in ShortTermMemory with same content hash
-        existing_docs = self.short_term_memory.get_items_by_metadata(
-            metadata_filter={"source": file_path, "content_hash": file_md5},
-            namespace=DOCUMENT_NAMESPACE,
-        )
-
-        if existing_docs:
-            # File already processed and hasn't changed (same content hash)
-            observability.observe(
-                event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
-                level=observability.EventLevel.DEBUG,
-                description="Knowledge file already processed and unchanged (same MD5 hash)",
-                data={"file_path": file_path, "content_hash": file_md5},
+            # Check if document already exists in ShortTermMemory with same content hash
+            existing_docs = self.short_term_memory.get_items_by_metadata(
+                metadata_filter={"source": file_path, "content_hash": file_md5},
+                namespace=DOCUMENT_NAMESPACE,
             )
-            return 0
 
-        # Load and process the file using hybrid architecture
-        try:
-            content = load_document(file_path)
-
-            if not content or len(content.strip()) < 10:
+            if existing_docs:
+                # File already processed and hasn't changed (same content hash)
                 observability.observe(
-                    event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
-                    level=observability.EventLevel.WARNING,
-                    description="No content found in knowledge file",
-                    data={
-                        "file_path": file_path,
-                        "content_length": len(content) if content else 0,
-                    },
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.DEBUG,
+                    description="Knowledge file already processed and unchanged (same MD5 hash)",
+                    data={"file_path": file_path, "content_hash": file_md5},
                 )
                 return 0
 
-            # Use DocumentChunkManager to process the document
-            document_chunks = await self.chunk_manager.process_document(
-                document_id=file_path,
-                content=content,
-                metadata={
-                    "source": file_path,
-                    "description": description,
-                    "content_hash": file_md5,
-                },
+        # Load and process the file using hybrid architecture
+        try:
+            # Use the knowledge source's process method which supports markitdown
+            # For directories, respect the max_files_per_source limit
+            document_chunks = await knowledge_source.process_with_chunk_manager(
+                chunk_manager=self.chunk_manager,
+                file_limit=self.max_files_per_source  # Respect configured limit
             )
 
             if not document_chunks:
@@ -843,10 +818,23 @@ class KnowledgeHandler:
                     description="No chunks generated from knowledge file",
                     data={
                         "file_path": file_path,
-                        "content_length": len(content),
+                        "chunks_count": 0,
                     },
                 )
                 return 0
+
+            # Add content_hash to chunk metadata since process_with_chunk_manager doesn't include it
+            # For directories, we'll calculate MD5 for each individual file
+            if file_md5 is not None:
+                for chunk in document_chunks:
+                    chunk.metadata["content_hash"] = file_md5
+            else:
+                # For directories, calculate MD5 for each file
+                for chunk in document_chunks:
+                    chunk_file_path = chunk.metadata.get("file_path", "")
+                    if chunk_file_path and os.path.isfile(chunk_file_path):
+                        chunk_md5 = self._calculate_file_md5(chunk_file_path)
+                        chunk.metadata["content_hash"] = chunk_md5
 
             # Generate embeddings for chunks
             chunk_contents = [chunk.content for chunk in document_chunks]
@@ -876,7 +864,7 @@ class KnowledgeHandler:
                         }
                     )
                     continue
-                    
+
                 metadata = {
                     "document_id": chunk.document_id,
                     "chunk_id": chunk.chunk_id,
@@ -905,6 +893,10 @@ class KnowledgeHandler:
                     "embeddings_generated": len(embeddings),
                 },
             )
+
+            # Add the source to our sources list if not already there
+            if knowledge_source not in self.sources:
+                self.sources.append(knowledge_source)
 
             return chunks_added
 
@@ -1127,7 +1119,20 @@ class KnowledgeHandler:
         for source_config in knowledge_sources:
             try:
                 source_path = source_config.get("path", "")
-                if not source_path or not os.path.exists(source_path):
+                if not source_path:
+                    continue
+
+                # Check if path exists (it should already be resolved by formation loader)
+                if not os.path.exists(source_path):
+                    observability.observe(
+                        event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        description="Knowledge source path not found",
+                        data={
+                            "source_path": source_path,
+                            "cwd": os.getcwd()
+                        }
+                    )
                     continue
 
                 # Make path absolute for consistency
@@ -1262,7 +1267,7 @@ class KnowledgeHandler:
             query: The original query that generated these results
             agent_id: Optional agent ID for attribution
         """
-        if not self._knowledge_injection_enabled or not knowledge_results:
+        if not self._knowledge_buffer_enabled or not knowledge_results:
             return
 
         try:
@@ -1293,7 +1298,7 @@ class KnowledgeHandler:
 
                 # Add to short-term memory with knowledge namespace
                 await self.short_term_memory.add(
-                    text=content, metadata=memory_metadata, namespace=KNOWLEDGE_INJECTION_NAMESPACE
+                    text=content, metadata=memory_metadata, namespace=KNOWLEDGE_BUFFER_NAMESPACE
                 )
 
             # Log successful knowledge injection

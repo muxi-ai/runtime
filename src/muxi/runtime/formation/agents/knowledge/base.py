@@ -60,6 +60,9 @@ from markitdown import MarkItDown
 # Import DocumentChunkManager for hybrid architecture integration
 from ...documents.storage.chunk_manager import DocumentChunkManager, DocumentChunk
 
+# Import observability
+from ....services import observability
+
 
 class KnowledgeSource:
     """
@@ -196,7 +199,12 @@ class FileKnowledge(KnowledgeSource):
             try:
                 self._markitdown = MarkItDown()
             except Exception as e:
-                print(f"Warning: Failed to initialize MarkItDown: {e}")
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    description="Failed to initialize MarkItDown",
+                    data={"error": str(e)}
+                )
                 self.enable_markitdown = False
 
     def _is_markitdown_supported(self, file_path: str) -> bool:
@@ -252,7 +260,15 @@ class FileKnowledge(KnowledgeSource):
                     return f"[Binary file: {os.path.basename(file_path)}]"
 
         except Exception as e:
-            print(f"Error processing file {file_path}: {e}")
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                description=f"Error processing file {os.path.basename(file_path)}",
+                data={
+                    "file_path": file_path,
+                    "error": str(e)
+                }
+            )
             return f"[Error loading file: {os.path.basename(file_path)}]"
 
     def _discover_files(self) -> List[str]:
@@ -272,7 +288,16 @@ class FileKnowledge(KnowledgeSource):
             files = [self.path]
         elif os.path.isdir(self.path):
             # Directory - scan for files
-            print(f"Scanning directory: {self.path} (recursive: {self.recursive})")
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
+                description="Scanning directory for knowledge files",
+                data={
+                    "directory": self.path,
+                    "recursive": self.recursive,
+                    "component": "knowledge"
+                }
+            )
 
             if self.recursive:
                 # Recursive scan
@@ -280,29 +305,55 @@ class FileKnowledge(KnowledgeSource):
                     pattern = os.path.join(self.path, "**", f"*{ext}")
                     ext_files = glob.glob(pattern, recursive=True)
                     files.extend(ext_files)
-                    if ext_files:  # Only print if files found
-                        print(f"  Found {len(ext_files)} {ext} files")
+                    # Log file discovery is now done after all extensions are processed
             else:
                 # Only immediate directory
                 for ext in self.allowed_extensions:
                     pattern = os.path.join(self.path, f"*{ext}")
                     ext_files = glob.glob(pattern)
                     files.extend(ext_files)
-                    if ext_files:  # Only print if files found
-                        print(f"  Found {len(ext_files)} {ext} files")
+                    # Log file discovery is now done after all extensions are processed
         else:
-            print(f"Warning: Path {self.path} does not exist")
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                description="Knowledge source path does not exist",
+                data={
+                    "path": self.path
+                }
+            )
 
         # Remove duplicates, sort, and limit
         unique_files = sorted(list(set(files)))
 
         if len(unique_files) > self.max_files:
-            print(f"Limiting to first {self.max_files} files " f"(found {len(unique_files)} total)")
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                description=f"Limiting knowledge files to {self.max_files} (found {len(unique_files)})",
+                data={
+                    "found": len(unique_files),
+                    "limit": self.max_files
+                }
+            )
             unique_files = unique_files[: self.max_files]
 
         # Cache the discovered files
         self._files = unique_files
-        print(f"Total files to process: {len(self._files)}")
+
+        # Emit event about discovered files
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
+            description=f"Discovered {len(self._files)} knowledge files",
+            data={
+                "source_name": self.name,
+                "path": self.path,
+                "file_count": len(self._files),
+                "files": self._files[:3] if len(self._files) > 3 else self._files,
+                "component": "knowledge"
+            }
+        )
         return self._files
 
     @classmethod
@@ -356,9 +407,15 @@ class FileKnowledge(KnowledgeSource):
                 # Check file size before processing
                 file_size = os.path.getsize(file_path)
                 if file_size > self.max_file_size:
-                    print(
-                        f"Skipping large file: {file_path} "
-                        f"({file_size} bytes > {self.max_file_size})"
+                    observability.observe(
+                        event_type=observability.ErrorEvents.WARNING,
+                        level=observability.EventLevel.WARNING,
+                        description=f"Skipping large file ({file_size} bytes > {self.max_file_size})",
+                        data={
+                            "file_path": file_path,
+                            "file_size": file_size,
+                            "limit": self.max_file_size
+                        }
                     )
                     continue
 
@@ -391,10 +448,27 @@ class FileKnowledge(KnowledgeSource):
                     )
 
                 all_chunks.extend(document_chunks)
-                print(f"✓ Processed {file_path} -> {len(document_chunks)} chunks")
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_LOADED,
+                    level=observability.EventLevel.INFO,
+                    description=f"Processed knowledge file into {len(document_chunks)} chunks",
+                    data={
+                        "file_path": file_path,
+                        "chunk_count": len(document_chunks),
+                        "processing_method": self._get_processing_method(file_path)
+                    }
+                )
 
             except Exception as e:
-                print(f"Error processing file {file_path}: {e}")
+                observability.observe(
+                    event_type=observability.SystemEvents.KNOWLEDGE_SOURCE_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    description="Error processing knowledge file",
+                    data={
+                        "file_path": file_path,
+                        "error": str(e)
+                    }
+                )
                 continue
 
         return all_chunks
