@@ -164,6 +164,9 @@ class KnowledgeHandler:
         self.auto_inject_knowledge = auto_inject_knowledge
         self._knowledge_buffer_enabled = short_term_memory is not None and auto_inject_knowledge
 
+        # Store embedding function for later use
+        self._generate_embeddings_fn = None
+
         # Create cache directory if it doesn't exist
         os.makedirs(cache_dir, exist_ok=True)
 
@@ -511,6 +514,10 @@ class KnowledgeHandler:
             },
         )
 
+        # Use provided embedding function or stored one
+        if generate_embeddings_fn is None:
+            generate_embeddings_fn = self._generate_embeddings_fn
+
         # Require embedding function for semantic search
         if generate_embeddings_fn is None:
             observability.observe(
@@ -705,6 +712,9 @@ class KnowledgeHandler:
                 source_config["max_files"] = source_config.get("max_files", 100)  # Increased from 3
                 max_size = source_config.get("max_file_size", 10 * 1024 * 1024)  # 10MB default
                 source_config["max_file_size"] = min(max_size, 50 * 1024 * 1024)  # 50MB max
+
+            # Store embedding function for later use
+            handler._generate_embeddings_fn = generate_embeddings_fn
 
             # Load ALL sources with smart invalidation
             await handler.load_sources_from_config(sources_config, generate_embeddings_fn)
@@ -1359,11 +1369,11 @@ class KnowledgeHandler:
         results = {"knowledge": [], "memory": [], "unified": []}
 
         try:
-            # Search knowledge sources
+            # Search knowledge sources (use stored embedding function if not provided)
             knowledge_results = await self.search(
                 query=query,
                 top_k=knowledge_limit or top_k,
-                generate_embeddings_fn=generate_embeddings_fn,
+                generate_embeddings_fn=generate_embeddings_fn or self._generate_embeddings_fn,
                 session_id=session_id,
             )
             results["knowledge"] = knowledge_results
