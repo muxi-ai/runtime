@@ -534,11 +534,6 @@ For detailed test implementations and results, see the individual test reports l
 - Data pipeline creation with visualization
 - Error recovery and graceful degradation
 
-**⚠️ Known Issues (Resolved):**
-- Initial artifact metadata format issues → Fixed with proper attribute mapping
-- Empty markdown links in responses → Fixed with regex cleanup
-- String escaping in HTML generation → Fixed with safer code patterns
-
 ### Notable Test Results
 
 **Test 5C3 (Large File Handling):** Successfully generated 10MB Excel file with 100,000 rows
@@ -792,7 +787,7 @@ assert sop_search_time < 0.1  # SOP search should add <100ms
 
 **Formations Required:** 8 configurations (6 base + 2 SOP-enhanced)
 **Automation:** Multi-process testing, A2A server management, SOP file generation
-**Success Criteria:** 
+**Success Criteria:**
 - Base: 18 coordination tests pass, A2A communication verified
 - Enhanced: 12 additional SOP tests pass, <100ms SOP search overhead
 
@@ -934,7 +929,7 @@ response = await overlord.chat("Hello")
 
 **Formations Required:** 6 configurations (4 base + 2 enhanced)
 **Automation:** Conversation flow testing, context validation, clarification stack verification
-**Success Criteria:** 
+**Success Criteria:**
 - Base: 10 clarification tests pass, single clarification flows work correctly
 - Enhanced: 15 additional multi-sequence tests pass, stack management verified
 
