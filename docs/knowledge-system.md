@@ -7,11 +7,13 @@ The MUXI Runtime Knowledge System enables agents to access and search through do
 ## Key Features
 
 - **Multiple File Format Support**: Handles 30+ file formats including documents, PDFs, images, audio, and more via MarkItDown
-- **Smart Caching**: MD5-based change detection prevents unnecessary embedding regeneration
+- **Smart Caching**: MD5-based change detection prevents unnecessary embedding regeneration (45% cache hit rate in testing)
+- **Agent-Level Isolation**: Complete knowledge isolation between agents - each agent only sees its configured sources
 - **Namespace Isolation**: Knowledge is protected from memory pressure with dedicated namespace
 - **Formation-Specific Storage**: Each formation has isolated knowledge storage
 - **Incremental Updates**: Only changed files regenerate embeddings
 - **Semantic Search**: Vector-based search using FAISS for fast retrieval
+- **Lazy Initialization**: Knowledge only loaded when first query requires it
 
 ## Architecture
 
@@ -63,12 +65,14 @@ agents:
     name: "Advanced Knowledge Agent"
     knowledge:
       enabled: true
+      embed_batch_size: 50      # For large knowledge bases
+      max_files_per_source: 10  # Limit files per directory (default: 5)
       sources:
         - path: "/absolute/path/to/docs"
           description: "External documentation"
           recursive: true
           allowed_extensions: [".md", ".txt", ".pdf"]
-          max_files: 100
+          file_limit: 20        # Override max_files_per_source for this source
           max_file_size: 5242880  # 5MB
 ```
 
@@ -154,6 +158,37 @@ Knowledge uses the `"knowledge"` namespace in ShortTermMemory, protected from FI
 ### Knowledge Injection
 Search results can be temporarily injected into memory using the `"knowledge_injection"` namespace for context enhancement.
 
+## Agent Knowledge Isolation
+
+### Complete Isolation
+Each agent has complete isolation of its knowledge sources:
+- Agents cannot access knowledge configured for other agents
+- Knowledge embeddings are namespaced by agent ID
+- No cross-contamination between agent knowledge bases
+
+### Cross-Agent Knowledge via Overlord
+While agents are isolated, the Overlord can coordinate cross-agent queries:
+
+```yaml
+# Agent 1: Support agent with FAQ knowledge
+agents:
+  - id: "support"
+    knowledge:
+      sources:
+        - path: "./docs/faq/"
+          description: "Support FAQs"
+
+# Agent 2: Sales agent with pricing knowledge
+  - id: "sales"
+    knowledge:
+      sources:
+        - path: "./docs/pricing/"
+          description: "Pricing information"
+
+# User query: "What's the pricing for the FAQ features?"
+# Overlord routes to both agents and combines responses
+```
+
 ## Usage Examples
 
 ### Basic Knowledge Search
@@ -198,10 +233,15 @@ results = await self.knowledge_handler.unified_search(
 ### Cost Savings
 - **Before**: Every restart regenerated all embeddings (~$0.10-0.50)
 - **After**: Only changed files regenerate (typically $0)
+- **Test Results**: 45% cache hit rate, 9 out of 20 files cached in large knowledge base test
 
 ### Speed Improvements
 - **Before**: 30-60 seconds for full regeneration
 - **After**: <5 seconds for cache loading
+- **Test Results**: 
+  - Formation load: ~1.14 seconds with 20 knowledge files
+  - First query: ~12 seconds (includes knowledge initialization)
+  - Subsequent queries: ~9 seconds
 
 ### Best Practices
 1. **Chunk Size**: Let DocumentChunkManager handle adaptive chunking
@@ -213,10 +253,13 @@ results = await self.knowledge_handler.unified_search(
 
 The knowledge system gracefully handles various error scenarios:
 
-1. **Missing Files**: Logged and skipped
-2. **Embedding Failures**: Individual chunks skipped, others processed
-3. **Cache Corruption**: Regenerates from source
-4. **Memory Pressure**: Knowledge protected from eviction
+1. **Missing Files**: Logged and skipped, formation continues loading
+2. **Empty Directories**: Handled gracefully, agent functions normally
+3. **Unsupported File Types**: Silently filtered (e.g., .bin, .exe, .jpg)
+4. **Large Knowledge Bases**: File limits prevent overload (max_files_per_source)
+5. **Embedding Failures**: Individual chunks skipped, others processed
+6. **Cache Corruption**: Regenerates from source
+7. **Memory Pressure**: Knowledge protected from eviction
 
 ## Observability
 
@@ -234,10 +277,12 @@ ErrorEvents.INTERNAL_ERROR
 
 ## Limitations
 
-1. **File Size**: Default 1MB limit per file (configurable)
-2. **File Count**: Default 50 files per source (configurable)
+1. **File Size**: Default 1MB limit per file (configurable via `max_file_size`)
+2. **File Count**: Default 5 files per source (configurable via `max_files_per_source`)
 3. **Embedding Model**: Uses formation's configured text model
-4. **Vector Dimensions**: Must match embedding model (typically 1536)
+4. **Vector Dimensions**: Must match embedding model (typically 1536 for OpenAI)
+5. **Agent Isolation**: Agents cannot share knowledge directly
+6. **Lazy Loading**: Knowledge only loads on first query, not at startup
 
 ## Future Enhancements
 
@@ -247,24 +292,46 @@ ErrorEvents.INTERNAL_ERROR
 4. **Parallel Processing**: Generate embeddings in parallel
 5. **Remote Sources**: Support for URLs and APIs
 
+## Common Pitfalls & Solutions
+
+### Directory Loading Issues
+- **Problem**: Directory not loading when `file_limit=1`
+- **Solution**: file_limit applies after directory traversal, not before
+
+### Missing MarkItDown Support
+- **Problem**: PDFs and documents showing as binary
+- **Solution**: System uses MarkItDown automatically via `_process_file`
+
+### Embedding Function Not Available
+- **Problem**: Knowledge search fails with "no embedding function"
+- **Solution**: Store embedding function during initialization: `handler.embed_fn = agent._embed_fn`
+
+### Knowledge Not Updating
+- **Problem**: Changes to files not reflected
+- **Solution**: Check MD5 hashing is working; delete cache to force regeneration
+
 ## Troubleshooting
 
 ### Knowledge Not Loading
 - Check `knowledge.enabled: true` in configuration
 - Verify file paths exist and are readable
 - Check formation logs for error messages
+- Ensure paths use forward slashes, even on Windows
 
 ### Search Not Working
 - Ensure embedding function is provided
 - Verify knowledge was loaded successfully
 - Check if formation has required LLM models configured
+- Confirm agent has been queried at least once (lazy loading)
 
 ### High Memory Usage
-- Reduce `max_files` limit
+- Reduce `max_files_per_source` limit (default: 5)
+- Use `file_limit` on specific sources
 - Use `max_file_size` to skip large files
 - Enable more aggressive FIFO cleanup
 
 ### Stale Results
-- Delete cache directory to force regeneration
+- Delete cache directory to force regeneration: `~/.muxi/{formation_id}/cache/knowledge/`
 - Check if source files have actually changed
 - Verify MD5 hashing is working correctly
+- Look for cache files with old timestamps

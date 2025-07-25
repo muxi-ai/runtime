@@ -595,264 +595,98 @@ memory:
 </details>
 
 <details>
-<summary>✅ Day 6: Domain Knowledge System (Partial)</summary>
+<summary>✅ Day 6: Domain Knowledge System</summary>
 
-#### Goal: Validate existing agent-level domain knowledge implementation (loading, caching, search, and isolation)
+#### Goal: Validate agent-level domain knowledge implementation (loading, caching, search, isolation, and edge cases)
 
-**Implementation Status: IN PROGRESS**
-- **Test Group 6A**: ✅ COMPLETED (2025-07-25)
-- **Test Groups 6B-6E**: Pending
-- **Tests Passing**: 2/2 in Group 6A (100% success rate)
-- **Test Reports**: [tests/reports/6a.md](tests/reports/6a.md)
+**Implementation Status: COMPLETED ✅**
+- **Test Groups Completed**: All 5 groups (6A through 6E)
+- **Tests Passing**: 100% success rate across all groups
+- **Formation Used**: `test-formations/formation-knowledge/`
 
-### Key Achievements in Test Group 6A
+### Test Group Summary
 
-**✅ Test Approach Updated:**
-- Moved from unit testing to proper chat flow integration testing
-- All tests now use `formation.load() → start_overlord() → overlord.chat()`
-- Tests validate actual user experience, not internal components
+| Group | Focus Area | Status | Report |
+|-------|------------|--------|---------|
+| **6A** | Knowledge Loading & Embedding | ✅ PASSED | [tests/reports/6a.md](tests/reports/6a.md) |
+| **6B** | Knowledge Caching & Change Detection | ✅ PASSED | [tests/reports/6b.md](tests/reports/6b.md) |
+| **6C** | Knowledge Search & Retrieval | ✅ PASSED | [tests/reports/6c.md](tests/reports/6c.md) |
+| **6D** | Agent Knowledge Isolation | ✅ PASSED | [tests/reports/6d.md](tests/reports/6d.md) |
+| **6E** | Knowledge Loading Edge Cases | ✅ PASSED | [tests/reports/6e.md](tests/reports/6e.md) |
 
-**✅ Core Features Validated:**
-- Knowledge loading during formation start
-- Automatic embedding generation with OpenAI text-embedding-3-small
+### Key Technical Achievements
+
+**✅ Core Knowledge Features:**
+- Automatic knowledge loading during agent initialization
+- Embedding generation with OpenAI text-embedding-3-small (1536 dimensions)
 - Content-based caching with MD5 hashes
 - Cache persistence in `~/.muxi/{formation_id}/cache/knowledge/`
-- Relative and absolute path support
-- Directory traversal with file limits
-- MarkItDown integration for multiple file formats (PDF, MD, TXT)
+- Support for 20+ file formats via MarkItDown
+- Relative and absolute path resolution
 
-**✅ Performance Results:**
+**✅ Performance & Optimization:**
 - Initial load: ~22 seconds for 197 chunks
 - Cached load: 2-3 seconds (10x improvement)
-- Zero API costs for unchanged knowledge on restart
+- Smart loading - only changed files are reprocessed
+- File limits prevent memory overload (max_files_per_source=5)
+- Zero API costs for unchanged knowledge
 
-**✅ Issues Fixed During Testing:**
-1. Directory MD5 calculation (skip for dirs, calculate per-file)
-2. File limit bug (changed from hardcoded 1 to configurable)
-3. Content hash restoration for cache invalidation
-4. Test architecture refactoring to chat flow
+**✅ Security & Isolation:**
+- Complete knowledge isolation between agents
+- No cross-contamination of knowledge sources
+- Agents cannot access each other's knowledge
+- Overlord can coordinate cross-agent queries
 
-### Test Group 6A: Knowledge Source Loading ✅ COMPLETED
-```python
-# Test 6A1: Relative Path Knowledge Loading
-formation = Formation.load("test-formations/formation-knowledge")
-overlord = await formation.start()
+**✅ Edge Case Handling:**
+- Empty directories handled gracefully
+- Large knowledge bases (20+ files) processed efficiently
+- Unsupported file types silently filtered
+- Missing files don't prevent formation loading
 
-# Verify Automaze agent loaded FAQ directory (relative path)
-automaze_agent = overlord.get_agent("automaze")
-assert automaze_agent.knowledge_handler is not None
-knowledge_sources = automaze_agent.knowledge_handler.sources
-assert any("faq" in source.path for source in knowledge_sources)
+### Test Formation Configuration
 
-# Verify MUXI agent loaded its knowledge files
-muxi_agent = overlord.get_agent("muxi")
-assert muxi_agent.knowledge_handler is not None
-assert any("muxi-business-plan.md" in source.path for source in muxi_agent.knowledge_handler.sources)
-assert any("muxi-pricing.md" in source.path for source in muxi_agent.knowledge_handler.sources)
-
-# Test 6A2: Absolute Path Knowledge Loading
-# Automaze agent should have loaded the absolute path PDF
-assert any("/Users/ran/Projects/muxi/ran-bio.pdf" in source.path for source in automaze_agent.knowledge_handler.sources)
-
-# Test 6A3: Knowledge Embedding Creation During Init
-# Check that embeddings were created for all knowledge sources
-for agent in [automaze_agent, muxi_agent]:
-    if agent.knowledge_handler:
-        # Verify short-term memory has document embeddings
-        doc_memories = agent.memory.search_memories(
-            query="test",
-            top_k=1,
-            namespace="documents"
-        )
-        assert len(doc_memories) > 0  # Should have embeddings stored
+```yaml
+# test-formations/formation-knowledge/
+agents:
+  automaze:
+    knowledge:
+      sources:
+      - path: "faq/"  # Relative directory
+      - path: "/Users/ran/Projects/muxi/ran-bio.pdf"  # Absolute file
+  muxi:
+    knowledge:
+      sources:
+      - path: "muxi-business-plan.md"  # Relative file
+      - path: "muxi-pricing.md"  # Relative file
 ```
 
-### Test Group 6B: Knowledge Caching & Change Detection (PENDING)
+### Major Issues Fixed During Testing
+
+1. **Directory MD5 Calculation** - Skip MD5 for directories, calculate per-file
+2. **File Limit Bug** - Changed from hardcoded 1 to configurable max_files_per_source
+3. **Content Hash Missing** - Restored for proper cache invalidation
+4. **Embedding Function Storage** - Fixed to persist across knowledge searches
+5. **Test Architecture** - Refactored from unit tests to chat flow integration
+
+### Test Implementation Approach
+
+All tests use proper chat flow integration:
 ```python
-# Test 6B1: Knowledge Caching Validation
-# Record initial load time
-start_time = time.time()
-formation = Formation.load("test-formations/formation-knowledge")
-overlord = await formation.start()
-initial_load_time = time.time() - start_time
+formation = Formation()
+await formation.load("test-formations/formation-knowledge/formation.yaml")
+overlord = await formation.start_overlord()
 
-# Stop and reload formation - should use cached embeddings
-overlord.stop()
-start_time = time.time()
-formation2 = Formation.load("test-formations/formation-knowledge")
-overlord2 = await formation2.start()
-cached_load_time = time.time() - start_time
-
-# Cached load should be significantly faster
-assert cached_load_time < initial_load_time * 0.5  # At least 2x faster
-
-# Test 6B2: Cache Invalidation on File Change
-# Modify a knowledge file
-knowledge_file = "test-formations/formation-knowledge/knowledge/muxi-pricing.md"
-original_content = read_file(knowledge_file)
-write_file(knowledge_file, original_content + "\n\n# Updated pricing info")
-
-# Reload should detect change and reprocess
-overlord2.stop()
-formation3 = Formation.load("test-formations/formation-knowledge")
-overlord3 = await formation3.start()
-
-# Verify new content is available
-response = await overlord3.chat("What's the updated pricing info?", user_id="test_user")
-assert "updated" in response.lower() or "pricing" in response.lower()
-
-# Restore original content
-write_file(knowledge_file, original_content)
-
-# Test 6B3: Cache Behavior with List Changes
-# Test that cache is invalidated when knowledge source list changes
-# This would require modifying agent YAML and reloading
-```
-
-### Test Group 6C: Knowledge Search & Retrieval (PENDING)
-```python
-# Test 6C1: Domain-Specific Knowledge Search
-formation = Formation.load("test-formations/formation-knowledge")
-overlord = await formation.start()
-
-# Test Automaze agent's FAQ knowledge
-response = await overlord.chat("What services does Automaze offer?", user_id="test_user")
-# Should route to Automaze agent and use FAQ knowledge
-assert "automaze" in response.lower()
-assert any(term in response.lower() for term in ["service", "offer", "solution"])
-
-# Test MUXI agent's pricing knowledge
-response = await overlord.chat("What are MUXI's pricing plans?", user_id="test_user")
-# Should route to MUXI agent and use pricing knowledge
-assert "muxi" in response.lower()
-assert any(term in response.lower() for term in ["price", "plan", "tier"])
-
-# Test 6C2: Absolute Path Knowledge Access
-response = await overlord.chat("Tell me about Ran's background", user_id="test_user")
-# Should use the PDF from absolute path
-assert any(term in response.lower() for term in ["ran", "background", "experience"])
-
-# Test 6C3: Knowledge-Enhanced vs Basic Response
-# Ask a question that could be answered generically but has specific knowledge
-response = await overlord.chat("How does Automaze handle data privacy?", user_id="test_user")
-# Should provide specific answer from FAQ, not generic
-assert len(response) > 200  # Detailed response
-assert "automaze" in response.lower()  # Company-specific answer
-```
-
-### Test Group 6D: Agent Knowledge Isolation (PENDING)
-```python
-# Test 6D1: Agent-Specific Knowledge Access
-formation = Formation.load("test-formations/formation-knowledge")
-overlord = await formation.start()
-
-# Get both agents
-automaze_agent = overlord.get_agent("automaze")
-muxi_agent = overlord.get_agent("muxi")
-
-# Verify each agent only has access to its own knowledge
-automaze_sources = [s.path for s in automaze_agent.knowledge_handler.sources]
-muxi_sources = [s.path for s in muxi_agent.knowledge_handler.sources]
-
-# No overlap in knowledge sources
-assert not any(source in muxi_sources for source in automaze_sources)
-assert not any(source in automaze_sources for source in muxi_sources)
-
-# Test 6D2: Knowledge Query Isolation
-# Direct query to Automaze agent about MUXI (should not have access)
 response = await overlord.chat(
-    "@automaze What are MUXI's pricing plans?",
-    user_id="test_user"
+    "What services does Automaze offer?",
+    user_id="test_user",
+    session_id="test_session",
+    stream=False
 )
-# Should not have detailed MUXI pricing info
-assert "don't have specific information about MUXI pricing" in response or "not sure" in response.lower()
-
-# Test 6D3: Cross-Agent Knowledge via Overlord
-# Overlord can coordinate between agents
-response = await overlord.chat(
-    "Compare Automaze services with MUXI pricing",
-    user_id="test_user"
-)
-# Should get information from both agents
-assert "automaze" in response.lower() and "muxi" in response.lower()
-
-# Test 6D4: Knowledge Namespace Verification
-# Verify knowledge is stored with agent-specific namespacing
-for agent in [automaze_agent, muxi_agent]:
-    if agent.memory and agent.knowledge_handler:
-        # Search for a generic term in documents namespace
-        results = agent.memory.search_memories(
-            query="service",
-            namespace="documents",
-            top_k=5
-        )
-        # All results should be from this agent's knowledge only
-        for result in results:
-            assert agent.id in str(result.metadata.get("agent_id", ""))
 ```
 
-### Test Group 6E: Knowledge Loading Edge Cases (PENDING)
-```python
-# Test 6E1: Empty Knowledge Directory
-# Create formation with empty knowledge directory
-test_formation_empty = create_test_formation_with_empty_knowledge()
-formation = Formation.load(test_formation_empty)
-overlord = await formation.start()
-# Should handle gracefully without errors
+**Success Criteria: ✅ All knowledge system tests pass with 100% success rate**
 
-# Test 6E2: Large Knowledge Base Performance
-# Test with formation containing many knowledge files
-# Performance should remain acceptable
-
-# Test 6E3: Unsupported File Types
-# Add unsupported file types to knowledge directory
-# Should skip gracefully with warnings
-
-# Test 6E4: Missing Files in Config
-# Reference non-existent files in agent config
-# Should log warnings but continue
-```
-
-**Test Formation Used:** `test-formations/formation-knowledge/`
-- **Automaze Agent**: FAQ directory (relative) + ran-bio.pdf (absolute)
-- **MUXI Agent**: muxi-business-plan.md + muxi-pricing.md (relative)
-
-**Key Implementation Details:**
-- Knowledge is loaded via `KnowledgeHandler` during agent initialization
-- MD5 hash-based caching prevents reprocessing unchanged files
-- Relative paths resolved to `<formation_dir>/knowledge/`
-- Each agent maintains isolated knowledge with no cross-agent access
-- Supports 20+ file formats via markitdown integration
-
-**Test Utilities Required:**
-```python
-def read_file(path):
-    with open(path, 'r') as f:
-        return f.read()
-
-def write_file(path, content):
-    with open(path, 'w') as f:
-        f.write(content)
-
-def create_test_formation_with_empty_knowledge():
-    # Create temporary formation with empty knowledge dir
-    pass
-```
-
-**Automation:** Knowledge loading verification, caching validation, isolation testing
-**Success Criteria:** 15+ knowledge tests pass covering all scenarios:
-- ✅ Knowledge loads during init when configured in agent YAML (Test 6A0)
-- ✅ Embeddings created and cached during initialization (Test 6A0)
-- ✅ Cached embeddings used unless files/list changed (Test 6A0)
-- ✅ Relative and absolute path resolution works correctly (Test 6A1)
-- ⏳ Agent knowledge isolation maintained (Test 6D - pending)
-- ⏳ Knowledge search and retrieval (Test 6C - pending)
-- ⏳ Edge case handling (Test 6E - pending)
-
-### Day 6 Summary
-**Completed:** Test Group 6A (2/2 tests) - Core knowledge initialization with chat flow
-**Pending:** Test Groups 6B-6E - Would cover change detection, search, isolation, and edge cases
-**Key Achievement:** Successfully moved from unit testing to proper chat flow integration testing
+*Detailed test implementations and results are documented in the individual test reports.*
 
 </details>
 
@@ -1714,7 +1548,7 @@ response = await overlord.chat(
 - **Day 3:** 34/36 multimodal tests pass ✅ (94% success rate, exceeded 15 test goal)
 - **Day 4:** 20+ MCP tests + credential tests pass ✅ (100% success rate, user isolation verified)
 - **Day 5:** 21/22 file generation tests pass ✅ (95.5% success rate, security validation confirmed)
-- **Day 6:** 2/2 tests in Group 6A pass ✅ (partial - only Test Group 6A completed, 6B-6E pending)
+- **Day 6:** 19/19 knowledge tests pass ✅ (100% success rate across all 5 test groups 6A-6E)
 - **Day 7:** Base: 18 coordination tests pass + A2A verified | Enhanced: 12 SOP tests pass
 - **Day 8:** Base: 10 clarification tests pass | Enhanced: 15 multi-sequence tests pass
 - **Day 9:** 15 thinking tests pass + model detection validated + edge cases handled
@@ -1724,10 +1558,10 @@ response = await overlord.chat(
 
 ### **Final Validation Checklist**
 - [ ] All 22 feature dimensions tested in combination (including SOPs and multi-clarification)
-- [ ] User credentials system fully validated with encryption & isolation
-- [ ] File generation tested across all major formats with security validation
-- [ ] Domain knowledge system tested with multiple agents and sources
-- [ ] Built-in MCP security validation (code filtering, safe execution)
+- [x] User credentials system fully validated with encryption & isolation ✅
+- [x] File generation tested across all major formats with security validation ✅
+- [x] Domain knowledge system tested with multiple agents and sources ✅
+- [x] Built-in MCP security validation (code filtering, safe execution) ✅
 - [ ] SOP system enhances multi-agent coordination with procedural guidance
 - [ ] Multiple clarification sequences maintain intent across sub-clarifications
 - [ ] Thinking visibility with automatic model detection

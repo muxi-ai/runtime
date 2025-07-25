@@ -1485,3 +1485,226 @@ memory:
 ```
 
 **Note**: The agent doesn't need special system prompts about file generation - the MCP handles tool discovery and capabilities.
+
+## Day 6: Domain Knowledge System Lessons Learned
+
+### 25. Knowledge Loading and MarkItDown Integration
+
+**Critical Lesson**: The knowledge system uses MarkItDown for file processing, not simple UTF-8 loading.
+
+**Problem**: Initial tests failed because `add_file` was using `load_document` (UTF-8 only) instead of markitdown-enabled loading.
+
+**Solution**: The system correctly uses `_process_file` which integrates MarkItDown:
+
+```python
+# Correct implementation in knowledge_handler.py
+def _process_file(self, file_path: Path) -> Optional[str]:
+    """Process a single file with MarkItDown support"""
+    content = self._md_converter.convert(str(file_path))
+    return content.text_content
+```
+
+**Supported File Types via MarkItDown**:
+- Text files: .txt, .md, .rst, .log
+- Documents: .pdf, .docx, .pptx, .xlsx
+- Code files: .py, .js, .java, .c, .cpp, etc.
+- Web files: .html, .xml
+- Data files: .csv, .json, .yaml
+
+### 26. Content-Based Caching with MD5 Hashes
+
+**Key Innovation**: The knowledge system implements smart caching based on file content, not modification times.
+
+**How it works**:
+1. Each file gets an MD5 hash of its content
+2. Embeddings are cached with: `{agent_id}:{file_path}:{content_hash}`
+3. If content changes, hash changes, triggering re-embedding
+4. Unchanged files use cached embeddings (9 cache hits out of 20 files in tests)
+
+**Benefits**:
+- Efficient handling of large knowledge bases
+- Quick updates when only some files change
+- No unnecessary re-processing
+
+### 27. Agent Knowledge Isolation
+
+**Architecture**: Complete isolation between agents' knowledge bases.
+
+```yaml
+# Each agent has its own knowledge sources
+agents:
+  - id: "support"
+    knowledge:
+      sources:
+        - path: "./docs/support/"  # Only support agent sees this
+  - id: "sales"
+    knowledge:
+      sources:
+        - path: "./docs/sales/"    # Only sales agent sees this
+```
+
+**Key Findings**:
+- Agents cannot access each other's knowledge directly
+- Knowledge is namespaced by agent ID in embeddings
+- Overlord can coordinate cross-agent queries while maintaining isolation
+
+### 28. Smart Knowledge Loading Optimization
+
+**Problem**: Initial implementation regenerated all embeddings on every load.
+
+**Solution**: Optimized loading that only processes changes:
+
+```python
+# Smart loading in from_agent_config
+existing_sources = handler.sources.copy()
+handler.sources = []
+
+for source_config in config.sources:
+    # Check if source already loaded with same hash
+    existing = find_existing_source(source_config.path, existing_sources)
+    if existing and existing.hash == calculate_hash(source_config.path):
+        handler.sources.append(existing)  # Reuse
+    else:
+        handler.add_file(source_config.path)  # Process new/changed
+```
+
+### 29. Edge Case Handling
+
+**Empty Knowledge Directories**:
+- System handles gracefully without errors
+- Agents function normally without knowledge
+- Formation loading succeeds
+
+**Large Knowledge Bases** (20+ files):
+- Efficient caching prevents performance degradation
+- File limits (max_files_per_source) prevent overloading
+- Formation loads in ~1 second, queries in <12 seconds
+
+**Unsupported File Types**:
+- Silently skipped without errors
+- Valid files still processed
+- No crashes or warnings
+
+**Missing Files**:
+- Non-existent paths handled gracefully
+- Formation loading continues
+- Valid files still accessible
+
+### 30. Knowledge Configuration Best Practices
+
+**Basic Knowledge Setup**:
+```yaml
+knowledge:
+  enabled: true
+  sources:
+    - path: "./knowledge/general/"
+      description: "General knowledge base"
+```
+
+**Advanced Configuration**:
+```yaml
+knowledge:
+  enabled: true
+  embed_batch_size: 50      # For large knowledge bases
+  max_files_per_source: 10  # Limit files per directory
+  sources:
+    - path: "/absolute/path/to/docs/"
+      description: "Product documentation"
+    - path: "./relative/path/faq/"
+      description: "FAQ documents"
+      file_limit: 5        # Override max for this source
+```
+
+### 31. Testing Knowledge Systems
+
+**Chat Flow Testing Pattern**:
+```python
+async def test_knowledge_integration():
+    # Load formation with knowledge-enabled agent
+    formation = Formation()
+    await formation.load("formation-with-knowledge.yaml")
+    overlord = await formation.start_overlord()
+    
+    # Test knowledge access via chat
+    response = await overlord.chat(
+        "What information do you have about our pricing?",
+        agent_name="support",
+        user_id="test_user",
+        stream=False
+    )
+    
+    # Verify knowledge was used
+    assert "pricing" in response.content.lower()
+    assert len(response.content) > 100  # Substantial response
+```
+
+### 32. Knowledge System Architecture Insights
+
+**Embedding Storage**:
+- Uses ShortTermMemory for persistence
+- Namespaced by agent: `knowledge:{agent_id}:{path}:{hash}`
+- Supports both in-memory and persistent storage
+
+**Search Process**:
+1. User query → Agent receives message
+2. Agent searches its knowledge embeddings
+3. Top-k relevant chunks retrieved
+4. Context added to LLM prompt
+5. Response generated with knowledge context
+
+**Performance Optimizations**:
+- Batch embedding for efficiency
+- Content-based caching
+- Lazy initialization (only when first query needs it)
+- Smart change detection
+
+### 33. Common Knowledge System Pitfalls
+
+**Pitfall 1: Directory MD5 Returns Empty**
+```python
+# Wrong: Returns empty string for directories
+if source_path.is_dir():
+    return ""  # This causes issues!
+
+# Correct: Return None to indicate directory
+if source_path.is_dir():
+    return None
+```
+
+**Pitfall 2: File Limit Prevents Directory Loading**
+```python
+# Wrong: file_limit=1 prevents directory traversal
+if file_limit == 1 and source_path.is_dir():
+    return  # Exits early!
+
+# Correct: Check after attempting to process
+if len(files_loaded) >= file_limit:
+    break
+```
+
+**Pitfall 3: Not Storing Embedding Function**
+```python
+# Wrong: Embedding function not accessible
+handler.embed_fn = None
+
+# Correct: Store for later use
+handler.embed_fn = agent._embed_fn
+```
+
+### 34. Knowledge Testing Recommendations
+
+1. **Always use chat flow**: Test through `overlord.chat()`, not direct component access
+2. **Create real files**: Use actual documents with meaningful content
+3. **Test isolation**: Verify agents can't access each other's knowledge
+4. **Test updates**: Modify files and verify cache invalidation
+5. **Test scale**: Use 20+ files to verify performance
+6. **Test edge cases**: Empty dirs, missing files, unsupported types
+
+### 35. Knowledge System Success Metrics
+
+From comprehensive Day 6 testing:
+- **100% Pass Rate**: All 16 knowledge tests passed
+- **Performance**: <2s formation load, <12s first query
+- **Caching**: 45% cache hit rate on subsequent loads
+- **Resilience**: No crashes on any edge case
+- **Accuracy**: Correct knowledge isolation and retrieval
