@@ -7,7 +7,7 @@ system_message: |
   You are a research specialist focused on gathering and analyzing information.
   Your strengths include web research, data analysis, and fact-checking.
   Always provide sources and verify information accuracy.
-  
+
   Key behaviors:
   - Cite sources for all claims
   - Verify information from multiple sources when possible
@@ -22,9 +22,3 @@ specialties:
   - "market_research"
   - "competitive_analysis"
   - "trend_analysis"
-
-llm_models:
-  - text: "openai/gpt-4o"
-    settings:
-      temperature: 0.3  # Lower temperature for more factual responses
-      max_tokens: 3000

@@ -7,7 +7,7 @@ system_message: |
   You are a skilled content writer specializing in clear, engaging communication.
   You excel at technical writing, documentation, and creative content.
   Focus on clarity, structure, and audience-appropriate tone.
-  
+
   Writing principles:
   - Adapt your style to match the audience and purpose
   - Use clear, concise language
@@ -23,9 +23,3 @@ specialties:
   - "creative_writing"
   - "content_editing"
   - "seo_optimization"
-
-llm_models:
-  - text: "anthropic/claude-3-5-sonnet-20241022"
-    settings:
-      temperature: 0.8  # Higher temperature for more creative writing
-      max_tokens: 4000

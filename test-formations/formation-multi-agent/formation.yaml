@@ -2,41 +2,88 @@ schema: "1.0.0"
 id: "multi-agent-test"
 description: "Multiple agents for testing routing and collaboration"
 
-runtime:
-  built_in_mcps: false  # Disable built-in MCPs for faster test startup
-
 llm:
-  settings:
-    temperature: 0.7
-    max_tokens: 3000
   api_keys:
     openai: "${{ secrets.OPENAI_API_KEY }}"
     anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+    google: "${{ secrets.GEMINI_API_KEY }}"
   models:
-    - text: "openai/gpt-4o"
-
-overlord:
-  llm:
-    model: "openai/gpt-4o-mini"
-    settings:
-      temperature: 0.2
-      max_tokens: 2000
-  config:
-    max_tool_calls: -1
+    - text: "openai/gpt-4o-mini"
+    - vision: "google/gemini-2.0-flash"
+    - video: "google/gemini-2.0-flash"
+    - audio: "openai/whisper-1"
+    - documents: "openai/gpt-4o"
+      settings:
+        max_size_mb: 20
+        extraction:
+          chunk_size: 1000
+          overlap: 100
+          strategy: "adaptive"
+    - embedding: "openai/text-embedding-3-small"
 
 memory:
   buffer:
-    size: 100
+    size: 50
     multiplier: 10
     vector_search: true
-
-a2a:
-  enabled: false
 
 logging:
   streams:
     - transport: "stdout"
-      level: "debug"
+      level: "info"
       format: "jsonl"
 
-# Agents and A2A configurations will be auto-discovered from directories
+# A2A Configuration
+# a2a:
+#   enabled: false                   # Enable Agent-to-Agent communication
+
+#   outbound:
+#     enabled: true                 # Enable outbound A2A communication
+#     registries:                   # External A2A registries to connect to
+#       - "http://0.0.0.0:9090"
+#     default_retry_attempts: 3     # Default number of retry attempts
+#     default_timeout_seconds: 30   # Default timeout for A2A requests
+
+
+#   inbound:
+#     enabled: true                 # Enable inbound A2A communication
+#     registries:                   # External A2A registries for server registration
+#       - "http://0.0.0.0:9090"
+#     port: 8181                    # Port for A2A server to listen on
+#     trusted_endpoints: []         # List of trusted external endpoints
+#     mode: "apiKey"                # Authentication mode for inbound requests
+#     shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
+
+
+# # A2A Configuration
+# a2a:
+#   enabled: true                   # Enable Agent-to-Agent communication
+
+#   outbound:
+#     enabled: true                 # Enable outbound A2A communication
+#     registries:                   # External A2A registries to connect to
+#       - "http://0.0.0.0:9090"
+#     default_retry_attempts: 3     # Default number of retry attempts
+#     default_timeout_seconds: 30   # Default timeout for A2A requests
+
+#     # Outbound services with secrets-based authentication
+#     services:
+#       - service_id: "document-processor"
+#         auth:
+#           type: "api_key"
+#           header: "X-API-Key"
+#           api_key: "${{ secrets.DOCUMENT_API_KEY }}"
+#       - service_id: "notification-hub"
+#         auth:
+#           type: "bearer"
+#           token: "${{ secrets.NOTIFICATION_TOKEN }}"
+
+#   inbound:
+#     enabled: true                 # Enable inbound A2A communication
+#     registries:                   # External A2A registries for server registration
+#       - "http://0.0.0.0:9090"
+#     port: 8182                    # Port for A2A server to listen on
+#     trusted_endpoints: []         # List of trusted external endpoints
+#     mode: "apiKey"                # Authentication mode for inbound requests
+#     shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
+
