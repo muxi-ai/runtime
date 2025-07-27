@@ -52,7 +52,16 @@ class CommandLineTransport(BaseTransport):
             self.command = command
             self.args = args or []
 
+        # Start with provided env or empty dict
         self.env = env or {}
+
+        # If auth is provided and is env type, merge env vars
+        if auth and isinstance(auth, dict) and auth.get("type") == "env":
+            # Extract all keys except 'type' - no name validation
+            auth_env_vars = {k: v for k, v in auth.items() if k != "type"}
+            # Merge with existing env (auth vars take precedence)
+            self.env.update(auth_env_vars)
+
         self.message_handler = MCPMessageHandler()
         self.client_context = None  # Store the stdio_client context manager
         self.session = None
