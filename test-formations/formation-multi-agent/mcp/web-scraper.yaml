@@ -12,4 +12,4 @@ timeout_seconds: 60
 # Authentication (optional)
 auth:
   type: "env"
-  BRAVE_API_KEY: "${{ secrets.FIRECRAWL_API_KEY }}"
+  FIRECRAWL_API_KEY: "${{ secrets.FIRECRAWL_API_KEY }}"

@@ -33,6 +33,11 @@ logging:
       level: "info"
       format: "jsonl"
 
+mcp:
+  enhance_user_prompts: true  # Enable message enhancement for better tool selection
+  max_tool_calls: 50
+  max_tool_iterations: 10
+
 # A2A Configuration
 # a2a:
 #   enabled: false                   # Enable Agent-to-Agent communication
