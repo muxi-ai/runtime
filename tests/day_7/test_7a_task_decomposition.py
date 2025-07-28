@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Day 7a: Task Decomposition Test - Simplified Version
+Day 7a: Task Decomposition Test - Workflow Integration Version
 
-Tests the Overlord's natural ability to decompose a simple request:
+Tests the Overlord's workflow integration for complex requests:
 "research 'ran aroussi funding gap' and write a short summary about it. save the summary as a linear issue"
 
 This tests whether:
-1. The Overlord correctly routes to researcher for web search
-2. The researcher finds specific information (not general LLM knowledge)
-3. The writer uses the researched information
-4. The project manager creates the Linear issue
+1. The request triggers workflow complexity analysis
+2. The workflow system creates a multi-task workflow (not simple routing)
+3. Tasks have proper dependencies and are executed in phases
+4. The workflow ID is tracked and accessible
+5. Workflow metadata is included in the response
+6. Simple requests bypass the workflow system
 """
 
 import asyncio
@@ -23,11 +25,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 from muxi.formation.formation import Formation
 
 
-async def test_simple_task_decomposition():
-    """Test natural task decomposition with a simple prompt."""
+async def test_workflow_task_decomposition():
+    """Test workflow-based task decomposition for complex requests."""
     print("\n" + "="*80)
-    print("Day 7a: Simple Task Decomposition Test")
-    print("Testing natural Overlord decomposition without prescriptive instructions")
+    print("Day 7a: Workflow Task Decomposition Test")
+    print("Testing workflow integration for complex multi-step requests")
     print("="*80 + "\n")
 
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multi-agent"
@@ -50,26 +52,29 @@ async def test_simple_task_decomposition():
         print("   ✓ Overlord started")
         print("   Agents: " + ", ".join(overlord.agents.keys()))
 
-        # Simple prompt that requires decomposition
+        # Complex prompt that should trigger workflow decomposition
         prompt = 'research "ran aroussi funding gap" and write a short summary about it. save the summary as a linear issue'
 
-        print("\n3. Sending simple prompt to Overlord...")
+        print("\n3. Sending complex prompt to Overlord...")
         print(f"   Prompt: {prompt}")
         print("   " + "-"*60)
-        print("   Expected decomposition:")
-        print("     1. Route to researcher → search for 'ran aroussi funding gap'")
-        print("     2. Route to writer → summarize the findings")
-        print("     3. Route to project-manager → create Linear issue")
+        print("   Expected workflow behavior:")
+        print("     1. Complexity analysis triggers (score >= 7.0)")
+        print("     2. Workflow created with multiple tasks")
+        print("     3. Tasks have proper dependencies")
+        print("     4. Workflow ID is generated and tracked")
+        print("     5. Execution happens in phases")
         print("   " + "-"*60)
 
         start_time = asyncio.get_event_loop().time()
 
         # Send the request - let Overlord decompose naturally
-        print("\n   [Overlord routing decisions will appear below]")
+        print("\n   [Workflow orchestration will appear below]")
         response = await overlord.chat(
             prompt,
-            user_id="test_user",
-            stream=False,
+            user_id="test_user", 
+            session_id="test_session_workflow",
+            stream=False,  # IMPORTANT: Must be False for workflow tests
             use_async=False
         )
 
@@ -95,7 +100,22 @@ async def test_simple_task_decomposition():
         print(f"   Full response saved to: {response_file}")
 
         # Analyze the response
-        print("\n4. Analyzing response...")
+        print("\n4. Analyzing response for workflow integration...")
+        
+        # Check for workflow metadata
+        has_metadata = hasattr(response, 'metadata') and response.metadata is not None
+        print(f"   Response has metadata: {'✓' if has_metadata else '✗'}")
+        
+        workflow_id = None
+        if has_metadata and 'workflow_id' in response.metadata:
+            workflow_id = response.metadata['workflow_id']
+            print(f"   Workflow ID found: {workflow_id}")
+        else:
+            print(f"   Workflow ID: Not found in metadata")
+        
+        # Check if workflow was actually used
+        workflow_used = workflow_id is not None
+        print(f"   Workflow system engaged: {'✓' if workflow_used else '✗'}")
 
         # Check for "ran aroussi" - this proves web search was used
         ran_mentioned = "ran aroussi" in response_content.lower()
@@ -121,11 +141,28 @@ async def test_simple_task_decomposition():
         if linear_match:
             print(f"   Linear issue ID: {linear_match.group()}")
 
+        # Test workflow status if workflow was used
+        if workflow_id:
+            print("\n5. Checking workflow status...")
+            # Check if we can get workflow status
+            if hasattr(overlord, 'get_workflow_status'):
+                workflow_status = overlord.get_workflow_status(workflow_id)
+                if workflow_status:
+                    print(f"   Workflow status: {workflow_status.status if hasattr(workflow_status, 'status') else 'Unknown'}")
+                    if hasattr(workflow_status, 'tasks'):
+                        print(f"   Total tasks: {len(workflow_status.tasks)}")
+                        # Check task dependencies
+                        has_dependencies = any(task.dependencies for task in workflow_status.tasks.values())
+                        print(f"   Tasks have dependencies: {'✓' if has_dependencies else '✗'}")
+            else:
+                print("   Workflow status method not available")
+        
         # Test follow-up to verify information source
-        print("\n5. Testing information source...")
+        print("\n6. Testing information source...")
         follow_up = await overlord.chat(
             "What specific information did you find about Ran Aroussi's funding gap? What sources did you use?",
             user_id="test_user",
+            session_id="test_session_workflow",
             stream=False,
             use_async=False
         )
@@ -140,8 +177,27 @@ async def test_simple_task_decomposition():
         has_sources = any(word in follow_up_content.lower() for word in ["website", "article", "search", "found"])
         print(f"   Sources mentioned in follow-up: {'✓' if has_sources else '✗'}")
 
+        # Test simple request that should bypass workflow
+        print("\n7. Testing simple request (should bypass workflow)...")
+        simple_prompt = "What is the weather today?"
+        simple_response = await overlord.chat(
+            simple_prompt,
+            user_id="test_user",
+            session_id="test_session_simple",
+            stream=False,
+            use_async=False
+        )
+        
+        # Check if simple request bypassed workflow
+        simple_has_metadata = hasattr(simple_response, 'metadata') and simple_response.metadata is not None
+        simple_workflow_id = None
+        if simple_has_metadata and 'workflow_id' in simple_response.metadata:
+            simple_workflow_id = simple_response.metadata['workflow_id']
+        
+        print(f"   Simple request used workflow: {'✗ (Good!)' if simple_workflow_id is None else '✓ (Should bypass!)'}")
+        
         # Clean up
-        print("\n6. Cleaning up...")
+        print("\n8. Cleaning up...")
         await formation.stop_overlord()
         print("   ✓ Overlord stopped")
 
@@ -151,20 +207,31 @@ async def test_simple_task_decomposition():
         print("\nResults:")
         print(f"  - Duration: {duration:.1f} seconds")
         print(f"  - Response length: {len(response_content)} characters")
+        print(f"  - Workflow system engaged: {'✓' if workflow_used else '✗'}")
         print(f"  - Web search used: {'✓' if search_used and ran_mentioned else '✗'}")
         print(f"  - Specific info found: {'✓' if ran_mentioned and funding_gap_mentioned else '✗'}")
         print(f"  - Linear issue created: {'✓' if linear_created else '✗'}")
+        print(f"  - Simple requests bypass workflow: {'✓' if simple_workflow_id is None else '✗'}")
 
-        success = ran_mentioned and funding_gap_mentioned and linear_created
-        print(f"\nOverall: {'SUCCESS' if success else 'PARTIAL SUCCESS'}")
+        workflow_success = workflow_used and ran_mentioned and funding_gap_mentioned and linear_created
+        simple_success = simple_workflow_id is None  # Simple request should not use workflow
+        overall_success = workflow_success and simple_success
+        
+        print(f"\nOverall: {'SUCCESS' if overall_success else 'PARTIAL SUCCESS'}")
 
-        if success:
+        if overall_success:
             print("\nThe Overlord successfully:")
-            print("  1. Decomposed the task naturally")
-            print("  2. Routed research to the researcher agent")
-            print("  3. Used web search to find specific information")
-            print("  4. Passed findings to writer for summarization")
+            print("  1. Triggered workflow system for complex request")
+            print("  2. Created multi-task workflow with dependencies")
+            print("  3. Executed tasks in proper phases")
+            print("  4. Used web search to find specific information")
             print("  5. Created a Linear issue with the summary")
+            print("  6. Bypassed workflow for simple requests")
+        else:
+            if not workflow_used:
+                print("\n⚠️  Workflow system was not engaged for complex request")
+            if not simple_success:
+                print("\n⚠️  Simple request incorrectly triggered workflow")
 
         print("="*80 + "\n")
 
@@ -176,4 +243,4 @@ async def test_simple_task_decomposition():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_simple_task_decomposition())
+    asyncio.run(test_workflow_task_decomposition())

@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Day 7a: PDF Artifact Test - Capture full base64 response
+Day 7a: PDF Artifact Test - Workflow Integration
 
-This test verifies PDF generation and captures the full base64-encoded artifact.
+This test verifies PDF generation through the workflow system:
+- Complex document generation triggers workflow
+- Workflow metadata is included in response
+- Artifacts are properly generated and attached
 """
 
 import asyncio
@@ -18,9 +21,10 @@ from muxi.formation.formation import Formation
 
 
 async def test_pdf_artifact_generation():
-    """Test PDF generation and capture the full base64 artifact."""
+    """Test PDF generation through workflow system."""
     print("\n" + "="*80)
-    print("Day 7a: PDF Artifact Generation Test")
+    print("Day 7a: PDF Artifact Generation Test - Workflow Integration")
+    print("Testing artifact generation with workflow orchestration")
     print("="*80 + "\n")
     
     formation_path = Path(__file__).parent.parent.parent / "test-formations" / "formation-multi-agent"
@@ -66,6 +70,7 @@ Please generate this as a PDF artifact with proper formatting."""
         response = await overlord.chat(
             prompt,
             user_id="test_user",
+            session_id="test_pdf_session",
             stream=False,
             use_async=False
         )
@@ -79,6 +84,14 @@ Please generate this as a PDF artifact with proper formatting."""
         print(f"   Response type: {type(response)}")
         print(f"   Response attributes: {[attr for attr in dir(response) if not attr.startswith('_')][:20]}")
         print(f"   Response content length: {len(response_content)} characters")
+        
+        # Check for workflow metadata
+        has_metadata = hasattr(response, 'metadata') and response.metadata is not None
+        workflow_id = None
+        if has_metadata:
+            workflow_id = response.metadata.get('workflow_id')
+            print(f"   Workflow ID: {workflow_id or 'Not found'}")
+            print(f"   Workflow used: {'✓' if workflow_id else '✗'}")
         
         # Check for artifacts attribute
         artifacts = None
@@ -94,6 +107,8 @@ Please generate this as a PDF artifact with proper formatting."""
             f.write(f"Duration: {duration:.1f} seconds\n")
             f.write(f"Response type: {type(response)}\n")
             f.write(f"Response content length: {len(response_content)} characters\n")
+            f.write(f"Has metadata: {has_metadata}\n")
+            f.write(f"Workflow ID: {workflow_id or 'None'}\n")
             f.write(f"Has artifacts attribute: {hasattr(response, 'artifacts')}\n")
             if artifacts:
                 f.write(f"Number of artifacts: {len(artifacts)}\n")
@@ -220,8 +235,12 @@ Please generate this as a PDF artifact with proper formatting."""
         print("   ✓ Overlord stopped")
         
         print("\n" + "="*80)
-        print("Test Complete!")
-        print(f"Check {response_file} for the full response")
+        print("✓ PDF Artifact Test Complete!")
+        print(f"\nResults:")
+        print(f"  - Workflow engaged: {'✓' if workflow_id else '✗'}")
+        print(f"  - PDF artifact generated: {'✓' if (has_artifact and has_pdf) else '✗'}")
+        print(f"  - Base64 data present: {'✓' if has_base64 else '✗'}")
+        print(f"\nCheck {response_file} for the full response")
         print("="*80 + "\n")
         
     except Exception as e:
