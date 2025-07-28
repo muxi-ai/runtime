@@ -31,7 +31,7 @@ overlord:
 
   # Routing model configuration
   llm:  # Overlord-specific routing functionality
-    model: "gpt-4.1-mini-2025-04-14" # Model for task management and delegation
+    model: "openai/gpt-4o-mini" # Model for task management and delegation
 
   config:
     # Content is processed intelligently by default:
@@ -58,7 +58,14 @@ overlord:
 
     # Workflow configuration (Task decomposition and orchestration)
     auto_decomposition: true # Enable automatic task decomposition (default: true)
-    plan_approval_threshold: 7 # Complexity threshold for plan approval (1-10, default: 7)
+    plan_approval_threshold: 10 # Set high to avoid approval prompts during tests
+    
+    # Enhanced workflow configuration
+    workflow:
+      complexity_threshold: 6.0 # Lower threshold to trigger workflows more easily
+      routing_strategy: "capability_based"
+      parallel_execution: true
+      max_parallel_tasks: 5
 
   # Clarification configuration (always enabled for better UX)
   clarification:
