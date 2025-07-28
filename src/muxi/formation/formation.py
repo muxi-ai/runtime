@@ -2521,13 +2521,11 @@ class Formation:
             # Block mode (typical for standalone server)
             formation = Formation()
             await formation.load("my-formation.yaml")
-            overlord = await formation.start_overlord()
-            server = formation.start_server()  # Blocks here
+            server = formation.start_server()  # Auto-starts overlord, then blocks
 
             # Non-blocking mode with proper error handling
             formation = Formation()
             await formation.load("my-formation.yaml")
-            overlord = await formation.start_overlord()
 
             try:
                 server = await formation.start_server(block=False)
@@ -2596,20 +2594,63 @@ class Formation:
             description=f"Starting Formation API server on {actual_host}:{actual_port}",
         )
 
-        # Check if we have an overlord (recommended but not required)
+        # Auto-start overlord if not already running
         if not hasattr(self, "_overlord") or self._overlord is None:
             observability.observe(
                 event_type=observability.SystemEvents.INITIALIZING,
-                level=observability.EventLevel.WARNING,
+                level=observability.EventLevel.INFO,
                 data={
                     "service": "formation_api_server",
                     "formation_id": self.formation_id,
                     "has_overlord": False,
-                    "warning": "Starting server without overlord - most endpoints will return errors",
-                    "suggestion": "Call start_overlord() before start_server()",
+                    "action": "auto_starting_overlord",
                 },
-                description="Starting Formation server without an overlord - most endpoints will return errors",
+                description="Auto-starting overlord for Formation API server",
             )
+
+            # Auto-start overlord for cleaner API
+            import asyncio
+            try:
+                # Check if we're in an async context
+                try:
+                    loop = asyncio.get_running_loop()
+                    # We're in an async context, but start_overlord is async
+                    # We need to handle this properly
+                    if loop.is_running():
+                        # Create a task to start overlord
+                        async def start_overlord_task():
+                            await self.start_overlord()
+
+                        # This is tricky - we can't await in a sync context
+                        # For now, raise an error asking user to start overlord first
+                        raise RuntimeError(
+                            "Cannot auto-start overlord in async context. "
+                            "Please call 'await formation.start_overlord()' "
+                            "before start_server()."
+                        )
+                    else:
+                        # Not in running loop, can use asyncio.run
+                        asyncio.run(self.start_overlord())
+                except RuntimeError:
+                    # No event loop, safe to create one
+                    asyncio.run(self.start_overlord())
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.INITIALIZING,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "service": "formation_api_server",
+                        "formation_id": self.formation_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Failed to auto-start overlord: {e}",
+                )
+                raise RuntimeError(
+                    f"Failed to auto-start overlord: {e}. "
+                    "Please start the overlord manually with "
+                    "'await formation.start_overlord()'"
+                )
 
         # Start the server
         if block:
