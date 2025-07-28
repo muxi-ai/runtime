@@ -1036,6 +1036,41 @@ response = await overlord.chat(
 )
 # Should coordinate multiple agents, potentially with thinking from each
 
+# Test 9D2: Workflow Decomposition Thinking Stream
+# NOTE: Enhancement needed - stream task decomposition process as <thinking>
+# Currently only execution progress is streamed, not the planning/decomposition phase
+formation = Formation.load("formations/thinking-workflow.yaml")
+overlord = await formation.start()
+
+# When streaming=True and complexity > threshold, should stream decomposition
+response_stream = await overlord.chat(
+    "Research AI trends, analyze market data, create visualizations, write comprehensive report",
+    stream=True
+)
+
+thinking_decomposition_seen = False
+async for chunk in response_stream:
+    # Should see the workflow decomposition process in <thinking> tags
+    # Example expected output:
+    # <thinking>
+    # Analyzing request complexity: 8.5/10
+    # This requires multiple specialized tasks:
+    # 1. Research AI trends - requires web search and analysis capabilities
+    # 2. Analyze market data - requires data processing and statistical analysis
+    # 3. Create visualizations - requires charting and design capabilities
+    # 4. Write report - requires synthesis and writing capabilities
+    # 
+    # Creating workflow with 4 subtasks...
+    # Task dependencies: research -> analysis -> visualization -> report
+    # Estimated total time: 15-20 minutes
+    # </thinking>
+    if "<thinking>" in chunk and "analyzing request" in chunk.lower():
+        thinking_decomposition_seen = True
+        
+# TODO: Implement streaming of workflow decomposition phase as thinking
+# This would provide transparency into the Overlord's planning process
+# before execution begins
+
 # Test 9D2: Thinking Consolidation
 response = await overlord.chat(
     "Analyze our system architecture and suggest improvements for scalability and security"
