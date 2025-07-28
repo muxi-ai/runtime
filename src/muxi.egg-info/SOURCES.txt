@@ -9,7 +9,6 @@ src/muxi.egg-info/dependency_links.txt
 src/muxi.egg-info/entry_points.txt
 src/muxi.egg-info/requires.txt
 src/muxi.egg-info/top_level.txt
-src/muxi/__init__.py
 src/muxi/datatypes/__init__.py
 src/muxi/datatypes/artifacts.py
 src/muxi/datatypes/async_operations.py
@@ -138,6 +137,7 @@ src/muxi/formation/utils/network_utils.py
 src/muxi/formation/utils/string_utils.py
 src/muxi/formation/workflow/__init__.py
 src/muxi/formation/workflow/analyzer.py
+src/muxi/formation/workflow/config.py
 src/muxi/formation/workflow/decomposer.py
 src/muxi/formation/workflow/executor.py
 src/muxi/formation/workflow/interactive.py
@@ -202,8 +202,8 @@ src/muxi/services/memory/context_memory.py
 src/muxi/services/memory/extractor.py
 src/muxi/services/memory/long_term.py
 src/muxi/services/memory/memobase.py
-src/muxi/services/memory/working.py
 src/muxi/services/memory/sqlite.py
+src/muxi/services/memory/working.py
 src/muxi/services/multimodal/__init__.py
 src/muxi/services/multimodal/fusion_engine.py
 src/muxi/services/multimodal/integration.py
@@ -285,3 +285,4 @@ tests/test_observability_system.py
 tests/test_task5_observability.py
 tests/test_user_id_enhancement.py
 tests/test_user_id_enhancement_fixed.py
+tests/test_workflow_enhanced_config.py

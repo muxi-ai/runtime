@@ -119,13 +119,14 @@ from ..workflow import (
     WorkflowExecutor,
     ApprovalManager,
     ProgressTracker,
+    WorkflowManager,
 )
 from ..workflow.config import (
     WorkflowConfig,
     WorkflowConfigManager,
     ErrorRecoveryStrategy,
 )
-from ...datatypes.workflow import ApprovalStatus, Workflow, WorkflowStatus
+from ...datatypes.workflow import ApprovalStatus, Workflow, WorkflowStatus, RequestAnalysis
 from ...datatypes.task_status import TaskStatus
 
 # Utility functions
@@ -276,8 +277,7 @@ class Overlord:
         approval_manager (ApprovalManager): Manages plan approval workflows
         progress_tracker (ProgressTracker): Tracks workflow execution progress
         persona_manager (PersonaManager): Manages dynamic persona adaptation
-        active_workflows (Dict[str, Workflow]): Currently executing workflows
-        pending_approvals (Dict[str, Workflow]): Workflows awaiting user approval
+        workflow_manager (WorkflowManager): Centralized workflow state and lifecycle management
     """
 
     def __init__(
@@ -551,23 +551,8 @@ class Overlord:
         )
         self.progress_tracker = ProgressTracker()
 
-        # Active workflows tracking (intelligence concerns)
-        self.active_workflows: Dict[str, Workflow] = {}
-        self.pending_approvals: Dict[str, Workflow] = {}
-
-        # Workflow history tracking for status queries (Phase 2, Stream 2)
-        self.workflow_history: Dict[str, Workflow] = {}  # All workflows ever executed
-        self.workflow_metrics = {
-            "total_workflows": 0,
-            "successful_workflows": 0,
-            "failed_workflows": 0,
-            "cancelled_workflows": 0,
-            "total_execution_time": 0.0,
-            "workflow_count_by_user": {},  # user_id -> count
-        }
-
-        # Thread safety for workflow data access
-        self._workflow_lock = threading.Lock()
+        # Initialize workflow manager for centralized workflow tracking
+        self.workflow_manager = WorkflowManager()
 
         # Setup progress tracking
         self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
@@ -1389,6 +1374,77 @@ class Overlord:
             # Workflow configuration
             self.auto_decomposition = config_section.get("auto_decomposition", True)
             self.plan_approval_threshold = config_section.get("plan_approval_threshold", 7)
+
+            # Load detailed workflow configuration if present
+            workflow_config_data = config_section.get("workflow", {})
+            if workflow_config_data:
+                # Create WorkflowConfig from formation data
+                from ..workflow.config import (
+                    WorkflowConfig,
+                    RetryConfig,
+                    TimeoutConfig,
+                    TaskRoutingStrategy,
+                    ErrorRecoveryStrategy,
+                )
+
+                # Parse retry configuration
+                retry_data = workflow_config_data.get("retry", {})
+                retry_config = RetryConfig(
+                    max_attempts=retry_data.get("max_attempts", 3),
+                    initial_delay=retry_data.get("initial_delay", 1.0),
+                    backoff_factor=retry_data.get("backoff_factor", 2.0),
+                    max_delay=retry_data.get("max_delay", 60.0),
+                )
+
+                # Parse timeout configuration
+                timeout_data = workflow_config_data.get("timeouts", {})
+                timeout_config = TimeoutConfig(
+                    task_timeout=timeout_data.get("task_timeout", 300.0),
+                    workflow_timeout=timeout_data.get("workflow_timeout", 3600.0),
+                    phase_timeout=timeout_data.get("phase_timeout", 600.0),
+                    enable_adaptive_timeout=timeout_data.get("enable_adaptive_timeout", True),
+                    timeout_multiplier=timeout_data.get("timeout_multiplier", 1.5),
+                )
+
+                # Create enhanced workflow config
+                self.workflow_config = WorkflowConfig(
+                    complexity_method=workflow_config_data.get("complexity_method", "heuristic"),
+                    complexity_threshold=workflow_config_data.get(
+                        "complexity_threshold", self.complexity_threshold
+                    ),
+                    complexity_weights=workflow_config_data.get(
+                        "complexity_weights", {"heuristic": 0.4, "llm": 0.4, "custom": 0.2}
+                    ),
+                    routing_strategy=TaskRoutingStrategy(
+                        workflow_config_data.get("routing_strategy", "capability_based")
+                    ),
+                    enable_agent_affinity=workflow_config_data.get("enable_agent_affinity", True),
+                    error_recovery_strategy=ErrorRecoveryStrategy(
+                        workflow_config_data.get("error_recovery", "retry_with_backoff")
+                    ),
+                    retry_config=retry_config,
+                    timeout_config=timeout_config,
+                    enable_parallel_execution=workflow_config_data.get("parallel_execution", True),
+                    max_parallel_tasks=workflow_config_data.get("max_parallel_tasks", 5),
+                    enable_partial_results=workflow_config_data.get("enable_partial_results", True),
+                    enable_resource_limits=workflow_config_data.get(
+                        "enable_resource_limits", False
+                    ),
+                    max_memory_per_task_mb=workflow_config_data.get("max_memory_per_task_mb"),
+                    max_cpu_per_task=workflow_config_data.get("max_cpu_per_task"),
+                    enable_detailed_logging=workflow_config_data.get(
+                        "enable_detailed_logging", True
+                    ),
+                    enable_metrics_collection=workflow_config_data.get(
+                        "enable_metrics_collection", True
+                    ),
+                )
+
+                # Update the workflow executor with new config
+                if hasattr(self, "workflow_executor"):
+                    self.workflow_executor.config = self.workflow_config
+                if hasattr(self, "workflow_config_manager"):
+                    self.workflow_config_manager.base_config = self.workflow_config
 
             # Streaming configuration
             self.streaming = overlord_config.get("streaming", True)
@@ -3897,7 +3953,7 @@ class Overlord:
                     original_message = clarification_info.get("original_message")
 
                     # Retrieve workflow from pending approvals
-                    workflow = self.pending_approvals.get(workflow_id)
+                    workflow = self.workflow_manager.get_pending_approval(workflow_id)
 
                     observability.observe(
                         event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
@@ -3905,7 +3961,9 @@ class Overlord:
                         data={
                             "workflow_id": workflow_id,
                             "workflow_found": workflow is not None,
-                            "pending_approvals_keys": list(self.pending_approvals.keys()),
+                            "pending_approvals_keys": list(
+                                self.workflow_manager.pending_approvals.keys()
+                            ),
                         },
                         description=f"Looking up workflow {workflow_id} in pending approvals",
                     )
@@ -3924,7 +3982,7 @@ class Overlord:
                             if approval_status == ApprovalStatus.APPROVED:
                                 # Clean up pending states
                                 del self._pending_clarifications[session_id]
-                                del self.pending_approvals[workflow_id]
+                                self.workflow_manager.remove_pending_approval(workflow_id)
 
                                 # Execute the approved workflow
                                 return await self._execute_workflow(
@@ -3938,7 +3996,7 @@ class Overlord:
                             elif approval_status == ApprovalStatus.REJECTED:
                                 # Clean up pending states
                                 del self._pending_clarifications[session_id]
-                                del self.pending_approvals[workflow_id]
+                                self.workflow_manager.remove_pending_approval(workflow_id)
 
                                 # Return rejection acknowledgment
                                 return MuxiResponse(
@@ -4259,8 +4317,8 @@ class Overlord:
     async def _process_with_workflow(
         self,
         message: str,
-        analysis: Any,  # RequestAnalysis type from workflow module
-        user_id: Any,
+        analysis: RequestAnalysis,
+        user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         stream: bool = False,
@@ -4285,6 +4343,10 @@ class Overlord:
             If stream=False: MuxiResponse containing either workflow results or approval request
             If stream=True: AsyncGenerator yielding progress updates
         """
+        # Validate inputs
+        self._validate_workflow_inputs(message, user_id, session_id, request_id)
+        self._validate_workflow_analysis(analysis)
+
         try:
             # Emit workflow orchestration started event
             # TODO: Add OVERLORD_WORKFLOW_STARTED event type to ConversationEvents
@@ -4326,18 +4388,7 @@ class Overlord:
 
             # Store workflow for tracking
             workflow_id = workflow.id
-            with self._workflow_lock:
-                self.active_workflows[workflow_id] = workflow
-
-                # Update metrics for new workflow
-                self.workflow_metrics["total_workflows"] += 1
-
-                # Track by user if user_id is available
-                if user_id:
-                    user_id_str = str(user_id)
-                    if user_id_str not in self.workflow_metrics["workflow_count_by_user"]:
-                        self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
-                    self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
+            self.workflow_manager.track_workflow(workflow, user_id)
 
             # Note: user_id is tracked separately in active_workflows
             # The Workflow model doesn't support user_id as an attribute
@@ -4365,22 +4416,17 @@ class Overlord:
         except Exception as e:
             # Clean up on error
             if "workflow_id" in locals():
-                with self._workflow_lock:
-                    if workflow_id in self.active_workflows:
-                        failed_workflow = self.active_workflows[workflow_id]
+                failed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
+                if failed_workflow:
+                    # Mark as failed and move to history
+                    if hasattr(failed_workflow, "status"):
+                        failed_workflow.status = WorkflowStatus.FAILED
+                    if hasattr(failed_workflow, "completed_at"):
+                        failed_workflow.completed_at = datetime.now()
+                    if hasattr(failed_workflow, "error_message"):
+                        failed_workflow.error_message = str(e)
 
-                        # Mark as failed and move to history
-                        if hasattr(failed_workflow, "status"):
-                            failed_workflow.status = WorkflowStatus.FAILED
-                        if hasattr(failed_workflow, "completed_at"):
-                            failed_workflow.completed_at = datetime.now()
-                        if hasattr(failed_workflow, "error_message"):
-                            failed_workflow.error_message = str(e)
-
-                        self.workflow_history[workflow_id] = failed_workflow
-                        del self.active_workflows[workflow_id]
-
-                        self.workflow_metrics["failed_workflows"] += 1
+                    self.workflow_manager.complete_workflow(workflow_id, failed_workflow)
 
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -4404,9 +4450,9 @@ class Overlord:
 
     async def _handle_workflow_approval(
         self,
-        workflow: Any,  # Workflow type from workflow module
+        workflow: Workflow,
         message: str,
-        user_id: Any,
+        user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> MuxiResponse:
@@ -4416,8 +4462,12 @@ class Overlord:
         Stores the pending workflow and generates an approval message for the user.
         If session_id is provided, stores clarification info for handling the response.
         """
+        # Validate inputs
+        self._validate_workflow_inputs(message, user_id, session_id, request_id)
+        self._validate_workflow_object(workflow)
+
         # Store pending workflow
-        self.pending_approvals[workflow.id] = workflow
+        self.workflow_manager.add_pending_approval(workflow)
 
         # Generate approval message using approval manager
         approval_message = await self.approval_manager.present_plan_for_approval(workflow)
@@ -4445,9 +4495,9 @@ class Overlord:
 
     async def _execute_workflow(
         self,
-        workflow: Any,  # Workflow type from workflow module
+        workflow: Workflow,
         message: str,
-        user_id: Any,
+        user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
         stream: bool = False,
@@ -4470,6 +4520,10 @@ class Overlord:
             If stream=False: MuxiResponse with complete results
             If stream=True: AsyncGenerator yielding progress updates
         """
+        # Validate inputs
+        self._validate_workflow_inputs(message, user_id, session_id, request_id)
+        self._validate_workflow_object(workflow)
+
         if stream:
             # Return async generator for streaming
             return self._execute_workflow_streaming(
@@ -4484,21 +4538,7 @@ class Overlord:
         workflow_id = workflow.id
 
         # Track workflow in active workflows
-        with self._workflow_lock:
-            self.active_workflows[workflow_id] = workflow
-
-            # Update metrics for new workflow
-            self.workflow_metrics["total_workflows"] += 1
-
-            # Track by user if user_id is available
-            if user_id:
-                user_id_str = str(user_id)
-                if user_id_str not in self.workflow_metrics["workflow_count_by_user"]:
-                    self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
-                self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
-
-        # Note: user_id is tracked separately in workflow_metrics
-        # The Workflow model doesn't support user_id as an attribute
+        self.workflow_manager.track_workflow(workflow, user_id)
 
         try:
             # Setup progress tracking callback
@@ -4506,7 +4546,7 @@ class Overlord:
                 """Internal callback to track workflow progress."""
                 if wf_id == workflow_id:
                     # Update our tracked workflow
-                    self.active_workflows[workflow_id] = wf
+                    self.workflow_manager.update_workflow_status(workflow_id, wf)
 
                     # Log progress
                     observability.observe(
@@ -4552,15 +4592,16 @@ class Overlord:
             # Collect all task results
             task_results = []
             for task in completed_workflow.tasks.values():
-                if task.status == TaskStatus.DONE:
+                # Handle both enum objects and string values due to use_enum_values=True
+                if task.status in {TaskStatus.DONE, TaskStatus.DONE.value}:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
-                        "outputs": task.outputs or {},
+                        "outputs": task.result or {},
                         "status": "completed",
                     }
                     task_results.append(task_result)
-                elif task.status == TaskStatus.FAILED:
+                elif task.status in {TaskStatus.FAILED, TaskStatus.FAILED.value}:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
@@ -4643,36 +4684,15 @@ class Overlord:
 
         finally:
             # Move workflow to history and update metrics
-            with self._workflow_lock:
-                if workflow_id in self.active_workflows:
-                    completed_workflow = self.active_workflows[workflow_id]
-
-                    # Move to history
-                    self.workflow_history[workflow_id] = completed_workflow
-                    del self.active_workflows[workflow_id]
-
-                    # Update metrics based on final status
-                    if hasattr(completed_workflow, "status"):
-                        if completed_workflow.status == WorkflowStatus.COMPLETED:
-                            self.workflow_metrics["successful_workflows"] += 1
-                        elif completed_workflow.status == WorkflowStatus.FAILED:
-                            self.workflow_metrics["failed_workflows"] += 1
-
-                    # Track execution time
-                    if hasattr(completed_workflow, "started_at") and hasattr(
-                        completed_workflow, "completed_at"
-                    ):
-                        if completed_workflow.started_at and completed_workflow.completed_at:
-                            execution_time = (
-                                completed_workflow.completed_at - completed_workflow.started_at
-                            ).total_seconds()
-                            self.workflow_metrics["total_execution_time"] += execution_time
+            completed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
+            if completed_workflow:
+                self.workflow_manager.complete_workflow(workflow_id, completed_workflow)
 
     async def _execute_workflow_streaming(
         self,
-        workflow: Any,  # Workflow type from workflow module
+        workflow: Workflow,
         message: str,
-        user_id: Any,
+        user_id: str,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
     ) -> AsyncGenerator[str, None]:
@@ -4692,24 +4712,14 @@ class Overlord:
         Yields:
             Progress updates and partial results as strings
         """
+        # Validate inputs (redundant but ensures safety)
+        self._validate_workflow_inputs(message, user_id, session_id, request_id)
+        self._validate_workflow_object(workflow)
+
         workflow_id = workflow.id
 
         # Track workflow in active workflows
-        with self._workflow_lock:
-            self.active_workflows[workflow_id] = workflow
-
-            # Update metrics for new workflow
-            self.workflow_metrics["total_workflows"] += 1
-
-            # Track by user if user_id is available
-            if user_id:
-                user_id_str = str(user_id)
-                if user_id_str not in self.workflow_metrics["workflow_count_by_user"]:
-                    self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
-                self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
-
-        # Note: user_id is tracked separately in workflow_metrics
-        # The Workflow model doesn't support user_id as an attribute
+        self.workflow_manager.track_workflow(workflow, user_id)
 
         try:
             # Yield initial workflow information
@@ -4887,36 +4897,15 @@ class Overlord:
 
         finally:
             # Move workflow to history and update metrics
-            with self._workflow_lock:
-                if workflow_id in self.active_workflows:
-                    completed_workflow = self.active_workflows[workflow_id]
-
-                    # Move to history
-                    self.workflow_history[workflow_id] = completed_workflow
-                    del self.active_workflows[workflow_id]
-
-                    # Update metrics based on final status
-                    if hasattr(completed_workflow, "status"):
-                        if completed_workflow.status == WorkflowStatus.COMPLETED:
-                            self.workflow_metrics["successful_workflows"] += 1
-                        elif completed_workflow.status == WorkflowStatus.FAILED:
-                            self.workflow_metrics["failed_workflows"] += 1
-
-                    # Track execution time
-                    if hasattr(completed_workflow, "started_at") and hasattr(
-                        completed_workflow, "completed_at"
-                    ):
-                        if completed_workflow.started_at and completed_workflow.completed_at:
-                            execution_time = (
-                                completed_workflow.completed_at - completed_workflow.started_at
-                            ).total_seconds()
-                            self.workflow_metrics["total_execution_time"] += execution_time
+            completed_workflow = self.workflow_manager.get_active_workflow(workflow_id)
+            if completed_workflow:
+                self.workflow_manager.complete_workflow(workflow_id, completed_workflow)
 
     async def _synthesize_workflow_results(
         self,
         task_results: List[Dict[str, Any]],
         original_request: str,
-        workflow: Any,  # Workflow type
+        workflow: Workflow,
     ) -> MuxiResponse:
         """
         Synthesize task results into a coherent final response.
@@ -4932,6 +4921,13 @@ class Overlord:
         Returns:
             MuxiResponse with synthesized content
         """
+        # Validate inputs
+        if not isinstance(task_results, list):
+            raise ValueError("Task results must be a list")
+        if not original_request or not isinstance(original_request, str):
+            raise ValueError("Original request must be a non-empty string")
+        self._validate_workflow_object(workflow)
+
         try:
             # Check if we have any successful results
             successful_results = [r for r in task_results if r.get("status") == "completed"]
@@ -5129,6 +5125,86 @@ class Overlord:
             content="\n".join(response_parts),
             metadata={"synthesis_method": "structured_concatenation"},
         )
+
+    # ===================================================================
+    # VALIDATION METHODS FOR TYPE SAFETY
+    # ===================================================================
+
+    def _validate_workflow_inputs(
+        self,
+        message: str,
+        user_id: str,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> None:
+        """
+        Validate inputs for workflow processing.
+
+        Args:
+            message: User message to process
+            user_id: User identifier
+            session_id: Optional session identifier
+            request_id: Optional request identifier
+
+        Raises:
+            ValueError: If inputs are invalid
+        """
+        if not message or not isinstance(message, str):
+            raise ValueError("Message must be a non-empty string")
+
+        if not user_id or not isinstance(user_id, str):
+            raise ValueError("User ID must be a non-empty string")
+
+        if session_id is not None and not isinstance(session_id, str):
+            raise ValueError("Session ID must be a string if provided")
+
+        if request_id is not None and not isinstance(request_id, str):
+            raise ValueError("Request ID must be a string if provided")
+
+    def _validate_workflow_analysis(self, analysis: RequestAnalysis) -> None:
+        """
+        Validate workflow analysis results.
+
+        Args:
+            analysis: Request analysis results
+
+        Raises:
+            ValueError: If analysis is invalid
+        """
+        if not isinstance(analysis, RequestAnalysis):
+            raise ValueError("Analysis must be a RequestAnalysis instance")
+
+        if not (1.0 <= analysis.complexity_score <= 10.0):
+            raise ValueError("Complexity score must be between 1.0 and 10.0")
+
+        if not analysis.required_capabilities:
+            raise ValueError("Analysis must include required capabilities")
+
+    def _validate_workflow_object(self, workflow: Workflow) -> None:
+        """
+        Validate workflow object integrity.
+
+        Args:
+            workflow: Workflow to validate
+
+        Raises:
+            ValueError: If workflow is invalid
+        """
+        if not isinstance(workflow, Workflow):
+            raise ValueError("Workflow must be a Workflow instance")
+
+        if not workflow.id:
+            raise ValueError("Workflow must have an ID")
+
+        if not workflow.tasks:
+            raise ValueError("Workflow must have at least one task")
+
+        # Validate task dependencies
+        task_ids = set(workflow.tasks.keys())
+        for task in workflow.tasks.values():
+            for dep_id in task.dependencies:
+                if dep_id not in task_ids:
+                    raise ValueError(f"Task {task.id} has invalid dependency: {dep_id}")
 
     async def _check_agent_clarification_request(
         self, agent_response: MuxiResponse, user_id: Any
@@ -6585,20 +6661,7 @@ Token:"""
         Returns:
             Workflow object with current status or None if not found
         """
-        with self._workflow_lock:
-            # Check active workflows first
-            if workflow_id in self.active_workflows:
-                return self.active_workflows[workflow_id]
-
-            # Check workflow history
-            if workflow_id in self.workflow_history:
-                return self.workflow_history[workflow_id]
-
-            # Check pending approvals
-            if workflow_id in self.pending_approvals:
-                return self.pending_approvals[workflow_id]
-
-        return None
+        return self.workflow_manager.get_workflow(workflow_id)
 
     def list_workflows(
         self,
@@ -6623,30 +6686,18 @@ Token:"""
         Returns:
             List of workflows matching the filters
         """
-        with self._workflow_lock:
-            workflows = []
+        # Get workflows from workflow manager
+        workflows = self.workflow_manager.get_workflows(
+            include_active=include_active,
+            include_history=include_history,
+            include_pending=include_active,  # Include pending with active
+            user_id=user_id,
+            status=status,
+            limit=limit + offset,  # Get extra for offset
+        )
 
-            # Collect workflows from requested sources
-            if include_active:
-                workflows.extend(self.active_workflows.values())
-                workflows.extend(self.pending_approvals.values())
-
-            if include_history:
-                workflows.extend(self.workflow_history.values())
-
-            # Apply filters
-            if user_id:
-                # Filter by user_id if it exists in workflow metadata
-                workflows = [w for w in workflows if hasattr(w, "user_id") and w.user_id == user_id]
-
-            if status:
-                workflows = [w for w in workflows if w.status == status]
-
-            # Sort by creation time (newest first)
-            workflows.sort(key=lambda w: w.created_at, reverse=True)
-
-            # Apply pagination
-            return workflows[offset:offset + limit]
+        # Apply pagination
+        return workflows[offset:offset + limit]
 
     async def cancel_workflow(self, workflow_id: str) -> bool:
         """
@@ -6658,48 +6709,15 @@ Token:"""
         Returns:
             True if workflow was cancelled, False if not found or already completed
         """
-        with self._workflow_lock:
-            workflow = None
+        # Use workflow manager to cancel the workflow
+        success = self.workflow_manager.cancel_workflow(workflow_id)
 
-            # Check if workflow is active
-            if workflow_id in self.active_workflows:
-                workflow = self.active_workflows[workflow_id]
-            elif workflow_id in self.pending_approvals:
-                workflow = self.pending_approvals[workflow_id]
-                # Remove from pending approvals
-                del self.pending_approvals[workflow_id]
+        if success:
+            # TODO: Notify workflow executor to stop execution
+            # This would require enhancing the WorkflowExecutor with cancellation support
+            pass
 
-            if not workflow:
-                observability.log_event("workflow_cancel_not_found", workflow_id=workflow_id)
-                return False
-
-            # Check if workflow can be cancelled
-            if workflow.is_complete:
-                observability.log_event(
-                    "workflow_cancel_already_complete",
-                    workflow_id=workflow_id,
-                    status=workflow.status,
-                )
-                return False
-
-            # Update workflow status
-            workflow.status = WorkflowStatus.CANCELLED
-            workflow.completed_at = datetime.now()
-
-            # Move to history
-            self.workflow_history[workflow_id] = workflow
-            if workflow_id in self.active_workflows:
-                del self.active_workflows[workflow_id]
-
-            # Update metrics
-            self.workflow_metrics["cancelled_workflows"] += 1
-
-        observability.log_event("workflow_cancelled", workflow_id=workflow_id)
-
-        # TODO: Notify workflow executor to stop execution
-        # This would require enhancing the WorkflowExecutor with cancellation support
-
-        return True
+        return success
 
     def get_workflow_metrics(self) -> Dict[str, Any]:
         """
@@ -6708,32 +6726,7 @@ Token:"""
         Returns:
             Dictionary containing workflow statistics
         """
-        with self._workflow_lock:
-            total = self.workflow_metrics["total_workflows"]
-            successful = self.workflow_metrics["successful_workflows"]
-            failed = self.workflow_metrics["failed_workflows"]
-            cancelled = self.workflow_metrics["cancelled_workflows"]
-
-            # Calculate success rate
-            completed = successful + failed
-            success_rate = (successful / completed * 100) if completed > 0 else 0.0
-
-            # Calculate average execution time
-            avg_execution_time = (
-                self.workflow_metrics["total_execution_time"] / total if total > 0 else 0.0
-            )
-
-            return {
-                "total_workflows": total,
-                "successful_workflows": successful,
-                "failed_workflows": failed,
-                "cancelled_workflows": cancelled,
-                "in_progress_workflows": len(self.active_workflows),
-                "pending_approval_workflows": len(self.pending_approvals),
-                "success_rate": round(success_rate, 2),
-                "average_execution_time_seconds": round(avg_execution_time, 2),
-                "workflow_count_by_user": dict(self.workflow_metrics["workflow_count_by_user"]),
-            }
+        return self.workflow_manager.get_metrics()
 
     def get_active_workflow_ids(self) -> List[str]:
         """
@@ -6742,8 +6735,7 @@ Token:"""
         Returns:
             List of active workflow IDs
         """
-        with self._workflow_lock:
-            return list(self.active_workflows.keys())
+        return self.workflow_manager.get_active_workflow_ids()
 
     def clear_workflow_history(self, older_than_days: int = 30) -> int:
         """
@@ -6755,27 +6747,4 @@ Token:"""
         Returns:
             Number of workflows cleared
         """
-        from datetime import timedelta
-
-        cutoff_date = datetime.now() - timedelta(days=older_than_days)
-        cleared_count = 0
-
-        with self._workflow_lock:
-            workflows_to_clear = [
-                wid
-                for wid, w in self.workflow_history.items()
-                if w.completed_at and w.completed_at < cutoff_date
-            ]
-
-            for workflow_id in workflows_to_clear:
-                del self.workflow_history[workflow_id]
-                cleared_count += 1
-
-        if cleared_count > 0:
-            observability.log_event(
-                "workflow_history_cleared",
-                cleared_count=cleared_count,
-                older_than_days=older_than_days,
-            )
-
-        return cleared_count
+        return self.workflow_manager.clear_workflow_history(older_than_days)

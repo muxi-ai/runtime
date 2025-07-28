@@ -29,6 +29,8 @@ from ...datatypes.workflow import (
 from .analyzer import RequestAnalyzer
 from .decomposer import TaskDecomposer, ApprovalManager
 from .executor import WorkflowExecutor, ProgressTracker
+from .workflow_manager import WorkflowManager
+from .workflow_metrics import WorkflowMetrics
 
 __all__ = [
     # Data types
@@ -53,5 +55,7 @@ __all__ = [
     "TaskDecomposer",
     "ApprovalManager",
     "WorkflowExecutor",
-    "ProgressTracker"
+    "ProgressTracker",
+    "WorkflowManager",
+    "WorkflowMetrics"
 ]
