@@ -447,9 +447,9 @@ Focus on identifying:
             )
 
     # Helper methods for testing
-    def _detect_approval_request(self, user_message: str) -> bool:
+    async def _detect_approval_request(self, user_message: str) -> bool:
         """Helper method for testing approval detection."""
-        return asyncio.run(self.requires_user_approval(user_message))
+        return await self.requires_user_approval(user_message)
 
     def _calculate_heuristic_complexity(self, user_message: str) -> float:
         """Helper method for testing complexity calculation."""
