@@ -49,7 +49,8 @@ class WorkflowManager:
         self._lock = threading.Lock()
 
         observability.observe(
-            observability.SystemEvents.SERVICE_STARTED,
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
             description="WorkflowManager initialized"
         )
 
@@ -63,9 +64,34 @@ class WorkflowManager:
             workflow: The workflow to track
             user_id: Optional user ID for user-specific metrics
         """
+        # Debug: Entry
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"event": "track_workflow_entry", "workflow_id": workflow.id},
+            description="WorkflowManager.track_workflow - Entry"
+        )
+
         with self._lock:
             workflow_id = workflow.id
+
+            # Debug: Inside lock
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
+                data={"event": "track_workflow_lock", "workflow_id": workflow_id},
+                description="WorkflowManager.track_workflow - Inside lock"
+            )
+
             self.active_workflows[workflow_id] = workflow
+
+            # Debug: After storing workflow
+            observability.observe(
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
+                data={"event": "track_workflow_stored", "workflow_id": workflow_id},
+                description="WorkflowManager.track_workflow - Workflow stored in active_workflows"
+            )
 
             # Update metrics
             self.workflow_metrics.increment_total_workflows()
@@ -73,12 +99,13 @@ class WorkflowManager:
                 self.workflow_metrics.increment_user_workflows(str(user_id))
 
             observability.observe(
-                observability.SystemEvents.PROCESSING,
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
                 data={
                     "event": "workflow_tracked",
                     "workflow_id": workflow_id,
                     "user_id": user_id,
-                    "status": workflow.status
+                    "status": workflow.status.value if hasattr(workflow.status, 'value') else str(workflow.status)
                 },
                 description="Workflow tracked"
             )
@@ -111,7 +138,7 @@ class WorkflowManager:
             # Ensure workflow exists in active workflows
             if workflow_id not in self.active_workflows:
                 observability.observe(
-                    observability.SystemEvents.PROCESSING,
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
                     level=observability.EventLevel.WARNING,
                     data={
                         "event": "workflow_complete_not_active",
@@ -139,7 +166,8 @@ class WorkflowManager:
                 self.workflow_metrics.add_execution_time(execution_time)
 
             observability.observe(
-                observability.SystemEvents.COMPLETED,
+                event_type=observability.ConversationEvents.REQUEST_COMPLETED,
+                level=observability.EventLevel.INFO,
                 data={
                     "event": "workflow_completed",
                     "workflow_id": workflow_id,
@@ -183,7 +211,8 @@ class WorkflowManager:
 
             # Log the update
             observability.observe(
-                observability.SystemEvents.PROCESSING,
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
                 data={
                     "event": "workflow_metrics_updated",
                     "workflow_id": workflow_id,
@@ -204,7 +233,8 @@ class WorkflowManager:
             self.pending_approvals[workflow_id] = workflow
 
             observability.observe(
-                observability.SystemEvents.PROCESSING,
+                event_type=observability.SystemEvents.SERVICE_STARTED,
+                level=observability.EventLevel.INFO,
                 data={
                     "event": "workflow_pending_approval",
                     "workflow_id": workflow_id
@@ -237,7 +267,8 @@ class WorkflowManager:
                 del self.pending_approvals[workflow_id]
 
                 observability.observe(
-                    observability.SystemEvents.PROCESSING,
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
                     data={
                         "event": "workflow_approval_removed",
                         "workflow_id": workflow_id
@@ -353,7 +384,7 @@ class WorkflowManager:
             self.workflow_metrics.increment_cancelled_workflows()
 
             observability.observe(
-                observability.SystemEvents.PROCESSING,
+                event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.WARNING,
                 data={
                     "event": "workflow_cancelled",
@@ -421,7 +452,8 @@ class WorkflowManager:
 
             if cleared_count > 0:
                 observability.observe(
-                    observability.SystemEvents.PROCESSING,
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
                     data={
                         "event": "workflow_history_cleared",
                         "cleared_count": cleared_count,
@@ -447,7 +479,8 @@ class WorkflowManager:
                 self.active_workflows[workflow_id] = workflow
 
                 observability.observe(
-                    observability.SystemEvents.PROCESSING,
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
                     data={
                         "event": "workflow_status_updated",
                         "workflow_id": workflow_id,

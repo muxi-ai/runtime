@@ -724,10 +724,42 @@ class ApprovalManager:
     async def present_plan_for_approval(self, workflow: Workflow) -> str:
         """Present plan to user and return formatted message"""
 
+        # Debug: Entry point
+        from ...services import observability
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "approval_manager_present",
+                "workflow_id": workflow.id,
+                "has_plan_preview": workflow.plan_preview is not None,
+            },
+            description="ApprovalManager.present_plan_for_approval called",
+        )
+
         if not workflow.plan_preview:
+            observability.observe(
+                event_type=observability.ErrorEvents.VALIDATION_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"service": "approval_manager_error", "workflow_id": workflow.id},
+                description="Workflow missing plan preview - raising ValueError",
+            )
             raise ValueError("Workflow missing plan preview")
 
         workflow.approval_status = ApprovalStatus.AWAITING_APPROVAL
+
+        # Debug: Success
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "approval_manager_success",
+                "workflow_id": workflow.id,
+                "plan_length": len(workflow.plan_preview),
+            },
+            description="ApprovalManager.present_plan_for_approval completed successfully",
+        )
+
         return workflow.plan_preview
 
     async def process_approval_response(

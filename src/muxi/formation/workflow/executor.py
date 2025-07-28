@@ -105,8 +105,15 @@ class WorkflowExecutor:
             Updated workflow with execution results
         """
         # Validate inputs
-        self._validate_workflow(workflow)
-        self._validate_context(context)
+        if not isinstance(workflow, Workflow):
+            raise ValueError("Workflow must be a Workflow instance")
+        if not workflow.id:
+            raise ValueError("Workflow must have an ID")
+        if not workflow.tasks:
+            raise ValueError("Workflow must have at least one task")
+
+        if context is not None and not isinstance(context, dict):
+            raise ValueError("Context must be a dictionary or None")
 
         workflow.status = WorkflowStatus.IN_PROGRESS
         workflow.started_at = datetime.now()
@@ -534,8 +541,10 @@ class WorkflowExecutor:
         # Validate inputs
         if not isinstance(task, SubTask):
             raise ValueError("Task must be a SubTask instance")
-        self._validate_workflow(workflow)
-        self._validate_context(context)
+        if not isinstance(workflow, Workflow):
+            raise ValueError("Workflow must be a Workflow instance")
+        if context is not None and not isinstance(context, dict):
+            raise ValueError("Context must be a dictionary or None")
 
         # Convert SubTask to separated models for cleaner internal logic
         spec, state = TaskAdapter.from_subtask(task)
@@ -597,7 +606,7 @@ class WorkflowExecutor:
                 end_time=datetime.now(),
                 success=True,
                 outputs=result.outputs if result else {},
-                attempt_number=state.attempt_count
+                attempt_number=state.attempt_count + 1  # Convert 0-based to 1-based
             )
 
             # Update SubTask with result information
@@ -1091,10 +1100,14 @@ class WorkflowExecutor:
         task_statuses = [task.status for task in workflow.tasks.values()]
 
         # Handle both enum objects and string values due to use_enum_values=True
-        done_values = {TaskStatus.DONE, TaskStatus.DONE.value}
+        # Include both DONE and COMPLETED as success states
+        success_values = {
+            TaskStatus.DONE, TaskStatus.DONE.value,
+            TaskStatus.COMPLETED, TaskStatus.COMPLETED.value
+        }
         failed_values = {TaskStatus.FAILED, TaskStatus.FAILED.value}
 
-        if all(status in done_values for status in task_statuses):
+        if all(status in success_values for status in task_statuses):
             return WorkflowStatus.COMPLETED
         elif any(status in failed_values for status in task_statuses):
             return WorkflowStatus.FAILED

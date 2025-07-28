@@ -524,6 +524,7 @@ class Overlord:
 
         # Initialize enhanced workflow capabilities (intelligence concerns)
         self.enable_workflow_by_default = enable_workflow_by_default
+        self.auto_decomposition = enable_workflow_by_default  # Initialize from parameter
         self.complexity_threshold = complexity_threshold
         self.plan_approval_threshold = plan_approval_threshold
 
@@ -538,13 +539,15 @@ class Overlord:
         self.workflow_config_manager = WorkflowConfigManager(self.workflow_config)
 
         # Initialize workflow components with enhanced configuration
+        # Note: extraction_model might be a string at this point, not an LLM object
+        # We'll update the LLM later in _initialize_extraction_model()
         self.request_analyzer = RequestAnalyzer(
-            llm=extraction_model,
+            llm=None,  # Will be set later in _initialize_extraction_model()
             complexity_method=self.workflow_config.complexity_method,
             complexity_threshold=self.workflow_config.complexity_threshold,
             complexity_weights=self.workflow_config.complexity_weights,
         )
-        self.task_decomposer = TaskDecomposer(llm=extraction_model)
+        self.task_decomposer = TaskDecomposer(llm=None)  # Will be set later
         self.approval_manager = ApprovalManager()
         self.workflow_executor = WorkflowExecutor(
             agent_registry=self.agents, config=self.workflow_config
@@ -1445,6 +1448,11 @@ class Overlord:
                     self.workflow_executor.config = self.workflow_config
                 if hasattr(self, "workflow_config_manager"):
                     self.workflow_config_manager.base_config = self.workflow_config
+                # Update the request analyzer with new config
+                if hasattr(self, "request_analyzer"):
+                    self.request_analyzer.complexity_method = self.workflow_config.complexity_method
+                    self.request_analyzer.complexity_threshold = self.workflow_config.complexity_threshold
+                    self.request_analyzer.complexity_weights = self.workflow_config.complexity_weights
 
             # Streaming configuration
             self.streaming = overlord_config.get("streaming", True)
@@ -1496,8 +1504,20 @@ class Overlord:
                 # Re-initialize components that use the extraction model
                 if hasattr(self, "request_analyzer"):
                     self.request_analyzer.llm = self.extraction_model
+                    observability.observe(
+                        event_type=observability.ServerEvents.SERVER_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"component": "request_analyzer", "has_llm": self.request_analyzer.llm is not None},
+                        description=f"Updated request_analyzer LLM: {self.request_analyzer.llm is not None}",
+                    )
                 if hasattr(self, "task_decomposer"):
                     self.task_decomposer.llm = self.extraction_model
+                    observability.observe(
+                        event_type=observability.ServerEvents.SERVER_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={"component": "task_decomposer", "has_llm": self.task_decomposer.llm is not None},
+                        description=f"Updated task_decomposer LLM: {self.task_decomposer.llm is not None}",
+                    )
                 if hasattr(self, "multimodal_fusion_engine"):
                     self.multimodal_fusion_engine.llm = self.extraction_model
                 if hasattr(self, "quality_assessor"):
@@ -3666,6 +3686,19 @@ class Overlord:
 
         ENHANCED: Now detects and handles agent clarification requests.
         """
+        # Debug: Entry point
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "_process_sync_chat_entry",
+                "agent_name": agent_name,
+                "user_id": user_id,
+                "session_id": session_id,
+                "message_preview": message[:50],
+            },
+            description=f"_process_sync_chat ENTRY: agent={agent_name}, session={session_id}",
+        )
         # Check if this might be a credential response (e.g., GitHub token)
         contains_token = await self._looks_like_credential_token(message) if session_id else False
 
@@ -4112,18 +4145,77 @@ class Overlord:
             description="Checking workflow analysis conditions",
         )
 
+        # Debug: Immediate next step
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "debug_next_step",
+                "checkpoint": "after_checking_conditions",
+            },
+            description="DEBUG: About to evaluate workflow conditions",
+        )
+
         # Check if we should analyze for workflow complexity
         # Only trigger if:
         # 1. No specific agent was requested (agent_name is None)
         # 2. auto_decomposition is enabled
         # 3. Not a clarification response
+
+        # Debug: Log the decision with more detail
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "workflow_analysis_decision",
+                "agent_name": agent_name,
+                "agent_name_is_none": agent_name is None,
+                "auto_decomposition": self.auto_decomposition,
+                "is_clarification_response": is_clarification_response,
+                "should_analyze": agent_name is None and self.auto_decomposition and not is_clarification_response,
+                "session_id": session_id,
+                "has_pending_clarifications": session_id in self._pending_clarifications if session_id else False,
+                "message_preview": message[:50],
+            },
+            description=(
+                f"WORKFLOW DECISION: agent_name={agent_name}, auto_decomp={self.auto_decomposition}, "
+                f"clarification={is_clarification_response}, "
+                f"SHOULD_TRIGGER={agent_name is None and self.auto_decomposition and not is_clarification_response}"
+            ),
+        )
+
         if agent_name is None and self.auto_decomposition and not is_clarification_response:
             # Analyze request complexity
             try:
                 analysis = await self.request_analyzer.analyze_request(message)
 
                 # Check if complexity exceeds threshold
-                if analysis.complexity_score >= self.complexity_threshold:
+                # Use workflow config threshold if available, otherwise fall back to overlord threshold
+                threshold = (
+                    self.workflow_config.complexity_threshold
+                    if hasattr(self, "workflow_config")
+                    else self.complexity_threshold
+                )
+
+                # Debug logging
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "workflow_analysis_result",
+                        "complexity_score": analysis.complexity_score,
+                        "threshold": threshold,
+                        "exceeds_threshold": analysis.complexity_score >= threshold,
+                        "requires_decomposition": analysis.requires_decomposition,
+                        "requires_approval": analysis.requires_approval,
+                    },
+                    description=(
+                        f"Workflow analysis: score={analysis.complexity_score}, "
+                        f"threshold={threshold}, trigger={analysis.complexity_score >= threshold}"
+                    ),
+                )
+
+                if analysis.complexity_score >= threshold:
                     # Process with workflow orchestration
                     return await self._process_with_workflow(
                         message=message,
@@ -4379,6 +4471,17 @@ class Overlord:
             )
 
             # Decompose the request into a workflow
+            observability.observe(
+                event_type=observability.ServerEvents.SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "task_decomposer",
+                    "has_llm": self.task_decomposer.llm is not None,
+                    "available_agents": list(self.agents.keys()),
+                },
+                description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
+            )
+
             workflow = await self.task_decomposer.decompose_request(
                 request=message,
                 context={"available_agents": list(self.agents.keys())},
@@ -4386,15 +4489,49 @@ class Overlord:
                 requires_approval=needs_approval,
             )
 
+            observability.observe(
+                event_type=observability.ServerEvents.SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "task_decomposer_complete",
+                    "workflow_id": workflow.id if workflow else None,
+                    "task_count": len(workflow.tasks) if workflow else 0,
+                },
+                description=f"Task decomposition complete: {len(workflow.tasks) if workflow else 0} tasks",
+            )
+
             # Store workflow for tracking
             workflow_id = workflow.id
+
+            # Debug: About to track workflow
+            observability.observe(
+                event_type=observability.ServerEvents.SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                data={"service": "track_workflow_call", "workflow_id": workflow_id},
+                description="About to call workflow_manager.track_workflow",
+            )
+
             self.workflow_manager.track_workflow(workflow, user_id)
+
+            # Debug: After tracking workflow
+            observability.observe(
+                event_type=observability.ServerEvents.SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                data={"service": "track_workflow_complete", "workflow_id": workflow_id},
+                description="workflow_manager.track_workflow completed successfully",
+            )
 
             # Note: user_id is tracked separately in active_workflows
             # The Workflow model doesn't support user_id as an attribute
 
             if needs_approval:
                 # Route to approval handler
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"service": "workflow_approval", "workflow_id": workflow_id},
+                    description="Routing to workflow approval handler",
+                )
                 return await self._handle_workflow_approval(
                     workflow=workflow,
                     message=message,
@@ -4404,7 +4541,22 @@ class Overlord:
                 )
             else:
                 # Execute immediately without approval
-                return await self._execute_workflow(
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"service": "workflow_execution", "workflow_id": workflow_id},
+                    description="Executing workflow without approval",
+                )
+
+                # Debug: About to call _execute_workflow
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"service": "execute_workflow_call", "workflow_id": workflow_id},
+                    description="About to call _execute_workflow",
+                )
+
+                result = await self._execute_workflow(
                     workflow=workflow,
                     message=message,
                     user_id=user_id,
@@ -4412,6 +4564,16 @@ class Overlord:
                     request_id=request_id,
                     stream=stream,
                 )
+
+                # Debug: _execute_workflow completed
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={"service": "execute_workflow_complete", "workflow_id": workflow_id},
+                    description="_execute_workflow completed successfully",
+                )
+
+                return result
 
         except Exception as e:
             # Clean up on error
@@ -4462,15 +4624,58 @@ class Overlord:
         Stores the pending workflow and generates an approval message for the user.
         If session_id is provided, stores clarification info for handling the response.
         """
+        # Debug: Entry point
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "workflow_approval_handler", "workflow_id": workflow.id},
+            description="Entered _handle_workflow_approval method",
+        )
+
         # Validate inputs
         self._validate_workflow_inputs(message, user_id, session_id, request_id)
         self._validate_workflow_object(workflow)
 
+        # Debug: After validation
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "workflow_approval_validation", "workflow_id": workflow.id},
+            description="Validation completed successfully",
+        )
+
         # Store pending workflow
         self.workflow_manager.add_pending_approval(workflow)
 
+        # Debug: After storing workflow
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "workflow_approval_stored", "workflow_id": workflow.id},
+            description="Workflow stored for approval",
+        )
+
         # Generate approval message using approval manager
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "approval_manager_call", "workflow_id": workflow.id},
+            description="About to call ApprovalManager.present_plan_for_approval",
+        )
+
         approval_message = await self.approval_manager.present_plan_for_approval(workflow)
+
+        # Debug: After approval manager call
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "approval_manager_complete",
+                "workflow_id": workflow.id,
+                "message_length": len(approval_message) if approval_message else 0,
+            },
+            description="ApprovalManager.present_plan_for_approval completed successfully",
+        )
 
         # Store clarification info if session_id exists
         if session_id:
@@ -4482,8 +4687,20 @@ class Overlord:
                 "request_id": request_id,
             }
 
+        # Debug: Before returning response
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "workflow_approval_response",
+                "workflow_id": workflow.id,
+                "has_session": session_id is not None,
+            },
+            description="About to return MuxiResponse with approval message",
+        )
+
         # Return response with approval message
-        return MuxiResponse(
+        response = MuxiResponse(
             role="assistant",
             content=approval_message,
             metadata={
@@ -4492,6 +4709,16 @@ class Overlord:
                 "requires_user_response": True,
             },
         )
+
+        # Debug: Final success
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={"service": "workflow_approval_success", "workflow_id": workflow.id},
+            description="_handle_workflow_approval completed successfully",
+        )
+
+        return response
 
     async def _execute_workflow(
         self,
@@ -6075,7 +6302,13 @@ Token:"""
                         analysis = await self.request_analyzer.analyze_request(message)
 
                         # Check if complexity exceeds threshold
-                        if analysis.complexity_score >= self.complexity_threshold:
+                        # Use workflow config threshold if available, otherwise fall back to overlord threshold
+                        threshold = (
+                            self.workflow_config.complexity_threshold
+                            if hasattr(self, "workflow_config")
+                            else self.complexity_threshold
+                        )
+                        if analysis.complexity_score >= threshold:
                             # Stream workflow execution
                             result = await self._process_with_workflow(
                                 message=message,
