@@ -4339,9 +4339,8 @@ class Overlord:
                         self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
                     self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
 
-            # Store user_id in workflow for filtering
-            if hasattr(workflow, "__dict__"):
-                workflow.user_id = user_id
+            # Note: user_id is tracked separately in active_workflows
+            # The Workflow model doesn't support user_id as an attribute
 
             if needs_approval:
                 # Route to approval handler
@@ -4498,9 +4497,8 @@ class Overlord:
                     self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
                 self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
 
-        # Store user_id in workflow for filtering
-        if hasattr(workflow, "__dict__"):
-            workflow.user_id = user_id
+        # Note: user_id is tracked separately in workflow_metrics
+        # The Workflow model doesn't support user_id as an attribute
 
         try:
             # Setup progress tracking callback
@@ -4710,9 +4708,8 @@ class Overlord:
                     self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
                 self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
 
-        # Store user_id in workflow for filtering
-        if hasattr(workflow, "__dict__"):
-            workflow.user_id = user_id
+        # Note: user_id is tracked separately in workflow_metrics
+        # The Workflow model doesn't support user_id as an attribute
 
         try:
             # Yield initial workflow information
