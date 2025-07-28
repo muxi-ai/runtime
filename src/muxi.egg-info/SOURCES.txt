@@ -32,6 +32,7 @@ src/muxi/datatypes/task_status.py
 src/muxi/datatypes/type_definitions.py
 src/muxi/datatypes/validation.py
 src/muxi/datatypes/workflow.py
+src/muxi/datatypes/workflow_models.py
 src/muxi/extensions/__init__.py
 src/muxi/extensions/base.py
 src/muxi/extensions/sqlite_vec.py
@@ -130,6 +131,14 @@ src/muxi/formation/resilience/error_classifier.py
 src/muxi/formation/resilience/fallback_manager.py
 src/muxi/formation/resilience/recovery_strategist.py
 src/muxi/formation/resilience/resilient_workflow_manager.py
+src/muxi/formation/server/__init__.py
+src/muxi/formation/server/auth.py
+src/muxi/formation/server/server.py
+src/muxi/formation/server/routes/__init__.py
+src/muxi/formation/server/routes/admin.py
+src/muxi/formation/server/routes/client.py
+src/muxi/formation/server/routes/health.py
+src/muxi/formation/server/routes/mcp.py
 src/muxi/formation/utils/__init__.py
 src/muxi/formation/utils/api_keys.py
 src/muxi/formation/utils/format_utils.py
@@ -142,6 +151,9 @@ src/muxi/formation/workflow/decomposer.py
 src/muxi/formation/workflow/executor.py
 src/muxi/formation/workflow/interactive.py
 src/muxi/formation/workflow/synthesis.py
+src/muxi/formation/workflow/task_adapter.py
+src/muxi/formation/workflow/workflow_manager.py
+src/muxi/formation/workflow/workflow_metrics.py
 src/muxi/services/__init__.py
 src/muxi/services/db.py
 src/muxi/services/a2a/__init__.py
