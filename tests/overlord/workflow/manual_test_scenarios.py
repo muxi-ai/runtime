@@ -17,12 +17,12 @@ from datetime import datetime
 from typing import Dict, Any
 import json
 
-from src.muxi.overlord.workflow.analyzer import RequestAnalyzer
-from src.muxi.overlord.workflow.decomposer import TaskDecomposer, ApprovalManager
-from src.muxi.overlord.workflow.executor import WorkflowExecutor, ProgressTracker
-from src.muxi.overlord.workflow.types import WorkflowStatus, ApprovalStatus
-from src.muxi.llm import LLM
-from src.muxi.agent import Agent
+from src.muxi.formation.workflow.analyzer import RequestAnalyzer
+from src.muxi.formation.workflow.decomposer import TaskDecomposer, ApprovalManager
+from src.muxi.formation.workflow.executor import WorkflowExecutor, ProgressTracker
+from src.muxi.datatypes.workflow import WorkflowStatus, ApprovalStatus
+from src.muxi.services.llm import LLM
+from src.muxi.formation.agents import Agent
 
 
 class ManualTestOrchestrator:

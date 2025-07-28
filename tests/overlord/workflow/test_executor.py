@@ -8,11 +8,11 @@ with DAG-based coordination and parallel execution.
 import pytest
 from unittest.mock import AsyncMock
 
-from src.muxi.overlord.workflow.executor import WorkflowExecutor, ProgressTracker
-from src.muxi.overlord.workflow.types import (
+from src.muxi.formation.workflow.executor import WorkflowExecutor, ProgressTracker
+from src.muxi.datatypes.workflow import (
     Workflow, SubTask, TaskStatus, WorkflowStatus, TaskResult
 )
-from src.muxi.agent import Agent
+from src.muxi.formation.agents import Agent
 
 
 class TestWorkflowExecutor:

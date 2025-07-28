@@ -8,11 +8,11 @@ executable workflows with plan preview capabilities.
 import pytest
 from unittest.mock import AsyncMock
 
-from src.muxi.overlord.workflow.decomposer import TaskDecomposer, ApprovalManager
-from src.muxi.overlord.workflow.types import (
+from src.muxi.formation.workflow.decomposer import TaskDecomposer, ApprovalManager
+from src.muxi.datatypes.workflow import (
     Workflow, SubTask, WorkflowStatus, ApprovalStatus, RequestAnalysis
 )
-from src.muxi.llm import LLM
+from src.muxi.services.llm import LLM
 
 
 class TestTaskDecomposer:

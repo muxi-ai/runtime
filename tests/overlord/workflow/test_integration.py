@@ -8,14 +8,14 @@ the entire orchestration pipeline with real component interactions.
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from src.muxi.overlord.workflow.analyzer import RequestAnalyzer
-from src.muxi.overlord.workflow.decomposer import TaskDecomposer, ApprovalManager
-from src.muxi.overlord.workflow.executor import WorkflowExecutor, ProgressTracker
-from src.muxi.overlord.workflow.types import (
+from src.muxi.formation.workflow.analyzer import RequestAnalyzer
+from src.muxi.formation.workflow.decomposer import TaskDecomposer, ApprovalManager
+from src.muxi.formation.workflow.executor import WorkflowExecutor, ProgressTracker
+from src.muxi.datatypes.workflow import (
     Workflow, WorkflowStatus, ApprovalStatus, TaskStatus
 )
-from src.muxi.llm import LLM
-from src.muxi.agent import Agent
+from src.muxi.services.llm import LLM
+from src.muxi.formation.agents import Agent
 
 
 class TestWorkflowOrchestrationIntegration:

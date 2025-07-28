@@ -8,7 +8,7 @@ as implemented in overlord.workflow.types.
 import pytest
 from datetime import datetime
 
-from src.muxi.overlord.workflow.types import (
+from src.muxi.datatypes.workflow import (
     TaskStatus, WorkflowStatus, ApprovalStatus,
     SubTask, Workflow, RequestAnalysis, TaskResult,
     generate_workflow_id, generate_task_id,

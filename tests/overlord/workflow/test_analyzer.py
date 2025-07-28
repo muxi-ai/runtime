@@ -8,8 +8,8 @@ and determines if workflow orchestration is needed.
 import pytest
 from unittest.mock import AsyncMock, Mock
 
-from src.muxi.overlord.workflow.analyzer import RequestAnalyzer
-from src.muxi.overlord.workflow.types import RequestAnalysis
+from src.muxi.formation.workflow.analyzer import RequestAnalyzer
+from src.muxi.datatypes.workflow import RequestAnalysis
 
 
 class TestRequestAnalyzer:
@@ -121,7 +121,8 @@ class TestRequestAnalyzer:
         assert isinstance(analysis, RequestAnalysis)
         assert analysis.confidence_score < 0.8  # Lower confidence for heuristic
 
-    def test_detect_approval_keywords(self):
+    @pytest.mark.asyncio
+    async def test_detect_approval_keywords(self):
         """Test approval keyword detection."""
         analyzer = RequestAnalyzer()
 
@@ -137,7 +138,7 @@ class TestRequestAnalyzer:
 
         for phrase in approval_phrases:
             request = f"Please {phrase} and then proceed"
-            requires_approval = analyzer._detect_approval_request(request)
+            requires_approval = await analyzer._detect_approval_request(request)
             assert requires_approval is True, f"Failed to detect approval in: {phrase}"
 
     def test_detect_non_approval(self):
