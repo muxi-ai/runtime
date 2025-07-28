@@ -3620,7 +3620,7 @@ class Overlord:
             # What else could it be? The user is responding to our clarification question.
             is_clarification_response = True
             observability.observe(
-                event_type=observability.SystemEvents.DEBUG,
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.DEBUG,
                 data={
                     "session_id": session_id,
@@ -3632,7 +3632,7 @@ class Overlord:
 
         if session_id and (contains_token or is_clarification_response):
             observability.observe(
-                event_type=observability.SystemEvents.DEBUG,
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "session_id": session_id,
@@ -3883,7 +3883,7 @@ class Overlord:
                 elif clarification_info.get("type") == "workflow_approval":
                     # Handle workflow approval response
                     observability.observe(
-                        event_type=observability.SystemEvents.DEBUG,
+                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                         level=observability.EventLevel.INFO,
                         data={
                             "session_id": session_id,
@@ -3900,7 +3900,7 @@ class Overlord:
                     workflow = self.pending_approvals.get(workflow_id)
 
                     observability.observe(
-                        event_type=observability.SystemEvents.DEBUG,
+                        event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                         level=observability.EventLevel.INFO,
                         data={
                             "workflow_id": workflow_id,
@@ -4039,7 +4039,7 @@ class Overlord:
         # ===================================================================
 
         observability.observe(
-            event_type=observability.SystemEvents.DEBUG,
+            event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
             level=observability.EventLevel.INFO,
             data={
                 "session_id": session_id,
@@ -4088,7 +4088,7 @@ class Overlord:
         if agent_name is None:
             # Add debug info about why we're here
             observability.observe(
-                event_type=observability.SystemEvents.DEBUG,
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.WARNING,
                 data={
                     "session_id": session_id,
@@ -4305,7 +4305,7 @@ class Overlord:
             needs_approval = analysis.complexity_score >= self.plan_approval_threshold
 
             observability.observe(
-                event_type=observability.SystemEvents.DEBUG,
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "complexity_score": analysis.complexity_score,
@@ -5548,7 +5548,7 @@ class Overlord:
                 }
 
             observability.observe(
-                event_type=observability.ConversationEvents.CLARIFICATION_REQUESTED,
+                event_type=observability.ConversationEvents.CLARIFICATION_REQUEST_SENT,
                 level=observability.EventLevel.INFO,
                 data={
                     "clarification_type": "credential",
