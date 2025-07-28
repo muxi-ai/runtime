@@ -5,7 +5,7 @@ This module defines the standardized response format for all MUXI communication
 modes (sync, async, webhooks) with multi-modal support and OpenAI compatibility.
 """
 
-from typing import Optional, List, Literal, TypedDict, Union
+from typing import Optional, List, Literal, TypedDict, Union, Dict, Any
 from pydantic import BaseModel, Field
 
 from .mcp import FunctionCallModel
@@ -160,6 +160,7 @@ class MuxiResponse(BaseModel):
         ..., description="Message content (string or content items)"
     )
     artifacts: Optional[List[MuxiArtifact]] = None
+    metadata: Optional[Dict[str, Any]] = None
 
     def model_dump(self, **kwargs):
         """
@@ -192,5 +193,9 @@ class MuxiResponse(BaseModel):
         if self.artifacts:
             mode = "json" if kwargs.get("mode") == "json" else None
             result["artifacts"] = [artifact.model_dump(mode=mode) for artifact in self.artifacts]
+
+        # Include metadata if present
+        if self.metadata:
+            result["metadata"] = self.metadata
 
         return result

@@ -119,7 +119,9 @@ from ..workflow import (
     ApprovalManager,
     ProgressTracker,
     Workflow,
+    TaskStatus,
 )
+from ...datatypes.workflow import ApprovalStatus
 
 # Utility functions
 from ..utils import generate_api_key
@@ -3572,16 +3574,36 @@ class Overlord:
         # Check if this might be a credential response (e.g., GitHub token)
         contains_token = await self._looks_like_credential_token(message) if session_id else False
 
-        # Debug session and clarifications
-
         # Check if this might be a clarification response
         is_clarification_response = False
         if session_id and session_id in self._pending_clarifications:
             # If there's a pending clarification, ANY response should be treated as a clarification response
             # What else could it be? The user is responding to our clarification question.
             is_clarification_response = True
+            observability.observe(
+                event_type=observability.SystemEvents.DEBUG,
+                level=observability.EventLevel.DEBUG,
+                data={
+                    "session_id": session_id,
+                    "clarification_type": self._pending_clarifications[session_id].get("type"),
+                    "is_clarification_response": is_clarification_response,
+                },
+                description=f"Found pending clarification for session {session_id}",
+            )
 
         if session_id and (contains_token or is_clarification_response):
+            observability.observe(
+                event_type=observability.SystemEvents.DEBUG,
+                level=observability.EventLevel.INFO,
+                data={
+                    "session_id": session_id,
+                    "contains_token": contains_token,
+                    "is_clarification_response": is_clarification_response,
+                    "message_preview": message[:100],
+                },
+                description="Entering clarification handling block",
+            )
+
             # Check if we have a pending credential request for this session
             if session_id in self._pending_clarifications:
                 clarification_info = self._pending_clarifications[session_id]
@@ -3819,8 +3841,223 @@ class Overlord:
                             content="I encountered an error processing your selection. Please try again.",
                         )
 
+                elif clarification_info.get("type") == "workflow_approval":
+                    # Handle workflow approval response
+                    observability.observe(
+                        event_type=observability.SystemEvents.DEBUG,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "session_id": session_id,
+                            "workflow_id": clarification_info.get("workflow_id"),
+                            "message": message[:100],
+                        },
+                        description="Processing workflow approval response",
+                    )
+
+                    workflow_id = clarification_info.get("workflow_id")
+                    original_message = clarification_info.get("original_message")
+
+                    # Retrieve workflow from pending approvals
+                    workflow = self.pending_approvals.get(workflow_id)
+
+                    observability.observe(
+                        event_type=observability.SystemEvents.DEBUG,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "workflow_id": workflow_id,
+                            "workflow_found": workflow is not None,
+                            "pending_approvals_keys": list(self.pending_approvals.keys()),
+                        },
+                        description=f"Looking up workflow {workflow_id} in pending approvals",
+                    )
+
+                    if workflow:
+                        try:
+                            # Process approval response using approval manager
+                            # Returns a tuple: (ApprovalStatus, Optional[str])
+                            approval_status, instructions = await self.approval_manager.process_approval_response(
+                                workflow=workflow,
+                                user_response=message
+                            )
+
+                            # Handle different approval outcomes
+                            if approval_status == ApprovalStatus.APPROVED:
+                                # Clean up pending states
+                                del self._pending_clarifications[session_id]
+                                del self.pending_approvals[workflow_id]
+
+                                # Execute the approved workflow
+                                return await self._execute_workflow(
+                                    workflow=workflow,
+                                    message=original_message or message,
+                                    user_id=user_id,
+                                    session_id=session_id,
+                                    request_id=request_id,
+                                )
+
+                            elif approval_status == ApprovalStatus.REJECTED:
+                                # Clean up pending states
+                                del self._pending_clarifications[session_id]
+                                del self.pending_approvals[workflow_id]
+
+                                # Return rejection acknowledgment
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=(
+                                        "I understand. I've cancelled the workflow. "
+                                        "Please let me know if you'd like me to try a different approach "
+                                        "or if you have a different request."
+                                    ),
+                                    metadata={"workflow_cancelled": True, "workflow_id": workflow_id},
+                                )
+
+                            elif approval_status == ApprovalStatus.MODIFIED:
+                                # For modification requests, we need to handle this differently
+                                # since process_approval_response only returns status and instructions
+                                # Keep clarification state active and ask for more details
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=(
+                                        "I understand you'd like me to modify the plan. "
+                                        f"{instructions if instructions else ''}\n"
+                                        "Could you please specify what changes you'd like me to make? "
+                                        "For example:\n"
+                                        "- Add or remove specific steps\n"
+                                        "- Change the order of operations\n"
+                                        "- Use different tools or approaches\n"
+                                        "- Adjust any parameters or settings"
+                                    ),
+                                    metadata={
+                                        "workflow_id": workflow_id,
+                                        "awaiting_modification_details": True,
+                                        "requires_user_response": True,
+                                    },
+                                )
+
+                            elif approval_status == ApprovalStatus.AWAITING_APPROVAL:
+                                # Unclear response - ask for clarification
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=instructions or (
+                                        "I didn't understand your response to the workflow plan. "
+                                        "Please respond with:\n"
+                                        "- 'yes' or 'proceed' to approve the plan\n"
+                                        "- 'no' or 'reject' to cancel it\n"
+                                        "- Specific modifications you'd like me to make"
+                                    ),
+                                    metadata={
+                                        "workflow_id": workflow_id,
+                                        "approval_required": True,
+                                        "requires_user_response": True
+                                    },
+                                )
+                            else:
+                                # Unexpected status
+                                return MuxiResponse(
+                                    role="assistant",
+                                    content=(
+                                        "I encountered an unexpected response from the approval system. "
+                                        "Please try again."
+                                    ),
+                                    metadata={
+                                        "error": "unexpected_approval_status",
+                                        "status": str(approval_status),
+                                    },
+                                )
+
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.ERROR,
+                                data={"error": str(e), "workflow_id": workflow_id},
+                                description=f"Failed to process workflow approval: {str(e)}",
+                            )
+                            return MuxiResponse(
+                                role="assistant",
+                                content=(
+                                    "I encountered an error processing your approval response. "
+                                    "Please try again or let me know if you'd like to start over."
+                                ),
+                            )
+                    else:
+                        # Workflow not found - it may have expired or been cleaned up
+                        del self._pending_clarifications[session_id]
+                        return MuxiResponse(
+                            role="assistant",
+                            content=(
+                                "I couldn't find the workflow you're responding to. "
+                                "It may have expired. Please restate your request if you'd like me to try again."
+                            ),
+                        )
+
+        # ===================================================================
+        # WORKFLOW ANALYSIS AND DECOMPOSITION
+        # ===================================================================
+
+        observability.observe(
+            event_type=observability.SystemEvents.DEBUG,
+            level=observability.EventLevel.INFO,
+            data={
+                "session_id": session_id,
+                "agent_name": agent_name,
+                "auto_decomposition": self.auto_decomposition,
+                "is_clarification_response": is_clarification_response,
+                "has_pending_clarifications": session_id in self._pending_clarifications if session_id else False,
+                "message_preview": message[:100],
+            },
+            description="Checking workflow analysis conditions",
+        )
+
+        # Check if we should analyze for workflow complexity
+        # Only trigger if:
+        # 1. No specific agent was requested (agent_name is None)
+        # 2. auto_decomposition is enabled
+        # 3. Not a clarification response
+        if agent_name is None and self.auto_decomposition and not is_clarification_response:
+            # Analyze request complexity
+            try:
+                analysis = await self.request_analyzer.analyze_request(message)
+
+                # Check if complexity exceeds threshold
+                if analysis.complexity_score >= self.complexity_threshold:
+                    # Process with workflow orchestration
+                    return await self._process_with_workflow(
+                        message=message,
+                        analysis=analysis,
+                        user_id=user_id,
+                        session_id=session_id,
+                        request_id=request_id,
+                    )
+            except Exception as e:
+                # Log error but continue with normal flow
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={"error": str(e), "phase": "workflow_analysis"},
+                    description=f"Failed to analyze request for workflow: {str(e)}",
+                )
+                # Fall through to normal agent selection
+
         # Use existing agent selection logic if no specific agent requested
         if agent_name is None:
+            # Add debug info about why we're here
+            observability.observe(
+                event_type=observability.SystemEvents.DEBUG,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "session_id": session_id,
+                    "is_clarification_response": is_clarification_response,
+                    "has_pending_clarifications": session_id in self._pending_clarifications if session_id else False,
+                    "pending_clarification_type": (
+                        self._pending_clarifications.get(session_id, {}).get("type")
+                        if session_id and session_id in self._pending_clarifications
+                        else None
+                    ),
+                    "message": message[:100],
+                },
+                description="Agent selection triggered - check if this should have been handled as clarification",
+            )
+
             # Emit agent selection started event
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_AGENT_SELECTION_STARTED,
@@ -3970,6 +4207,525 @@ class Overlord:
             )
 
         return result
+
+    async def _process_with_workflow(
+        self,
+        message: str,
+        analysis: Any,  # RequestAnalysis type from workflow module
+        user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> MuxiResponse:
+        """
+        Process a complex request using workflow orchestration.
+
+        This method handles requests that exceed the complexity threshold by:
+        1. Determining if user approval is needed based on plan_approval_threshold
+        2. Decomposing the request into a multi-agent workflow
+        3. Either executing immediately or routing through approval flow
+
+        Args:
+            message: The user's original message
+            analysis: RequestAnalysis object containing complexity score and decomposition hints
+            user_id: User identifier
+            session_id: Optional session identifier
+            request_id: Optional request identifier
+
+        Returns:
+            MuxiResponse containing either workflow results or approval request
+        """
+        try:
+            # Emit workflow orchestration started event
+            # TODO: Add OVERLORD_WORKFLOW_STARTED event type to ConversationEvents
+            # For now, use OVERLORD_TASK_DECOMPOSED as it's the closest existing event
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_TASK_DECOMPOSED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "complexity_score": analysis.complexity_score,
+                    "user_id": user_id,
+                    "session_id": session_id,
+                    "workflow_triggered": True,
+                },
+                description=f"Starting workflow orchestration (complexity: {analysis.complexity_score})",
+            )
+
+            # Determine if approval is needed
+            needs_approval = analysis.complexity_score >= self.plan_approval_threshold
+
+            observability.observe(
+                event_type=observability.SystemEvents.DEBUG,
+                level=observability.EventLevel.INFO,
+                data={
+                    "complexity_score": analysis.complexity_score,
+                    "plan_approval_threshold": self.plan_approval_threshold,
+                    "needs_approval": needs_approval,
+                    "message_preview": message[:100],
+                },
+                description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
+            )
+
+            # Decompose the request into a workflow
+            workflow = await self.task_decomposer.decompose_request(
+                request=message,
+                context={"available_agents": list(self.agents.keys())},
+                analysis=analysis,
+                requires_approval=needs_approval,
+            )
+
+            # Store workflow for tracking
+            workflow_id = workflow.id
+            self.active_workflows[workflow_id] = workflow
+
+            if needs_approval:
+                # Route to approval handler
+                return await self._handle_workflow_approval(
+                    workflow=workflow,
+                    message=message,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
+            else:
+                # Execute immediately without approval
+                return await self._execute_workflow(
+                    workflow=workflow,
+                    message=message,
+                    user_id=user_id,
+                    session_id=session_id,
+                    request_id=request_id,
+                )
+
+        except Exception as e:
+            # Clean up on error
+            if "workflow_id" in locals() and workflow_id in self.active_workflows:
+                del self.active_workflows[workflow_id]
+
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "phase": "workflow_processing"},
+                description=f"Failed to process workflow: {str(e)}",
+            )
+
+            # Fall back to simple response
+            return MuxiResponse(
+                role="assistant",
+                content=(
+                    "I encountered an error while planning a complex workflow for your request. "
+                    "Let me try a simpler approach to help you."
+                ),
+                metadata={
+                    "error": "workflow_processing_failed",
+                    "fallback": True,
+                },
+            )
+
+    async def _handle_workflow_approval(
+        self,
+        workflow: Any,  # Workflow type from workflow module
+        message: str,
+        user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> MuxiResponse:
+        """
+        Handle workflow approval flow.
+
+        Stores the pending workflow and generates an approval message for the user.
+        If session_id is provided, stores clarification info for handling the response.
+        """
+        # Store pending workflow
+        self.pending_approvals[workflow.id] = workflow
+
+        # Generate approval message using approval manager
+        approval_message = await self.approval_manager.present_plan_for_approval(workflow)
+
+        # Store clarification info if session_id exists
+        if session_id:
+            self._pending_clarifications[session_id] = {
+                "type": "workflow_approval",
+                "workflow_id": workflow.id,
+                "original_message": message,
+                "user_id": user_id,
+                "request_id": request_id,
+            }
+
+        # Return response with approval message
+        return MuxiResponse(
+            role="assistant",
+            content=approval_message,
+            metadata={
+                "workflow_id": workflow.id,
+                "approval_required": True,
+                "requires_user_response": True,
+            },
+        )
+
+    async def _execute_workflow(
+        self,
+        workflow: Any,  # Workflow type from workflow module
+        message: str,
+        user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> MuxiResponse:
+        """
+        Execute a workflow immediately without approval.
+
+        This method orchestrates the execution of complex multi-task workflows,
+        tracking progress and synthesizing results into a coherent response.
+        """
+        workflow_id = workflow.id
+
+        # Track workflow in active workflows
+        self.active_workflows[workflow_id] = workflow
+
+        try:
+            # Setup progress tracking callback
+            def progress_callback(wf_id: str, wf: Any):
+                """Internal callback to track workflow progress."""
+                if wf_id == workflow_id:
+                    # Update our tracked workflow
+                    self.active_workflows[workflow_id] = wf
+
+                    # Log progress
+                    observability.observe(
+                        event_type=observability.ConversationEvents.OVERLORD_TASK_DECOMPOSED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "workflow_id": workflow_id,
+                            "status": wf.status.value if hasattr(wf.status, 'value') else str(wf.status),
+                            "progress": self.workflow_executor.get_workflow_progress(workflow_id),
+                        },
+                        description=f"Workflow {workflow_id} progress update",
+                    )
+
+            # Add progress callback
+            self.workflow_executor.add_progress_callback(progress_callback)
+
+            # Build execution context
+            execution_context = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "request_id": request_id,
+                "original_message": message,
+            }
+
+            # Execute workflow
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_ROUTING_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow_id,
+                    "task_count": len(workflow.tasks),
+                    "user_id": user_id,
+                },
+                description=f"Starting execution of workflow {workflow_id}",
+            )
+
+            completed_workflow = await self.workflow_executor.execute_workflow(
+                workflow, context=execution_context
+            )
+
+            # Collect all task results
+            task_results = []
+            for task in completed_workflow.tasks.values():
+                if task.status == TaskStatus.DONE:
+                    task_result = {
+                        "task_id": task.id,
+                        "description": task.description,
+                        "outputs": task.outputs or {},
+                        "status": "completed"
+                    }
+                    task_results.append(task_result)
+                elif task.status == TaskStatus.FAILED:
+                    task_result = {
+                        "task_id": task.id,
+                        "description": task.description,
+                        "error": task.error_message or "Unknown error",
+                        "status": "failed"
+                    }
+                    task_results.append(task_result)
+
+            # Synthesize final response from task results
+            final_response = await self._synthesize_workflow_results(
+                task_results, message, workflow
+            )
+
+            # Add workflow metadata
+            final_response.metadata = final_response.metadata or {}
+            final_response.metadata.update({
+                "workflow_id": workflow_id,
+                "workflow_status": (
+                    completed_workflow.status.value
+                    if hasattr(completed_workflow.status, "value")
+                    else str(completed_workflow.status)
+                ),
+                "total_tasks": len(workflow.tasks),
+                "completed_tasks": len([t for t in task_results if t.get("status") == "completed"]),
+                "failed_tasks": len([t for t in task_results if t.get("status") == "failed"]),
+                "execution_time": (
+                    (completed_workflow.completed_at - completed_workflow.started_at).total_seconds()
+                    if completed_workflow.completed_at and completed_workflow.started_at
+                    else None
+                ),
+            })
+
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow_id,
+                    "status": (
+                        completed_workflow.status.value
+                        if hasattr(completed_workflow.status, "value")
+                        else str(completed_workflow.status)
+                    ),
+                    "task_results": len(task_results),
+                },
+                description=f"Workflow {workflow_id} execution complete",
+            )
+
+            return final_response
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_ROUTING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow_id,
+                    "error": str(e),
+                    "user_id": user_id,
+                },
+                description=f"Error executing workflow {workflow_id}: {str(e)}",
+            )
+
+            return MuxiResponse(
+                role="assistant",
+                content=(
+                    f"I encountered an error while executing the workflow: {str(e)}. "
+                    "Please try again or simplify your request."
+                ),
+                metadata={
+                    "workflow_id": workflow_id,
+                    "error": str(e),
+                    "workflow_status": "failed",
+                },
+            )
+
+        finally:
+            # Clean up active workflow tracking
+            if workflow_id in self.active_workflows:
+                del self.active_workflows[workflow_id]
+
+    async def _synthesize_workflow_results(
+        self,
+        task_results: List[Dict[str, Any]],
+        original_request: str,
+        workflow: Any,  # Workflow type
+    ) -> MuxiResponse:
+        """
+        Synthesize task results into a coherent final response.
+
+        This method takes the outputs from all workflow tasks and combines them
+        into a unified response that addresses the user's original request.
+
+        Args:
+            task_results: List of task results with outputs
+            original_request: User's original request
+            workflow: The executed workflow
+
+        Returns:
+            MuxiResponse with synthesized content
+        """
+        try:
+            # Check if we have any successful results
+            successful_results = [r for r in task_results if r.get("status") == "completed"]
+
+            if not successful_results:
+                # All tasks failed
+                failed_tasks = [r for r in task_results if r.get("status") == "failed"]
+                error_summary = "\n".join([
+                    f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
+                    for task in failed_tasks
+                ])
+
+                return MuxiResponse(
+                    role="assistant",
+                    content=(
+                        f"I encountered errors while processing your request. "
+                        f"Here's what went wrong:\n\n{error_summary}\n\n"
+                        f"Please try rephrasing your request or breaking it into smaller parts."
+                    ),
+                    metadata={"synthesis_method": "error_summary"},
+                )
+
+            # Try to use LLM for intelligent synthesis if available
+            synthesis_model = self._capability_models.get("text") if hasattr(self, "_capability_models") else None
+
+            if synthesis_model and self.llm_service:
+                # Prepare synthesis prompt
+                synthesis_prompt = self._create_synthesis_prompt(
+                    original_request, successful_results, task_results
+                )
+
+                try:
+                    # Use LLM to synthesize results
+                    synthesis_response = await self.llm_service.execute(
+                        operation_id=f"synthesis_{workflow.id}",
+                        model=synthesis_model,
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are a helpful assistant that synthesizes multiple task results "
+                                    "into a coherent, comprehensive response. Focus on addressing the user's "
+                                    "original request while incorporating all relevant information from the tasks."
+                                ),
+                            },
+                            {"role": "user", "content": synthesis_prompt},
+                        ],
+                        temperature=0.7,
+                        max_tokens=2000,
+                    )
+
+                    if synthesis_response and synthesis_response.get("text"):
+                        return MuxiResponse(
+                            role="assistant",
+                            content=synthesis_response["text"],
+                            metadata={"synthesis_method": "llm_synthesis"},
+                        )
+
+                except Exception as e:
+                    # Log but continue with fallback
+                    observability.observe(
+                        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={"error": str(e), "workflow_id": workflow.id},
+                        description=f"LLM synthesis failed, using fallback: {str(e)}",
+                    )
+
+            # Fallback: Simple concatenation with structure
+            return self._fallback_synthesis(original_request, successful_results, task_results)
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e), "workflow_id": workflow.id},
+                description=f"Error synthesizing workflow results: {str(e)}",
+            )
+
+            # Emergency fallback
+            return MuxiResponse(
+                role="assistant",
+                content=(
+                    f"I completed the workflow with {len(successful_results)} successful tasks, "
+                    f"but encountered an error while preparing the final response. "
+                    f"The tasks were completed successfully, but I couldn't synthesize the results properly."
+                ),
+                metadata={"synthesis_method": "emergency_fallback", "error": str(e)},
+            )
+
+    def _create_synthesis_prompt(
+        self,
+        original_request: str,
+        successful_results: List[Dict[str, Any]],
+        all_results: List[Dict[str, Any]],
+    ) -> str:
+        """Create prompt for LLM synthesis of task results."""
+        prompt_parts = [
+            f"Original User Request: {original_request}",
+            "",
+            "Task Results to Synthesize:",
+            "",
+        ]
+
+        # Add successful task results
+        for i, result in enumerate(successful_results, 1):
+            prompt_parts.append(f"Task {i}: {result.get('description', 'Unknown task')}")
+
+            # Extract content from outputs
+            outputs = result.get("outputs", {})
+            if isinstance(outputs, dict):
+                content = (
+                    outputs.get("content")
+                    or outputs.get("written_content")
+                    or outputs.get("analysis_results")
+                    or outputs.get("research_findings", "")
+                )
+            else:
+                content = str(outputs)
+
+            prompt_parts.append(f"Result: {content}")
+            prompt_parts.append("")
+
+        # Note any failed tasks
+        failed_tasks = [r for r in all_results if r.get("status") == "failed"]
+        if failed_tasks:
+            prompt_parts.append("Note: The following tasks failed and should be acknowledged:")
+            for task in failed_tasks:
+                prompt_parts.append(f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}")
+            prompt_parts.append("")
+
+        prompt_parts.extend([
+            "Please synthesize these results into a comprehensive response that:",
+            "1. Directly addresses the user's original request",
+            "2. Integrates information from all successful tasks coherently",
+            "3. Acknowledges any failed tasks if relevant",
+            "4. Provides a clear, well-structured answer",
+            "",
+            "Synthesized Response:",
+        ])
+
+        return "\n".join(prompt_parts)
+
+    def _fallback_synthesis(
+        self,
+        original_request: str,
+        successful_results: List[Dict[str, Any]],
+        all_results: List[Dict[str, Any]],
+    ) -> MuxiResponse:
+        """Fallback synthesis when LLM is not available."""
+        response_parts = [
+            f"I've completed processing your request: \"{original_request}\"",
+            "",
+            "Here are the results:",
+            "",
+        ]
+
+        # Add successful results
+        for i, result in enumerate(successful_results, 1):
+            response_parts.append(f"**{result.get('description', f'Task {i}')}:**")
+
+            # Extract content from outputs
+            outputs = result.get("outputs", {})
+            if isinstance(outputs, dict):
+                content = (
+                    outputs.get("content")
+                    or outputs.get("written_content")
+                    or outputs.get("analysis_results")
+                    or outputs.get("research_findings", "No output")
+                )
+            else:
+                content = str(outputs)
+
+            response_parts.append(content)
+            response_parts.append("")
+
+        # Note any failed tasks
+        failed_tasks = [r for r in all_results if r.get("status") == "failed"]
+        if failed_tasks:
+            response_parts.append("**Note:** Some tasks could not be completed:")
+            for task in failed_tasks:
+                response_parts.append(f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}")
+
+        return MuxiResponse(
+            role="assistant",
+            content="\n".join(response_parts),
+            metadata={"synthesis_method": "structured_concatenation"},
+        )
 
     async def _check_agent_clarification_request(
         self, agent_response: MuxiResponse, user_id: Any
