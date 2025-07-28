@@ -21,6 +21,52 @@ llm:
           strategy: "adaptive"
     - embedding: "openai/text-embedding-3-small"
 
+
+# Overlord behavior configuration
+overlord:
+  persona: |
+    You are Fynn, a friendly, helpful, and professional assistant.
+
+  streaming: true # Enable streaming for all synchronous responses
+
+  # Routing model configuration
+  llm:  # Overlord-specific routing functionality
+    model: "gpt-4.1-mini-2025-04-14" # Model for task management and delegation
+
+  config:
+    # Content is processed intelligently by default:
+    # - Text is extracted from media only when needed for routing
+    # - Full content processing is delegated to specialized agents
+    max_extraction_tokens: 500 # Max tokens for media extractions when needed for routing
+
+    caching:
+      enabled: true  # Whether to cache routing decisions (default: True)
+      ttl: 3600  # Time to live for cached routing decisions
+
+    # Response configuration
+    response:
+      format: "markdown" # Default format if not specified (options are markdown, json, text, etc)
+      interactive_elements: true # Enable interactive UI elements like buttons, forms, charts (default: true)
+
+    # Intelligence configuration (Phase 3 capabilities)
+    learn_user_preference: true # Enable user preference learning (default: true)
+    adaptive_responses: true # Enable adaptive response generation (default: true)
+
+    # Resilience configuration (Phase 4.1 capabilities)
+    circuit_breaker: true # Enable circuit breaker for error recovery (default: true)
+    error_recovery: true # Enable automatic error recovery strategies (default: true)
+
+    # Workflow configuration (Task decomposition and orchestration)
+    auto_decomposition: true # Enable automatic task decomposition (default: true)
+    plan_approval_threshold: 7 # Complexity threshold for plan approval (1-10, default: 7)
+
+  # Clarification configuration (always enabled for better UX)
+  clarification:
+    max_questions: 5                 # Safety limit - maximum clarifying questions per request
+    style: "conversational"          # Question style: conversational, formal, brief
+    persist_learned_info: false      # Privacy control: false = session-only, true = persistent learning
+
+
 memory:
   buffer:
     size: 50
