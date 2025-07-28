@@ -17,7 +17,7 @@ import time
 from unittest.mock import patch
 
 # Import the observability system components
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src/muxi/runtime'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../src/muxi'))
 
 from src.muxi.observability import (  # noqa: E402
     EventLogger, ObservabilityManager, RequestContextManager,

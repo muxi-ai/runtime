@@ -13,7 +13,7 @@ As part of Task 5 in the code review implementation plan, we've introduced speci
 
 ## Type Definitions
 
-All new type definitions are located in `src/muxi/runtime/datatypes/type_definitions.py`.
+All new type definitions are located in `src/muxi/datatypes/type_definitions.py`.
 
 ### Categories of Types
 

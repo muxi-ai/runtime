@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 
 # Add the registry module to the path
-sys.path.insert(0, '../src/muxi/runtime/utils')
+sys.path.insert(0, '../src/muxi/utils')
 
 # Import the storage classes
 sys.path.insert(0, 'utils')

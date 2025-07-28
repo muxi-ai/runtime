@@ -122,9 +122,9 @@ pids
 .specstory/
 .a2a_registry/
 .registry_data/
-src/muxi/runtime/observability/health/.status
+src/muxi/observability/health/.status
 .claude/settings.local.json
-src/muxi/runtime/.claude/settings.local.json
+src/muxi/.claude/settings.local.json
 .key
 .claude/commands/read-test-plan.md
 CLAUDE.md

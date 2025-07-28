@@ -103,7 +103,7 @@ pytest runtime/tests/mcp/
 pytest runtime/tests/ --ignore=runtime/tests/archive/
 
 # Run with coverage
-pytest runtime/tests/ --cov=runtime/muxi/runtime --ignore=runtime/tests/archive/
+pytest runtime/tests/ --cov=runtime/muxi --ignore=runtime/tests/archive/
 ```
 
 ## 📊 Test Statistics

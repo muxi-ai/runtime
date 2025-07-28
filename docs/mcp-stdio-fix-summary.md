@@ -33,7 +33,7 @@ Updated `CommandLineTransport` to properly handle async contexts:
 - `Formation.stop_overlord()` is now async
 
 ### 4. Added Clean Exit Utility
-Created `src/muxi/runtime/utils/clean_exit.py` for tests:
+Created `src/muxi/utils/clean_exit.py` for tests:
 ```python
 from typing import NoReturn
 

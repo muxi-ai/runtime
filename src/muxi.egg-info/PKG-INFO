@@ -326,7 +326,7 @@ async def test_multi_agent_routing():
 ## 📂 Project Structure
 
 ```
-src/muxi/runtime/
+src/muxi/
 ├── formation.py         # Formation loader and lifecycle manager
 ├── overlord.py         # Central orchestration engine
 ├── agents/             # Agent implementations

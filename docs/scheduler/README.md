@@ -358,7 +358,7 @@ python -m pytest tests/scheduler/test_basic.py -v
 python -m pytest tests/scheduler/test_integration.py -v
 
 # Run with coverage
-python -m pytest tests/scheduler/ --cov=src/muxi/runtime/services/scheduler
+python -m pytest tests/scheduler/ --cov=src/muxi/services/scheduler
 ```
 
 ## Best Practices

@@ -131,7 +131,7 @@ Result: Success
 
 ### Agent Intelligence
 
-The agent's tool chaining logic is implemented in `src/muxi/runtime/formation/agents/agent.py`. The agent:
+The agent's tool chaining logic is implemented in `src/muxi/formation/agents/agent.py`. The agent:
 
 1. **Parses error messages** to understand the failure type
 2. **Identifies corrective actions** based on error patterns
@@ -169,7 +169,7 @@ When building MCP servers, provide detailed error messages that agents can parse
 # Good: Specific, actionable error
 return {"error": "Directory '/path/to/dir' does not exist"}
 
-# Bad: Generic, unhelpful error  
+# Bad: Generic, unhelpful error
 return {"error": "Operation failed"}
 ```
 
@@ -178,7 +178,7 @@ return {"error": "Operation failed"}
 Configure appropriate limits based on your use case:
 
 ```yaml
-# For simple workflows  
+# For simple workflows
 mcp:
   max_tool_iterations: 3        # Fewer iterations for simple tasks
   max_tool_calls: 10           # Lower total tool call limit
@@ -274,7 +274,7 @@ The agent logs detailed information about chain decisions:
 
 # Chain iteration
 {
-    "event_type": "AGENT_TOOL_CHAIN_ITERATION", 
+    "event_type": "AGENT_TOOL_CHAIN_ITERATION",
     "data": {
         "chain_id": "chn_V1StGXR8_Z5jdHi6B-myT",
         "iteration": 1,
@@ -288,7 +288,7 @@ The agent logs detailed information about chain decisions:
 {
     "event_type": "AGENT_TOOL_CHAIN_COMPLETED",
     "data": {
-        "chain_id": "chn_V1StGXR8_Z5jdHi6B-myT", 
+        "chain_id": "chn_V1StGXR8_Z5jdHi6B-myT",
         "total_iterations": 2,
         "final_result": {...}
     }
@@ -302,12 +302,12 @@ mcp:
   # Connection/retry settings
   default_retry_attempts: int          # Server connection retries (default: 3)
   default_timeout_seconds: int         # Default timeout per request (default: 30)
-  
+
   # Tool execution settings (controls chaining behavior)
   max_tool_iterations: int             # Max execution loops (default: 10)
   max_tool_calls: int                  # Max total tool calls (default: 50)
   max_repeated_errors: int             # Stop after N repeated errors (default: 3)
-  
+
   # Timeout settings
   max_timeout_in_seconds: int          # Total operation timeout (default: 300)
   max_tool_timeout_in_seconds: int     # Per-tool-call timeout (default: 30)

@@ -6,7 +6,7 @@ Standalone utility to handle OAuth authentication flow for MCP servers.
 Captures OAuth tokens that can be used with bearer authentication.
 
 Usage:
-    python src/muxi/runtime/utils/oauth_mcp.py https://mcp.server.com/sse
+    python src/muxi/utils/oauth_mcp.py https://mcp.server.com/sse
 """
 
 import sys

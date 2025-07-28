@@ -53,7 +53,7 @@ except ImportError as e:
     # Use importlib to load the module
     spec = importlib.util.spec_from_file_location(
         "mcp_handler",
-        os.path.join(root_dir, "src/muxi/runtime/mcp/handler.py")
+        os.path.join(root_dir, "src/muxi/mcp/handler.py")
     )
     if spec is not None:
         mcp_handler = importlib.util.module_from_spec(spec)

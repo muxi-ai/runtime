@@ -1,4 +1,4 @@
-# src/muxi/runtime/utils/zmq_decrypt.py
+# src/muxi/utils/zmq_decrypt.py
 # Reference implementation for server-side message decryption
 
 import json

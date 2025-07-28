@@ -434,7 +434,7 @@ async def start_a2a_registry() -> bool:
     """Start the A2A registry server"""
     try:
         # Start the registry server as a subprocess
-        registry_script = "./src/muxi/runtime/utils/a2a_registry.py"
+        registry_script = "./src/muxi/utils/a2a_registry.py"
         _ = subprocess.Popen([
             sys.executable, registry_script
         ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
