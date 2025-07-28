@@ -128,8 +128,8 @@ class FormationServer:
                     "admin_key_generated": "admin" in generated_keys,
                     "client_key_generated": "client" in generated_keys,
                     "warning": "Auto-generated API keys are for development only",
-                    "admin_key": generated_keys.get("admin"),
-                    "client_key": generated_keys.get("client"),
+                    "admin_key": "••••••••" if "admin" in generated_keys else None,
+                    "client_key": "••••••••" if "client" in generated_keys else None,
                 },
                 description="Auto-generated API keys created - NOT recommended for production use"
             )
@@ -296,22 +296,48 @@ class FormationServer:
 
         self._server = uvicorn.Server(config)
 
-        # Setup signal handlers for graceful shutdown
-        def signal_handler(sig, frame):
+        # Setup asyncio-safe signal handlers for graceful shutdown
+        def signal_handler(sig_num):
             observability.observe(
                 event_type=observability.SystemEvents.CLEANUP,
                 level=observability.EventLevel.INFO,
                 data={
                     "service": "formation_api_server",
-                    "signal": str(sig),
+                    "signal": str(sig_num),
                     "formation_id": self.formation.formation_id,
                 },
-                description=f"Received signal {sig}, initiating graceful shutdown"
+                description=f"Received signal {sig_num}, initiating graceful shutdown"
             )
             self._shutdown_event.set()
 
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+        # Use asyncio event loop signal handlers for async safety
+        try:
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(signal.SIGINT, signal_handler, signal.SIGINT)
+            loop.add_signal_handler(signal.SIGTERM, signal_handler, signal.SIGTERM)
+        except (NotImplementedError, RuntimeError):
+            # Fallback for platforms that don't support asyncio signal handlers
+            # Use traditional signal handlers with proper async event handling
+            def sync_signal_handler(sig_num, frame):
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "formation_api_server",
+                        "signal": str(sig_num),
+                        "formation_id": self.formation.formation_id,
+                    },
+                    description=f"Received signal {sig_num}, initiating shutdown"
+                )
+                # Schedule the event setting on the event loop
+                try:
+                    loop.call_soon_threadsafe(self._shutdown_event.set)
+                except RuntimeError:
+                    # If event loop is not running, fall back to direct call
+                    asyncio.create_task(self._set_shutdown_event())
+
+            signal.signal(signal.SIGINT, sync_signal_handler)
+            signal.signal(signal.SIGTERM, sync_signal_handler)
 
         # Start server
         if block:
@@ -331,6 +357,10 @@ class FormationServer:
                     await self._server_task
                 except Exception as e:
                     raise RuntimeError(f"Failed to start server: {e}")
+
+    async def _set_shutdown_event(self) -> None:
+        """Helper method to set shutdown event asynchronously."""
+        self._shutdown_event.set()
 
     async def stop(self) -> None:
         """Stop the Formation server gracefully."""
@@ -375,7 +405,7 @@ class FormationServer:
         self._server_task = None
 
         observability.observe(
-            event_type=observability.SystemEvents.SERVICE_STARTED,  # Using available event
+            event_type=observability.SystemEvents.CLEANUP,
             level=observability.EventLevel.INFO,
             data={
                 "service": "formation_api_server",

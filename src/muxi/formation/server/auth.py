@@ -5,6 +5,7 @@ Provides dependency injection classes for validating API keys
 in incoming requests.
 """
 
+import secrets
 from typing import Optional
 
 from fastapi import HTTPException, Security
@@ -27,10 +28,6 @@ class AdminKeyAuth:
             admin_key: The valid admin API key
         """
         self.admin_key = admin_key
-        self.header_scheme = APIKeyHeader(
-            name="X-Admin-Key",
-            description="Admin API key for formation management"
-        )
 
     async def __call__(
         self,
@@ -54,7 +51,7 @@ class AdminKeyAuth:
                 detail="Admin API key not configured"
             )
 
-        if api_key != self.admin_key:
+        if not secrets.compare_digest(api_key, self.admin_key):
             raise HTTPException(
                 status_code=403,
                 detail="Invalid admin API key"
@@ -79,10 +76,6 @@ class ClientKeyAuth:
             client_key: The valid client API key
         """
         self.client_key = client_key
-        self.header_scheme = APIKeyHeader(
-            name="X-Client-Key",
-            description="Client API key for user interactions"
-        )
 
     async def __call__(
         self,
@@ -106,7 +99,7 @@ class ClientKeyAuth:
                 detail="Client API key not configured"
             )
 
-        if api_key != self.client_key:
+        if not secrets.compare_digest(api_key, self.client_key):
             raise HTTPException(
                 status_code=403,
                 detail="Invalid client API key"

@@ -5,10 +5,10 @@ These endpoints provide formation management capabilities,
 requiring admin API key authentication.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 router = APIRouter()
 
@@ -25,9 +25,9 @@ class AgentCreate(BaseModel):
 
 class AgentUpdate(BaseModel):
     """Model for updating an agent."""
-    active: bool = None
-    description: str = None
-    model: str = None
+    active: Optional[bool] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    model: Optional[str] = Field(default=None)
 
 
 class SecretCreate(BaseModel):
@@ -74,14 +74,6 @@ async def add_agent(request: Request, agent: AgentCreate) -> Dict[str, Any]:
     """
     formation = request.app.state.formation
 
-    # Check if agent ID already exists
-    existing_agents = formation.config.get("agents", [])
-    if any(a.get("id") == agent.id for a in existing_agents):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Agent with id '{agent.id}' already exists"
-        )
-
     # Create agent config
     agent_config = {
         "id": agent.id,
@@ -89,13 +81,13 @@ async def add_agent(request: Request, agent: AgentCreate) -> Dict[str, Any]:
         "description": agent.description,
         "model": agent.model,
         "active": agent.active,
-        "source": "api",  # Mark as API-created
     }
 
-    # Add to formation config
-    if "agents" not in formation.config:
-        formation.config["agents"] = []
-    formation.config["agents"].append(agent_config)
+    # Add to formation config using thread-safe method
+    try:
+        formation.add_agent_to_config(agent_config)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
     # TODO: Notify overlord of agent addition
 
@@ -122,19 +114,12 @@ async def update_agent(
     """
     formation = request.app.state.formation
 
-    # Find agent
-    agents = formation.config.get("agents", [])
-    agent = next((a for a in agents if a.get("id") == agent_id), None)
-
-    if not agent:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Agent '{agent_id}' not found"
-        )
-
-    # Apply updates
-    update_data = updates.dict(exclude_unset=True)
-    agent.update(update_data)
+    # Apply updates using thread-safe method
+    update_data = updates.model_dump(exclude_unset=True)
+    try:
+        agent = formation.update_agent_in_config(agent_id, update_data)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
     # TODO: Notify overlord of agent update
 
@@ -158,30 +143,14 @@ async def remove_agent(request: Request, agent_id: str) -> Dict[str, str]:
     """
     formation = request.app.state.formation
 
-    # Find agent
-    agents = formation.config.get("agents", [])
-    agent_idx = next(
-        (i for i, a in enumerate(agents) if a.get("id") == agent_id),
-        None
-    )
-
-    if agent_idx is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Agent '{agent_id}' not found"
-        )
-
-    agent = agents[agent_idx]
-
-    # Check if agent can be removed
-    if agent.get("source") != "api":
-        raise HTTPException(
-            status_code=403,
-            detail=f"Agent '{agent_id}' was not created via API and cannot be removed"
-        )
-
-    # Remove agent
-    agents.pop(agent_idx)
+    # Remove agent using thread-safe method
+    try:
+        formation.remove_agent_from_config(agent_id)
+    except ValueError as e:
+        if "not found" in str(e):
+            raise HTTPException(status_code=404, detail=str(e))
+        else:
+            raise HTTPException(status_code=403, detail=str(e))
 
     # TODO: Notify overlord of agent removal
 
@@ -206,9 +175,9 @@ async def list_secrets(request: Request) -> Dict[str, Any]:
     # Get all secret keys
     secrets = formation.secrets_manager.list_secrets()
 
-    # Mask values
+    # Mask values with consistent pattern (no length disclosure)
     masked_secrets = {
-        key: "***" + value[-4:] if len(value) > 4 else "****"
+        key: "••••••••"
         for key, value in secrets.items()
     }
 

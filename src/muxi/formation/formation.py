@@ -31,7 +31,7 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, Awaitable
 import yaml
 from pathlib import Path
 import os
@@ -168,6 +168,12 @@ class Formation:
 
         # Built-in MCP registration tracking
         self._builtin_mcp_task: Optional[asyncio.Task] = None
+
+        # Formation server instance tracking
+        self._formation_server: Optional["FormationServer"] = None
+
+        # Thread safety for config modifications
+        self._config_lock = threading.Lock()
 
         # Dependency validation
         self._dependency_validator = DependencyValidator()
@@ -2489,7 +2495,7 @@ class Formation:
 
     def start_server(
         self, host: Optional[str] = None, port: Optional[int] = None, block: bool = True
-    ) -> "FormationServer":
+    ) -> Union["FormationServer", Awaitable["FormationServer"]]:
         """
         Start the Formation API server.
 
@@ -2502,11 +2508,11 @@ class Formation:
             port: Override port from formation.yaml (default: use config value)
             block: Whether to block until server stops (default: True)
                    If True, this method will block until the server is stopped.
-                   If False, the server runs in the background and you can continue
-                   using the formation programmatically.
+                   If False, returns an awaitable that resolves when startup completes.
 
         Returns:
-            FormationServer: The running server instance
+            FormationServer: The running server instance (when block=True)
+            Awaitable[FormationServer]: Awaitable server instance (when block=False)
 
         Raises:
             RuntimeError: If server configuration is missing or invalid
@@ -2518,11 +2524,17 @@ class Formation:
             overlord = await formation.start_overlord()
             server = formation.start_server()  # Blocks here
 
-            # Non-blocking mode (for programmatic use)
+            # Non-blocking mode with proper error handling
             formation = Formation()
             await formation.load("my-formation.yaml")
             overlord = await formation.start_overlord()
-            server = formation.start_server(block=False)
+
+            try:
+                server = await formation.start_server(block=False)
+                print("Server started successfully!")
+            except Exception as e:
+                print(f"Server startup failed: {e}")
+
             # Continue using formation...
             await server.stop()  # Stop when done
         """
@@ -2536,6 +2548,26 @@ class Formation:
                 "Server configuration not found. Ensure your formation.yaml "
                 "has a 'server' section."
             )
+
+        # Check for existing server instance
+        if self._formation_server is not None:
+            if self._formation_server.is_running:
+                raise RuntimeError(
+                    "A Formation server is already running. "
+                    "Stop the existing server before starting a new one."
+                )
+            else:
+                # Server exists but not running, we can reuse or replace it
+                observability.observe(
+                    event_type=observability.SystemEvents.INITIALIZING,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "formation_api_server",
+                        "action": "replacing_stopped_server",
+                        "formation_id": self.formation_id,
+                    },
+                    description="Replacing existing stopped server instance"
+                )
 
         # Import FormationServer here to avoid circular imports
         from .server import FormationServer
@@ -2618,10 +2650,26 @@ class Formation:
                     "Either use block=True or run this in an async context."
                 )
 
-            # Schedule the server start
-            asyncio.create_task(self._formation_server.start(block=False))
+            # Return an awaitable that starts the server and returns it
+            async def start_server_async() -> "FormationServer":
+                await self._formation_server.start(block=False)
+                return self._formation_server
+
+            return start_server_async()
 
         return self._formation_server
+
+    def is_server_running(self) -> bool:
+        """
+        Check if the Formation API server is currently running.
+
+        Returns:
+            bool: True if server exists and is running, False otherwise
+        """
+        return (
+            self._formation_server is not None
+            and self._formation_server.is_running
+        )
 
     def stop(self) -> None:
         """
@@ -3065,6 +3113,102 @@ class Formation:
             )
 
         return await self._overlord.remove_agent(agent_id)
+
+    def add_agent_to_config(self, agent_config: Dict[str, Any]) -> None:
+        """
+        Safely add an agent to the formation config with thread synchronization.
+
+        Args:
+            agent_config: Agent configuration dictionary
+
+        Raises:
+            ValueError: If agent ID already exists
+        """
+        with self._config_lock:
+            if not self.config:
+                raise RuntimeError("Formation config not loaded")
+
+            # Ensure agents list exists
+            if "agents" not in self.config:
+                self.config["agents"] = []
+
+            # Check for existing agent ID
+            agent_id = agent_config.get("id")
+            if agent_id and any(a.get("id") == agent_id for a in self.config["agents"]):
+                raise ValueError(f"Agent with id '{agent_id}' already exists")
+
+            # Add agent with source tracking
+            agent_config = agent_config.copy()
+            agent_config["source"] = "api"
+            self.config["agents"].append(agent_config)
+
+    def update_agent_in_config(
+        self, agent_id: str, updates: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Safely update an agent in the formation config with thread synchronization.
+
+        Args:
+            agent_id: ID of agent to update
+            updates: Fields to update
+
+        Returns:
+            Updated agent configuration
+
+        Raises:
+            ValueError: If agent not found
+        """
+        with self._config_lock:
+            if not self.config:
+                raise RuntimeError("Formation config not loaded")
+
+            agents = self.config.get("agents", [])
+            agent = next((a for a in agents if a.get("id") == agent_id), None)
+
+            if not agent:
+                raise ValueError(f"Agent '{agent_id}' not found")
+
+            # Apply updates
+            agent.update(updates)
+            return agent.copy()
+
+    def remove_agent_from_config(self, agent_id: str) -> bool:
+        """
+        Safely remove an agent from the formation config with thread synchronization.
+
+        Only agents created via API (source="api") can be removed.
+
+        Args:
+            agent_id: ID of agent to remove
+
+        Returns:
+            True if agent was removed
+
+        Raises:
+            ValueError: If agent not found or cannot be removed
+        """
+        with self._config_lock:
+            if not self.config:
+                raise RuntimeError("Formation config not loaded")
+
+            agents = self.config.get("agents", [])
+            agent_idx = next(
+                (i for i, a in enumerate(agents) if a.get("id") == agent_id),
+                None
+            )
+
+            if agent_idx is None:
+                raise ValueError(f"Agent '{agent_id}' not found")
+
+            agent = agents[agent_idx]
+
+            # Check if agent can be removed
+            if agent.get("source") != "api":
+                raise ValueError(f"Agent '{agent_id}' was not created via API and cannot be removed")
+
+            # Remove agent
+            agents.pop(agent_idx)
+            return True
 
     async def list_agents(self) -> Dict[str, Dict[str, Any]]:
         """
