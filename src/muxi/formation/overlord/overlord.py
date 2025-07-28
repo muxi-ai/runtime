@@ -82,6 +82,7 @@ import base64
 import json
 import threading
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
 import os
 
@@ -118,10 +119,14 @@ from ..workflow import (
     WorkflowExecutor,
     ApprovalManager,
     ProgressTracker,
-    Workflow,
-    TaskStatus,
 )
-from ...datatypes.workflow import ApprovalStatus
+from ..workflow.config import (
+    WorkflowConfig,
+    WorkflowConfigManager,
+    ErrorRecoveryStrategy,
+)
+from ...datatypes.workflow import ApprovalStatus, Workflow, WorkflowStatus
+from ...datatypes.task_status import TaskStatus
 
 # Utility functions
 from ..utils import generate_api_key
@@ -291,6 +296,8 @@ class Overlord:
         # Enhanced workflow parameters (intelligence concerns)
         enable_workflow_by_default: bool = False,
         complexity_threshold: float = 7.0,
+        plan_approval_threshold: float = 7.0,
+        workflow_config: Optional[WorkflowConfig] = None,
     ):
         """
         Initialize the overlord with pre-configured services from Formation.
@@ -518,18 +525,49 @@ class Overlord:
         # Initialize enhanced workflow capabilities (intelligence concerns)
         self.enable_workflow_by_default = enable_workflow_by_default
         self.complexity_threshold = complexity_threshold
+        self.plan_approval_threshold = plan_approval_threshold
 
-        # Initialize workflow components (intelligence concerns)
-        self.request_analyzer = RequestAnalyzer(llm=extraction_model)
-        self.request_analyzer.complexity_threshold = complexity_threshold
+        # Create or use provided workflow configuration
+        self.workflow_config = workflow_config or WorkflowConfig(
+            complexity_threshold=complexity_threshold,
+            complexity_method="heuristic",  # Default to heuristic
+            error_recovery_strategy=ErrorRecoveryStrategy.RETRY_WITH_BACKOFF,
+        )
+
+        # Initialize workflow configuration manager
+        self.workflow_config_manager = WorkflowConfigManager(self.workflow_config)
+
+        # Initialize workflow components with enhanced configuration
+        self.request_analyzer = RequestAnalyzer(
+            llm=extraction_model,
+            complexity_method=self.workflow_config.complexity_method,
+            complexity_threshold=self.workflow_config.complexity_threshold,
+            complexity_weights=self.workflow_config.complexity_weights,
+        )
         self.task_decomposer = TaskDecomposer(llm=extraction_model)
-        self.workflow_executor = WorkflowExecutor(agent_registry=self.agents)
         self.approval_manager = ApprovalManager()
+        self.workflow_executor = WorkflowExecutor(
+            agent_registry=self.agents, config=self.workflow_config
+        )
         self.progress_tracker = ProgressTracker()
 
         # Active workflows tracking (intelligence concerns)
         self.active_workflows: Dict[str, Workflow] = {}
         self.pending_approvals: Dict[str, Workflow] = {}
+
+        # Workflow history tracking for status queries (Phase 2, Stream 2)
+        self.workflow_history: Dict[str, Workflow] = {}  # All workflows ever executed
+        self.workflow_metrics = {
+            "total_workflows": 0,
+            "successful_workflows": 0,
+            "failed_workflows": 0,
+            "cancelled_workflows": 0,
+            "total_execution_time": 0.0,
+            "workflow_count_by_user": {},  # user_id -> count
+        }
+
+        # Thread safety for workflow data access
+        self._workflow_lock = threading.Lock()
 
         # Setup progress tracking
         self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
@@ -1160,6 +1198,7 @@ class Overlord:
 
         # Add artifact system prompt (always enabled)
         from pathlib import Path
+
         artifact_prompt_path = Path(__file__).parent.parent / "artifacts" / "prompt.md"
         try:
             if artifact_prompt_path.exists():
@@ -3875,9 +3914,10 @@ class Overlord:
                         try:
                             # Process approval response using approval manager
                             # Returns a tuple: (ApprovalStatus, Optional[str])
-                            approval_status, instructions = await self.approval_manager.process_approval_response(
-                                workflow=workflow,
-                                user_response=message
+                            approval_status, instructions = (
+                                await self.approval_manager.process_approval_response(
+                                    workflow=workflow, user_response=message
+                                )
                             )
 
                             # Handle different approval outcomes
@@ -3908,7 +3948,10 @@ class Overlord:
                                         "Please let me know if you'd like me to try a different approach "
                                         "or if you have a different request."
                                     ),
-                                    metadata={"workflow_cancelled": True, "workflow_id": workflow_id},
+                                    metadata={
+                                        "workflow_cancelled": True,
+                                        "workflow_id": workflow_id,
+                                    },
                                 )
 
                             elif approval_status == ApprovalStatus.MODIFIED:
@@ -3938,7 +3981,8 @@ class Overlord:
                                 # Unclear response - ask for clarification
                                 return MuxiResponse(
                                     role="assistant",
-                                    content=instructions or (
+                                    content=instructions
+                                    or (
                                         "I didn't understand your response to the workflow plan. "
                                         "Please respond with:\n"
                                         "- 'yes' or 'proceed' to approve the plan\n"
@@ -3948,7 +3992,7 @@ class Overlord:
                                     metadata={
                                         "workflow_id": workflow_id,
                                         "approval_required": True,
-                                        "requires_user_response": True
+                                        "requires_user_response": True,
                                     },
                                 )
                             else:
@@ -4002,7 +4046,9 @@ class Overlord:
                 "agent_name": agent_name,
                 "auto_decomposition": self.auto_decomposition,
                 "is_clarification_response": is_clarification_response,
-                "has_pending_clarifications": session_id in self._pending_clarifications if session_id else False,
+                "has_pending_clarifications": (
+                    session_id in self._pending_clarifications if session_id else False
+                ),
                 "message_preview": message[:100],
             },
             description="Checking workflow analysis conditions",
@@ -4047,7 +4093,9 @@ class Overlord:
                 data={
                     "session_id": session_id,
                     "is_clarification_response": is_clarification_response,
-                    "has_pending_clarifications": session_id in self._pending_clarifications if session_id else False,
+                    "has_pending_clarifications": (
+                        session_id in self._pending_clarifications if session_id else False
+                    ),
                     "pending_clarification_type": (
                         self._pending_clarifications.get(session_id, {}).get("type")
                         if session_id and session_id in self._pending_clarifications
@@ -4215,7 +4263,8 @@ class Overlord:
         user_id: Any,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
-    ) -> MuxiResponse:
+        stream: bool = False,
+    ) -> Union[MuxiResponse, AsyncGenerator[str, None]]:
         """
         Process a complex request using workflow orchestration.
 
@@ -4230,9 +4279,11 @@ class Overlord:
             user_id: User identifier
             session_id: Optional session identifier
             request_id: Optional request identifier
+            stream: If True, stream workflow execution progress
 
         Returns:
-            MuxiResponse containing either workflow results or approval request
+            If stream=False: MuxiResponse containing either workflow results or approval request
+            If stream=True: AsyncGenerator yielding progress updates
         """
         try:
             # Emit workflow orchestration started event
@@ -4275,7 +4326,22 @@ class Overlord:
 
             # Store workflow for tracking
             workflow_id = workflow.id
-            self.active_workflows[workflow_id] = workflow
+            with self._workflow_lock:
+                self.active_workflows[workflow_id] = workflow
+
+                # Update metrics for new workflow
+                self.workflow_metrics["total_workflows"] += 1
+
+                # Track by user if user_id is available
+                if user_id:
+                    user_id_str = str(user_id)
+                    if user_id_str not in self.workflow_metrics["workflow_count_by_user"]:
+                        self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
+                    self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
+
+            # Store user_id in workflow for filtering
+            if hasattr(workflow, "__dict__"):
+                workflow.user_id = user_id
 
             if needs_approval:
                 # Route to approval handler
@@ -4294,12 +4360,28 @@ class Overlord:
                     user_id=user_id,
                     session_id=session_id,
                     request_id=request_id,
+                    stream=stream,
                 )
 
         except Exception as e:
             # Clean up on error
-            if "workflow_id" in locals() and workflow_id in self.active_workflows:
-                del self.active_workflows[workflow_id]
+            if "workflow_id" in locals():
+                with self._workflow_lock:
+                    if workflow_id in self.active_workflows:
+                        failed_workflow = self.active_workflows[workflow_id]
+
+                        # Mark as failed and move to history
+                        if hasattr(failed_workflow, "status"):
+                            failed_workflow.status = WorkflowStatus.FAILED
+                        if hasattr(failed_workflow, "completed_at"):
+                            failed_workflow.completed_at = datetime.now()
+                        if hasattr(failed_workflow, "error_message"):
+                            failed_workflow.error_message = str(e)
+
+                        self.workflow_history[workflow_id] = failed_workflow
+                        del self.active_workflows[workflow_id]
+
+                        self.workflow_metrics["failed_workflows"] += 1
 
             observability.observe(
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -4369,17 +4451,56 @@ class Overlord:
         user_id: Any,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
-    ) -> MuxiResponse:
+        stream: bool = False,
+    ) -> Union[MuxiResponse, AsyncGenerator[str, None]]:
         """
         Execute a workflow immediately without approval.
 
         This method orchestrates the execution of complex multi-task workflows,
         tracking progress and synthesizing results into a coherent response.
+
+        Args:
+            workflow: Workflow to execute
+            message: The user's original message
+            user_id: User identifier
+            session_id: Optional session identifier
+            request_id: Optional request identifier
+            stream: If True, stream progress updates; if False, return complete response
+
+        Returns:
+            If stream=False: MuxiResponse with complete results
+            If stream=True: AsyncGenerator yielding progress updates
         """
+        if stream:
+            # Return async generator for streaming
+            return self._execute_workflow_streaming(
+                workflow=workflow,
+                message=message,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+            )
+
+        # Non-streaming execution continues below
         workflow_id = workflow.id
 
         # Track workflow in active workflows
-        self.active_workflows[workflow_id] = workflow
+        with self._workflow_lock:
+            self.active_workflows[workflow_id] = workflow
+
+            # Update metrics for new workflow
+            self.workflow_metrics["total_workflows"] += 1
+
+            # Track by user if user_id is available
+            if user_id:
+                user_id_str = str(user_id)
+                if user_id_str not in self.workflow_metrics["workflow_count_by_user"]:
+                    self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
+                self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
+
+        # Store user_id in workflow for filtering
+        if hasattr(workflow, "__dict__"):
+            workflow.user_id = user_id
 
         try:
             # Setup progress tracking callback
@@ -4395,7 +4516,9 @@ class Overlord:
                         level=observability.EventLevel.INFO,
                         data={
                             "workflow_id": workflow_id,
-                            "status": wf.status.value if hasattr(wf.status, 'value') else str(wf.status),
+                            "status": (
+                                wf.status.value if hasattr(wf.status, "value") else str(wf.status)
+                            ),
                             "progress": self.workflow_executor.get_workflow_progress(workflow_id),
                         },
                         description=f"Workflow {workflow_id} progress update",
@@ -4436,7 +4559,7 @@ class Overlord:
                         "task_id": task.id,
                         "description": task.description,
                         "outputs": task.outputs or {},
-                        "status": "completed"
+                        "status": "completed",
                     }
                     task_results.append(task_result)
                 elif task.status == TaskStatus.FAILED:
@@ -4444,7 +4567,7 @@ class Overlord:
                         "task_id": task.id,
                         "description": task.description,
                         "error": task.error_message or "Unknown error",
-                        "status": "failed"
+                        "status": "failed",
                     }
                     task_results.append(task_result)
 
@@ -4455,22 +4578,28 @@ class Overlord:
 
             # Add workflow metadata
             final_response.metadata = final_response.metadata or {}
-            final_response.metadata.update({
-                "workflow_id": workflow_id,
-                "workflow_status": (
-                    completed_workflow.status.value
-                    if hasattr(completed_workflow.status, "value")
-                    else str(completed_workflow.status)
-                ),
-                "total_tasks": len(workflow.tasks),
-                "completed_tasks": len([t for t in task_results if t.get("status") == "completed"]),
-                "failed_tasks": len([t for t in task_results if t.get("status") == "failed"]),
-                "execution_time": (
-                    (completed_workflow.completed_at - completed_workflow.started_at).total_seconds()
-                    if completed_workflow.completed_at and completed_workflow.started_at
-                    else None
-                ),
-            })
+            final_response.metadata.update(
+                {
+                    "workflow_id": workflow_id,
+                    "workflow_status": (
+                        completed_workflow.status.value
+                        if hasattr(completed_workflow.status, "value")
+                        else str(completed_workflow.status)
+                    ),
+                    "total_tasks": len(workflow.tasks),
+                    "completed_tasks": len(
+                        [t for t in task_results if t.get("status") == "completed"]
+                    ),
+                    "failed_tasks": len([t for t in task_results if t.get("status") == "failed"]),
+                    "execution_time": (
+                        (
+                            completed_workflow.completed_at - completed_workflow.started_at
+                        ).total_seconds()
+                        if completed_workflow.completed_at and completed_workflow.started_at
+                        else None
+                    ),
+                }
+            )
 
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_ROUTING_COMPLETED,
@@ -4515,9 +4644,276 @@ class Overlord:
             )
 
         finally:
-            # Clean up active workflow tracking
-            if workflow_id in self.active_workflows:
-                del self.active_workflows[workflow_id]
+            # Move workflow to history and update metrics
+            with self._workflow_lock:
+                if workflow_id in self.active_workflows:
+                    completed_workflow = self.active_workflows[workflow_id]
+
+                    # Move to history
+                    self.workflow_history[workflow_id] = completed_workflow
+                    del self.active_workflows[workflow_id]
+
+                    # Update metrics based on final status
+                    if hasattr(completed_workflow, "status"):
+                        if completed_workflow.status == WorkflowStatus.COMPLETED:
+                            self.workflow_metrics["successful_workflows"] += 1
+                        elif completed_workflow.status == WorkflowStatus.FAILED:
+                            self.workflow_metrics["failed_workflows"] += 1
+
+                    # Track execution time
+                    if hasattr(completed_workflow, "started_at") and hasattr(
+                        completed_workflow, "completed_at"
+                    ):
+                        if completed_workflow.started_at and completed_workflow.completed_at:
+                            execution_time = (
+                                completed_workflow.completed_at - completed_workflow.started_at
+                            ).total_seconds()
+                            self.workflow_metrics["total_execution_time"] += execution_time
+
+    async def _execute_workflow_streaming(
+        self,
+        workflow: Any,  # Workflow type from workflow module
+        message: str,
+        user_id: Any,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> AsyncGenerator[str, None]:
+        """
+        Execute a workflow with streaming progress updates.
+
+        This method streams real-time updates as the workflow progresses,
+        showing which tasks are being executed and their results.
+
+        Args:
+            workflow: Workflow to execute
+            message: The user's original message
+            user_id: User identifier
+            session_id: Optional session identifier
+            request_id: Optional request identifier
+
+        Yields:
+            Progress updates and partial results as strings
+        """
+        workflow_id = workflow.id
+
+        # Track workflow in active workflows
+        with self._workflow_lock:
+            self.active_workflows[workflow_id] = workflow
+
+            # Update metrics for new workflow
+            self.workflow_metrics["total_workflows"] += 1
+
+            # Track by user if user_id is available
+            if user_id:
+                user_id_str = str(user_id)
+                if user_id_str not in self.workflow_metrics["workflow_count_by_user"]:
+                    self.workflow_metrics["workflow_count_by_user"][user_id_str] = 0
+                self.workflow_metrics["workflow_count_by_user"][user_id_str] += 1
+
+        # Store user_id in workflow for filtering
+        if hasattr(workflow, "__dict__"):
+            workflow.user_id = user_id
+
+        try:
+            # Yield initial workflow information
+            yield f"🔄 Starting workflow: {workflow.name or workflow_id}\n"
+            yield f"📋 Total tasks: {len(workflow.tasks)}\n\n"
+
+            # Track completed content for final synthesis
+            completed_tasks = []
+
+            # Setup streaming progress callback
+            def streaming_progress_callback(
+                wf_id: str, wf: Any, task_update: Optional[Dict[str, Any]] = None
+            ):
+                """Callback that queues progress updates for streaming."""
+                if wf_id == workflow_id and task_update:
+                    # Queue the update for streaming
+                    progress_queue.put_nowait(task_update)
+
+            # Create a queue for progress updates
+            import asyncio
+
+            progress_queue = asyncio.Queue()
+
+            # Build execution context
+            execution_context = {
+                "user_id": user_id,
+                "session_id": session_id,
+                "request_id": request_id,
+                "original_message": message,
+            }
+
+            # Start workflow execution in background
+            execution_task = asyncio.create_task(
+                self.workflow_executor.execute_workflow_streaming(
+                    workflow,
+                    context=execution_context,
+                    progress_callback=streaming_progress_callback,
+                )
+            )
+
+            # Stream progress updates while workflow executes
+            workflow_complete = False
+            while not workflow_complete or not progress_queue.empty():
+                try:
+                    # Wait for progress update with timeout
+                    update = await asyncio.wait_for(progress_queue.get(), timeout=0.5)
+
+                    # Format and yield the update
+                    if update.get("type") == "task_started":
+                        task_id = update.get("task_id")
+                        agent_id = update.get("agent_id")
+                        description = update.get("description", "")
+                        yield f"\n🚀 Starting Task [{task_id}] - {description}\n"
+                        if agent_id:
+                            yield f"   Agent: {agent_id}\n"
+
+                    elif update.get("type") == "task_progress":
+                        task_id = update.get("task_id")
+                        progress = update.get("progress", "")
+                        yield f"   ⏳ {progress}\n"
+
+                    elif update.get("type") == "task_completed":
+                        task_id = update.get("task_id")
+                        status = update.get("status", "unknown")
+                        outputs = update.get("outputs", {})
+
+                        if status == "completed":
+                            yield f"   ✅ Task [{task_id}] completed\n"
+                            # Store for final synthesis
+                            completed_tasks.append(
+                                {
+                                    "task_id": task_id,
+                                    "description": update.get("description", ""),
+                                    "outputs": outputs,
+                                    "status": "completed",
+                                }
+                            )
+                            # Yield task outputs if available
+                            if outputs and isinstance(outputs, dict):
+                                for key, value in outputs.items():
+                                    if isinstance(value, str) and len(value) > 100:
+                                        # Truncate long outputs
+                                        yield f"      {key}: {value[:100]}...\n"
+                                    else:
+                                        yield f"      {key}: {value}\n"
+                        else:
+                            yield f"   ❌ Task [{task_id}] failed: {update.get('error', 'Unknown error')}\n"
+                            completed_tasks.append(
+                                {
+                                    "task_id": task_id,
+                                    "description": update.get("description", ""),
+                                    "error": update.get("error", "Unknown error"),
+                                    "status": "failed",
+                                }
+                            )
+
+                    elif update.get("type") == "workflow_completed":
+                        workflow_complete = True
+                        yield "\n✨ Workflow completed!\n"
+
+                except asyncio.TimeoutError:
+                    # Check if execution is done
+                    if execution_task.done():
+                        workflow_complete = True
+                        # Check for any exception
+                        try:
+                            completed_workflow = await execution_task
+                        except Exception as e:
+                            yield f"\n❌ Workflow failed: {str(e)}\n"
+                            return
+
+            # Get the completed workflow
+            if not execution_task.done():
+                completed_workflow = await execution_task
+            else:
+                completed_workflow = execution_task.result()
+
+            # Synthesize final summary
+            yield "\n📊 Final Summary:\n"
+            yield "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+
+            # Synthesize results into coherent response
+            if completed_tasks:
+                final_response = await self._synthesize_workflow_results(
+                    completed_tasks, message, workflow
+                )
+
+                # Stream the synthesized response
+                if hasattr(final_response, "content"):
+                    content = final_response.content
+                    if isinstance(content, str):
+                        # Stream in chunks for better UX
+                        chunk_size = 100
+                        for i in range(0, len(content), chunk_size):
+                            yield content[i:i + chunk_size]
+                            await asyncio.sleep(0.01)  # Small delay for smooth streaming
+                    else:
+                        yield str(content)
+                else:
+                    yield str(final_response)
+
+            # Final metrics
+            completed_count = len([t for t in completed_tasks if t.get("status") == "completed"])
+            failed_count = len([t for t in completed_tasks if t.get("status") == "failed"])
+
+            yield "\n\n📈 Execution Stats:\n"
+            yield f"   - Total tasks: {len(workflow.tasks)}\n"
+            yield f"   - Completed: {completed_count}\n"
+            yield f"   - Failed: {failed_count}\n"
+
+            if hasattr(completed_workflow, "completed_at") and hasattr(
+                completed_workflow, "started_at"
+            ):
+                if completed_workflow.completed_at and completed_workflow.started_at:
+                    execution_time = (
+                        completed_workflow.completed_at - completed_workflow.started_at
+                    ).total_seconds()
+                    yield f"   - Execution time: {execution_time:.2f}s\n"
+
+        except Exception as e:
+            # Stream error to user
+            yield f"\n❌ Error executing workflow: {str(e)}\n"
+
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_ROUTING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow_id,
+                    "error": str(e),
+                    "user_id": user_id,
+                    "streaming": True,
+                },
+                description=f"Error in streaming workflow execution: {str(e)}",
+            )
+
+        finally:
+            # Move workflow to history and update metrics
+            with self._workflow_lock:
+                if workflow_id in self.active_workflows:
+                    completed_workflow = self.active_workflows[workflow_id]
+
+                    # Move to history
+                    self.workflow_history[workflow_id] = completed_workflow
+                    del self.active_workflows[workflow_id]
+
+                    # Update metrics based on final status
+                    if hasattr(completed_workflow, "status"):
+                        if completed_workflow.status == WorkflowStatus.COMPLETED:
+                            self.workflow_metrics["successful_workflows"] += 1
+                        elif completed_workflow.status == WorkflowStatus.FAILED:
+                            self.workflow_metrics["failed_workflows"] += 1
+
+                    # Track execution time
+                    if hasattr(completed_workflow, "started_at") and hasattr(
+                        completed_workflow, "completed_at"
+                    ):
+                        if completed_workflow.started_at and completed_workflow.completed_at:
+                            execution_time = (
+                                completed_workflow.completed_at - completed_workflow.started_at
+                            ).total_seconds()
+                            self.workflow_metrics["total_execution_time"] += execution_time
 
     async def _synthesize_workflow_results(
         self,
@@ -4546,10 +4942,12 @@ class Overlord:
             if not successful_results:
                 # All tasks failed
                 failed_tasks = [r for r in task_results if r.get("status") == "failed"]
-                error_summary = "\n".join([
-                    f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
-                    for task in failed_tasks
-                ])
+                error_summary = "\n".join(
+                    [
+                        f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
+                        for task in failed_tasks
+                    ]
+                )
 
                 return MuxiResponse(
                     role="assistant",
@@ -4562,7 +4960,9 @@ class Overlord:
                 )
 
             # Try to use LLM for intelligent synthesis if available
-            synthesis_model = self._capability_models.get("text") if hasattr(self, "_capability_models") else None
+            synthesis_model = (
+                self._capability_models.get("text") if hasattr(self, "_capability_models") else None
+            )
 
             if synthesis_model and self.llm_service:
                 # Prepare synthesis prompt
@@ -4666,18 +5066,22 @@ class Overlord:
         if failed_tasks:
             prompt_parts.append("Note: The following tasks failed and should be acknowledged:")
             for task in failed_tasks:
-                prompt_parts.append(f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}")
+                prompt_parts.append(
+                    f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
+                )
             prompt_parts.append("")
 
-        prompt_parts.extend([
-            "Please synthesize these results into a comprehensive response that:",
-            "1. Directly addresses the user's original request",
-            "2. Integrates information from all successful tasks coherently",
-            "3. Acknowledges any failed tasks if relevant",
-            "4. Provides a clear, well-structured answer",
-            "",
-            "Synthesized Response:",
-        ])
+        prompt_parts.extend(
+            [
+                "Please synthesize these results into a comprehensive response that:",
+                "1. Directly addresses the user's original request",
+                "2. Integrates information from all successful tasks coherently",
+                "3. Acknowledges any failed tasks if relevant",
+                "4. Provides a clear, well-structured answer",
+                "",
+                "Synthesized Response:",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
@@ -4689,7 +5093,7 @@ class Overlord:
     ) -> MuxiResponse:
         """Fallback synthesis when LLM is not available."""
         response_parts = [
-            f"I've completed processing your request: \"{original_request}\"",
+            f'I\'ve completed processing your request: "{original_request}"',
             "",
             "Here are the results:",
             "",
@@ -4719,7 +5123,9 @@ class Overlord:
         if failed_tasks:
             response_parts.append("**Note:** Some tasks could not be completed:")
             for task in failed_tasks:
-                response_parts.append(f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}")
+                response_parts.append(
+                    f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
+                )
 
         return MuxiResponse(
             role="assistant",
@@ -5564,9 +5970,8 @@ Token:"""
         """
         Process chat with streaming response.
 
-        This method uses the sync chat processing logic to ensure consistent behavior
-        across streaming and non-streaming modes. It processes the request through
-        _process_sync_chat to get the complete response, then streams it in chunks.
+        This method handles streaming for both regular agent chats and workflow execution.
+        For workflows, it provides real-time progress updates as tasks are executed.
 
         Args:
             message: User's message to process
@@ -5576,21 +5981,60 @@ Token:"""
             request_id: Optional request ID for tracking
 
         Yields:
-            str: Content chunks streamed from the complete response
+            str: Content chunks streamed from the response or workflow progress
 
         Note:
             This ensures identical processing logic between streaming and non-streaming
             modes, including agent selection, busy tracking, clarification handling,
-            and memory management.
+            workflow detection, and memory management.
         """
         try:
+            # Check if this should trigger a workflow (only if no specific agent requested)
+            if agent_name is None and self.auto_decomposition:
+                # Check for pending clarifications first
+                is_clarification_response = (
+                    session_id and session_id in self._pending_clarifications
+                )
+
+                if not is_clarification_response:
+                    # Analyze request complexity
+                    try:
+                        analysis = await self.request_analyzer.analyze_request(message)
+
+                        # Check if complexity exceeds threshold
+                        if analysis.complexity_score >= self.complexity_threshold:
+                            # Stream workflow execution
+                            result = await self._process_with_workflow(
+                                message=message,
+                                analysis=analysis,
+                                user_id=user_id,
+                                session_id=session_id,
+                                request_id=request_id,
+                                stream=True,  # Enable streaming
+                            )
+
+                            # If result is an async generator (streaming), yield its chunks
+                            if hasattr(result, "__aiter__"):
+                                async for chunk in result:
+                                    yield chunk
+                            else:
+                                # If not streaming (e.g., approval needed), yield the response
+                                if hasattr(result, "content"):
+                                    yield result.content
+                                else:
+                                    yield str(result)
+                            return  # Exit after handling workflow
+                    except Exception as e:
+                        # Log error but continue with normal flow
+                        observability.observe(
+                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                            level=observability.EventLevel.WARNING,
+                            data={"error": str(e), "phase": "workflow_analysis"},
+                            description=f"Failed to analyze request for workflow: {str(e)}",
+                        )
+
+            # Fall back to regular streaming chat for non-workflow requests
             # Get the full response using sync processing logic
-            # This ensures consistent processing including:
-            # - Agent selection and routing
-            # - Agent busy/idle tracking
-            # - Clarification request handling
-            # - Memory context and storage
-            # - Error handling
             result = await self._process_sync_chat(
                 message=message,
                 agent_name=agent_name,
@@ -6129,3 +6573,212 @@ Token:"""
             return "".join(chunks)
 
         return result
+
+    # =========================================================================
+    # WORKFLOW STATUS ENDPOINTS - Phase 2, Stream 2
+    # =========================================================================
+
+    def get_workflow_status(self, workflow_id: str) -> Optional[Workflow]:
+        """
+        Get the status of a specific workflow.
+
+        Args:
+            workflow_id: Unique workflow identifier
+
+        Returns:
+            Workflow object with current status or None if not found
+        """
+        with self._workflow_lock:
+            # Check active workflows first
+            if workflow_id in self.active_workflows:
+                return self.active_workflows[workflow_id]
+
+            # Check workflow history
+            if workflow_id in self.workflow_history:
+                return self.workflow_history[workflow_id]
+
+            # Check pending approvals
+            if workflow_id in self.pending_approvals:
+                return self.pending_approvals[workflow_id]
+
+        return None
+
+    def list_workflows(
+        self,
+        user_id: Optional[str] = None,
+        status: Optional[WorkflowStatus] = None,
+        limit: int = 100,
+        offset: int = 0,
+        include_active: bool = True,
+        include_history: bool = True,
+    ) -> List[Workflow]:
+        """
+        List workflows with optional filters.
+
+        Args:
+            user_id: Filter by user ID (requires user_id in workflow metadata)
+            status: Filter by workflow status
+            limit: Maximum number of workflows to return
+            offset: Number of workflows to skip
+            include_active: Include currently active workflows
+            include_history: Include historical workflows
+
+        Returns:
+            List of workflows matching the filters
+        """
+        with self._workflow_lock:
+            workflows = []
+
+            # Collect workflows from requested sources
+            if include_active:
+                workflows.extend(self.active_workflows.values())
+                workflows.extend(self.pending_approvals.values())
+
+            if include_history:
+                workflows.extend(self.workflow_history.values())
+
+            # Apply filters
+            if user_id:
+                # Filter by user_id if it exists in workflow metadata
+                workflows = [w for w in workflows if hasattr(w, "user_id") and w.user_id == user_id]
+
+            if status:
+                workflows = [w for w in workflows if w.status == status]
+
+            # Sort by creation time (newest first)
+            workflows.sort(key=lambda w: w.created_at, reverse=True)
+
+            # Apply pagination
+            return workflows[offset:offset + limit]
+
+    async def cancel_workflow(self, workflow_id: str) -> bool:
+        """
+        Cancel an active workflow.
+
+        Args:
+            workflow_id: Workflow to cancel
+
+        Returns:
+            True if workflow was cancelled, False if not found or already completed
+        """
+        with self._workflow_lock:
+            workflow = None
+
+            # Check if workflow is active
+            if workflow_id in self.active_workflows:
+                workflow = self.active_workflows[workflow_id]
+            elif workflow_id in self.pending_approvals:
+                workflow = self.pending_approvals[workflow_id]
+                # Remove from pending approvals
+                del self.pending_approvals[workflow_id]
+
+            if not workflow:
+                observability.log_event("workflow_cancel_not_found", workflow_id=workflow_id)
+                return False
+
+            # Check if workflow can be cancelled
+            if workflow.is_complete:
+                observability.log_event(
+                    "workflow_cancel_already_complete",
+                    workflow_id=workflow_id,
+                    status=workflow.status,
+                )
+                return False
+
+            # Update workflow status
+            workflow.status = WorkflowStatus.CANCELLED
+            workflow.completed_at = datetime.now()
+
+            # Move to history
+            self.workflow_history[workflow_id] = workflow
+            if workflow_id in self.active_workflows:
+                del self.active_workflows[workflow_id]
+
+            # Update metrics
+            self.workflow_metrics["cancelled_workflows"] += 1
+
+        observability.log_event("workflow_cancelled", workflow_id=workflow_id)
+
+        # TODO: Notify workflow executor to stop execution
+        # This would require enhancing the WorkflowExecutor with cancellation support
+
+        return True
+
+    def get_workflow_metrics(self) -> Dict[str, Any]:
+        """
+        Get aggregated workflow metrics.
+
+        Returns:
+            Dictionary containing workflow statistics
+        """
+        with self._workflow_lock:
+            total = self.workflow_metrics["total_workflows"]
+            successful = self.workflow_metrics["successful_workflows"]
+            failed = self.workflow_metrics["failed_workflows"]
+            cancelled = self.workflow_metrics["cancelled_workflows"]
+
+            # Calculate success rate
+            completed = successful + failed
+            success_rate = (successful / completed * 100) if completed > 0 else 0.0
+
+            # Calculate average execution time
+            avg_execution_time = (
+                self.workflow_metrics["total_execution_time"] / total if total > 0 else 0.0
+            )
+
+            return {
+                "total_workflows": total,
+                "successful_workflows": successful,
+                "failed_workflows": failed,
+                "cancelled_workflows": cancelled,
+                "in_progress_workflows": len(self.active_workflows),
+                "pending_approval_workflows": len(self.pending_approvals),
+                "success_rate": round(success_rate, 2),
+                "average_execution_time_seconds": round(avg_execution_time, 2),
+                "workflow_count_by_user": dict(self.workflow_metrics["workflow_count_by_user"]),
+            }
+
+    def get_active_workflow_ids(self) -> List[str]:
+        """
+        Get IDs of all currently active workflows.
+
+        Returns:
+            List of active workflow IDs
+        """
+        with self._workflow_lock:
+            return list(self.active_workflows.keys())
+
+    def clear_workflow_history(self, older_than_days: int = 30) -> int:
+        """
+        Clear old workflows from history.
+
+        Args:
+            older_than_days: Clear workflows older than this many days
+
+        Returns:
+            Number of workflows cleared
+        """
+        from datetime import timedelta
+
+        cutoff_date = datetime.now() - timedelta(days=older_than_days)
+        cleared_count = 0
+
+        with self._workflow_lock:
+            workflows_to_clear = [
+                wid
+                for wid, w in self.workflow_history.items()
+                if w.completed_at and w.completed_at < cutoff_date
+            ]
+
+            for workflow_id in workflows_to_clear:
+                del self.workflow_history[workflow_id]
+                cleared_count += 1
+
+        if cleared_count > 0:
+            observability.log_event(
+                "workflow_history_cleared",
+                cleared_count=cleared_count,
+                older_than_days=older_than_days,
+            )
+
+        return cleared_count

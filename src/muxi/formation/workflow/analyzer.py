@@ -1,9 +1,19 @@
 import asyncio
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable, Union
+from enum import Enum
 
 from ...datatypes.workflow import RequestAnalysis
 from ...services.llm import LLM
 import json
+
+
+class ComplexityMethod(Enum):
+    """Available complexity calculation methods"""
+
+    HEURISTIC = "heuristic"  # Default rule-based analysis
+    LLM = "llm"  # LLM-powered analysis
+    CUSTOM = "custom"  # Custom scoring function
+    HYBRID = "hybrid"  # Combination of methods
 
 
 class RequestAnalyzer:
@@ -15,15 +25,41 @@ class RequestAnalyzer:
     It also detects when users want to preview and approve plans before execution.
     """
 
-    def __init__(self, llm: Optional[LLM] = None):
+    def __init__(
+        self,
+        llm: Optional[LLM] = None,
+        complexity_method: Union[ComplexityMethod, str] = ComplexityMethod.HEURISTIC,
+        complexity_threshold: float = 7.0,
+        custom_complexity_fn: Optional[Callable[[str, Optional[Dict[str, Any]]], float]] = None,
+        complexity_weights: Optional[Dict[str, float]] = None,
+    ):
         """
-        Initialize the request analyzer.
+        Initialize the request analyzer with enhanced configuration.
 
         Args:
             llm: Optional LLM for advanced analysis. If None, uses heuristic analysis.
+            complexity_method: Method to use for complexity calculation
+            complexity_threshold: Configurable threshold for decomposition (1-10)
+            custom_complexity_fn: Custom function for complexity scoring
+            complexity_weights: Weights for different complexity factors
         """
         self.llm = llm
-        self.complexity_threshold = 7.0  # Configurable threshold for decomposition
+        self.complexity_method = (
+            ComplexityMethod(complexity_method)
+            if isinstance(complexity_method, str)
+            else complexity_method
+        )
+        self.complexity_threshold = complexity_threshold
+        self.custom_complexity_fn = custom_complexity_fn
+
+        # Default complexity weights for hybrid method
+        self.complexity_weights = complexity_weights or {
+            "word_count": 0.1,
+            "indicator_keywords": 0.3,
+            "multi_step": 0.2,
+            "capabilities_count": 0.2,
+            "sentence_complexity": 0.2,
+        }
 
     async def analyze_request(
         self, user_message: str, context: Optional[Dict[str, Any]] = None
@@ -42,11 +78,19 @@ class RequestAnalyzer:
             # Check for approval requirement first
             requires_approval = await self.requires_user_approval(user_message)
 
-            if self.llm:
-                # Use LLM-powered analysis for more sophisticated understanding
+            # Use configured complexity method
+            if self.complexity_method == ComplexityMethod.CUSTOM and self.custom_complexity_fn:
+                # Custom complexity function
+                complexity_score = await self._custom_analyze_request(user_message, context)
+                analysis = self._build_basic_analysis(user_message, complexity_score)
+            elif self.complexity_method == ComplexityMethod.LLM and self.llm:
+                # LLM-powered analysis
                 analysis = await self._llm_analyze_request(user_message, context)
+            elif self.complexity_method == ComplexityMethod.HYBRID:
+                # Hybrid approach - combine multiple methods
+                analysis = await self._hybrid_analyze_request(user_message, context)
             else:
-                # Fall back to heuristic analysis
+                # Default to heuristic analysis
                 analysis = self._heuristic_analyze_request(user_message)
 
             # Override approval requirement if detected
@@ -70,7 +114,7 @@ class RequestAnalyzer:
             return RequestAnalysis(
                 complexity_score=5.0,
                 requires_decomposition=False,
-                requires_approval=requires_approval,
+                requires_approval=requires_approval if "requires_approval" in locals() else False,
                 implicit_subtasks=[],
                 required_capabilities=["general"],
                 acceptance_criteria=["Request completed successfully"],
@@ -416,3 +460,128 @@ Focus on identifying:
         """Helper method for testing capability identification."""
         analysis = self._heuristic_analyze_request(user_message)
         return analysis.required_capabilities
+
+    async def _custom_analyze_request(
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
+    ) -> float:
+        """
+        Use custom complexity function to analyze request.
+
+        Args:
+            user_message: User's request
+            context: Optional conversation context
+
+        Returns:
+            Complexity score (1-10)
+        """
+        if self.custom_complexity_fn:
+            # Call custom function - handle both sync and async
+            if asyncio.iscoroutinefunction(self.custom_complexity_fn):
+                score = await self.custom_complexity_fn(user_message, context)
+            else:
+                score = self.custom_complexity_fn(user_message, context)
+
+            # Ensure score is within bounds
+            return min(10.0, max(1.0, float(score)))
+
+        # Fallback to heuristic if custom function not available
+        return self._calculate_heuristic_complexity(user_message)
+
+    async def _hybrid_analyze_request(
+        self, user_message: str, context: Optional[Dict[str, Any]] = None
+    ) -> RequestAnalysis:
+        """
+        Hybrid analysis combining multiple methods with weighted scoring.
+
+        Args:
+            user_message: User's request
+            context: Optional conversation context
+
+        Returns:
+            Hybrid analysis results
+        """
+        # Start with heuristic analysis
+        heuristic_analysis = self._heuristic_analyze_request(user_message)
+        heuristic_score = heuristic_analysis.complexity_score
+
+        # Add LLM analysis if available
+        llm_score = heuristic_score  # Default to heuristic if LLM not available
+        if self.llm:
+            try:
+                llm_analysis = await self._llm_analyze_request(user_message, context)
+                llm_score = llm_analysis.complexity_score
+
+                # Merge capabilities and subtasks
+                combined_capabilities = list(
+                    set(
+                        heuristic_analysis.required_capabilities
+                        + llm_analysis.required_capabilities
+                    )
+                )
+                combined_subtasks = list(
+                    set(heuristic_analysis.implicit_subtasks + llm_analysis.implicit_subtasks)
+                )
+
+                heuristic_analysis.required_capabilities = combined_capabilities
+                heuristic_analysis.implicit_subtasks = combined_subtasks
+            except Exception as e:
+                _ = e  # TODO: remove this after implementing observability
+                pass  # Use heuristic score if LLM fails
+
+        # Add custom scoring if available
+        custom_score = heuristic_score
+        if self.custom_complexity_fn:
+            try:
+                custom_score = await self._custom_analyze_request(user_message, context)
+            except Exception as e:
+                _ = e  # TODO: remove this after implementing observability
+                pass  # Use heuristic score if custom fails
+
+        # Calculate weighted average
+        weights = self.complexity_weights
+        weighted_score = (
+            heuristic_score * weights.get("heuristic", 0.4)
+            + llm_score * weights.get("llm", 0.4)
+            + custom_score * weights.get("custom", 0.2)
+        )
+
+        # Update the analysis with hybrid score
+        heuristic_analysis.complexity_score = min(10.0, max(1.0, weighted_score))
+        heuristic_analysis.confidence_score = 0.9  # High confidence for hybrid method
+
+        return heuristic_analysis
+
+    def _build_basic_analysis(self, user_message: str, complexity_score: float) -> RequestAnalysis:
+        """
+        Build a basic RequestAnalysis from a complexity score.
+
+        Args:
+            user_message: User's request
+            complexity_score: Calculated complexity score
+
+        Returns:
+            Basic RequestAnalysis object
+        """
+        # Extract basic capabilities from message
+        message_lower = user_message.lower()
+        capabilities = []
+
+        if any(word in message_lower for word in ["research", "investigate", "analyze"]):
+            capabilities.append("research")
+        if any(word in message_lower for word in ["write", "create", "draft"]):
+            capabilities.append("writing")
+        if any(word in message_lower for word in ["code", "program", "implement"]):
+            capabilities.append("coding")
+
+        if not capabilities:
+            capabilities = ["general"]
+
+        return RequestAnalysis(
+            complexity_score=complexity_score,
+            requires_decomposition=False,  # Will be set later
+            requires_approval=False,  # Will be set later
+            implicit_subtasks=[],
+            required_capabilities=capabilities,
+            acceptance_criteria=["Request completed successfully"],
+            confidence_score=0.8,
+        )
