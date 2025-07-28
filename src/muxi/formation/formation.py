@@ -31,7 +31,7 @@
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 import yaml
 from pathlib import Path
 import os
@@ -91,6 +91,10 @@ from ..datatypes.exceptions import (
 # Utility imports
 from .utils import generate_api_key
 from ..utils.user_dirs import set_formation_id
+
+# Type checking imports
+if TYPE_CHECKING:
+    from .server import FormationServer
 
 # Formation initialization imports
 from .initialization import (
@@ -171,6 +175,7 @@ class Formation:
         # Service configuration (prepared for overlord handoff)
         self._configured_services: Dict[str, Any] = {}
         self._api_keys: Dict[str, str] = {}
+        self._generated_api_keys: Dict[str, str] = {}
 
         # Individual service configurations (prepared during setup)
         self._llm_config: Dict[str, Any] = {}
@@ -1072,11 +1077,40 @@ class Formation:
 
         Generates or uses configured API keys for user and admin access.
         """
-        auth_config = self.config.get("auth", {}) if self.config else {}
+        # Get server config
+        server_config = self.config.get("server", {}) if self.config else {}
 
-        # Generate or use configured API keys
-        self._api_keys["user"] = auth_config.get("client_api_key") or generate_api_key("user")
-        self._api_keys["admin"] = auth_config.get("admin_api_key") or generate_api_key("admin")
+        # Get API keys from server config
+        api_keys_config = server_config.get("api_keys", {})
+
+        # Track which keys were generated vs provided
+        generated_keys = {}
+
+        # Handle client key
+        client_key = api_keys_config.get("client_key")
+        if client_key:
+            self._api_keys["client"] = client_key
+        else:
+            self._api_keys["client"] = generate_api_key("client")
+            generated_keys["client"] = self._api_keys["client"]
+
+        # Handle admin key
+        admin_key = api_keys_config.get("admin_key")
+        if admin_key:
+            self._api_keys["admin"] = admin_key
+        else:
+            self._api_keys["admin"] = generate_api_key("admin")
+            generated_keys["admin"] = self._api_keys["admin"]
+
+        # Store generated keys for later display
+        self._generated_api_keys = generated_keys
+
+        # Store server configuration for later use
+        self._server_config = {
+            "host": server_config.get("host", "0.0.0.0"),
+            "port": server_config.get("port", 3000),
+            "api_keys": self._api_keys,
+        }
 
     def _setup_llm_config(self) -> None:
         """Setup and validate LLM configuration."""
@@ -2453,6 +2487,142 @@ class Formation:
         # Use os._exit to skip Python cleanup (including async generator cleanup)
         os._exit(code)
 
+    def start_server(
+        self, host: Optional[str] = None, port: Optional[int] = None, block: bool = True
+    ) -> "FormationServer":
+        """
+        Start the Formation API server.
+
+        This starts an HTTP server that exposes the formation's capabilities
+        via REST API endpoints. The server provides both admin operations
+        (formation management) and client operations (user interactions).
+
+        Args:
+            host: Override host from formation.yaml (default: use config value)
+            port: Override port from formation.yaml (default: use config value)
+            block: Whether to block until server stops (default: True)
+                   If True, this method will block until the server is stopped.
+                   If False, the server runs in the background and you can continue
+                   using the formation programmatically.
+
+        Returns:
+            FormationServer: The running server instance
+
+        Raises:
+            RuntimeError: If server configuration is missing or invalid
+
+        Example:
+            # Block mode (typical for standalone server)
+            formation = Formation()
+            await formation.load("my-formation.yaml")
+            overlord = await formation.start_overlord()
+            server = formation.start_server()  # Blocks here
+
+            # Non-blocking mode (for programmatic use)
+            formation = Formation()
+            await formation.load("my-formation.yaml")
+            overlord = await formation.start_overlord()
+            server = formation.start_server(block=False)
+            # Continue using formation...
+            await server.stop()  # Stop when done
+        """
+        # Ensure configuration is loaded
+        if not self.config:
+            raise RuntimeError("No configuration loaded. Call load() first.")
+
+        # Ensure we have server configuration
+        if not hasattr(self, "_server_config"):
+            raise RuntimeError(
+                "Server configuration not found. Ensure your formation.yaml "
+                "has a 'server' section."
+            )
+
+        # Import FormationServer here to avoid circular imports
+        from .server import FormationServer
+
+        # Get configuration values
+        config_host = self._server_config.get("host", "0.0.0.0")
+        config_port = self._server_config.get("port", 3000)
+
+        # Use provided values or fall back to config
+        actual_host = host or config_host
+        actual_port = port or config_port
+
+        # Create server instance
+        self._formation_server = FormationServer(formation=self, host=actual_host, port=actual_port)
+
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "formation_api_server",
+                "host": actual_host,
+                "port": actual_port,
+                "block_mode": block,
+                "has_overlord": hasattr(self, "_overlord") and self._overlord is not None,
+            },
+            description=f"Starting Formation API server on {actual_host}:{actual_port}",
+        )
+
+        # Check if we have an overlord (recommended but not required)
+        if not hasattr(self, "_overlord") or self._overlord is None:
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "service": "formation_api_server",
+                    "formation_id": self.formation_id,
+                    "has_overlord": False,
+                    "warning": "Starting server without overlord - most endpoints will return errors",
+                    "suggestion": "Call start_overlord() before start_server()",
+                },
+                description="Starting Formation server without an overlord - most endpoints will return errors",
+            )
+
+        # Start the server
+        if block:
+            # Run in blocking mode using asyncio
+            try:
+                asyncio.run(self._formation_server.start(block=True))
+            except KeyboardInterrupt:
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "formation_api_server",
+                        "formation_id": self.formation_id,
+                        "shutdown_reason": "user_interrupt",
+                    },
+                    description="Formation API server interrupted by user",
+                )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "service": "formation_api_server",
+                        "formation_id": self.formation_id,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                    },
+                    description=f"Formation API server error: {e}",
+                )
+                raise
+        else:
+            # Run in non-blocking mode
+            # This requires the server to be started in an existing event loop
+            loop = asyncio.get_event_loop()
+            if not loop.is_running():
+                raise RuntimeError(
+                    "Non-blocking mode requires a running event loop. "
+                    "Either use block=True or run this in an async context."
+                )
+
+            # Schedule the server start
+            asyncio.create_task(self._formation_server.start(block=False))
+
+        return self._formation_server
+
     def stop(self) -> None:
         """
         Stop formation infrastructure and cleanup resources.
@@ -2469,6 +2639,41 @@ class Formation:
             # Stop overlord if still running (gracefully)
             if self._is_running:
                 self.stop_overlord()
+
+            # Stop API server if running
+            if hasattr(self, "_formation_server") and self._formation_server:
+                if self._formation_server.is_running:
+                    observability.observe(
+                        event_type=observability.SystemEvents.CLEANUP,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "service": "formation_api_server",
+                            "formation_id": self.formation_id,
+                            "cleanup_stage": "formation_stop",
+                        },
+                        description="Stopping Formation API server during formation cleanup",
+                    )
+                    # Run async stop in sync context
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            asyncio.create_task(self._formation_server.stop())
+                        else:
+                            asyncio.run(self._formation_server.stop())
+                    except Exception as e:
+                        observability.observe(
+                            event_type=observability.SystemEvents.CLEANUP,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "service": "formation_api_server",
+                                "formation_id": self.formation_id,
+                                "error": str(e),
+                                "error_type": type(e).__name__,
+                                "cleanup_stage": "formation_stop",
+                            },
+                            description=f"Error stopping Formation API server during cleanup: {e}",
+                        )
+                self._formation_server = None
 
             # Cleanup formation resources
             self.config = None

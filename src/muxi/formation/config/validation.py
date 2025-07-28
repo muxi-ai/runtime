@@ -273,7 +273,7 @@ class FormationValidator:
                 return False
 
             # Check for formation-specific indicators first
-            formation_fields = ["agents", "overlord", "mcp", "memory", "logging", "auth"]
+            formation_fields = ["agents", "overlord", "mcp", "memory", "logging", "server"]
             has_formation_fields = any(field in config for field in formation_fields)
 
             # If it has formation fields, it's definitely a formation
@@ -353,6 +353,10 @@ class FormationValidator:
                 self.result.add_error("Formation version must be a non-empty string")
 
         # Allow any additional fields users might want to add for their own purposes
+
+        # Validate server configuration
+        if "server" in config:
+            self._validate_server_config(config["server"])
 
         # Validate LLM configuration
         if "llm" in config:
@@ -2275,6 +2279,42 @@ class FormationValidator:
                 self.result.add_error(
                     "Runtime 'built_in_mcps' must be either a boolean or a list of MCP names"
                 )
+
+    def _validate_server_config(self, server_config: Dict[str, Any]) -> None:
+        """Validate server configuration."""
+        if not isinstance(server_config, dict):
+            self.result.add_error("Server configuration must be a dictionary")
+            return
+
+        # Validate host
+        if "host" in server_config:
+            host = server_config["host"]
+            if not isinstance(host, str) or not host.strip():
+                self.result.add_error("Server host must be a non-empty string")
+
+        # Validate port
+        if "port" in server_config:
+            port = server_config["port"]
+            if not isinstance(port, int) or port < 1 or port > 65535:
+                self.result.add_error("Server port must be an integer between 1 and 65535")
+
+        # Validate api_keys
+        if "api_keys" in server_config:
+            api_keys = server_config["api_keys"]
+            if not isinstance(api_keys, dict):
+                self.result.add_error("Server api_keys must be a dictionary")
+            else:
+                # Validate admin_key
+                if "admin_key" in api_keys:
+                    admin_key = api_keys["admin_key"]
+                    if not isinstance(admin_key, str) or not admin_key.strip():
+                        self.result.add_error("Server admin_key must be a non-empty string")
+
+                # Validate client_key
+                if "client_key" in api_keys:
+                    client_key = api_keys["client_key"]
+                    if not isinstance(client_key, str) or not client_key.strip():
+                        self.result.add_error("Server client_key must be a non-empty string")
 
 
 def validate_formation(

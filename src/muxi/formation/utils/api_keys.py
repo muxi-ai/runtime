@@ -7,17 +7,17 @@ import string
 from typing import Literal
 
 
-def generate_api_key(key_type: Literal["user", "admin"]) -> str:
+def generate_api_key(key_type: Literal["client", "admin"]) -> str:
     """
     Generate a new API key with appropriate prefix.
 
     Args:
-        key_type: Type of key to generate ("user" or "admin").
+        key_type: Type of key to generate ("client" or "admin").
             Determines the prefix of the generated key.
 
     Returns:
         A new API key string in the format:
-        - User keys: "sk_muxi_user_[random string]"
+        - Client keys: "sk_muxi_client_[random string]"
         - Admin keys: "sk_muxi_admin_[random string]"
     """
     # Constants for API key generation
@@ -28,5 +28,5 @@ def generate_api_key(key_type: Literal["user", "admin"]) -> str:
     random_part = "".join(secrets.choice(ALPHABET) for _ in range(API_KEY_LENGTH))
 
     # Add the appropriate prefix based on key type
-    prefix = "sk_muxi_user" if key_type == "user" else "sk_muxi_admin"
+    prefix = "sk_muxi_client" if key_type == "client" else "sk_muxi_admin"
     return f"{prefix}_{random_part}"
