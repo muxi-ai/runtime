@@ -5,6 +5,7 @@ This module wraps the WorkflowExecutor with resilience capabilities, providing
 better error handling, recovery strategies, and user-friendly error messages.
 """
 
+import asyncio
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
@@ -47,6 +48,14 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         self.error_classifier = ErrorClassifier()
         self.fallback_manager = FallbackManager()
         self.recovery_strategist = RecoveryStrategist(ResilienceConfig())
+
+        # TODO: Circuit breakers are initialized but not yet implemented.
+        # Future enhancement: Add circuit breakers for each agent/tool to prevent
+        # cascading failures. Example:
+        # self.circuit_breakers = {
+        #     'linear-mcp': CircuitBreaker(failure_threshold=3, recovery_timeout=60),
+        #     'github-mcp': CircuitBreaker(failure_threshold=3, recovery_timeout=60),
+        # }
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}
 
         # Track error history for better messages
@@ -144,7 +153,66 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
         error_str = str(error).lower()
         error_type_name = type(error).__name__
 
-        # MCP tool errors
+        # Check for specific exception types first
+        if isinstance(error, TimeoutError) or isinstance(error, asyncio.TimeoutError):
+            return {
+                'type': ErrorType.NETWORK_TIMEOUT,
+                'severity': ErrorSeverity.RECOVERABLE,
+                'message': f"The {task.description} operation timed out.",
+                'details': f"Timeout while {task.description}",
+                'retry_count': len(self.error_history.get(task.id, [])),
+            }
+
+        # Connection errors
+        if isinstance(error, (ConnectionError, OSError)):
+            # Check for connection refused error codes
+            if hasattr(error, 'errno') and error.errno in [111, 10061]:  # Connection refused
+                return {
+                    'type': ErrorType.NETWORK_TIMEOUT,
+                    'severity': ErrorSeverity.RECOVERABLE,
+                    'message': f"Unable to connect to the service needed for {task.description}.",
+                    'details': "Connection refused",
+                    'retry_count': len(self.error_history.get(task.id, [])),
+                }
+            # General connection error
+            return {
+                'type': ErrorType.NETWORK_TIMEOUT,
+                'severity': ErrorSeverity.RECOVERABLE,
+                'message': f"Network error while {task.description}.",
+                'details': f"Connection error: {error_type_name}",
+                'retry_count': len(self.error_history.get(task.id, [])),
+            }
+
+        # HTTP-specific errors (if using httpx or requests)
+        if error_type_name in ['HTTPStatusError', 'HTTPError']:
+            if hasattr(error, 'response') and hasattr(error.response, 'status_code'):
+                status_code = error.response.status_code
+                if status_code == 401:
+                    return {
+                        'type': ErrorType.AUTH_FAILED,
+                        'severity': ErrorSeverity.CRITICAL,
+                        'message': f"Authentication failed for {task.description}.",
+                        'details': "HTTP 401 Unauthorized",
+                        'retry_count': len(self.error_history.get(task.id, [])),
+                    }
+                elif status_code == 404:
+                    return {
+                        'type': ErrorType.AGENT_UNAVAILABLE,
+                        'severity': ErrorSeverity.RECOVERABLE,
+                        'message': f"The resource required for {task.description} was not found.",
+                        'details': "HTTP 404 Not Found",
+                        'retry_count': len(self.error_history.get(task.id, [])),
+                    }
+                elif status_code == 429:
+                    return {
+                        'type': ErrorType.LLM_RATE_LIMITED,
+                        'severity': ErrorSeverity.RECOVERABLE,
+                        'message': "Rate limit exceeded. Waiting before retry.",
+                        'details': "HTTP 429 Too Many Requests",
+                        'retry_count': len(self.error_history.get(task.id, [])),
+                    }
+
+        # MCP tool errors (string matching as fallback)
         if 'mcp' in error_str or 'tool' in error_str:
             if 'timeout' in error_str:
                 return {
@@ -392,7 +460,9 @@ class ResilientWorkflowExecutor(WorkflowExecutor):
 
             result.error_summary = error_summary
 
-        # Clear error history
-        self.error_history.clear()
+        # Clear error history for this workflow's tasks only
+        for task_id in result.tasks.keys():
+            if task_id in self.error_history:
+                del self.error_history[task_id]
 
         return result
