@@ -10,7 +10,7 @@ manages pending approvals, and collects workflow metrics.
 """
 
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, Optional, Any, List
 
 from ...datatypes.workflow import Workflow, WorkflowStatus
@@ -49,7 +49,7 @@ class WorkflowManager:
         self._lock = threading.Lock()
 
         observability.observe(
-            event_type=observability.SystemEvents.SERVICE_STARTED,
+            event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
             description="WorkflowManager initialized"
         )
@@ -161,6 +161,7 @@ class WorkflowManager:
                 self.workflow_metrics.increment_cancelled_workflows()
 
             # Track execution time
+            execution_time = None
             if workflow.started_at and workflow.completed_at:
                 execution_time = (workflow.completed_at - workflow.started_at).total_seconds()
                 self.workflow_metrics.add_execution_time(execution_time)
@@ -172,7 +173,7 @@ class WorkflowManager:
                     "event": "workflow_completed",
                     "workflow_id": workflow_id,
                     "status": workflow.status,
-                    "execution_time": execution_time if 'execution_time' in locals() else None
+                    "execution_time": execution_time
                 },
                 description="Workflow completed"
             )
@@ -341,6 +342,23 @@ class WorkflowManager:
             if status:
                 workflows = [w for w in workflows if w.status == status]
 
+            # TODO: Implement user_id filtering once Workflow model includes user tracking
+            # Currently, the Workflow model does not have a user_id field or metadata
+            # that tracks which user initiated the workflow. This is a future enhancement
+            # that requires updating the Workflow model and all code that creates workflows.
+            if user_id:
+                # For now, log a warning that user_id filtering is not yet implemented
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "event": "user_id_filter_not_implemented",
+                        "user_id": user_id,
+                        "message": "user_id filtering requested but not yet implemented"
+                    },
+                    description="User ID filtering not yet supported in get_workflows"
+                )
+
             # Sort by creation time (newest first)
             workflows.sort(key=lambda w: w.created_at, reverse=True)
 
@@ -434,8 +452,6 @@ class WorkflowManager:
             Number of workflows cleared
         """
         with self._lock:
-            from datetime import timedelta
-
             cutoff_date = datetime.now() - timedelta(days=older_than_days)
             cleared_count = 0
 

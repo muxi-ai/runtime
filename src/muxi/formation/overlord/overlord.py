@@ -751,7 +751,7 @@ class Overlord:
         # Log task creation
         observability.observe(
             event_type=observability.SystemEvents.SERVICE_STARTED,  # Use existing event type
-            level=observability.EventLevel.INFO,
+            level=observability.EventLevel.DEBUG,
             data={
                 "task_name": name or "unnamed",
                 "total_tasks": len(self._background_tasks),
@@ -779,7 +779,7 @@ class Overlord:
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,  # Reuse existing event type
                 level=(
-                    observability.EventLevel.INFO
+                    observability.EventLevel.DEBUG
                     if not exception_str
                     else observability.EventLevel.ERROR
                 ),
@@ -1451,8 +1451,12 @@ class Overlord:
                 # Update the request analyzer with new config
                 if hasattr(self, "request_analyzer"):
                     self.request_analyzer.complexity_method = self.workflow_config.complexity_method
-                    self.request_analyzer.complexity_threshold = self.workflow_config.complexity_threshold
-                    self.request_analyzer.complexity_weights = self.workflow_config.complexity_weights
+                    self.request_analyzer.complexity_threshold = (
+                        self.workflow_config.complexity_threshold
+                    )
+                    self.request_analyzer.complexity_weights = (
+                        self.workflow_config.complexity_weights
+                    )
 
             # Streaming configuration
             self.streaming = overlord_config.get("streaming", True)
@@ -1507,7 +1511,10 @@ class Overlord:
                     observability.observe(
                         event_type=observability.ServerEvents.SERVER_STARTED,
                         level=observability.EventLevel.INFO,
-                        data={"component": "request_analyzer", "has_llm": self.request_analyzer.llm is not None},
+                        data={
+                            "component": "request_analyzer",
+                            "has_llm": self.request_analyzer.llm is not None,
+                        },
                         description=f"Updated request_analyzer LLM: {self.request_analyzer.llm is not None}",
                     )
                 if hasattr(self, "task_decomposer"):
@@ -1515,7 +1522,10 @@ class Overlord:
                     observability.observe(
                         event_type=observability.ServerEvents.SERVER_STARTED,
                         level=observability.EventLevel.INFO,
-                        data={"component": "task_decomposer", "has_llm": self.task_decomposer.llm is not None},
+                        data={
+                            "component": "task_decomposer",
+                            "has_llm": self.task_decomposer.llm is not None,
+                        },
                         description=f"Updated task_decomposer LLM: {self.task_decomposer.llm is not None}",
                     )
                 if hasattr(self, "multimodal_fusion_engine"):
@@ -4148,7 +4158,7 @@ class Overlord:
         # Debug: Immediate next step
         observability.observe(
             event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
+            level=observability.EventLevel.DEBUG,
             data={
                 "service": "debug_next_step",
                 "checkpoint": "after_checking_conditions",
@@ -4165,16 +4175,20 @@ class Overlord:
         # Debug: Log the decision with more detail
         observability.observe(
             event_type=observability.ServerEvents.SERVER_STARTED,
-            level=observability.EventLevel.INFO,
+            level=observability.EventLevel.DEBUG,
             data={
                 "service": "workflow_analysis_decision",
                 "agent_name": agent_name,
                 "agent_name_is_none": agent_name is None,
                 "auto_decomposition": self.auto_decomposition,
                 "is_clarification_response": is_clarification_response,
-                "should_analyze": agent_name is None and self.auto_decomposition and not is_clarification_response,
+                "should_analyze": agent_name is None
+                and self.auto_decomposition
+                and not is_clarification_response,
                 "session_id": session_id,
-                "has_pending_clarifications": session_id in self._pending_clarifications if session_id else False,
+                "has_pending_clarifications": (
+                    session_id in self._pending_clarifications if session_id else False
+                ),
                 "message_preview": message[:50],
             },
             description=(
@@ -4441,10 +4455,8 @@ class Overlord:
 
         try:
             # Emit workflow orchestration started event
-            # TODO: Add OVERLORD_WORKFLOW_STARTED event type to ConversationEvents
-            # For now, use OVERLORD_TASK_DECOMPOSED as it's the closest existing event
             observability.observe(
-                event_type=observability.ConversationEvents.OVERLORD_TASK_DECOMPOSED,
+                event_type=observability.ConversationEvents.OVERLORD_WORKFLOW_STARTED,
                 level=observability.EventLevel.INFO,
                 data={
                     "complexity_score": analysis.complexity_score,

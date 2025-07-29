@@ -463,6 +463,9 @@ class ConversationEvents(Enum):
     OVERLORD_TASK_DECOMPOSED = "overlord.task.decomposed"
     # When overlord breaks down complex task into subtasks
 
+    OVERLORD_WORKFLOW_STARTED = "overlord.workflow.started"
+    # When overlord starts workflow orchestration for a complex request
+
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================

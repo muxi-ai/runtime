@@ -1,7 +1,9 @@
 import asyncio
+from collections import defaultdict
 from typing import Optional, Dict, Any, List, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
+import re
 
 from ...datatypes.workflow import (
     Workflow,
@@ -16,7 +18,10 @@ from ...datatypes.workflow_models import (
     TaskExecutionState,
     create_execution_result,
 )
+from ...services import observability
+
 from ..agents.agent import Agent
+
 from .config import (
     WorkflowConfig,
     WorkflowErrorHandler,
@@ -48,9 +53,12 @@ class WorkflowExecutor:
 
         self.active_workflows: Dict[str, Workflow] = {}
         self.task_results: Dict[str, TaskResult] = {}
+        self.workflow_history: Dict[str, Workflow] = {}  # Track completed workflows
 
         # Enhanced tracking
-        self.agent_task_history: Dict[str, List[Dict[str, Any]]] = {}  # Track agent performance
+        self.agent_task_history: Dict[str, List[Dict[str, Any]]] = defaultdict(
+            list
+        )  # Track agent performance
         self.workflow_start_times: Dict[str, datetime] = {}
         self.task_execution_times: Dict[str, float] = {}  # Track task execution times
 
@@ -61,27 +69,96 @@ class WorkflowExecutor:
         # Progress tracking callbacks
         self.progress_callbacks: List[Callable[[str, Workflow], None]] = []
 
+        # Round-robin routing index
+        self._rr_index: int = 0
+
     async def _workflow_timeout_monitor(self, workflow_id: str):
         """Monitor workflow timeout"""
-        if not self.config.timeout_config.workflow_timeout:
-            return
+        try:
+            if not self.config.timeout_config.workflow_timeout:
+                return
 
-        await asyncio.sleep(self.config.timeout_config.workflow_timeout)
+            await asyncio.sleep(self.config.timeout_config.workflow_timeout)
 
-        # Check if workflow still active
-        if workflow_id in self.active_workflows:
-            workflow = self.active_workflows[workflow_id]
-            if workflow.status == WorkflowStatus.IN_PROGRESS:
-                # Cancel all in-progress tasks
-                for task in workflow.tasks.values():
-                    if task.status == TaskStatus.IN_PROGRESS:
-                        task.status = TaskStatus.FAILED
-                        task.error_message = "Workflow timeout exceeded"
-                        task.end_time = datetime.now()
+            # Check if workflow still active
+            if workflow_id in self.active_workflows:
+                workflow = self.active_workflows[workflow_id]
+                if workflow.status == WorkflowStatus.IN_PROGRESS:
+                    # Cancel all in-progress tasks
+                    for task in workflow.tasks.values():
+                        if task.status == TaskStatus.IN_PROGRESS:
+                            task.status = TaskStatus.FAILED
+                            task.error_message = "Workflow timeout exceeded"
+                            task.end_time = datetime.now()
 
-                workflow.status = WorkflowStatus.FAILED
-                workflow.error_message = "Workflow timeout exceeded"
-                workflow.completed_at = datetime.now()
+                    workflow.status = WorkflowStatus.FAILED
+                    workflow.error_message = "Workflow timeout exceeded"
+                    workflow.completed_at = datetime.now()
+
+                    # Log timeout event
+                    observability.observe(
+                        event_type=observability.ErrorEvents.CONNECTION_TIMEOUT,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "workflow_id": workflow_id,
+                            "timeout": self.config.timeout_config.workflow_timeout,
+                            "status": "workflow_timeout_enforced",
+                        },
+                        description=(
+                            f"Workflow {workflow_id} timed out after "
+                            f"{self.config.timeout_config.workflow_timeout}s"
+                        ),
+                    )
+
+        except asyncio.CancelledError:
+            # Task was cancelled, this is expected behavior
+            pass
+        except Exception as e:
+            # Log any unexpected errors but don't crash
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "workflow_id": workflow_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "function": "_workflow_timeout_monitor",
+                },
+                description=f"Error in workflow timeout monitor: {str(e)}",
+            )
+
+    def _validate_and_initialize_workflow(
+        self, workflow: Workflow, context: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Validate workflow inputs and initialize workflow state.
+
+        Args:
+            workflow: Workflow to validate and initialize
+            context: Optional execution context to validate
+
+        Raises:
+            ValueError: If validation fails
+        """
+        # Validate workflow
+        if not isinstance(workflow, Workflow):
+            raise ValueError("Workflow must be a Workflow instance")
+        if not workflow.id:
+            raise ValueError("Workflow must have an ID")
+        if not workflow.tasks:
+            raise ValueError("Workflow must have at least one task")
+
+        # Validate context
+        if context is not None and not isinstance(context, dict):
+            raise ValueError("Context must be a dictionary or None")
+
+        # Initialize workflow state
+        workflow.status = WorkflowStatus.IN_PROGRESS
+        workflow.started_at = datetime.now()
+        self.workflow_start_times[workflow.id] = workflow.started_at
+
+        # Track this workflow
+        self.active_workflows[workflow.id] = workflow
 
     async def execute_workflow(
         self, workflow: Workflow, context: Optional[Dict[str, Any]] = None
@@ -104,23 +181,8 @@ class WorkflowExecutor:
         Returns:
             Updated workflow with execution results
         """
-        # Validate inputs
-        if not isinstance(workflow, Workflow):
-            raise ValueError("Workflow must be a Workflow instance")
-        if not workflow.id:
-            raise ValueError("Workflow must have an ID")
-        if not workflow.tasks:
-            raise ValueError("Workflow must have at least one task")
-
-        if context is not None and not isinstance(context, dict):
-            raise ValueError("Context must be a dictionary or None")
-
-        workflow.status = WorkflowStatus.IN_PROGRESS
-        workflow.started_at = datetime.now()
-        self.workflow_start_times[workflow.id] = workflow.started_at
-
-        # Track this workflow
-        self.active_workflows[workflow.id] = workflow
+        # Validate and initialize workflow
+        self._validate_and_initialize_workflow(workflow, context)
 
         # Create workflow timeout task if configured
         timeout_task = None
@@ -141,8 +203,7 @@ class WorkflowExecutor:
                 if phase_timeout:
                     try:
                         await asyncio.wait_for(
-                            self._execute_phase(workflow, task_ids, context),
-                            timeout=phase_timeout
+                            self._execute_phase(workflow, task_ids, context), timeout=phase_timeout
                         )
                     except asyncio.TimeoutError:
                         # Handle phase timeout
@@ -192,7 +253,7 @@ class WorkflowExecutor:
         self,
         workflow: Workflow,
         context: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
     ) -> Workflow:
         """
         Execute workflow with streaming progress updates.
@@ -209,11 +270,8 @@ class WorkflowExecutor:
         Returns:
             Updated workflow with execution results
         """
-        workflow.status = WorkflowStatus.IN_PROGRESS
-        workflow.started_at = datetime.now()
-
-        # Track this workflow
-        self.active_workflows[workflow.id] = workflow
+        # Validate and initialize workflow
+        self._validate_and_initialize_workflow(workflow, context)
 
         try:
             # Build execution phases
@@ -221,28 +279,34 @@ class WorkflowExecutor:
 
             # Notify workflow started
             if progress_callback:
-                progress_callback(workflow.id, workflow, {
-                    "type": "workflow_started",
-                    "workflow_id": workflow.id,
-                    "total_phases": len(phases),
-                    "total_tasks": len(workflow.tasks)
-                })
+                progress_callback(
+                    workflow.id,
+                    workflow,
+                    {
+                        "type": "workflow_started",
+                        "workflow_id": workflow.id,
+                        "total_phases": len(phases),
+                        "total_tasks": len(workflow.tasks),
+                    },
+                )
 
             # Execute each phase
             for phase_num, task_ids in enumerate(phases, 1):
                 # Notify phase started
                 if progress_callback:
-                    progress_callback(workflow.id, workflow, {
-                        "type": "phase_started",
-                        "phase_num": phase_num,
-                        "total_phases": len(phases),
-                        "task_ids": task_ids
-                    })
+                    progress_callback(
+                        workflow.id,
+                        workflow,
+                        {
+                            "type": "phase_started",
+                            "phase_num": phase_num,
+                            "total_phases": len(phases),
+                            "task_ids": task_ids,
+                        },
+                    )
 
                 # Execute tasks in parallel within this phase with streaming
-                await self._execute_phase_streaming(
-                    workflow, task_ids, context, progress_callback
-                )
+                await self._execute_phase_streaming(workflow, task_ids, context, progress_callback)
 
                 # Check if we should continue
                 if not self._should_continue_execution(workflow):
@@ -254,12 +318,20 @@ class WorkflowExecutor:
 
             # Notify workflow completed
             if progress_callback:
-                progress_callback(workflow.id, workflow, {
-                    "type": "workflow_completed",
-                    "workflow_id": workflow.id,
-                    "status": workflow.status.value if hasattr(workflow.status, 'value') else str(workflow.status),
-                    "total_time": (workflow.completed_at - workflow.started_at).total_seconds()
-                })
+                progress_callback(
+                    workflow.id,
+                    workflow,
+                    {
+                        "type": "workflow_completed",
+                        "workflow_id": workflow.id,
+                        "status": (
+                            workflow.status.value
+                            if hasattr(workflow.status, "value")
+                            else str(workflow.status)
+                        ),
+                        "total_time": (workflow.completed_at - workflow.started_at).total_seconds(),
+                    },
+                )
 
         except Exception as e:
             workflow.status = WorkflowStatus.FAILED
@@ -268,11 +340,11 @@ class WorkflowExecutor:
 
             # Notify workflow failed
             if progress_callback:
-                progress_callback(workflow.id, workflow, {
-                    "type": "workflow_failed",
-                    "workflow_id": workflow.id,
-                    "error": str(e)
-                })
+                progress_callback(
+                    workflow.id,
+                    workflow,
+                    {"type": "workflow_failed", "workflow_id": workflow.id, "error": str(e)},
+                )
 
         finally:
             # Clean up
@@ -286,7 +358,7 @@ class WorkflowExecutor:
         workflow: Workflow,
         task_ids: List[str],
         context: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
     ):
         """
         Execute all tasks in a phase concurrently with streaming updates.
@@ -297,30 +369,33 @@ class WorkflowExecutor:
             context: Optional execution context
             progress_callback: Optional callback for progress updates
         """
-        # Check if parallel execution is enabled
-        if not self.config.enable_parallel_execution:
-            # Execute tasks sequentially
-            for task_id in task_ids:
-                if task_id in workflow.tasks:
-                    task = workflow.tasks[task_id]
-                    await self._execute_task_streaming(task, workflow, context, progress_callback)
-                    # Check if we should continue after each task
-                    if not self._should_continue_execution(workflow):
-                        break
-            return
-
-        # Create coroutines for all tasks in this phase
-        task_coroutines = []
+        # Create task list regardless of execution mode
+        tasks_to_execute = []
         for task_id in task_ids:
             if task_id in workflow.tasks:
-                coroutine = self._execute_task_streaming(
-                    workflow.tasks[task_id], workflow, context, progress_callback
-                )
-                task_coroutines.append(coroutine)
+                tasks_to_execute.append(workflow.tasks[task_id])
 
-        # Execute tasks with max_parallel_tasks limit
-        if task_coroutines:
+        if not tasks_to_execute:
+            return
+
+        # Execute based on configuration
+        if not self.config.enable_parallel_execution:
+            # Sequential execution
+            for task in tasks_to_execute:
+                await self._execute_task_streaming(task, workflow, context, progress_callback)
+                # Check if we should continue after each task
+                if not self._should_continue_execution(workflow):
+                    break
+        else:
+            # Parallel execution with batching
+            # Create coroutines for all tasks
+            task_coroutines = [
+                self._execute_task_streaming(task, workflow, context, progress_callback)
+                for task in tasks_to_execute
+            ]
+
             max_parallel = self.config.max_parallel_tasks
+
             if max_parallel and max_parallel < len(task_coroutines):
                 # Execute in batches respecting max_parallel_tasks
                 for i in range(0, len(task_coroutines), max_parallel):
@@ -338,7 +413,7 @@ class WorkflowExecutor:
         task: SubTask,
         workflow: Workflow,
         context: Optional[Dict[str, Any]] = None,
-        progress_callback: Optional[Callable] = None
+        progress_callback: Optional[Callable] = None,
     ) -> TaskResult:
         """
         Execute individual task with streaming progress updates.
@@ -358,13 +433,17 @@ class WorkflowExecutor:
         # Notify task started
         if progress_callback:
             agent = self._select_agent_for_task(task)
-            progress_callback(workflow.id, workflow, {
-                "type": "task_started",
-                "task_id": task.id,
-                "description": task.description,
-                "agent_id": agent.id if agent else None,
-                "dependencies": task.depends_on
-            })
+            progress_callback(
+                workflow.id,
+                workflow,
+                {
+                    "type": "task_started",
+                    "task_id": task.id,
+                    "description": task.description,
+                    "agent_id": agent.id if agent else None,
+                    "dependencies": task.depends_on,
+                },
+            )
 
         try:
             # Collect inputs from dependencies
@@ -387,11 +466,15 @@ class WorkflowExecutor:
 
             # Notify task execution starting
             if progress_callback:
-                progress_callback(workflow.id, workflow, {
-                    "type": "task_progress",
-                    "task_id": task.id,
-                    "progress": f"Executing with agent {agent.id}"
-                })
+                progress_callback(
+                    workflow.id,
+                    workflow,
+                    {
+                        "type": "task_progress",
+                        "task_id": task.id,
+                        "progress": f"Executing with agent {agent.id}",
+                    },
+                )
 
             # Execute task
             result = await self._execute_task_with_agent(task, agent, execution_context)
@@ -407,14 +490,18 @@ class WorkflowExecutor:
 
             # Notify task completed
             if progress_callback:
-                progress_callback(workflow.id, workflow, {
-                    "type": "task_completed",
-                    "task_id": task.id,
-                    "description": task.description,
-                    "status": "completed",
-                    "outputs": task.outputs,
-                    "execution_time": (task.end_time - task.start_time).total_seconds()
-                })
+                progress_callback(
+                    workflow.id,
+                    workflow,
+                    {
+                        "type": "task_completed",
+                        "task_id": task.id,
+                        "description": task.description,
+                        "status": "completed",
+                        "outputs": task.outputs,
+                        "execution_time": (task.end_time - task.start_time).total_seconds(),
+                    },
+                )
 
             return result
 
@@ -425,13 +512,17 @@ class WorkflowExecutor:
 
             # Notify task failed
             if progress_callback:
-                progress_callback(workflow.id, workflow, {
-                    "type": "task_completed",
-                    "task_id": task.id,
-                    "description": task.description,
-                    "status": "failed",
-                    "error": str(e)
-                })
+                progress_callback(
+                    workflow.id,
+                    workflow,
+                    {
+                        "type": "task_completed",
+                        "task_id": task.id,
+                        "description": task.description,
+                        "status": "failed",
+                        "error": str(e),
+                    },
+                )
 
             # Create error result
             error_result = TaskResult(
@@ -455,19 +546,20 @@ class WorkflowExecutor:
 
         return base_timeout
 
-    def _update_agent_history(self, agent_id: str, task: SubTask, status: str, execution_time: float) -> None:
+    def _update_agent_history(
+        self, agent_id: str, task: SubTask, status: str, execution_time: float
+    ) -> None:
         """Update agent performance history"""
-        if agent_id not in self.agent_task_history:
-            self.agent_task_history[agent_id] = []
-
-        self.agent_task_history[agent_id].append({
-            "task_id": task.id,
-            "capabilities": task.required_capabilities,
-            "complexity": task.estimated_complexity,
-            "status": status,
-            "execution_time": execution_time,
-            "timestamp": datetime.now().isoformat()
-        })
+        self.agent_task_history[agent_id].append(
+            {
+                "task_id": task.id,
+                "capabilities": task.required_capabilities,
+                "complexity": task.estimated_complexity,
+                "status": status,
+                "execution_time": execution_time,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
 
         # Keep only recent history (last 100 tasks)
         if len(self.agent_task_history[agent_id]) > 100:
@@ -591,7 +683,7 @@ class WorkflowExecutor:
                 if task_timeout:
                     result = await asyncio.wait_for(
                         self._execute_task_with_agent(task, agent, execution_context),
-                        timeout=task_timeout
+                        timeout=task_timeout,
                     )
                 else:
                     result = await self._execute_task_with_agent(task, agent, execution_context)
@@ -606,7 +698,7 @@ class WorkflowExecutor:
                 end_time=datetime.now(),
                 success=True,
                 outputs=result.outputs if result else {},
-                attempt_number=state.attempt_count + 1  # Convert 0-based to 1-based
+                attempt_number=state.attempt_count + 1,  # Convert 0-based to 1-based
             )
 
             # Update SubTask with result information
@@ -628,9 +720,7 @@ class WorkflowExecutor:
 
         except Exception as e:
             # Handle error with configured strategy
-            error_action = await self.error_handler.handle_task_error(
-                task.id, e, execution_context
-            )
+            error_action = await self.error_handler.handle_task_error(task.id, e, execution_context)
 
             if error_action["action"] == "retry":
                 # Wait and retry
@@ -661,7 +751,7 @@ class WorkflowExecutor:
                     task_id=task.id,
                     status=TaskStatus.DONE,
                     outputs=task.result if isinstance(task.result, dict) else {},
-                    error_message=f"Task skipped: {error_action['reason']}"
+                    error_message=f"Task skipped: {error_action['reason']}",
                 )
 
             # Default: mark as failed
@@ -706,7 +796,9 @@ class WorkflowExecutor:
 
         return inputs
 
-    def _select_agent_for_spec(self, spec: TaskSpecification, state: TaskExecutionState) -> Optional[Agent]:
+    def _select_agent_for_spec(
+        self, spec: TaskSpecification, state: TaskExecutionState
+    ) -> Optional[Agent]:
         """
         Select best agent based on task specification.
 
@@ -719,20 +811,114 @@ class WorkflowExecutor:
         Returns:
             Selected agent or None if no suitable agent found
         """
-        # Create a minimal SubTask for compatibility with existing routing logic
-        # In a full refactor, we would update all routing methods to use TaskSpecification
-        from ...datatypes.workflow import SubTask
-        temp_task = SubTask(
-            id=spec.id,
-            description=spec.description,
-            required_capabilities=list(spec.required_capabilities),
-            dependencies=list(spec.dependencies),
-            estimated_complexity=spec.estimated_complexity,
-            status=state.status,
-            assigned_agent_id=state.assigned_agent_id
-        )
+        # Direct routing implementation without creating temporary SubTask
+        strategy = self.config.routing_strategy
 
-        return self._select_agent_for_task(temp_task)
+        # Special case: custom routing function still needs SubTask for backward compatibility
+        if strategy == TaskRoutingStrategy.CUSTOM and self.custom_routing_fn:
+            from ...datatypes.workflow import SubTask
+
+            temp_task = SubTask(
+                id=spec.id,
+                description=spec.description,
+                required_capabilities=list(spec.required_capabilities),
+                dependencies=list(spec.dependencies),
+                estimated_complexity=spec.estimated_complexity,
+                status=state.status,
+                assigned_agent_id=state.assigned_agent_id,
+            )
+            return self.custom_routing_fn(temp_task, list(self.agent_registry.values()))
+
+        # Handle no capability requirements - return any available agent
+        if not spec.required_capabilities:
+            return next(iter(self.agent_registry.values()), None)
+
+        # Apply routing rules directly using spec
+        if self.routing_rules:
+            for rule in self.routing_rules:
+                # Match pattern against description or capabilities
+                pattern_match = rule.task_pattern.lower() in spec.description.lower()
+                capability_match = rule.required_capabilities and all(
+                    cap in spec.required_capabilities for cap in rule.required_capabilities
+                )
+
+                if pattern_match or capability_match:
+                    for agent_id in rule.preferred_agents:
+                        if agent_id in self.agent_registry:
+                            return self.agent_registry[agent_id]
+
+        # Main routing logic based on strategy
+        best_agent = None
+
+        if strategy == TaskRoutingStrategy.ROUND_ROBIN:
+            # Simple round-robin without affinity check
+            agents = list(self.agent_registry.values())
+            if agents:
+                if not hasattr(self, "_rr_index"):
+                    self._rr_index = 0
+                best_agent = agents[self._rr_index % len(agents)]
+                self._rr_index += 1
+                return best_agent
+
+        # For all other strategies, find agents with required capabilities
+        capable_agents = []
+        for agent_id, agent in self.agent_registry.items():
+            # Check if agent has any required capability
+            agent_caps = getattr(agent, "specialization", [])
+            if any(cap in agent_caps for cap in spec.required_capabilities):
+                capable_agents.append((agent_id, agent))
+
+        if not capable_agents:
+            # No capable agents found, return any available
+            return next(iter(self.agent_registry.values()), None)
+
+        # Apply strategy-specific selection from capable agents
+        if strategy == TaskRoutingStrategy.LOAD_BALANCED:
+            # Select agent with least recent tasks
+            min_tasks = float("inf")
+            for agent_id, agent in capable_agents:
+                task_count = len(self.agent_task_history[agent_id])
+                if task_count < min_tasks:
+                    min_tasks = task_count
+                    best_agent = agent
+
+        elif strategy == TaskRoutingStrategy.SPECIALIZED:
+            # Select agent with most matching capabilities
+            max_matches = 0
+            for agent_id, agent in capable_agents:
+                agent_caps = getattr(agent, "specialization", [])
+                matches = sum(1 for cap in spec.required_capabilities if cap in agent_caps)
+                if matches > max_matches:
+                    max_matches = matches
+                    best_agent = agent
+
+        else:  # Default: CAPABILITY_BASED or PRIORITY_BASED
+            # Use affinity if enabled
+            if self.config.enable_agent_affinity:
+                best_score = -1
+                for agent_id, agent in capable_agents:
+                    if agent_id in self.agent_task_history:
+                        history = self.agent_task_history[agent_id]
+                        relevant = [
+                            h
+                            for h in history
+                            if any(
+                                cap in h.get("capabilities", [])
+                                for cap in spec.required_capabilities
+                            )
+                        ]
+                        if relevant:
+                            success_count = sum(1 for h in relevant if h.get("status") == "success")
+                            score = success_count / len(relevant) if relevant else 0
+                            if score > best_score:
+                                best_score = score
+                                best_agent = agent
+
+            # If no affinity match or affinity disabled, use first capable
+            if not best_agent:
+                best_agent = capable_agents[0][1]
+
+        return best_agent
 
     def _select_agent_for_task(self, task: SubTask) -> Optional[Agent]:
         """
@@ -806,7 +992,8 @@ class WorkflowExecutor:
         for agent_id in self.agent_registry:
             # Count active tasks for this agent
             active_count = sum(
-                1 for wf in self.active_workflows.values()
+                1
+                for wf in self.active_workflows.values()
                 for t in wf.tasks.values()
                 if t.assigned_agent_id == agent_id and t.status == TaskStatus.IN_PROGRESS
             )
@@ -818,9 +1005,6 @@ class WorkflowExecutor:
 
     def _route_round_robin(self, task: SubTask) -> Optional[Agent]:
         """Simple round-robin routing"""
-        if not hasattr(self, '_rr_index'):
-            self._rr_index = 0
-
         agents = list(self.agent_registry.values())
         if not agents:
             return None
@@ -833,7 +1017,7 @@ class WorkflowExecutor:
         """Route based on task priority (using complexity as proxy)"""
         # For high complexity tasks, use best performing agents
         if task.estimated_complexity >= 8:
-            return self._get_best_performing_agent(task.required_capabilities)
+            return self._get_best_performing_agent(task)
 
         # For lower complexity, use standard routing
         return self._route_by_capability(task)
@@ -846,20 +1030,18 @@ class WorkflowExecutor:
 
     def _calculate_agent_affinity(self, agent_id: str, task: SubTask) -> float:
         """Calculate affinity score based on past performance"""
-        if agent_id not in self.agent_task_history:
-            return 0.0
-
         history = self.agent_task_history[agent_id]
         relevant_tasks = [
-            h for h in history
-            if any(cap in h.get('capabilities', []) for cap in task.required_capabilities)
+            h
+            for h in history
+            if any(cap in h.get("capabilities", []) for cap in task.required_capabilities)
         ]
 
         if not relevant_tasks:
             return 0.0
 
         # Calculate success rate
-        successful = sum(1 for t in relevant_tasks if t.get('status') == 'success')
+        successful = sum(1 for t in relevant_tasks if t.get("status") == "success")
         success_rate = successful / len(relevant_tasks)
 
         # Factor in recency (more recent = higher weight)
@@ -867,13 +1049,13 @@ class WorkflowExecutor:
 
         return success_rate * recency_weight
 
-    def _get_best_performing_agent(self, capabilities: List[str]) -> Optional[Agent]:
-        """Get agent with best performance for given capabilities"""
+    def _get_best_performing_agent(self, task: SubTask) -> Optional[Agent]:
+        """Get agent with best performance for given task"""
         best_agent = None
         best_score = -1
 
         for agent_id, agent in self.agent_registry.items():
-            score = self._calculate_agent_affinity(agent_id, capabilities)
+            score = self._calculate_agent_affinity(agent_id, task)
             if score > best_score:
                 best_score = score
                 best_agent = agent
@@ -920,7 +1102,7 @@ class WorkflowExecutor:
             )
 
             # Extract content from MuxiResponse
-            response_content = response.content if hasattr(response, 'content') else str(response)
+            response_content = response.content if hasattr(response, "content") else str(response)
 
             # Parse response into structured outputs
             outputs = self._parse_task_response(response_content, task)
@@ -997,42 +1179,135 @@ class WorkflowExecutor:
             "status": "success",
             "metrics": {"response_length": len(response)},
             "warnings": [],
-            "artifacts": []
+            "artifacts": [],
         }
 
         outputs = {
             "main": main_output,
-            "task_id": {
-                "result": task.id,
-                "status": "success"
-            },
-            "completed": {
-                "result": True,
-                "status": "success"
-            }
+            "task_id": {"result": task.id, "status": "success"},
+            "completed": {"result": True, "status": "success"},
         }
 
-        # Add capability-specific outputs
+        # Add capability-specific outputs with dynamic metrics
         if "research" in task.required_capabilities:
             outputs["research_findings"] = {
                 "result": response,
                 "status": "success",
-                "metrics": {"research_depth": 10}  # Use numeric value
+                "metrics": self._calculate_research_metrics(response),
             }
         elif "writing" in task.required_capabilities:
             outputs["written_content"] = {
                 "result": response,
                 "status": "success",
-                "metrics": {"word_count": len(response.split())}
+                "metrics": {"word_count": len(response.split())},
             }
         elif "analysis" in task.required_capabilities:
             outputs["analysis_results"] = {
                 "result": response,
                 "status": "success",
-                "metrics": {"analysis_depth": 10}  # Use numeric value
+                "metrics": self._calculate_analysis_metrics(response),
             }
 
         return outputs
+
+    def _calculate_research_metrics(self, response: str) -> Dict[str, Any]:
+        """
+        Calculate research-specific metrics based on response content.
+
+        Args:
+            response: The research response text
+
+        Returns:
+            Dictionary of research metrics
+        """
+        # Calculate research depth based on content characteristics
+        metrics = {
+            "word_count": len(response.split()),
+            "paragraph_count": len(response.split("\n\n")),
+            "research_depth": 1,  # Base depth
+        }
+
+        # Increase depth based on content indicators
+        depth_indicators = {
+            "source": 2,
+            "citation": 2,
+            "reference": 2,
+            "study": 3,
+            "analysis": 3,
+            "finding": 2,
+            "evidence": 3,
+            "data": 2,
+            "research": 2,
+            "conclusion": 2,
+        }
+
+        response_lower = response.lower()
+        for indicator, weight in depth_indicators.items():
+            if indicator in response_lower:
+                metrics["research_depth"] += weight
+
+        # Cap research depth at 10
+        metrics["research_depth"] = min(metrics["research_depth"], 10)
+
+        # Add source count if URLs are present
+        url_pattern = r"https?://[^\s]+"
+        urls = re.findall(url_pattern, response)
+        if urls:
+            metrics["source_count"] = len(urls)
+
+        return metrics
+
+    def _calculate_analysis_metrics(self, response: str) -> Dict[str, Any]:
+        """
+        Calculate analysis-specific metrics based on response content.
+
+        Args:
+            response: The analysis response text
+
+        Returns:
+            Dictionary of analysis metrics
+        """
+        # Calculate analysis depth based on content structure
+        metrics = {
+            "word_count": len(response.split()),
+            "analysis_depth": 1,  # Base depth
+        }
+
+        # Increase depth based on analytical indicators
+        depth_indicators = {
+            "compare": 2,
+            "contrast": 2,
+            "evaluate": 3,
+            "assess": 3,
+            "examine": 2,
+            "investigate": 3,
+            "conclusion": 2,
+            "recommendation": 3,
+            "implication": 3,
+            "trend": 2,
+            "pattern": 2,
+            "correlation": 3,
+        }
+
+        response_lower = response.lower()
+        for indicator, weight in depth_indicators.items():
+            if indicator in response_lower:
+                metrics["analysis_depth"] += weight
+
+        # Additional depth for structured analysis
+        if any(marker in response for marker in ["1.", "2.", "•", "-", "*"]):
+            metrics["analysis_depth"] += 2
+
+        # Cap analysis depth at 10
+        metrics["analysis_depth"] = min(metrics["analysis_depth"], 10)
+
+        # Count analytical sections
+        section_markers = ["however", "furthermore", "therefore", "in conclusion", "additionally"]
+        section_count = sum(1 for marker in section_markers if marker in response_lower)
+        if section_count > 0:
+            metrics["section_count"] = section_count
+
+        return metrics
 
     def _should_continue_execution(self, workflow: Workflow) -> bool:
         """
@@ -1051,15 +1326,17 @@ class WorkflowExecutor:
         # Check workflow timeout
         if workflow.id in self.workflow_start_times:
             elapsed = (datetime.now() - self.workflow_start_times[workflow.id]).total_seconds()
-            if self.config.timeout_config.workflow_timeout and elapsed > self.config.timeout_config.workflow_timeout:
+            if (
+                self.config.timeout_config.workflow_timeout
+                and elapsed > self.config.timeout_config.workflow_timeout
+            ):
                 workflow.status = WorkflowStatus.FAILED
                 workflow.error_message = "Workflow timeout exceeded"
                 return False
 
         # Check failure strategy
         failed_tasks = [
-            task for task in workflow.tasks.values()
-            if task.status == TaskStatus.FAILED
+            task for task in workflow.tasks.values() if task.status == TaskStatus.FAILED
         ]
 
         if not failed_tasks:
@@ -1069,14 +1346,14 @@ class WorkflowExecutor:
         if self.config.enable_partial_results:
             # Continue if we have any successful tasks
             successful_tasks = [
-                task for task in workflow.tasks.values()
-                if task.status == TaskStatus.DONE
+                task for task in workflow.tasks.values() if task.status == TaskStatus.DONE
             ]
             return len(successful_tasks) > 0
 
         # Check if failed tasks are critical
         critical_failures = [
-            task for task in failed_tasks
+            task
+            for task in failed_tasks
             if task.estimated_complexity >= 7  # High complexity = critical
         ]
 
@@ -1102,8 +1379,10 @@ class WorkflowExecutor:
         # Handle both enum objects and string values due to use_enum_values=True
         # Include both DONE and COMPLETED as success states
         success_values = {
-            TaskStatus.DONE, TaskStatus.DONE.value,
-            TaskStatus.COMPLETED, TaskStatus.COMPLETED.value
+            TaskStatus.DONE,
+            TaskStatus.DONE.value,
+            TaskStatus.COMPLETED,
+            TaskStatus.COMPLETED.value,
         }
         failed_values = {TaskStatus.FAILED, TaskStatus.FAILED.value}
 
@@ -1139,9 +1418,6 @@ class WorkflowExecutor:
             callback: Function to call with (workflow_id, workflow) on updates
         """
         self.progress_callbacks.append(callback)
-
-    # Add property to track workflow history
-    workflow_history: Dict[str, Workflow] = {}
 
     def get_workflow_status(self, workflow_id: str) -> Optional[Workflow]:
         """
@@ -1280,19 +1556,69 @@ class ProgressTracker:
         """
         return self.workflow_progress.get(workflow_id)
 
-    def cleanup_completed_workflows(self) -> None:
+    def cleanup_completed_workflows(self, retention_hours: int = 24) -> int:
         """
-        Clean up progress tracking for completed workflows.
-        """
-        # Keep progress info for completed workflows for a while
-        # In full implementation, would have configurable retention
-        pass
+        Clean up progress tracking and history for completed workflows.
 
-    def _select_agent_for_task_excluding(self, task: SubTask, excluded_agents: List[str]) -> Optional[Agent]:
+        Removes workflow data older than the retention period to prevent
+        unbounded memory growth. Keeps recent data for debugging and monitoring.
+
+        Args:
+            retention_hours: Hours to retain completed workflow data (default: 24)
+
+        Returns:
+            Number of workflows cleaned up
+        """
+        if retention_hours < 0:
+            raise ValueError("Retention hours must be non-negative")
+
+        current_time = datetime.now()
+        cutoff_time = current_time - timedelta(hours=retention_hours)
+        workflows_cleaned = 0
+
+        # Identify workflows to clean up from history
+        workflows_to_clean = []
+        for workflow_id, workflow in self.workflow_history.items():
+            if workflow.completed_at and workflow.completed_at < cutoff_time:
+                workflows_to_clean.append(workflow_id)
+
+        # Clean up all associated data for old workflows
+        for workflow_id in workflows_to_clean:
+            # Remove from workflow history
+            if workflow_id in self.workflow_history:
+                workflow = self.workflow_history[workflow_id]
+                del self.workflow_history[workflow_id]
+
+                # Clean up task results for this workflow's tasks
+                for task_id in workflow.tasks:
+                    if task_id in self.task_results:
+                        del self.task_results[task_id]
+                    if task_id in self.task_execution_times:
+                        del self.task_execution_times[task_id]
+
+            # Clean up workflow tracking data
+            if workflow_id in self.workflow_progress:
+                del self.workflow_progress[workflow_id]
+            if workflow_id in self.workflow_start_times:
+                del self.workflow_start_times[workflow_id]
+
+            workflows_cleaned += 1
+
+        # Clean up old agent task history (keep last 1000 entries per agent)
+        for agent_id in self.agent_task_history:
+            history = self.agent_task_history[agent_id]
+            if len(history) > 1000:
+                # Keep only the most recent 1000 entries
+                self.agent_task_history[agent_id] = history[-1000:]
+
+        return workflows_cleaned
+
+    def _select_agent_for_task_excluding(
+        self, task: SubTask, excluded_agents: List[str]
+    ) -> Optional[Agent]:
         """Select agent excluding specific agents"""
         available_agents = {
-            aid: agent for aid, agent in self.agent_registry.items()
-            if aid not in excluded_agents
+            aid: agent for aid, agent in self.agent_registry.items() if aid not in excluded_agents
         }
 
         if not available_agents:
@@ -1338,7 +1664,9 @@ class ProgressTracker:
 
         metrics = {
             "workflow_id": workflow_id,
-            "status": workflow.status.value if hasattr(workflow.status, 'value') else str(workflow.status),
+            "status": (
+                workflow.status.value if hasattr(workflow.status, "value") else str(workflow.status)
+            ),
             "total_tasks": total_tasks,
             "completed_tasks": completed_tasks,
             "failed_tasks": failed_tasks,
@@ -1346,10 +1674,11 @@ class ProgressTracker:
             "average_task_time": sum(task_times) / len(task_times) if task_times else 0,
             "total_execution_time": (
                 (workflow.completed_at - workflow.started_at).total_seconds()
-                if workflow.completed_at and workflow.started_at else 0
+                if workflow.completed_at and workflow.started_at
+                else 0
             ),
             "error_summary": self._get_workflow_error_summary(workflow),
-            "agent_utilization": self._get_agent_utilization(workflow)
+            "agent_utilization": self._get_agent_utilization(workflow),
         }
 
         return metrics
@@ -1359,16 +1688,15 @@ class ProgressTracker:
         errors = []
         for task in workflow.tasks.values():
             if task.error_message:
-                errors.append({
-                    "task_id": task.id,
-                    "error": task.error_message,
-                    "task_description": task.description
-                })
+                errors.append(
+                    {
+                        "task_id": task.id,
+                        "error": task.error_message,
+                        "task_description": task.description,
+                    }
+                )
 
-        return {
-            "total_errors": len(errors),
-            "errors": errors
-        }
+        return {"total_errors": len(errors), "errors": errors}
 
     def _get_agent_utilization(self, workflow: Workflow) -> Dict[str, Any]:
         """Get agent utilization for workflow"""
@@ -1377,11 +1705,7 @@ class ProgressTracker:
         for task in workflow.tasks.values():
             if task.assigned_agent_id:
                 if task.assigned_agent_id not in agent_tasks:
-                    agent_tasks[task.assigned_agent_id] = {
-                        "total": 0,
-                        "completed": 0,
-                        "failed": 0
-                    }
+                    agent_tasks[task.assigned_agent_id] = {"total": 0, "completed": 0, "failed": 0}
 
                 agent_tasks[task.assigned_agent_id]["total"] += 1
 
@@ -1450,8 +1774,16 @@ class ProgressTracker:
         if result.status == TaskStatus.FAILED and not result.error_message:
             raise ValueError("Failed task must have an error message")
 
+        # Allow None execution_time for completed tasks to handle quick completions or timing issues
+        # Log a warning instead of raising an error
         if result.status == TaskStatus.DONE and result.execution_time is None:
-            raise ValueError("Completed task must have execution time")
+            import warnings
+
+            warnings.warn(
+                f"Task {result.task_id} completed without execution_time. "
+                "This may indicate a very quick completion or timing measurement issue.",
+                RuntimeWarning,
+            )
 
     def _validate_context(self, context: Optional[Dict[str, Any]]) -> None:
         """

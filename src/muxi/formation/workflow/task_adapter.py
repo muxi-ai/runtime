@@ -7,17 +7,17 @@ SubTask model used throughout the MUXI Runtime.
 
 The adapter ensures backward compatibility while allowing internal code to benefit
 from the cleaner separation of concerns provided by the new models.
+
+Important:
+    All task outputs MUST have explicit names. The adapter will raise a ValueError
+    if any output is missing a name to ensure data integrity and prevent potential
+    mismatches in task dependencies and data flow.
 """
 
 from typing import Tuple, Optional
-from datetime import datetime
 
 from ...datatypes.workflow import SubTask, TaskInput, TaskOutput
-from ...datatypes.workflow_models import (
-    TaskSpecification,
-    TaskExecutionState,
-    TaskExecutionResult
-)
+from ...datatypes.workflow_models import TaskSpecification, TaskExecutionState, TaskExecutionResult
 from ...datatypes.task_status import TaskStatus
 
 
@@ -41,29 +41,132 @@ class TaskAdapter:
         This method extracts the immutable specification from the SubTask and
         creates the corresponding execution state tracking the runtime information.
 
+        Note:
+            The `blocked_by` field in TaskExecutionState will be initialized as an empty set
+            because calculating it requires workflow context (to check the status of dependency
+            tasks). The workflow executor should populate this field after conversion based on
+            the actual workflow state.
+
         Args:
             subtask: The SubTask to convert
 
         Returns:
             Tuple of (TaskSpecification, TaskExecutionState)
+
+        Raises:
+            ValueError: If the subtask is missing required fields or contains invalid data
+            TypeError: If the subtask is not a valid SubTask instance
         """
+        # Validate input type
+        if not subtask:
+            raise ValueError("SubTask cannot be None")
+
+        if not hasattr(subtask, "id"):
+            raise TypeError("Invalid SubTask: missing required attributes")
+
+        # Use existing validation method
+        if not TaskAdapter.validate_conversion(subtask):
+            raise ValueError(
+                f"SubTask {subtask.id if hasattr(subtask, 'id') and subtask.id else '<unknown>'} failed validation"
+            )
+
+        # Validate required fields
+        if not subtask.id:
+            raise ValueError("SubTask.id is required but was empty or None")
+
+        if not subtask.description:
+            raise ValueError(f"SubTask {subtask.id} has no description")
+
+        # Validate outputs list
+        if subtask.outputs is None:
+            raise ValueError(
+                f"SubTask {subtask.id} has None outputs - expected a list (can be empty)"
+            )
+
+        if not isinstance(subtask.outputs, list):
+            raise TypeError(
+                f"SubTask {subtask.id} outputs must be a list, got {type(subtask.outputs).__name__}"
+            )
+
+        # Validate inputs list
+        if subtask.inputs is None:
+            raise ValueError(
+                f"SubTask {subtask.id} has None inputs - expected a list (can be empty)"
+            )
+
+        if not isinstance(subtask.inputs, list):
+            raise TypeError(
+                f"SubTask {subtask.id} inputs must be a list, got {type(subtask.inputs).__name__}"
+            )
+
+        # Validate required_capabilities
+        if not subtask.required_capabilities:
+            raise ValueError(f"SubTask {subtask.id} must have at least one required capability")
+
+        if not isinstance(subtask.required_capabilities, list):
+            raise TypeError(
+                f"SubTask {subtask.id} required_capabilities must be a list, "
+                f"got {type(subtask.required_capabilities).__name__}"
+            )
+
+        # Validate dependencies
+        if subtask.dependencies is None:
+            raise ValueError(
+                f"SubTask {subtask.id} has None dependencies - expected a list (can be empty)"
+            )
+
+        if not isinstance(subtask.dependencies, list):
+            raise TypeError(
+                f"SubTask {subtask.id} dependencies must be a list, got {type(subtask.dependencies).__name__}"
+            )
+
+        # Validate estimated_complexity
+        if subtask.estimated_complexity is None:
+            raise ValueError(f"SubTask {subtask.id} has no estimated_complexity")
+
+        if not isinstance(subtask.estimated_complexity, (int, float)):
+            raise TypeError(
+                f"SubTask {subtask.id} estimated_complexity must be a number, "
+                f"got {type(subtask.estimated_complexity).__name__}"
+            )
+
+        if not (1.0 <= subtask.estimated_complexity <= 10.0):
+            raise ValueError(
+                f"SubTask {subtask.id} estimated_complexity must be between 1.0 and 10.0, "
+                f"got {subtask.estimated_complexity}"
+            )
+
+        # Validate status
+        if not subtask.status:
+            raise ValueError(f"SubTask {subtask.id} has no status")
+
         # Extract expected outputs from SubTask outputs
         expected_outputs = []
-        for output in subtask.outputs:
-            expected_outputs.append({
-                "name": output.name,
-                "type": output.type,
-                "description": output.description
-            })
+        for idx, output in enumerate(subtask.outputs):
+            # Validate output has a name
+            if not output.name:
+                raise ValueError(
+                    f"Output at index {idx} in subtask {subtask.id} is missing a name. "
+                    "All outputs must have explicit names to ensure data integrity."
+                )
+            expected_outputs.append(
+                {"name": output.name, "type": output.type, "description": output.description}
+            )
 
         # Extract input requirements from SubTask inputs
         input_requirements = {}
-        for inp in subtask.inputs:
+        for idx, inp in enumerate(subtask.inputs):
+            # Validate input has a name
+            if not inp.name:
+                raise ValueError(
+                    f"Input at index {idx} in subtask {subtask.id} is missing a name. "
+                    "All inputs must have explicit names to ensure data integrity."
+                )
             input_requirements[inp.name] = {
                 "type": inp.type,
                 "required": inp.required,
                 "description": inp.description,
-                "source_task_id": inp.source_task_id
+                "source_task_id": inp.source_task_id,
             }
 
         # Create the immutable specification
@@ -74,7 +177,7 @@ class TaskAdapter:
             expected_outputs=expected_outputs,
             dependencies=subtask.dependencies,
             estimated_complexity=subtask.estimated_complexity,
-            input_requirements=input_requirements if input_requirements else None
+            input_requirements=input_requirements if input_requirements else None,
         )
 
         # Create the mutable execution state
@@ -83,12 +186,24 @@ class TaskAdapter:
             status=subtask.status,
             assigned_agent_id=subtask.assigned_agent_id,
             start_time=subtask.start_time,
-            progress_percent=subtask.progress_percent
+            progress_percent=subtask.progress_percent,
         )
 
-        # Calculate blocked_by based on dependencies
-        # This would require access to the workflow, so we leave it empty for now
-        # The executor should populate this based on workflow state
+        # TODO: Calculate blocked_by based on dependencies
+        # The blocked_by field indicates which tasks are currently blocking this task's execution.
+        # It should contain the IDs of dependency tasks that haven't completed yet.
+        #
+        # This calculation requires:
+        # 1. Access to the full workflow to check dependency task statuses
+        # 2. Filtering dependencies to only include those not in COMPLETED/DONE state
+        #
+        # Since this adapter method doesn't have workflow context, we initialize blocked_by as empty.
+        # The WorkflowExecutor should update this field after conversion by:
+        # - Checking each task in subtask.dependencies
+        # - Adding to blocked_by if the dependency task status is not COMPLETED/DONE
+        #
+        # Future enhancement: Consider adding an optional workflow parameter to this method
+        # to enable proper blocked_by calculation during conversion.
 
         return spec, state
 
@@ -96,7 +211,7 @@ class TaskAdapter:
     def to_subtask(
         spec: TaskSpecification,
         state: TaskExecutionState,
-        result: Optional[TaskExecutionResult] = None
+        result: Optional[TaskExecutionResult] = None,
     ) -> SubTask:
         """
         Convert separated models back into a SubTask.
@@ -115,23 +230,33 @@ class TaskAdapter:
         # Convert expected outputs back to TaskOutput objects
         outputs = []
         for idx, expected in enumerate(spec.expected_outputs):
-            outputs.append(TaskOutput(
-                name=expected.get("name", f"output_{idx}"),
-                description=expected.get("description", ""),
-                type=expected.get("type", "data")
-            ))
+            # Ensure output has an explicit name
+            if not expected.get("name"):
+                raise ValueError(
+                    f"Output at index {idx} in task {spec.id} is missing a name. "
+                    "All outputs must have explicit names to ensure data integrity."
+                )
+            outputs.append(
+                TaskOutput(
+                    name=expected["name"],
+                    description=expected.get("description", ""),
+                    type=expected.get("type", "data"),
+                )
+            )
 
         # Convert input requirements back to TaskInput objects
         inputs = []
         if spec.input_requirements:
             for name, req in spec.input_requirements.items():
-                inputs.append(TaskInput(
-                    name=name,
-                    description=req.get("description", ""),
-                    type=req.get("type", "data"),
-                    required=req.get("required", True),
-                    source_task_id=req.get("source_task_id")
-                ))
+                inputs.append(
+                    TaskInput(
+                        name=name,
+                        description=req.get("description", ""),
+                        type=req.get("type", "data"),
+                        required=req.get("required", True),
+                        source_task_id=req.get("source_task_id"),
+                    )
+                )
 
         # Create the SubTask
         subtask = SubTask(
@@ -145,7 +270,7 @@ class TaskAdapter:
             assigned_agent_id=state.assigned_agent_id,
             status=state.status,
             start_time=state.start_time,
-            progress_percent=state.progress_percent
+            progress_percent=state.progress_percent,
         )
 
         # If we have a result, update the SubTask with result information
@@ -161,10 +286,7 @@ class TaskAdapter:
         return subtask
 
     @staticmethod
-    def update_subtask_from_result(
-        subtask: SubTask,
-        result: TaskExecutionResult
-    ) -> SubTask:
+    def update_subtask_from_result(subtask: SubTask, result: TaskExecutionResult) -> SubTask:
         """
         Update a SubTask with information from a TaskExecutionResult.
 
@@ -198,14 +320,21 @@ class TaskAdapter:
 
     @staticmethod
     def create_result_from_subtask(
-        subtask: SubTask,
-        agent_id: str
+        subtask: SubTask, agent_id: str
     ) -> Optional[TaskExecutionResult]:
         """
         Create a TaskExecutionResult from a completed SubTask.
 
         This method extracts result information from a SubTask that has
         completed execution and creates the corresponding result object.
+
+        The method handles various types of results:
+        - dict: Used as-is
+        - str: Wrapped as {"result": <string>}
+        - list/tuple: Wrapped as {"results": <list>}
+        - int/float/bool: Wrapped as {"value": <primitive>}
+        - Objects with __dict__: Converted to dict
+        - Other types: Converted to string and wrapped as {"result": <string>}
 
         Args:
             subtask: The completed SubTask
@@ -227,8 +356,38 @@ class TaskAdapter:
         else:
             execution_time = 0.0
 
-        # Extract outputs
-        outputs = subtask.result if isinstance(subtask.result, dict) else {}
+        # Extract outputs with proper type handling
+        outputs = {}
+        if subtask.result is not None:
+            if isinstance(subtask.result, dict):
+                outputs = subtask.result
+            elif isinstance(subtask.result, str):
+                # Single string result gets wrapped as 'result' key
+                outputs = {"result": subtask.result}
+            elif isinstance(subtask.result, (list, tuple)):
+                # List/tuple results get wrapped as 'results' key
+                outputs = {"results": list(subtask.result)}
+            elif isinstance(subtask.result, (int, float, bool)):
+                # Primitive types get wrapped as 'value' key
+                outputs = {"value": subtask.result}
+            else:
+                # For other types, attempt to extract meaningful data
+                try:
+                    # Try to convert to dict if object has __dict__
+                    if hasattr(subtask.result, "__dict__"):
+                        outputs = subtask.result.__dict__
+                    else:
+                        # Last resort: convert to string representation
+                        outputs = {"result": str(subtask.result)}
+                except Exception:
+                    # If all else fails, use string representation
+                    outputs = {"result": str(subtask.result)}
+
+        # Ensure we have valid timestamps - raise error if missing
+        if not subtask.start_time:
+            raise ValueError(f"Cannot create result for task {subtask.id}: start_time is missing")
+        if not subtask.end_time:
+            raise ValueError(f"Cannot create result for task {subtask.id}: end_time is missing")
 
         return TaskExecutionResult(
             task_id=subtask.id,
@@ -237,8 +396,8 @@ class TaskAdapter:
             error=subtask.error_message,
             execution_time=execution_time,
             agent_id=agent_id or subtask.assigned_agent_id or "unknown",
-            start_time=subtask.start_time or datetime.now(),
-            end_time=subtask.end_time or datetime.now()
+            start_time=subtask.start_time,
+            end_time=subtask.end_time,
         )
 
     @staticmethod
@@ -275,6 +434,7 @@ class TaskAdapter:
 
 # Utility functions for common conversion patterns
 
+
 def subtask_to_models(subtask: SubTask) -> Tuple[TaskSpecification, TaskExecutionState]:
     """
     Convenience function to convert SubTask to separated models.
@@ -289,9 +449,7 @@ def subtask_to_models(subtask: SubTask) -> Tuple[TaskSpecification, TaskExecutio
 
 
 def models_to_subtask(
-    spec: TaskSpecification,
-    state: TaskExecutionState,
-    result: Optional[TaskExecutionResult] = None
+    spec: TaskSpecification, state: TaskExecutionState, result: Optional[TaskExecutionResult] = None
 ) -> SubTask:
     """
     Convenience function to convert separated models to SubTask.
@@ -307,10 +465,7 @@ def models_to_subtask(
     return TaskAdapter.to_subtask(spec, state, result)
 
 
-def apply_result_to_subtask(
-    subtask: SubTask,
-    result: TaskExecutionResult
-) -> SubTask:
+def apply_result_to_subtask(subtask: SubTask, result: TaskExecutionResult) -> SubTask:
     """
     Convenience function to apply execution result to SubTask.
 

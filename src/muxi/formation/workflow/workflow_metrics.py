@@ -148,23 +148,35 @@ class WorkflowMetrics:
 
         This is useful for aggregating metrics from multiple sources.
 
+        This method avoids potential deadlocks by copying data from the
+        other instance outside of any locks, then updating self atomically.
+
         Args:
             other: Another WorkflowMetrics instance to merge from
         """
-        with self._lock:
-            with other._lock:
-                self.total_workflows += other.total_workflows
-                self.completed_workflows += other.completed_workflows
-                self.failed_workflows += other.failed_workflows
-                self.cancelled_workflows += other.cancelled_workflows
-                self.total_execution_time += other.total_execution_time
+        # First, copy data from the other instance while holding only its lock
+        with other._lock:
+            other_total_workflows = other.total_workflows
+            other_completed_workflows = other.completed_workflows
+            other_failed_workflows = other.failed_workflows
+            other_cancelled_workflows = other.cancelled_workflows
+            other_total_execution_time = other.total_execution_time
+            other_workflow_count_by_user = other.workflow_count_by_user.copy()
 
-                # Merge user counts
-                for user_id, count in other.workflow_count_by_user.items():
-                    if user_id in self.workflow_count_by_user:
-                        self.workflow_count_by_user[user_id] += count
-                    else:
-                        self.workflow_count_by_user[user_id] = count
+        # Now update self with the copied data while holding only self's lock
+        with self._lock:
+            self.total_workflows += other_total_workflows
+            self.completed_workflows += other_completed_workflows
+            self.failed_workflows += other_failed_workflows
+            self.cancelled_workflows += other_cancelled_workflows
+            self.total_execution_time += other_total_execution_time
+
+            # Merge user counts
+            for user_id, count in other_workflow_count_by_user.items():
+                if user_id in self.workflow_count_by_user:
+                    self.workflow_count_by_user[user_id] += count
+                else:
+                    self.workflow_count_by_user[user_id] = count
 
     def get_user_metrics(self, user_id: str) -> Dict[str, Any]:
         """

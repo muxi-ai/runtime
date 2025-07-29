@@ -14,6 +14,7 @@ from ...datatypes.workflow import (
     build_execution_phases,
 )
 from ...services.llm import LLM
+from ...services import observability
 
 
 class TaskDecomposer:
@@ -725,9 +726,8 @@ class ApprovalManager:
         """Present plan to user and return formatted message"""
 
         # Debug: Entry point
-        from ...services import observability
         observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
+            event_type=observability.ConversationEvents.AGENT_PLANNING_STARTED,
             level=observability.EventLevel.INFO,
             data={
                 "service": "approval_manager_present",
@@ -750,7 +750,7 @@ class ApprovalManager:
 
         # Debug: Success
         observability.observe(
-            event_type=observability.ServerEvents.SERVER_STARTED,
+            event_type=observability.ConversationEvents.REQUEST_COMPLETED,
             level=observability.EventLevel.INFO,
             data={
                 "service": "approval_manager_success",

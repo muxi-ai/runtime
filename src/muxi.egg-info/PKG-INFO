@@ -402,6 +402,14 @@ class Overlord:
         # 2. SOP matching (NEW)
         relevant_sops = await self.sop_coordinator.search(message)
 
+        # Validate SOPs if found
+        if relevant_sops:
+            try:
+                self._validate_sops(relevant_sops)
+            except InvalidSOPError as e:
+                # Handle invalid SOP gracefully
+                relevant_sops = []
+
         # 3. Agent selection (enhanced with SOPs)
         if relevant_sops:
             # Use SOP to guide task decomposition
@@ -431,7 +439,6 @@ class Overlord:
                 context=context,
                 tools=tools
             )
-
         return response
 ```
 
