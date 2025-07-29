@@ -12,7 +12,7 @@ The Formation API Server is a FastAPI-based HTTP server that exposes MUXI format
 │  │ Health       │  │ Admin        │  │ Client       │  │
 │  │ Routes       │  │ Routes       │  │ Routes       │  │
 │  │              │  │              │  │              │  │
-│  │ /health      │  │ /admin/*     │  │ /api/*       │  │
+│  │ /health      │  │ /v1/*        │  │ /v1/*        │  │
 │  │ /status      │  │ (admin key)  │  │ (client key) │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
 │  ┌──────────────────────────────────────────────────┐  │
@@ -80,32 +80,41 @@ asyncio.run(main())
 curl http://localhost:3000/health
 
 # List agents (admin key required)
-curl -H "X-Admin-Key: sk_muxi_admin_..." http://localhost:3000/admin/agents
+curl -H "X-Muxi-Admin-Key: sk_muxi_admin_..." http://localhost:3000/v1/agents
 
 # Chat with formation (client key required)
 curl -X POST \
-  -H "X-Client-Key: sk_muxi_client_..." \
+  -H "X-Muxi-Client-Key: sk_muxi_client_..." \
   -H "Content-Type: application/json" \
-  -d '{"message": "Hello!"}' \
-  http://localhost:3000/api/chat
+  -d '{"message": "Hello!", "user_id": "user123"}' \
+  http://localhost:3000/v1/chat
+
+# Create a secret (admin key required)
+curl -X POST \
+  -H "X-Muxi-Admin-Key: sk_muxi_admin_..." \
+  -H "Content-Type: application/json" \
+  -d '{"key": "NEW_API_KEY", "value": "secret_value"}' \
+  http://localhost:3000/v1/secrets
 ```
 
 ## Authentication System
 
 The Formation API uses a dual-key authentication system:
 
-### Admin Key (`X-Admin-Key`)
+### Admin Key (`X-Muxi-Admin-Key`)
 - **Purpose**: Formation management operations
-- **Endpoints**: `/admin/*`
+- **Endpoints**: `/v1/*` (admin operations)
 - **Capabilities**:
   - Add/remove/update agents
-  - Manage secrets
-  - Configuration changes
+  - Manage secrets and configuration
+  - MCP server management
+  - LLM, logging, memory, scheduler settings
+  - A2A configuration
   - Server administration
 
-### Client Key (`X-Client-Key`)
+### Client Key (`X-Muxi-Client-Key`)
 - **Purpose**: User interactions
-- **Endpoints**: `/api/*`
+- **Endpoints**: `/v1/*` (client operations)
 - **Capabilities**:
   - Chat with formation
   - Memory operations
@@ -136,27 +145,53 @@ If no API keys are provided, the server auto-generates them:
 - `GET /health` - Server health check
 - `GET /status` - Server status information
 
-### Admin Operations (require `X-Admin-Key`)
-- `GET /admin/agents` - List all agents
-- `POST /admin/agents` - Add new agent
-- `PATCH /admin/agents/{agent_id}` - Update agent
-- `DELETE /admin/agents/{agent_id}` - Remove agent
-- `GET /admin/secrets` - List secrets (masked values)
-- `POST /admin/secrets/{key}` - Create secret
-- `PUT /admin/secrets/{key}` - Update secret
-- `DELETE /admin/secrets/{key}` - Delete secret
+### Admin Operations (require `X-Muxi-Admin-Key`)
+- `GET /v1/config` - Full formation configuration
+- `GET /v1/status` - Formation status snapshot
+- `GET /v1/overlord` - Overlord configuration
+- `GET /v1/overlord/persona` - Overlord persona
+- `GET /v1/agents` - List all agents
+- `POST /v1/agents` - Add new agent
+- `PATCH /v1/agents/{agent_id}` - Update agent
+- `DELETE /v1/agents/{agent_id}` - Remove agent
+- `GET /v1/secrets` - List secrets (masked values)
+- `POST /v1/secrets` - Create secret (JSON body)
+- `PUT /v1/secrets/{key}` - Update secret
+- `DELETE /v1/secrets/{key}` - Delete secret
+- `GET /v1/mcp` - MCP defaults configuration
+- `PATCH /v1/mcp` - Update MCP defaults
+- `GET /v1/mcp/servers` - List MCP servers
+- `POST /v1/mcp/servers` - Create MCP server
+- `GET /v1/mcp/servers/{server_id}` - Get MCP server
+- `PATCH /v1/mcp/servers/{server_id}` - Update MCP server
+- `DELETE /v1/mcp/servers/{server_id}` - Delete MCP server
+- `GET /v1/mcp/tools` - List available MCP tools
+- `POST /v1/mcp/tools/call` - Execute MCP tool
+- `GET /v1/llm/settings` - LLM configuration
+- `PATCH /v1/llm/settings` - Update LLM settings
+- `DELETE /v1/llm/settings/{item}` - Reset LLM setting
+- `GET /v1/logging` - Logging configuration
+- `PATCH /v1/logging/streams/{name}` - Update logging stream
+- `GET /v1/memory` - Memory configuration
+- `PATCH /v1/memory` - Update memory configuration
+- `DELETE /v1/memory/{item}` - Reset memory setting
+- `GET /v1/async` - Async behavior settings
+- `PATCH /v1/async` - Update async settings
+- `GET /v1/scheduler` - Scheduler configuration
+- `PATCH /v1/scheduler` - Update scheduler
+- `DELETE /v1/scheduler/jobs/{id}` - Remove scheduled job
+- `GET /v1/a2a` - A2A configuration
+- `PATCH /v1/a2a/outbound` - Update A2A outbound settings
+- `DELETE /v1/a2a/outbound/{item}` - Reset A2A setting
 
-### Client Operations (require `X-Client-Key`)
-- `POST /api/chat` - Send message to formation (with SSE streaming)
-- `GET /api/events/{user_id}` - SSE stream for async updates
-- `GET /api/jobs/{user_id}` - List async jobs
-- `DELETE /api/jobs/{user_id}/{job_id}` - Cancel job
-- `GET /api/memories/{user_id}` - Get user memories
-- `POST /api/memories/{user_id}` - Create user memory
-- `DELETE /api/memories/{user_id}/{memory_id}` - Delete memory
-
-### MCP Integration
-- `POST /mcp` - MCP tool interface with intelligent routing
+### Client Operations (require `X-Muxi-Client-Key`)
+- `POST /v1/chat` - Send message to formation (with SSE streaming)
+- `GET /v1/events/{user_id}` - SSE stream for async updates
+- `GET /v1/jobs/{user_id}` - List async jobs
+- `DELETE /v1/jobs/{user_id}/{job_id}` - Cancel job
+- `GET /v1/memories/{user_id}` - Get user memories
+- `POST /v1/memories/{user_id}` - Create user memory
+- `DELETE /v1/memories/{user_id}/{memory_id}` - Delete memory
 
 ## Server Management
 
@@ -216,16 +251,19 @@ class FormationClient:
     def __init__(self, base_url: str, client_key: str):
         self.base_url = base_url
         self.headers = {
-            "X-Client-Key": client_key,
+            "X-Muxi-Client-Key": client_key,
             "Content-Type": "application/json"
         }
 
     async def chat(self, message: str, user_id: str = None):
         async with httpx.AsyncClient() as client:
+            payload = {"message": message}
+            if user_id:
+                payload["user_id"] = user_id
             response = await client.post(
-                f"{self.base_url}/api/chat",
-                json={"message": message},
-                headers={**self.headers, "X-User-Id": user_id} if user_id else self.headers
+                f"{self.base_url}/v1/chat",
+                json=payload,
+                headers=self.headers
             )
             return response.json()
 
@@ -245,7 +283,7 @@ class FormationClient {
 
     async chat(message: string, userId?: string): Promise<any> {
         const headers: Record<string, string> = {
-            'X-Client-Key': this.clientKey,
+            'X-Muxi-Client-Key': this.clientKey,
             'Content-Type': 'application/json'
         };
 
@@ -253,10 +291,15 @@ class FormationClient {
             headers['X-User-Id'] = userId;
         }
 
-        const response = await fetch(`${this.baseUrl}/api/chat`, {
+        const payload = { message };
+        if (userId) {
+            payload.user_id = userId;
+        }
+        
+        const response = await fetch(`${this.baseUrl}/v1/chat`, {
             method: 'POST',
             headers,
-            body: JSON.stringify({ message })
+            body: JSON.stringify(payload)
         });
 
         return response.json();
@@ -405,7 +448,7 @@ RuntimeError: A Formation server is already running
 ```
 403 Forbidden: Invalid admin API key
 ```
-**Solution**: Verify API keys in formation.yaml and check header format (`X-Admin-Key` vs `X-Client-Key`).
+**Solution**: Verify API keys in formation.yaml and check header format (`X-Muxi-Admin-Key` vs `X-Muxi-Client-Key`).
 
 #### Overlord Not Available
 ```
@@ -472,11 +515,28 @@ The Formation API Server is part of the MUXI Runtime project. For development:
 src/muxi/formation/server/
 ├── server.py          # Main FormationServer class
 ├── auth.py            # Authentication dependencies
+├── middleware.py      # Request/response middleware
+├── responses.py       # Response utilities
+├── utils.py           # Helper utilities
 └── routes/
     ├── health.py      # Health & status endpoints
-    ├── admin.py       # Admin management endpoints
-    ├── client.py      # Client interaction endpoints
-    └── mcp.py         # MCP integration endpoints
+    ├── admin/         # Admin management endpoints
+    │   ├── agents.py  # Agent management
+    │   ├── secrets.py # Secret management
+    │   ├── config.py  # Configuration endpoints
+    │   ├── overlord.py # Overlord endpoints
+    │   ├── mcp.py     # MCP management
+    │   ├── llm.py     # LLM settings
+    │   ├── logging.py # Logging configuration
+    │   ├── memory.py  # Memory configuration
+    │   ├── async_routes.py # Async settings
+    │   ├── scheduler.py # Scheduler configuration
+    │   └── a2a.py     # A2A configuration
+    └── client/        # Client interaction endpoints
+        ├── chat.py    # Chat endpoints
+        ├── events.py  # SSE event streams
+        ├── jobs.py    # Async job management
+        └── memory.py  # User memory management
 ```
 
 ---
