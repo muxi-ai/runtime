@@ -118,9 +118,9 @@ from ..workflow import (
     ProgressTracker,
     RequestAnalyzer,
     TaskDecomposer,
-    WorkflowExecutor,
     WorkflowManager,
 )
+from ..workflow.resilient_executor import ResilientWorkflowExecutor
 
 from ..workflow.config import (
     ComplexityConfig,
@@ -561,7 +561,8 @@ class Overlord:
         )
         self.task_decomposer = TaskDecomposer(llm=None)  # Will be set later
         self.approval_manager = ApprovalManager()
-        self.workflow_executor = WorkflowExecutor(
+        # Use ResilientWorkflowExecutor for better error handling
+        self.workflow_executor = ResilientWorkflowExecutor(
             agent_registry=self.agents, config=self.workflow_config
         )
         self.progress_tracker = ProgressTracker()
@@ -1428,12 +1429,18 @@ class Overlord:
                         strategy=TaskRoutingStrategy(
                             workflow_config_data.get("routing_strategy", "capability_based")
                         ),
-                        enable_agent_affinity=workflow_config_data.get("enable_agent_affinity", True),
+                        enable_agent_affinity=workflow_config_data.get(
+                            "enable_agent_affinity", True
+                        ),
                     ),
                     behavior=WorkflowBehaviorConfig(
-                        enable_parallel_execution=workflow_config_data.get("parallel_execution", True),
+                        enable_parallel_execution=workflow_config_data.get(
+                            "parallel_execution", True
+                        ),
                         max_parallel_tasks=workflow_config_data.get("max_parallel_tasks", 5),
-                        enable_partial_results=workflow_config_data.get("enable_partial_results", True),
+                        enable_partial_results=workflow_config_data.get(
+                            "enable_partial_results", True
+                        ),
                     ),
                     resources=ResourceConfig(
                         enable_limits=workflow_config_data.get("enable_resource_limits", False),
@@ -4824,7 +4831,7 @@ class Overlord:
                 "original_message": message,
             }
 
-            # Execute workflow
+            # Execute workflow with resilience support
             observability.observe(
                 event_type=observability.ConversationEvents.OVERLORD_ROUTING_STARTED,
                 level=observability.EventLevel.INFO,
@@ -4836,9 +4843,46 @@ class Overlord:
                 description=f"Starting execution of workflow {workflow_id}",
             )
 
-            completed_workflow = await self.workflow_executor.execute_workflow(
-                workflow, context=execution_context
-            )
+            # Check if resilient workflow manager should handle this
+            if hasattr(self, "resilient_workflow_manager") and self.formation_config.get(
+                "resilience", {}
+            ).get("enable_workflow_resilience", True):
+                # Execute with resilience monitoring
+                resilient_result = await self.resilient_workflow_manager.execute_resilient_workflow(
+                    workflow,
+                    resilience_config=ResilienceConfig(
+                        **self.formation_config.get("resilience", {})
+                    ),
+                )
+
+                # Check if circuit breaker was triggered
+                if resilient_result.circuit_breaker_triggered:
+                    return MuxiResponse(
+                        role="assistant",
+                        content=(
+                            "I'm experiencing some technical difficulties with external services. "
+                            "Let me provide you with the best information I can based on my knowledge."
+                        ),
+                        metadata={
+                            "fallback_mode": True,
+                            "workflow_id": workflow_id,
+                            "circuit_breaker_triggered": True,
+                        },
+                    )
+
+                # If resilience handled it, use that result
+                if resilient_result.result and isinstance(resilient_result.result, Workflow):
+                    completed_workflow = resilient_result.result
+                else:
+                    # Otherwise continue with normal execution
+                    completed_workflow = await self.workflow_executor.execute_workflow(
+                        workflow, context=execution_context
+                    )
+            else:
+                # Normal execution without resilience monitoring
+                completed_workflow = await self.workflow_executor.execute_workflow(
+                    workflow, context=execution_context
+                )
 
             # Collect all task results
             task_results = []

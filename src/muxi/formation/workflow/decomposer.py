@@ -725,7 +725,6 @@ class ApprovalManager:
     async def present_plan_for_approval(self, workflow: Workflow) -> str:
         """Present plan to user and return formatted message"""
 
-        # Debug: Entry point
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_PLANNING_STARTED,
             level=observability.EventLevel.INFO,
@@ -748,7 +747,6 @@ class ApprovalManager:
 
         workflow.approval_status = ApprovalStatus.AWAITING_APPROVAL
 
-        # Debug: Success
         observability.observe(
             event_type=observability.ConversationEvents.REQUEST_COMPLETED,
             level=observability.EventLevel.INFO,

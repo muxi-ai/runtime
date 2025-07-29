@@ -99,12 +99,6 @@ class RequestAnalyzer:
             # Determine if decomposition is needed
             analysis.requires_decomposition = await self.should_decompose(analysis)
 
-            #  Debug - TODO: add observability
-            #     f"Request analysis: complexity={analysis.complexity_score:.1f}, "
-            #     f"decomposition={analysis.requires_decomposition}, "
-            #     f"approval={analysis.requires_approval}"
-            # )
-
             return analysis
 
         except Exception as e:
@@ -524,18 +518,18 @@ Focus on identifying:
 
                 heuristic_analysis.required_capabilities = combined_capabilities
                 heuristic_analysis.implicit_subtasks = combined_subtasks
-            except Exception as e:
-                _ = e  # TODO: remove this after implementing observability
-                pass  # Use heuristic score if LLM fails
+            except Exception:
+                # Use heuristic score if LLM fails
+                pass
 
         # Add custom scoring if available
         custom_score = heuristic_score
         if self.custom_complexity_fn:
             try:
                 custom_score = await self._custom_analyze_request(user_message, context)
-            except Exception as e:
-                _ = e  # TODO: remove this after implementing observability
-                pass  # Use heuristic score if custom fails
+            except Exception:
+                # Use heuristic score if custom fails
+                pass
 
         # Calculate weighted average
         weights = self.complexity_weights
