@@ -1,0 +1,72 @@
+schema: "1.0.0"
+id: "multi-agent-approval"
+description: "Multi-agent formation with approval flow enabled"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+  
+  models:
+    - text: "openai/gpt-4o-mini"
+
+overlord:
+  streaming: true
+  
+  llm:
+    model: "openai/gpt-4o-mini"
+  
+  config:
+    # Enable workflow with LOW approval threshold
+    auto_decomposition: true
+    plan_approval_threshold: 5  # LOW - most complex tasks will need approval
+    
+    workflow:
+      complexity_threshold: 4.0  # LOW - trigger workflow easily
+      routing_strategy: "capability_based"
+      parallel_execution: true
+      max_parallel_tasks: 5
+      
+      # Keep resilience settings
+      error_recovery: "retry_with_backoff"
+      retry:
+        max_attempts: 5
+        initial_delay: 2.0
+        backoff_factor: 2.0
+      
+      timeouts:
+        task_timeout: 300
+        workflow_timeout: 1800
+
+memory:
+  buffer:
+    size: 50
+
+# Same agents as before
+agents:
+  - id: "researcher"
+    name: "Research Specialist"
+    description: "Expert at researching topics"
+    system_message: "You are a research specialist."
+    role: "specialist"
+    specialties:
+      - "research"
+      
+  - id: "writer"
+    name: "Writing Expert"  
+    description: "Professional writer"
+    system_message: "You are a writing expert."
+    role: "specialist"
+    specialties:
+      - "writing"
+      
+  - id: "project-manager"
+    name: "Project Manager"
+    description: "AI assistant designed to manage projects"
+    system_message: |
+      You are a project manager. You are responsible for managing projects in Linear.
+      When creating issues and documents, make sure that you include both the title and the actual content.
+      Always use "21b2d439-9ffa-4383-86f5-556acc7af93b" as the team id for all issues and documents
+    role: "specialist"
+    specialties:
+      - "linear"
