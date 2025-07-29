@@ -59,6 +59,8 @@ class FormationServer:
         self._server: Optional[uvicorn.Server] = None
         self._server_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
+        self._active_connections: set = set()
+        self._shutdown_timeout = 30.0
 
         # Extract API keys from formation
         self.admin_key = formation._api_keys.get("admin", "")
@@ -180,17 +182,61 @@ class FormationServer:
 
         yield
 
-        # Shutdown
+        # Shutdown - drain connections gracefully
         observability.observe(
-            event_type=observability.SystemEvents.SERVICE_STARTED,
+            event_type=observability.SystemEvents.CLEANUP,
             level=observability.EventLevel.INFO,
             data={
                 "service": "formation_server",
                 "formation_id": self.formation.formation_id,
-                "shutting_down": True,
+                "active_connections": len(self._active_connections),
+                "shutdown_timeout": self._shutdown_timeout,
             },
-            description="Formation server shutting down"
+            description="Formation server shutting down - draining connections"
         )
+
+        # Wait for active connections to complete
+        if self._active_connections:
+            observability.observe(
+                event_type=observability.SystemEvents.CLEANUP,
+                level=observability.EventLevel.INFO,
+                data={
+                    "service": "formation_server",
+                    "active_connections": len(self._active_connections),
+                    "action": "draining_connections",
+                },
+                description=f"Waiting for {len(self._active_connections)} active connections to complete"
+            )
+
+            # Wait for connections to finish with timeout
+            start_time = asyncio.get_event_loop().time()
+            while self._active_connections and (asyncio.get_event_loop().time() - start_time) < self._shutdown_timeout:
+                await asyncio.sleep(0.1)
+
+            remaining_connections = len(self._active_connections)
+            if remaining_connections > 0:
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "service": "formation_server",
+                        "remaining_connections": remaining_connections,
+                        "timeout_seconds": self._shutdown_timeout,
+                        "action": "force_close",
+                    },
+                    description=f"Shutdown timeout reached - {remaining_connections} connections still active"
+                )
+            else:
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "formation_server",
+                        "action": "connections_drained",
+                        "drain_time_seconds": asyncio.get_event_loop().time() - start_time,
+                    },
+                    description="All connections drained successfully"
+                )
 
     def _create_app(self) -> FastAPI:
         """
@@ -209,14 +255,35 @@ class FormationServer:
         # Store formation reference in app state
         app.state.formation = self.formation
 
-        # Add CORS middleware
+        # Add middleware in order (last added = first executed)
+        # 1. CORS (needs to be first to handle preflight)
         app.add_middleware(
             CORSMiddleware,
-            allow_origins=["*"],  # Configure based on security needs
+            allow_origins=["*"],  # Allow all origins for server-to-server
             allow_credentials=True,
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        # Import and add custom middleware
+        from .middleware import (
+            ErrorHandlingMiddleware,
+            RequestTrackingMiddleware,
+            APILoggingMiddleware,
+            ConnectionTrackingMiddleware
+        )
+
+        # 2. Connection tracking (for graceful shutdown)
+        app.add_middleware(ConnectionTrackingMiddleware, server_instance=self)
+
+        # 3. Error handling (catch all exceptions)
+        app.add_middleware(ErrorHandlingMiddleware)
+
+        # 4. Request tracking (generate request IDs)
+        app.add_middleware(RequestTrackingMiddleware)
+
+        # 5. API logging (log requests)
+        app.add_middleware(APILoggingMiddleware)
 
         # Register routers
         self._register_health_routes(app)
@@ -229,6 +296,7 @@ class FormationServer:
     def _register_health_routes(self, app: FastAPI) -> None:
         """Register health and status endpoints."""
         from .routes.health import router
+        # Health routes are not versioned for easier monitoring
         app.include_router(router, tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:
@@ -242,7 +310,7 @@ class FormationServer:
 
         app.include_router(
             router,
-            prefix="/admin",
+            prefix="/v1/admin",
             tags=["admin"],
             dependencies=[Depends(admin_auth)]
         )
@@ -258,7 +326,7 @@ class FormationServer:
 
         app.include_router(
             router,
-            prefix="/api",
+            prefix="/v1/api",
             tags=["client"],
             dependencies=[Depends(client_auth)]
         )
@@ -268,7 +336,7 @@ class FormationServer:
         from .routes.mcp import router
         app.include_router(
             router,
-            prefix="/mcp",
+            prefix="/v1/mcp",
             tags=["mcp"]
         )
 

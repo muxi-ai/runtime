@@ -23,13 +23,14 @@ import sys
 
 # Import all types and classes
 from ...datatypes.observability import (
-    EventLevel,
-    SystemEvents,
+    APIEvents,
     ConversationEvents,
-    ServerEvents,
     ErrorEvents,
-    TokenUsage,
+    EventLevel,
     RequestContext,
+    ServerEvents,
+    SystemEvents,
+    TokenUsage,
 )
 from .context import get_current_request_context, set_request_context
 from .logger import EventLogger
@@ -39,14 +40,15 @@ from .request_manager import RequestContextManager
 # Main exports
 __all__ = [
     # Event types and levels
-    "EventLevel",
-    "SystemEvents",
+    "APIEvents",
     "ConversationEvents",
-    "ServerEvents",
     "ErrorEvents",
+    "EventLevel",
+    "ServerEvents",
+    "SystemEvents",
     # Data classes
-    "TokenUsage",
     "RequestContext",
+    "TokenUsage",
     # Context management
     "get_current_request_context",
     "set_request_context",
@@ -58,8 +60,8 @@ __all__ = [
     "emit_event",
     "observe",
     # Runtime logger management
-    "set_runtime_event_logger",
     "get_runtime_event_logger",
+    "set_runtime_event_logger",
 ]
 
 
@@ -108,7 +110,7 @@ def get_runtime_event_logger() -> Optional["EventLogger"]:
 
 
 def observe(
-    event_type: Union[SystemEvents, ConversationEvents, str],
+    event_type: Union[SystemEvents, ConversationEvents, ServerEvents, ErrorEvents, APIEvents, str],
     level: EventLevel = EventLevel.INFO,
     data: Optional[Dict[str, Any]] = None,
     description: str = "",
@@ -163,7 +165,7 @@ def observe(
 
 
 def emit_event(
-    event_type: Union[SystemEvents, ConversationEvents, str],
+    event_type: Union[SystemEvents, ConversationEvents, ServerEvents, ErrorEvents, APIEvents, str],
     level: EventLevel = EventLevel.INFO,
     data: Optional[Dict[str, Any]] = None,
     description: str = "",

@@ -5,10 +5,17 @@ These endpoints provide formation management capabilities,
 requiring admin API key authentication.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from ..responses import (
+    APIResponse,
+    agent_list_response,
+    secret_list_response
+)
 
 router = APIRouter()
 
@@ -51,15 +58,16 @@ async def test_auth(request: Request) -> Dict[str, str]:
     return {"status": "success", "message": "Admin auth validated!", "endpoint": "admin"}
 
 
-@router.get("/agents")
-async def list_agents(request: Request) -> List[Dict[str, Any]]:
+@router.get("/agents", response_model=APIResponse)
+async def list_agents(request: Request) -> JSONResponse:
     """
     List all agents in the formation.
 
     Returns:
-        List of agent configurations
+        Structured response with list of agent configurations
     """
     formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
 
     # Get agents from formation config
     agents = formation.config.get("agents", [])
@@ -69,7 +77,9 @@ async def list_agents(request: Request) -> List[Dict[str, Any]]:
         if "source" not in agent:
             agent["source"] = "yaml"
 
-    return agents
+    # Create structured response
+    response = agent_list_response(agents, request_id)
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.post("/agents")
@@ -170,29 +180,32 @@ async def remove_agent(request: Request, agent_id: str) -> Dict[str, str]:
     return {"message": f"Agent '{agent_id}' removed successfully"}
 
 
-@router.get("/secrets")
-async def list_secrets(request: Request) -> Dict[str, Any]:
+@router.get("/secrets", response_model=APIResponse)
+async def list_secrets(request: Request) -> JSONResponse:
     """
     List all secret keys (with masked values).
 
     Returns:
-        Dictionary of secret keys with masked values
+        Structured response with dictionary of secret keys with masked values
     """
     formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
 
     if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
-        return {}
+        masked_secrets = {}
+    else:
+        # Get all secret keys
+        secrets = formation.secrets_manager.list_secrets()
 
-    # Get all secret keys
-    secrets = formation.secrets_manager.list_secrets()
+        # Mask values with consistent pattern (no length disclosure)
+        masked_secrets = {
+            key: "••••••••"
+            for key, value in secrets.items()
+        }
 
-    # Mask values with consistent pattern (no length disclosure)
-    masked_secrets = {
-        key: "••••••••"
-        for key, value in secrets.items()
-    }
-
-    return masked_secrets
+    # Create structured response
+    response = secret_list_response({"secrets": masked_secrets}, request_id)
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.post("/secrets/{key}")
