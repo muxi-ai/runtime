@@ -466,6 +466,9 @@ class ConversationEvents(Enum):
     OVERLORD_WORKFLOW_STARTED = "overlord.workflow.started"
     # When overlord starts workflow orchestration for a complex request
 
+    OVERLORD_WORKFLOW_CANCELLED = "overlord.workflow.cancelled"
+    # When a workflow is cancelled by user or system
+
     # ===================================================================
     # MEMORY & CONTEXT OPERATIONS
     # ===================================================================

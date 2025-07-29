@@ -1456,12 +1456,25 @@ class WorkflowExecutor:
             workflow.completed_at = datetime.now()
 
             # Cancel in-progress tasks
+            cancelled_tasks = []
             for task in workflow.tasks.values():
                 if task.status == TaskStatus.IN_PROGRESS:
                     task.status = TaskStatus.CANCELLED
                     task.end_time = datetime.now()
+                    cancelled_tasks.append(task.id)
 
-            #  Info - TODO: add observability
+            # Emit workflow cancelled event
+            observability.observe(
+                event_type=observability.ConversationEvents.OVERLORD_WORKFLOW_CANCELLED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow_id,
+                    "cancelled_tasks": cancelled_tasks,
+                    "total_tasks": len(workflow.tasks),
+                },
+                description=f"Workflow {workflow_id} cancelled with {len(cancelled_tasks)} in-progress tasks"
+            )
+
             return True
 
         return False

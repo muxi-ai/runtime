@@ -6958,9 +6958,8 @@ Token:"""
         success = self.workflow_manager.cancel_workflow(workflow_id)
 
         if success:
-            # TODO: Notify workflow executor to stop execution
-            # This would require enhancing the WorkflowExecutor with cancellation support
-            pass
+            # Notify workflow executor to stop execution
+            await self.workflow_executor.cancel_workflow(workflow_id)
 
         return success
 
