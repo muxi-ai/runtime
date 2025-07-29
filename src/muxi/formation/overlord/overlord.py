@@ -114,18 +114,28 @@ from ...services.mcp.built_in import list_builtin_mcps
 
 # Enhanced workflow capabilities
 from ..workflow import (
+    ApprovalManager,
+    ProgressTracker,
     RequestAnalyzer,
     TaskDecomposer,
     WorkflowExecutor,
-    ApprovalManager,
-    ProgressTracker,
     WorkflowManager,
 )
+
 from ..workflow.config import (
+    ComplexityConfig,
+    ErrorRecoveryStrategy,
+    ObservabilityConfig,
+    ResourceConfig,
+    RetryConfig,
+    RoutingConfig,
+    TaskRoutingStrategy,
+    TimeoutConfig,
+    WorkflowBehaviorConfig,
     WorkflowConfig,
     WorkflowConfigManager,
-    ErrorRecoveryStrategy,
 )
+
 from ...datatypes.workflow import ApprovalStatus, Workflow, WorkflowStatus, RequestAnalysis
 from ...datatypes.task_status import TaskStatus
 
@@ -138,16 +148,16 @@ from .secrets_manager import SecretsInterpolator
 # Memory Management
 from ..memory import (
     BufferMemoryManager,
+    ExtractionCoordinator,
     PersistentMemoryManager,
     UserContextManager,
-    ExtractionCoordinator,
 )
 
 # Dynamic Agent Management
 from .active_agents_tracker import ActiveAgentsTracker
 from ...datatypes.exceptions import (
-    AgentNotFoundError,
     AgentHasDependentsError,
+    AgentNotFoundError,
     OverlordShuttingDownError,
 )
 
@@ -530,8 +540,10 @@ class Overlord:
 
         # Create or use provided workflow configuration
         self.workflow_config = workflow_config or WorkflowConfig(
-            complexity_threshold=complexity_threshold,
-            complexity_method="heuristic",  # Default to heuristic
+            complexity=ComplexityConfig(
+                threshold=complexity_threshold,
+                method="heuristic",  # Default to heuristic
+            ),
             error_recovery_strategy=ErrorRecoveryStrategy.RETRY_WITH_BACKOFF,
         )
 
@@ -1382,14 +1394,6 @@ class Overlord:
             workflow_config_data = config_section.get("workflow", {})
             if workflow_config_data:
                 # Create WorkflowConfig from formation data
-                from ..workflow.config import (
-                    WorkflowConfig,
-                    RetryConfig,
-                    TimeoutConfig,
-                    TaskRoutingStrategy,
-                    ErrorRecoveryStrategy,
-                )
-
                 # Parse retry configuration
                 retry_data = workflow_config_data.get("retry", {})
                 retry_config = RetryConfig(
@@ -1409,38 +1413,46 @@ class Overlord:
                     timeout_multiplier=timeout_data.get("timeout_multiplier", 1.5),
                 )
 
-                # Create enhanced workflow config
+                # Create enhanced workflow config with nested structure
                 self.workflow_config = WorkflowConfig(
-                    complexity_method=workflow_config_data.get("complexity_method", "heuristic"),
-                    complexity_threshold=workflow_config_data.get(
-                        "complexity_threshold", self.complexity_threshold
+                    complexity=ComplexityConfig(
+                        method=workflow_config_data.get("complexity_method", "heuristic"),
+                        threshold=workflow_config_data.get(
+                            "complexity_threshold", self.complexity_threshold
+                        ),
+                        weights=workflow_config_data.get(
+                            "complexity_weights", {"heuristic": 0.4, "llm": 0.4, "custom": 0.2}
+                        ),
                     ),
-                    complexity_weights=workflow_config_data.get(
-                        "complexity_weights", {"heuristic": 0.4, "llm": 0.4, "custom": 0.2}
+                    routing=RoutingConfig(
+                        strategy=TaskRoutingStrategy(
+                            workflow_config_data.get("routing_strategy", "capability_based")
+                        ),
+                        enable_agent_affinity=workflow_config_data.get("enable_agent_affinity", True),
                     ),
-                    routing_strategy=TaskRoutingStrategy(
-                        workflow_config_data.get("routing_strategy", "capability_based")
+                    behavior=WorkflowBehaviorConfig(
+                        enable_parallel_execution=workflow_config_data.get("parallel_execution", True),
+                        max_parallel_tasks=workflow_config_data.get("max_parallel_tasks", 5),
+                        enable_partial_results=workflow_config_data.get("enable_partial_results", True),
                     ),
-                    enable_agent_affinity=workflow_config_data.get("enable_agent_affinity", True),
+                    resources=ResourceConfig(
+                        enable_limits=workflow_config_data.get("enable_resource_limits", False),
+                        max_memory_per_task_mb=workflow_config_data.get("max_memory_per_task_mb"),
+                        max_cpu_per_task=workflow_config_data.get("max_cpu_per_task"),
+                    ),
+                    observability=ObservabilityConfig(
+                        enable_detailed_logging=workflow_config_data.get(
+                            "enable_detailed_logging", True
+                        ),
+                        enable_metrics_collection=workflow_config_data.get(
+                            "enable_metrics_collection", True
+                        ),
+                    ),
                     error_recovery_strategy=ErrorRecoveryStrategy(
                         workflow_config_data.get("error_recovery", "retry_with_backoff")
                     ),
                     retry_config=retry_config,
-                    timeout_config=timeout_config,
-                    enable_parallel_execution=workflow_config_data.get("parallel_execution", True),
-                    max_parallel_tasks=workflow_config_data.get("max_parallel_tasks", 5),
-                    enable_partial_results=workflow_config_data.get("enable_partial_results", True),
-                    enable_resource_limits=workflow_config_data.get(
-                        "enable_resource_limits", False
-                    ),
-                    max_memory_per_task_mb=workflow_config_data.get("max_memory_per_task_mb"),
-                    max_cpu_per_task=workflow_config_data.get("max_cpu_per_task"),
-                    enable_detailed_logging=workflow_config_data.get(
-                        "enable_detailed_logging", True
-                    ),
-                    enable_metrics_collection=workflow_config_data.get(
-                        "enable_metrics_collection", True
-                    ),
+                    timeout=timeout_config,
                 )
 
                 # Update the workflow executor with new config
