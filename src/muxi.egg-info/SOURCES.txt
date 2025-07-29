@@ -297,4 +297,3 @@ tests/test_observability_system.py
 tests/test_task5_observability.py
 tests/test_user_id_enhancement.py
 tests/test_user_id_enhancement_fixed.py
-tests/test_workflow_enhanced_config.py
