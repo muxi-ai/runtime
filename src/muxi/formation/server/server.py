@@ -33,13 +33,7 @@ class FormationServer:
     - Health and status monitoring
     """
 
-    def __init__(
-        self,
-        formation: "Formation",
-        host: str = "0.0.0.0",
-        port: int = 3000,
-        **kwargs
-    ):
+    def __init__(self, formation: "Formation", host: str = "0.0.0.0", port: int = 3000, **kwargs):
         """
         Initialize the Formation server.
 
@@ -78,7 +72,7 @@ class FormationServer:
                 "has_client_key": bool(self.client_key),
                 "formation_id": formation.formation_id,
             },
-            description=f"Initializing Formation server on {self.host}:{self.port}"
+            description=f"Initializing Formation server on {self.host}:{self.port}",
         )
 
     @asynccontextmanager
@@ -98,7 +92,7 @@ class FormationServer:
                 "formation_id": self.formation.formation_id,
                 "endpoints_count": len(app.routes),
             },
-            description="Formation server started successfully"
+            description="Formation server started successfully",
         )
 
         # Log server startup
@@ -113,7 +107,7 @@ class FormationServer:
                 "server_url": f"http://{self.host}:{self.port}",
                 "endpoints_count": len(app.routes),
             },
-            description=f"Formation API server started on http://{self.host}:{self.port}"
+            description=f"Formation API server started on http://{self.host}:{self.port}",
         )
 
         # Handle API key display and warnings
@@ -133,14 +127,14 @@ class FormationServer:
                     "admin_key": "••••••••" if "admin" in generated_keys else None,
                     "client_key": "••••••••" if "client" in generated_keys else None,
                 },
-                description="Auto-generated API keys created - NOT recommended for production use"
+                description="Auto-generated API keys created - NOT recommended for production use",
             )
 
             # Still print to console for development visibility
             print(f"\n✅ Formation server started on http://{self.host}:{self.port}")
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("⚠️  AUTO-GENERATED API KEYS - DEVELOPMENT ONLY")
-            print("="*60)
+            print("=" * 60)
             print("🔒 The following API keys were automatically generated")
             print("   because none were provided in your formation configuration.")
             print()
@@ -149,8 +143,8 @@ class FormationServer:
             print()
             print("   server:")
             print("     api_keys:")
-            print("       admin_key: \"${{ secrets.FORMATION_ADMIN_API_KEY }}\"")
-            print("       client_key: \"${{ secrets.FORMATION_CLIENT_API_KEY }}\"")
+            print('       admin_key: "${{ secrets.FORMATION_ADMIN_API_KEY }}"')
+            print('       client_key: "${{ secrets.FORMATION_CLIENT_API_KEY }}"')
             print()
             print("📋 Generated API Keys:")
 
@@ -158,7 +152,7 @@ class FormationServer:
                 print(f"   Admin API Key:  {generated_keys['admin']}")
             if "client" in generated_keys:
                 print(f"   Client API Key: {generated_keys['client']}")
-            print("="*60)
+            print("=" * 60)
             print()
         else:
             # Log that keys were loaded from configuration
@@ -171,7 +165,7 @@ class FormationServer:
                     "has_admin_key": bool(self.admin_key),
                     "has_client_key": bool(self.client_key),
                 },
-                description="API keys loaded from formation configuration"
+                description="API keys loaded from formation configuration",
             )
 
             # Minimal console output for configured keys
@@ -192,7 +186,7 @@ class FormationServer:
                 "active_connections": len(self._active_connections),
                 "shutdown_timeout": self._shutdown_timeout,
             },
-            description="Formation server shutting down - draining connections"
+            description="Formation server shutting down - draining connections",
         )
 
         # Wait for active connections to complete
@@ -205,12 +199,15 @@ class FormationServer:
                     "active_connections": len(self._active_connections),
                     "action": "draining_connections",
                 },
-                description=f"Waiting for {len(self._active_connections)} active connections to complete"
+                description=f"Waiting for {len(self._active_connections)} active connections to complete",
             )
 
             # Wait for connections to finish with timeout
             start_time = asyncio.get_event_loop().time()
-            while self._active_connections and (asyncio.get_event_loop().time() - start_time) < self._shutdown_timeout:
+            while (
+                self._active_connections
+                and (asyncio.get_event_loop().time() - start_time) < self._shutdown_timeout
+            ):
                 await asyncio.sleep(0.1)
 
             remaining_connections = len(self._active_connections)
@@ -224,7 +221,7 @@ class FormationServer:
                         "timeout_seconds": self._shutdown_timeout,
                         "action": "force_close",
                     },
-                    description=f"Shutdown timeout reached - {remaining_connections} connections still active"
+                    description=f"Shutdown timeout reached - {remaining_connections} connections still active",
                 )
             else:
                 observability.observe(
@@ -235,7 +232,7 @@ class FormationServer:
                         "action": "connections_drained",
                         "drain_time_seconds": asyncio.get_event_loop().time() - start_time,
                     },
-                    description="All connections drained successfully"
+                    description="All connections drained successfully",
                 )
 
     def _create_app(self) -> FastAPI:
@@ -270,7 +267,7 @@ class FormationServer:
             ErrorHandlingMiddleware,
             RequestTrackingMiddleware,
             APILoggingMiddleware,
-            ConnectionTrackingMiddleware
+            ConnectionTrackingMiddleware,
         )
 
         # 2. Connection tracking (for graceful shutdown)
@@ -289,56 +286,73 @@ class FormationServer:
         self._register_health_routes(app)
         self._register_admin_routes(app)
         self._register_client_routes(app)
-        self._register_mcp_routes(app)
 
         return app
 
     def _register_health_routes(self, app: FastAPI) -> None:
         """Register health and status endpoints."""
         from .routes.health import router
+
         # Health routes are not versioned for easier monitoring
         app.include_router(router, tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:
         """Register admin management endpoints."""
-        from .routes.admin import router
         from .auth import AdminKeyAuth
         from fastapi import Depends
+
+        # Import all admin route modules
+        from .routes.admin import (
+            agents,
+            secrets,
+            config,
+            overlord,
+            mcp,
+            llm,
+            logging,
+            memory,
+            scheduler,
+            a2a,
+        )
+        from .routes.admin.async_routes import router as async_router
 
         # Create auth dependency
         admin_auth = AdminKeyAuth(self.admin_key)
 
-        app.include_router(
-            router,
-            prefix="/v1/admin",
-            tags=["admin"],
-            dependencies=[Depends(admin_auth)]
-        )
+        # Register all admin routers with auth dependency
+        admin_routers = [
+            agents.router,
+            secrets.router,
+            config.router,
+            overlord.router,
+            mcp.router,
+            llm.router,
+            logging.router,
+            memory.router,
+            async_router,
+            scheduler.router,
+            a2a.router,
+        ]
+
+        for router in admin_routers:
+            app.include_router(router, prefix="/v1", dependencies=[Depends(admin_auth)])
 
     def _register_client_routes(self, app: FastAPI) -> None:
         """Register client interaction endpoints."""
-        from .routes.client import router
         from .auth import ClientKeyAuth
         from fastapi import Depends
+
+        # Import all client route modules
+        from .routes.client import chat, events, jobs, memory
 
         # Create auth dependency
         client_auth = ClientKeyAuth(self.client_key)
 
-        app.include_router(
-            router,
-            prefix="/v1/api",
-            tags=["client"],
-            dependencies=[Depends(client_auth)]
-        )
+        # Register all client routers with auth dependency
+        client_routers = [chat.router, events.router, jobs.router, memory.router]
 
-    def _register_mcp_routes(self, app: FastAPI) -> None:
-        """Register MCP endpoint."""
-        from .routes.mcp import router
-        app.include_router(
-            router,
-            prefix="/v1/mcp",
-            tags=["mcp"]
-        )
+        for router in client_routers:
+            app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])
 
     async def start(self, block: bool = True) -> None:
         """
@@ -374,7 +388,7 @@ class FormationServer:
                     "signal": str(sig_num),
                     "formation_id": self.formation.formation_id,
                 },
-                description=f"Received signal {sig_num}, initiating graceful shutdown"
+                description=f"Received signal {sig_num}, initiating graceful shutdown",
             )
             self._shutdown_event.set()
 
@@ -395,7 +409,7 @@ class FormationServer:
                         "signal": str(sig_num),
                         "formation_id": self.formation.formation_id,
                     },
-                    description=f"Received signal {sig_num}, initiating shutdown"
+                    description=f"Received signal {sig_num}, initiating shutdown",
                 )
                 # Schedule the event setting on the event loop
                 try:
@@ -443,7 +457,7 @@ class FormationServer:
                 "formation_id": self.formation.formation_id,
                 "server_url": f"http://{self.host}:{self.port}",
             },
-            description="Stopping Formation API server"
+            description="Stopping Formation API server",
         )
 
         self._shutdown_event.set()
@@ -465,7 +479,7 @@ class FormationServer:
                         "timeout_seconds": 30,
                         "action": "force_cancel",
                     },
-                    description="Server shutdown timed out after 30 seconds, forcing cancellation"
+                    description="Server shutdown timed out after 30 seconds, forcing cancellation",
                 )
                 self._server_task.cancel()
 
@@ -480,16 +494,13 @@ class FormationServer:
                 "formation_id": self.formation.formation_id,
                 "status": "stopped",
             },
-            description="Formation API server stopped successfully"
+            description="Formation API server stopped successfully",
         )
 
     @property
     def is_running(self) -> bool:
         """Check if the server is currently running."""
-        return (
-            self._server_task is not None
-            and not self._server_task.done()
-        )
+        return self._server_task is not None and not self._server_task.done()
 
     @property
     def url(self) -> str:

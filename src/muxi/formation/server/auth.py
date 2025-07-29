@@ -7,8 +7,8 @@ in incoming requests.
 
 import secrets
 
-from fastapi import HTTPException, Security
-from fastapi.security import APIKeyHeader
+from fastapi import HTTPException, Request
+from starlette.status import HTTP_403_FORBIDDEN, HTTP_500_INTERNAL_SERVER_ERROR
 
 
 class AdminKeyAuth:
@@ -28,33 +28,38 @@ class AdminKeyAuth:
         """
         self.admin_key = admin_key
 
-    async def __call__(
-        self,
-        api_key: str = Security(APIKeyHeader(name="X-Admin-Key"))
-    ) -> str:
+    async def __call__(self, request: Request) -> str:
         """
-        Validate the admin API key.
+        Validate the admin API key from case-insensitive header.
 
         Args:
-            api_key: The API key from the request header
+            request: The FastAPI request object
 
         Returns:
             The validated API key
 
         Raises:
-            HTTPException: If the API key is invalid
+            HTTPException: If the API key is invalid or missing
         """
         if not self.admin_key:
             raise HTTPException(
-                status_code=500,
-                detail="Admin API key not configured"
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Admin API key not configured"
+            )
+
+        # Look for the header case-insensitively
+        api_key = None
+        for header_name, header_value in request.headers.items():
+            if header_name.lower() == "x-muxi-admin-key":
+                api_key = header_value
+                break
+
+        if not api_key:
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN, detail="Missing X-Muxi-Admin-Key header"
             )
 
         if not secrets.compare_digest(api_key, self.admin_key):
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid admin API key"
-            )
+            raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid admin API key")
 
         return api_key
 
@@ -76,32 +81,37 @@ class ClientKeyAuth:
         """
         self.client_key = client_key
 
-    async def __call__(
-        self,
-        api_key: str = Security(APIKeyHeader(name="X-Client-Key"))
-    ) -> str:
+    async def __call__(self, request: Request) -> str:
         """
-        Validate the client API key.
+        Validate the client API key from case-insensitive header.
 
         Args:
-            api_key: The API key from the request header
+            request: The FastAPI request object
 
         Returns:
             The validated API key
 
         Raises:
-            HTTPException: If the API key is invalid
+            HTTPException: If the API key is invalid or missing
         """
         if not self.client_key:
             raise HTTPException(
-                status_code=500,
-                detail="Client API key not configured"
+                status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Client API key not configured"
+            )
+
+        # Look for the header case-insensitively
+        api_key = None
+        for header_name, header_value in request.headers.items():
+            if header_name.lower() == "x-muxi-client-key":
+                api_key = header_value
+                break
+
+        if not api_key:
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN, detail="Missing X-Muxi-Client-Key header"
             )
 
         if not secrets.compare_digest(api_key, self.client_key):
-            raise HTTPException(
-                status_code=403,
-                detail="Invalid client API key"
-            )
+            raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid client API key")
 
         return api_key

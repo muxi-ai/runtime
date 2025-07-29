@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from ....utils.version import get_version
 
-router = APIRouter()
+router = APIRouter(tags=["Health"])
 
 
 @router.get("/health")

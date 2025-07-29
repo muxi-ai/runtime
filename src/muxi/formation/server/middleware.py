@@ -17,6 +17,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ...services import observability
 from ...utils.id_generator import generate_request_id
 from .responses import create_error_response
+from .utils import get_header_case_insensitive, has_header_case_insensitive
 
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
@@ -187,8 +188,8 @@ class APILoggingMiddleware(BaseHTTPMiddleware):
             Response
         """
         # Extract API key info (without exposing the actual key)
-        has_admin_key = "X-Admin-Key" in request.headers
-        has_client_key = "X-Client-Key" in request.headers
+        has_admin_key = has_header_case_insensitive(request.headers, "X-Muxi-Admin-Key")
+        has_client_key = has_header_case_insensitive(request.headers, "X-Muxi-Client-Key")
 
         # Log API-specific info
         observability.observe(
@@ -200,9 +201,9 @@ class APILoggingMiddleware(BaseHTTPMiddleware):
                 "path": request.url.path,
                 "has_admin_key": has_admin_key,
                 "has_client_key": has_client_key,
-                "content_type": request.headers.get("content-type"),
-                "accept": request.headers.get("accept"),
-                "user_agent": request.headers.get("user-agent"),
+                "content_type": get_header_case_insensitive(request.headers, "content-type"),
+                "accept": get_header_case_insensitive(request.headers, "accept"),
+                "user_agent": get_header_case_insensitive(request.headers, "user-agent"),
             },
             description="Formation API request details",
         )
