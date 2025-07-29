@@ -2609,7 +2609,6 @@ class Formation:
             )
 
             # Auto-start overlord for cleaner API
-            import asyncio
             try:
                 # Check if we're in an async context
                 try:

@@ -6,7 +6,6 @@ in incoming requests.
 """
 
 import secrets
-from typing import Optional
 
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
@@ -106,20 +105,3 @@ class ClientKeyAuth:
             )
 
         return api_key
-
-
-def get_user_id(
-    user_id: Optional[str] = Security(APIKeyHeader(name="X-User-Id", auto_error=False))
-) -> Optional[str]:
-    """
-    Extract user ID from request headers.
-
-    This is an optional header used for multi-user scenarios.
-
-    Args:
-        user_id: The user ID from the request header
-
-    Returns:
-        The user ID if provided, None otherwise
-    """
-    return user_id

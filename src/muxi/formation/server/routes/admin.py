@@ -40,6 +40,17 @@ class SecretUpdate(BaseModel):
     value: str
 
 
+@router.get("/test-auth")
+async def test_auth(request: Request) -> Dict[str, str]:
+    """
+    Simple test endpoint for auth validation.
+
+    Returns:
+        Simple success message
+    """
+    return {"status": "success", "message": "Admin auth validated!", "endpoint": "admin"}
+
+
 @router.get("/agents")
 async def list_agents(request: Request) -> List[Dict[str, Any]]:
     """

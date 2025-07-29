@@ -8,11 +8,10 @@ requiring client API key authentication.
 from typing import Dict, Any, List, Optional
 import json
 
-from fastapi import APIRouter, HTTPException, Request, Depends
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ..auth import get_user_id
 from ....services import observability
 
 router = APIRouter()
@@ -23,6 +22,7 @@ class ChatRequest(BaseModel):
     """Model for chat requests."""
 
     message: str
+    user_id: Optional[str] = "0"  # Default to "0" if not provided
     agent_id: Optional[str] = None
     session_id: Optional[str] = None
     group_id: Optional[str] = None  # Support for group permissions
@@ -49,7 +49,7 @@ class MemoryCreate(BaseModel):
 
 @router.post("/chat")
 async def chat(
-    request: Request, chat_request: ChatRequest, user_id: Optional[str] = Depends(get_user_id)
+    request: Request, chat_request: ChatRequest
 ) -> StreamingResponse:
     """
     Send a message to the formation and receive a response.
@@ -58,8 +58,7 @@ async def chat(
     For asynchronous requests, returns a job ID.
 
     Args:
-        chat_request: The chat request
-        user_id: Optional user ID from headers
+        chat_request: The chat request containing message and optional user_id
 
     Returns:
         Streaming response or async job details
@@ -70,8 +69,8 @@ async def chat(
     if not hasattr(formation, "_overlord") or not formation._overlord:
         raise HTTPException(status_code=503, detail="Overlord not available")
 
-    # Use provided user_id or generate one
-    effective_user_id = user_id or "anonymous"
+    # Use user_id from request body
+    effective_user_id = chat_request.user_id
 
     # Log chat request
     observability.observe(
