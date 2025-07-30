@@ -1,0 +1,48 @@
+schema: "1.0.0"
+id: "multi-agent-approval"
+description: "Multi-agent formation with approval flow enabled"
+
+llm:
+  api_keys:
+    openai: "${{ secrets.OPENAI_API_KEY }}"
+    anthropic: "${{ secrets.ANTHROPIC_API_KEY }}"
+
+  models:
+    - text: "openai/gpt-4o-mini"
+      settings:
+        temperature: 0.7
+        max_tokens: 2000
+        # timeout_seconds: 300  # TODO: timeout should be handled at MUXI layer, not passed to OpenAI
+
+overlord:
+  llm:
+    model: "openai/gpt-4o-mini"
+    settings:
+      temperature: 0.2
+      max_tokens: 2000
+      # timeout_seconds: 300  # TODO: timeout should be handled at MUXI layer, not passed to OpenAI
+
+  # Enable workflow with LOW approval threshold
+  workflow:
+    auto_decomposition: true
+    plan_approval_threshold: 5  # LOW - most complex tasks will need approval
+    complexity_threshold: 4.0  # LOW - trigger workflow easily
+    routing_strategy: "capability_based"
+    parallel_execution: true
+    max_parallel_tasks: 5
+
+    # Keep resilience settings
+    error_recovery: "retry_with_backoff"
+    retry:
+      max_attempts: 5
+      initial_delay: 2.0
+      backoff_factor: 2.0
+
+    timeouts:
+      task_timeout: 300
+      workflow_timeout: 1800
+
+memory:
+  buffer:
+    size: 50
+

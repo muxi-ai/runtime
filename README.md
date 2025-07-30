@@ -57,6 +57,8 @@ MUXI Runtime is the low-level execution engine that powers AI agent formations i
 - **Streaming Responses**: Real-time streaming chat responses with AsyncGenerator support for ChatGPT-like streaming behavior
 - **Intelligent Clarification**: Advanced parameter collection system that automatically detects incomplete requests and asks natural clarifying questions with multilingual support
 - **Unified Response Format**: Standardized response structure across all communication modes (sync, async, webhooks) with consistent error handling, metadata, and session management
+- **Workflow Orchestration**: Intelligent task decomposition for complex requests with configurable complexity analysis, multi-agent coordination, parallel task execution, and approval workflows for high-stakes operations
+- **Resilience Layer**: Production-ready error recovery with automatic retry (exponential backoff), user-friendly error messages, graceful degradation strategies, and circuit breakers to prevent cascading failures
 - **Observability & Monitoring**: Comprehensive event streaming system with 4 transport types (stdout, file, stream, trail), 10 event formatters (jsonl, text, msgpack, protobuf, datadog, splunk, elastic, grafana, newrelic, opentelemetry), health monitoring, and distributed tracing
 - **MCP Code Quality Enhancement**: Comprehensive code quality improvements including elimination of 150+ lines of duplicated code, enhanced error handling with logging, performance optimizations with caching, type safety improvements, JSON-RPC compliance, and proper subprocess safety patterns
 - **Task Scheduling System**: Natural language task scheduling for both recurring jobs ("check email every hour") and one-time tasks ("remind me tomorrow at 2pm") with intelligent detection, unified database architecture, proactive AI capabilities, security hardening, and enterprise features including audit trails and Formation API exposure
@@ -432,6 +434,25 @@ response = await overlord.chat(
     files=[{"filename": "deck.pdf", "content": pdf_bytes}]
 )
 ```
+
+## 📚 Documentation
+
+### Core Documentation
+- [Workflow System](docs/workflow/) - Complete workflow documentation
+  - [Orchestration](docs/workflow/orchestration.md) - Task decomposition and multi-agent coordination
+  - [Resilience](docs/workflow/resilience_integration.md) - Error recovery and graceful degradation
+  - [Technical Guide](docs/workflow/technical_guide.md) - Implementation details
+  - [Quick Reference](docs/workflow/quick_reference.md) - Common patterns
+- [Memory Systems](docs/memory-systems.md) - Three-tier memory architecture
+- [MCP Integration](docs/mcp/README.md) - Model Context Protocol for tools
+- [Agent Collaboration](docs/agent-collaboration.md) - Multi-agent patterns
+- [Observability](docs/observability.md) - Monitoring and event streaming
+
+### Technical Guides
+- [Type Safety Guide](docs/type-safety-guide.md) - Pydantic v2 patterns
+- [Multi-User Architecture](docs/multi-user-architecture.md) - Tenant isolation
+- [Configuration Guide](docs/configuration/) - Formation YAML reference
+- [API Documentation](docs/formation-api-server.md) - REST API endpoints
 
 ## 📊 Performance Characteristics
 

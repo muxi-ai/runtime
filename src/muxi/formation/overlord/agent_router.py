@@ -69,8 +69,7 @@ class AgentRouter:
 
         # Get caching configuration
         overlord_config = self.overlord.formation_config.get("overlord", {})
-        config_section = overlord_config.get("config", {})
-        caching_config = config_section.get("caching", {})
+        caching_config = overlord_config.get("caching", {})
 
         caching_enabled = caching_config.get("enabled", True)  # Default: enabled
         cache_ttl = caching_config.get("ttl", 3600)  # Default: 3600 seconds (1 hour)

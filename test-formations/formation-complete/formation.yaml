@@ -20,15 +20,14 @@ overlord:
     Break down complex tasks and delegate to the appropriate specialists.
   llm:
     model: "openai/gpt-4o-mini"
+    max_extraction_tokens: 500
     settings:
       temperature: 0.2
       max_tokens: 2000
-  config:
-    max_tool_calls: -1
-    response:
-      format: "markdown"
-      interactive_elements: true
-  streaming: true
+  response:
+    format: "markdown"
+    interactive_elements: true
+    streaming: true
 
 memory:
   working:

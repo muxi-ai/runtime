@@ -252,6 +252,7 @@ class ChatOrchestrator:
     ) -> bool:
         """
         Determine whether to use async or sync processing.
+        Now approval-aware to ensure approval flows stay synchronous.
 
         Args:
             message: The user's message
@@ -265,6 +266,24 @@ class ChatOrchestrator:
         # If explicitly specified, use that
         if use_async is not None:
             return use_async
+
+        # NEW: Check if this would need approval - if so, force sync
+        try:
+            if await self.overlord.would_need_workflow_approval(message, agent_name):
+                # Log the decision for observability
+                observability.observe(
+                    event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "decision": "force_sync_for_approval",
+                        "reason": "workflow_approval_required",
+                    },
+                    description="Forcing sync mode because workflow approval is required",
+                )
+                return False
+        except Exception:
+            # If approval check fails, continue with normal async logic
+            pass
 
         # If no time estimator available, use sync
         if not hasattr(self.overlord, "time_estimator") or not self.overlord.time_estimator:

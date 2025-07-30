@@ -2790,7 +2790,14 @@ class Formation:
 
             # Stop overlord if still running (gracefully)
             if self._is_running:
-                self.stop_overlord()
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        asyncio.create_task(self.stop_overlord())
+                    else:
+                        asyncio.run(self.stop_overlord())
+                except Exception as e:
+                    print(f"   ⚠️  Cleanup warning: {e}")
 
             # Stop API server if running
             if hasattr(self, "_formation_server") and self._formation_server:
@@ -2837,22 +2844,49 @@ class Formation:
             self._formation_cancellation_token = None
 
             # Clear individual service configurations
-            config_attributes = [
-                "_llm_config",
-                "_memory_config",
-                "_mcp_config",
-                "_a2a_config",
-                "_logging_config",
-                "_clarification_config",
-                "_scheduler_config",
-                "_agents_config"
-            ]
-            
-            for config_attr in config_attributes:
-                self._clear_config_dict(config_attr)
-            
-            # Document processing config is not a dict, so just set to None
-            self._document_processing_config = None
+            # Use dict check to handle both dict and object types
+            if isinstance(self._llm_config, dict):
+                self._llm_config.clear()
+            else:
+                self._llm_config = {}
+
+            if isinstance(self._memory_config, dict):
+                self._memory_config.clear()
+            else:
+                self._memory_config = {}
+
+            if isinstance(self._mcp_config, dict):
+                self._mcp_config.clear()
+            else:
+                self._mcp_config = {}
+
+            if isinstance(self._a2a_config, dict):
+                self._a2a_config.clear()
+            else:
+                self._a2a_config = {}
+
+            if isinstance(self._logging_config, dict):
+                self._logging_config.clear()
+            else:
+                self._logging_config = {}
+
+            if isinstance(self._clarification_config, dict):
+                self._clarification_config.clear()
+            else:
+                self._clarification_config = {}
+
+            # Document processing config is special - it's a DocumentProcessingConfig object
+            self._document_processing_config = {}
+
+            if isinstance(self._scheduler_config, dict):
+                self._scheduler_config.clear()
+            else:
+                self._scheduler_config = {}
+
+            if isinstance(self._agents_config, list):
+                self._agents_config.clear()
+            else:
+                self._agents_config = []
 
         except Exception as e:
             print(f"❌ Error during formation cleanup: {e}")

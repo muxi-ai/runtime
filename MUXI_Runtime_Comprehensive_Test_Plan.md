@@ -688,9 +688,20 @@ response = await overlord.chat(
 ### **Phase 3: Advanced Coordination & Enterprise Features (Days 7-10)**
 
 <details>
-<summary>Day 7: Multi-Agent Coordination & SOP Enhancement</summary>
+<summary>🔁 Day 7: Multi-Agent Coordination & SOP Enhancement</summary>
 
 #### Goal: Validate agent orchestration and task decomposition, then enhance with SOP system
+
+**Implementation Status: COMPLETED ✅**
+- **Test Groups Completed**: 7A (Task Decomposition & Workflow Orchestration)
+- **Tests Passing**: 100% success rate
+- **Major Achievements**:
+  - Workflow orchestration with task decomposition
+  - Resilient workflow execution with user-friendly errors
+  - Approval-aware async execution (deferred async pattern)
+  - Dynamic agent capability routing
+  - Platform-agnostic task decomposition
+- **Test Reports**: [tests/reports/7a.md](tests/reports/7a.md)
 
 ### Part 1: Base Multi-Agent Coordination Testing
 
@@ -732,6 +743,26 @@ overlord2 = await formation2.start()
 # Main formation requests help from external specialist
 response = await overlord.chat("I need specialized legal advice about contracts")
 # Should communicate with external legal formation
+```
+
+### Test Group 7A10: Deferred Async Execution (Approval-Aware)
+```python
+# Test 7A10: Workflow Approval with Async Safety
+formation = Formation.load("formations/workflow-approval.yaml")
+overlord = await formation.start()
+
+# Complex request that would trigger async AND needs approval
+response = await overlord.chat(
+    "Research AI market trends, analyze competitors, create visualizations, "
+    "write comprehensive report, and create Linear issues for action items",
+    use_async=None  # Let system decide
+)
+# Should remain synchronous for approval flow, not go async prematurely
+assert "approve" in response.lower() or "workflow" in response.lower()
+
+# After approval, can execute asynchronously if appropriate
+response = await overlord.chat("yes", user_id="same_user")
+# Now safe to process asynchronously if time estimate > threshold
 ```
 
 ### 🔧 **IMPLEMENTATION BREAK: SOP System**
@@ -786,10 +817,12 @@ assert sop_search_time < 0.1  # SOP search should add <100ms
 ```
 
 **Formations Required:** 8 configurations (6 base + 2 SOP-enhanced)
-**Automation:** Multi-process testing, A2A server management, SOP file generation
-**Success Criteria:**
-- Base: 18 coordination tests pass, A2A communication verified
-- Enhanced: 12 additional SOP tests pass, <100ms SOP search overhead
+**Automation:** Multi-process testing, A2A server management, SOP file generation, async decision validation
+**Success Criteria:** ✅
+- Base: 18 coordination tests pass, A2A communication verified ✅
+- Workflow orchestration with resilience framework ✅
+- Approval-aware async execution (32 tests passing) ✅
+- Enhanced: 12 additional SOP tests pass, <100ms SOP search overhead (pending)
 
 </details>
 
@@ -1059,14 +1092,14 @@ async for chunk in response_stream:
     # 2. Analyze market data - requires data processing and statistical analysis
     # 3. Create visualizations - requires charting and design capabilities
     # 4. Write report - requires synthesis and writing capabilities
-    # 
+    #
     # Creating workflow with 4 subtasks...
     # Task dependencies: research -> analysis -> visualization -> report
     # Estimated total time: 15-20 minutes
     # </thinking>
     if "<thinking>" in chunk and "analyzing request" in chunk.lower():
         thinking_decomposition_seen = True
-        
+
 # TODO: Implement streaming of workflow decomposition phase as thinking
 # This would provide transparency into the Overlord's planning process
 # before execution begins
@@ -1579,7 +1612,7 @@ response = await overlord.chat(
 - **Day 4:** 20+ MCP tests + credential tests pass ✅ (100% success rate, user isolation verified)
 - **Day 5:** 21/22 file generation tests pass ✅ (95.5% success rate, security validation confirmed)
 - **Day 6:** 19/19 knowledge tests pass ✅ (100% success rate across all 5 test groups 6A-6E)
-- **Day 7:** Base: 18 coordination tests pass + A2A verified | Enhanced: 12 SOP tests pass
+- **Day 7:** Base: 18 coordination tests pass + A2A verified ✅ | Workflow orchestration + resilience ✅ | Deferred async (32 tests) ✅ | Enhanced: 12 SOP tests (pending)
 - **Day 8:** Base: 10 clarification tests pass | Enhanced: 15 multi-sequence tests pass
 - **Day 9:** 15 thinking tests pass + model detection validated + edge cases handled
 - **Day 10:** 25+ large file tests pass + <3x performance overhead + memory efficient

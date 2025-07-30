@@ -6,44 +6,38 @@
 ```yaml
 # formation.yaml
 overlord:
-  config:
+  workflow:
     auto_decomposition: true
     complexity_threshold: 7.0
     plan_approval_threshold: 10
+    complexity_method: "heuristic"
+    routing_strategy: "capability_based"
+    error_recovery: "retry_with_backoff"
     
-    workflow:
-      complexity_method: "heuristic"
-      routing_strategy: "capability_based"
-      error_recovery: "retry_with_backoff"
-      
-      retry:
-        max_attempts: 3
-        initial_delay: 1.0
-        backoff_factor: 2.0
-      
-      timeouts:
-        task_timeout: 300
-        workflow_timeout: 3600
+    retry:
+      max_attempts: 3
+      initial_delay: 1.0
+      backoff_factor: 2.0
+    
+    timeouts:
+      task_timeout: 300
+      workflow_timeout: 3600
 ```
 
 ### Advanced Configuration
 ```yaml
 overlord:
-  config:
-    workflow:
-      # Custom routing rules
-      routing_rules:
-        - pattern: "code review"
-          agents: ["senior-dev", "code-expert"]
-          weight: 0.9
-          
-      # Workflow overrides
-      overrides:
-        - pattern: "research"
-          priority: 10
-          config:
-            complexity_threshold: 5.0
-            max_parallel_tasks: 10
+  workflow:
+    # Additional workflow settings
+    max_parallel_tasks: 5
+    parallel_execution: true
+    partial_results: true
+    
+    # Enhanced complexity settings
+    complexity_weights:
+      heuristic: 0.4
+      llm: 0.4
+      custom: 0.2
 ```
 
 ## API Reference
@@ -237,17 +231,17 @@ if workflow.status == WorkflowStatus.FAILED:
 ### Reduce Workflow Overhead
 ```yaml
 overlord:
-  config:
-    workflow:
-      # Increase complexity threshold to reduce workflow triggers
-      complexity_threshold: 8.0
-      
-      # Optimize parallel execution
-      max_parallel_tasks: 5
-      
-      # Enable caching
-      enable_caching: true
-      cache_ttl: 3600
+  workflow:
+    # Increase complexity threshold to reduce workflow triggers
+    complexity_threshold: 8.0
+    
+    # Optimize parallel execution
+    max_parallel_tasks: 5
+    parallel_execution: true
+  
+  caching:
+    enabled: true
+    ttl: 3600
 ```
 
 ### Monitor Performance
@@ -311,53 +305,40 @@ async def test_workflow_integration():
 ### Research-Heavy Workloads
 ```yaml
 overlord:
-  config:
-    workflow:
-      complexity_threshold: 5.0  # Lower threshold for research tasks
-      routing_strategy: "capability_based"
-      
-      overrides:
-        - pattern: "research"
-          config:
-            max_parallel_tasks: 8
-            task_timeout: 600
-            
-      routing_rules:
-        - pattern: "academic research"
-          agents: ["research-specialist", "academic-agent"]
-          weight: 1.0
+  workflow:
+    complexity_threshold: 5.0  # Lower threshold for research tasks
+    routing_strategy: "capability_based"
+    max_parallel_tasks: 8
+    
+    timeouts:
+      task_timeout: 600
+      enable_adaptive_timeout: true
 ```
 
 ### High-Performance Setup
 ```yaml
 overlord:
-  config:
-    workflow:
-      max_parallel_tasks: 10
-      max_concurrent_workflows: 20
+  workflow:
+    max_parallel_tasks: 10
+    
+    retry:
+      max_attempts: 5
+      initial_delay: 0.5
       
-      retry:
-        max_attempts: 5
-        initial_delay: 0.5
-        
-      timeouts:
-        task_timeout: 180
-        enable_adaptive_timeout: true
+    timeouts:
+      task_timeout: 180
+      enable_adaptive_timeout: true
 ```
 
 ### Development/Testing Setup
 ```yaml
 overlord:
-  config:
-    workflow:
-      complexity_threshold: 3.0  # Lower threshold for testing
-      error_recovery: "fail_fast"  # Immediate failure for debugging
-      
-      retry:
-        max_attempts: 1  # No retries during development
-        
-      debug_logging: true
-      log_level: "DEBUG"
+  workflow:
+    complexity_threshold: 3.0  # Lower threshold for testing
+    error_recovery: "fail_fast"  # Immediate failure for debugging
+    
+    retry:
+      max_attempts: 1  # No retries during development
 ```
 
 ## Troubleshooting Checklist
