@@ -753,6 +753,22 @@ class ServerEvents(Enum):
     SERVER_FAILED = "server.failed"
     # When server fails
 
+    REQUEST_RECEIVED = "server.request.received"
+    # When server receives an HTTP request
+
+    REQUEST_COMPLETED = "server.request.completed"
+    # When server completes processing an HTTP request
+
+
+class APIEvents(Enum):
+    """API-specific event types for Formation API observability"""
+
+    API_REQUEST = "api.request"
+    # API request with auth and metadata details
+
+    API_RESPONSE = "api.response"
+    # API response with status and timing
+
 
 class ErrorEvents(Enum):
     """Error event types for MUXI observability (routed to stderr)."""

@@ -12,7 +12,15 @@ from typing import Any, Dict, List, Optional, Union
 
 import requests
 
-from ...datatypes.observability import ConversationEvents, SystemEvents, ErrorEvents, EventLevel, RequestContext
+from ...datatypes.observability import (
+    ConversationEvents,
+    SystemEvents,
+    ErrorEvents,
+    ServerEvents,
+    APIEvents,
+    EventLevel,
+    RequestContext,
+)
 from ...utils.user_dirs import get_observability_dir
 from ...utils.id_generator import generate_nanoid
 from ...utils.version import get_version
@@ -63,7 +71,7 @@ class EventLogger:
 
     def emit_event(
         self,
-        event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, str],
+        event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str],
         level: EventLevel = EventLevel.INFO,
         data: Optional[Dict[str, Any]] = None,
         request_context: Optional[RequestContext] = None,
@@ -72,7 +80,7 @@ class EventLogger:
     ) -> str:
         """Emit an observability event with structured data."""
         # Handle different event types
-        if isinstance(event_type, (ConversationEvents, SystemEvents, ErrorEvents)):
+        if isinstance(event_type, (ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
             event_type_str = event_type.value
         else:
             event_type_str = event_type
@@ -128,15 +136,19 @@ class EventLogger:
         return event_id
 
     def _emit_to_output(
-        self, event: Dict[str, Any], event_type: Union[ConversationEvents, SystemEvents, ErrorEvents, str]
+        self,
+        event: Dict[str, Any],
+        event_type: Union[
+            ConversationEvents, SystemEvents, ErrorEvents, ServerEvents, APIEvents, str
+        ],
     ) -> None:
         """Emit event to the configured output destination."""
         try:
             # JSON-L format for easy parsing
             event_line = json.dumps(event, separators=(",", ":"))
 
-            # Route SystemEvents and ErrorEvents to stdout only, regardless of configuration
-            if isinstance(event_type, (SystemEvents, ErrorEvents)):
+            # Route SystemEvents, ServerEvents, APIEvents and ErrorEvents to stdout only, regardless of configuration
+            if isinstance(event_type, (SystemEvents, ErrorEvents, ServerEvents, APIEvents)):
                 print(event_line, flush=True)
                 return
 

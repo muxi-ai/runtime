@@ -8,11 +8,59 @@ and formation status without requiring authentication.
 from typing import Dict
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse
 
-from ....utils.version import get_version
+router = APIRouter(tags=["Health"])
 
-router = APIRouter()
+
+@router.get("/")
+async def root_status(request: Request) -> HTMLResponse:
+    """
+    Root endpoint that returns an HTML status page.
+
+    Returns:
+        HTML page showing server status (Up/Down)
+    """
+    # Check if the formation is healthy
+    formation = request.app.state.formation
+    is_healthy = True
+
+    # Basic health checks
+    try:
+        # Check if formation is loaded
+        if not hasattr(formation, 'config') or formation.config is None:
+            is_healthy = False
+    except Exception:
+        is_healthy = False
+
+    # Determine status, color, and status code
+    if is_healthy:
+        status = "Up"
+        color = "green"
+        status_code = 200
+    else:
+        status = "Down"
+        color = "red"
+        status_code = 503
+
+    # Generate HTML response
+    html_content = (
+        "<!DOCTYPE html>",
+        '<html style="margin:0; padding:0; height:100%; color:white">',
+        "<head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width">',
+        f'<title>{status}</title>',
+        "</head>",
+        '<body style="margin:0; padding:0; height:100%; color:white">',
+        '<table width="100%" height="100%" cellpadding="0" cellspacing="0" border="0">',
+        f'<tr><td align="center" bgcolor="{color}">{status}</td></tr>',
+        "</table>",
+        "</body>",
+        "</html>",
+    )
+
+    return HTMLResponse(content=html_content, status_code=status_code)
 
 
 @router.get("/health")
@@ -24,46 +72,3 @@ async def health_check() -> Dict[str, str]:
         Simple health status
     """
     return {"status": "healthy"}
-
-
-@router.get("/status")
-async def formation_status(request: Request) -> JSONResponse:
-    """
-    Get detailed formation status.
-
-    Returns formation information including:
-    - Formation ID and description
-    - Server version
-    - Uptime
-    - Agent count
-    - Active connections
-
-    Returns:
-        Detailed status information
-    """
-    # Get formation from app state (will be set during server startup)
-    formation = request.app.state.formation
-
-    status = {
-        "formation": {
-            "id": formation.formation_id,
-            "description": formation.config.get("description", ""),
-            "version": formation.config.get("version", "1.0.0"),
-        },
-        "server": {
-            "version": get_version(),
-            "uptime_seconds": 0,  # TODO: Track actual uptime
-        },
-        "agents": {
-            "count": len(formation._agents_config) if hasattr(formation, "_agents_config") else 0,
-            "active": 0,  # TODO: Track active agents
-        },
-        "connections": {
-            "active_http": 0,  # TODO: Track connections
-            "active_websocket": 0,
-        }
-    }
-
-    # TODO: Add observability event for health check
-
-    return JSONResponse(content=status)

@@ -37,3 +37,13 @@ def get_default_nanoid() -> str:
         Exception: If nanoid generation fails.
     """
     return generate_nanoid()
+
+
+def generate_request_id() -> str:
+    """
+    Generate a request ID for API requests.
+
+    Returns:
+        A request ID in the format 'req_<nanoid>'
+    """
+    return f"req_{generate_nanoid()}"
