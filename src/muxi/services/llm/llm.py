@@ -435,8 +435,10 @@ def _classify_error(error: Exception, provider: str = None) -> LLMError:
             original_error=error,
         )
     elif isinstance(error, asyncio.TimeoutError):
+        # Provide more context for timeout errors
+        timeout_msg = error_message if error_message else "No response received within timeout period"
         return LLMError(
-            message=f"Request timed out: {error_message}",
+            message=f"Request timed out after waiting for response: {timeout_msg}",
             error_type=LLMErrorType.TIMEOUT,
             provider=provider,
             retryable=True,
@@ -479,6 +481,7 @@ async def _exponential_backoff_retry(
         LLMErrorType.TIMEOUT,
         LLMErrorType.MODEL_OVERLOAD,
     ),
+    llm_instance=None,
     *args,
     **kwargs,
 ):
@@ -486,6 +489,51 @@ async def _exponential_backoff_retry(
     global _retry_stats
 
     _retry_stats["total_requests"] += 1
+
+    # Try to extract context from function name and kwargs
+    operation = getattr(func, '__name__', 'llm_request')
+    context_parts = []
+
+    # Check if we have an LLM instance
+    if llm_instance:
+        context_parts.append(f"model={llm_instance.model_name}")
+    elif args and hasattr(args[0], 'model_name'):
+        context_parts.append(f"model={args[0].model_name}")
+
+    # Check for metadata with caller context
+    if 'metadata' in kwargs and kwargs['metadata']:
+        metadata = kwargs['metadata']
+        if 'agent_id' in metadata:
+            context_parts.append(f"agent={metadata['agent_id']}")
+        if 'agent_name' in metadata:
+            context_parts.append(f"agent_name={metadata['agent_name']}")
+        if 'task_id' in metadata:
+            context_parts.append(f"task={metadata['task_id']}")
+        if 'workflow_id' in metadata:
+            context_parts.append(f"workflow={metadata['workflow_id']}")
+
+    # Check for common kwargs that provide context
+    if 'messages' in kwargs and kwargs['messages']:
+        msg_count = len(kwargs['messages'])
+        # Try to get the first user message for context
+        first_user_msg = next((m['content'] for m in kwargs['messages'] if m.get('role') == 'user'), None)
+        if first_user_msg:
+            msg_preview = first_user_msg[:30].replace('\n', ' ')
+            context_parts.append(f"{msg_count} msgs, first='{msg_preview}...'")
+        else:
+            context_parts.append(f"{msg_count} messages")
+
+    if 'prompt' in kwargs:
+        prompt_preview = str(kwargs['prompt'])[:50].replace('\n', ' ')
+        context_parts.append(f"prompt='{prompt_preview}...'")
+
+    if 'temperature' in kwargs:
+        context_parts.append(f"temp={kwargs['temperature']}")
+
+    if 'max_tokens' in kwargs:
+        context_parts.append(f"max_tokens={kwargs['max_tokens']}")
+
+    context_str = f" ({', '.join(context_parts)})" if context_parts else ""
 
     for attempt in range(max_retries + 1):
         try:
@@ -503,8 +551,14 @@ async def _exponential_backoff_retry(
                         "provider": e.provider,
                         "retryable": e.retryable,
                         "attempt": attempt + 1,
+                        "operation": operation,
+                        "context": context_str,
+                        "error_message": str(e),
                     },
-                    description=f"Request failed after {attempt + 1} attempts",
+                    description=(
+                        f"{operation}{context_str} failed after {attempt + 1} attempts with "
+                        f"{e.error_type.value}: {str(e)}"
+                    ),
                 )
                 raise e
 
@@ -523,8 +577,14 @@ async def _exponential_backoff_retry(
                     "provider": e.provider,
                     "retry_delay": delay,
                     "attempt": attempt + 1,
+                    "operation": operation,
+                    "context": context_str,
+                    "error_message": str(e),
                 },
-                description=f"Request failed, retrying in {delay:.2f}s",
+                description=(
+                    f"{operation}{context_str} failed with {e.error_type.value}: {str(e)}. "
+                    f"Retrying in {delay:.2f}s (attempt {attempt + 1}/{max_retries + 1})"
+                ),
             )
 
             await asyncio.sleep(delay)
@@ -936,6 +996,15 @@ class LLM:
             try:
                 # Add timeout to the function call
                 return await asyncio.wait_for(func(*args, **kwargs), timeout=self.timeout)
+            except asyncio.TimeoutError as e:
+                # Provide specific timeout error with timeout value
+                raise LLMError(
+                    message=f"Request timed out after {self.timeout}s waiting for {self._provider} response",
+                    error_type=LLMErrorType.TIMEOUT,
+                    provider=self._provider,
+                    retryable=True,
+                    original_error=e,
+                )
             except Exception as e:
                 # Classify and raise appropriate LLMError
                 raise _classify_error(e, self._provider)
@@ -952,11 +1021,13 @@ class LLM:
 
         # First try the primary model with exponential backoff retry
         try:
+            # Pass the LLM instance for better context
             return await _exponential_backoff_retry(
                 func_to_retry,
                 max_retries=self.max_retries,
                 base_delay=self.base_retry_delay,
                 max_delay=self.max_retry_delay,
+                llm_instance=self,
                 *args,
                 **kwargs,
             )
@@ -1043,6 +1114,7 @@ class LLM:
         stop: Optional[Union[str, List[str]]] = None,
         files: Optional[List[Union[str, Path]]] = None,
         fusion_mode: Optional[str] = "adaptive",  # "basic", "adaptive", "advanced"
+        metadata: Optional[Dict[str, Any]] = None,  # For tracking caller context
         **kwargs: Any,
     ) -> str:
         """
@@ -1070,6 +1142,14 @@ class LLM:
         """
         # Emit LLM request started event
         try:
+            # Build context description
+            context_parts = [f"LLM chat request started for {self.model_name}"]
+            if metadata:
+                if metadata.get('agent_id'):
+                    context_parts.append(f"by agent {metadata['agent_id']}")
+                if metadata.get('task_id'):
+                    context_parts.append(f"for task {metadata['task_id']}")
+
             observability.observe(
                 event_type=observability.ConversationEvents.MODEL_REQUEST_STARTED,
                 level=observability.EventLevel.INFO,
@@ -1082,8 +1162,9 @@ class LLM:
                     "fusion_mode": fusion_mode,
                     "temperature": temperature or self.temperature,
                     "max_tokens": max_tokens or self.max_tokens,
+                    "metadata": metadata,
                 },
-                description=f"LLM chat request started for {self.model_name}",
+                description=" ".join(context_parts),
             )
         except Exception as e:
             observability.observe(
@@ -1465,6 +1546,7 @@ Provide a helpful, conversational response that directly addresses what the user
         prompt: str,
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None,
+        metadata: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> str:
         """
@@ -1474,6 +1556,7 @@ Provide a helpful, conversational response that directly addresses what the user
             prompt: The prompt to send to the model
             temperature: Optional temperature parameter (overrides model default)
             max_tokens: Optional maximum tokens to generate (overrides model default)
+            metadata: Optional metadata for tracking caller context
             **kwargs: Additional model-specific parameters
 
         Returns:
@@ -1485,7 +1568,11 @@ Provide a helpful, conversational response that directly addresses what the user
         # Wrap the prompt in a message and call chat()
         messages = [{"role": "user", "content": prompt}]
         return await self.chat(
-            messages=messages, temperature=temperature, max_tokens=max_tokens, **kwargs
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            metadata=metadata,
+            **kwargs
         )
 
     @property

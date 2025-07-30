@@ -64,7 +64,6 @@ class WorkflowManager:
             workflow: The workflow to track
             user_id: Optional user ID for user-specific metrics
         """
-        # Debug: Entry
         observability.observe(
             event_type=observability.SystemEvents.SERVICE_STARTED,
             level=observability.EventLevel.INFO,
@@ -75,7 +74,6 @@ class WorkflowManager:
         with self._lock:
             workflow_id = workflow.id
 
-            # Debug: Inside lock
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,
@@ -85,7 +83,6 @@ class WorkflowManager:
 
             self.active_workflows[workflow_id] = workflow
 
-            # Debug: After storing workflow
             observability.observe(
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.INFO,

@@ -19,10 +19,10 @@ The MUXI Runtime Workflow Orchestration System provides intelligent task decompo
 └─────────────────┘    └──────────────────┘    └─────────────────┘
          │                                               │
          ▼                                               ▼
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│ WorkflowManager │    │ WorkflowExecutor │◄───│    Workflow     │
-│                 │    │                  │    │                 │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
+┌─────────────────┐    ┌──────────────────────┐    ┌─────────────────┐
+│ WorkflowManager │    │ResilientWorkflowExecutor│◄───│    Workflow     │
+│                 │    │ (wraps WorkflowExecutor)│    │                 │
+└─────────────────┘    └──────────────────────┘    └─────────────────┘
          │                       │                       │
          ▼                       ▼                       ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
@@ -37,7 +37,12 @@ The MUXI Runtime Workflow Orchestration System provides intelligent task decompo
 - **RequestAnalyzer**: Analyzes request complexity using configurable methods
 - **TaskDecomposer**: Breaks complex requests into executable tasks with dependencies
 - **WorkflowManager**: Tracks workflow lifecycle and maintains state
-- **WorkflowExecutor**: Executes workflows with advanced routing and error handling
+- **ResilientWorkflowExecutor**: Wraps WorkflowExecutor with resilience features:
+  - Automatic error classification and recovery
+  - User-friendly error messages
+  - Exponential backoff retry logic
+  - Graceful degradation strategies
+- **WorkflowExecutor**: Core execution engine with routing and parallel task support
 - **WorkflowMetrics**: Collects and reports workflow performance data
 
 ## Request Flow
@@ -149,47 +154,32 @@ Sequential agent selection for even distribution.
 
 ```yaml
 overlord:
-  config:
-    # Workflow system settings
+  # Workflow system settings
+  workflow:
     auto_decomposition: true
-    complexity_threshold: 7.0
     plan_approval_threshold: 10
+    
+    # Complexity calculation
+    complexity_method: "heuristic"  # heuristic, llm, custom, hybrid
+    complexity_threshold: 7.0
 
-    workflow:
-      # Complexity calculation method
-      complexity_method: "heuristic"  # heuristic, llm, custom, hybrid
+    # Task routing strategy
+    routing_strategy: "capability_based"  # load_balanced, round_robin
 
-      # Task routing strategy
-      routing_strategy: "capability_based"  # load_balanced, round_robin
+    # Error recovery strategy
+    error_recovery: "retry_with_backoff"  # fail_fast, skip_and_continue
 
-      # Error recovery strategy
-      error_recovery: "retry_with_backoff"  # fail_fast, skip_and_continue
+    # Retry configuration
+    retry:
+      max_attempts: 3
+      initial_delay: 1.0
+      backoff_factor: 2.0
 
-      # Retry configuration
-      retry:
-        max_attempts: 3
-        initial_delay: 1.0
-        backoff_factor: 2.0
-
-      # Timeout configuration
-      timeouts:
-        task_timeout: 300
-        workflow_timeout: 3600
-        enable_adaptive_timeout: true
-
-      # Workflow-specific overrides
-      overrides:
-        - pattern: "research"
-          priority: 10
-          config:
-            complexity_threshold: 5.0
-            max_parallel_tasks: 10
-
-      # Custom routing rules
-      routing_rules:
-        - pattern: "code review"
-          agents: ["code-expert", "senior-dev"]
-          weight: 0.9
+    # Timeout configuration
+    timeouts:
+      task_timeout: 300
+      workflow_timeout: 3600
+      enable_adaptive_timeout: true
 ```
 
 ### Runtime Configuration
@@ -254,6 +244,18 @@ if complexity_score >= plan_approval_threshold:
     else:
         return approval.response
 ```
+
+#### Approval-Aware Async Execution 🆕
+
+The workflow system now features approval-aware async decision logic that ensures approval flows remain synchronous:
+
+- **Automatic Sync for Approvals**: When a workflow requires approval, async execution is automatically disabled
+- **Post-Approval Re-evaluation**: After approval, the system re-evaluates if execution should be async
+- **Webhook Notifications**: Background workflows send completion notifications via webhooks
+
+This elegant solution prevents approval flows from being disrupted by async execution while still allowing performance benefits when appropriate.
+
+See [Deferred Async Execution](deferred_async_execution.md) for detailed implementation and configuration.
 
 ### 4. Parallel Task Execution
 
@@ -454,10 +456,9 @@ Enable detailed workflow logging:
 
 ```yaml
 overlord:
-  config:
-    workflow:
-      debug_logging: true
-      log_level: "DEBUG"
+  workflow:
+    debug_logging: true
+    log_level: "DEBUG"
 ```
 
 ## Security Considerations
@@ -496,11 +497,10 @@ overlord:
 
 # New configuration
 overlord:
-  config:
+  workflow:
     auto_decomposition: true
     complexity_threshold: 7.0
-    workflow:
-      routing_strategy: "capability_based"
+    routing_strategy: "capability_based"
 ```
 
 ## Future Enhancements
@@ -520,8 +520,19 @@ overlord:
 3. **Workflow Composition**: Combining multiple workflows into larger orchestrations
 4. **Real-time Collaboration**: Multiple users collaborating on workflow execution
 
+## Resilience Integration
+
+The workflow system now includes a comprehensive resilience layer that provides:
+
+- **Automatic Error Recovery**: Intelligent retry with exponential backoff
+- **User-Friendly Messages**: Context-aware error explanations instead of generic errors
+- **Graceful Degradation**: Partial results when complete execution isn't possible
+- **Circuit Breakers**: Prevent cascading failures across services
+
+For detailed information about the resilience features, see [Workflow Resilience Integration](resilience_integration.md).
+
 ## Conclusion
 
-The MUXI Runtime Workflow Orchestration System provides a robust, scalable foundation for intelligent task decomposition and multi-agent coordination. Its flexible configuration system, comprehensive monitoring capabilities, and production-ready architecture make it suitable for a wide range of complex automation scenarios.
+The MUXI Runtime Workflow Orchestration System provides a robust, scalable foundation for intelligent task decomposition and multi-agent coordination. With the integrated resilience layer, it handles failures gracefully while maintaining transparency through user-friendly error messages. Its flexible configuration system, comprehensive monitoring capabilities, and production-ready architecture make it suitable for a wide range of complex automation scenarios.
 
 The system has been thoroughly tested and is currently handling production workloads with excellent performance and reliability metrics.

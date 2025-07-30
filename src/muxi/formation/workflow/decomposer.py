@@ -1,5 +1,6 @@
 from typing import Optional, Dict, Any, Tuple
 import re
+from pathlib import Path
 
 from ...datatypes.workflow import (
     Workflow,
@@ -25,14 +26,20 @@ class TaskDecomposer:
     capabilities for user approval.
     """
 
-    def __init__(self, llm: Optional[LLM] = None):
+    def __init__(
+        self, llm: Optional[LLM] = None, agent_registry: Optional[Dict] = None, mcp_service=None
+    ):
         """
         Initialize the task decomposer.
 
         Args:
             llm: Optional LLM for intelligent decomposition. Falls back to heuristics if None.
+            agent_registry: Registry of available agents with their capabilities
+            mcp_service: MCP service for discovering available tools
         """
         self.llm = llm
+        self.agent_registry = agent_registry or {}
+        self.mcp_service = mcp_service
 
     async def decompose_request(
         self,
@@ -173,14 +180,55 @@ class TaskDecomposer:
         """
         decomposition_prompt = self._create_decomposition_prompt(request, context, analysis)
 
+        # Debug: Log the actual prompt being sent to LLM
+        capabilities_info = self._get_available_capabilities_info()
+        observability.observe(
+            event_type=observability.SystemEvents.SERVICE_STARTED,
+            level=observability.EventLevel.INFO,  # Changed to INFO so it shows up
+            data={
+                "service": "task_decomposer",
+                "prompt_length": len(decomposition_prompt),
+                "capabilities_info": capabilities_info,
+                "full_prompt": (
+                    decomposition_prompt[:1000] + "..."
+                    if len(decomposition_prompt) > 1000
+                    else decomposition_prompt
+                ),
+            },
+            description="TaskDecomposer using dynamic capabilities",
+        )
+
+        # DEBUG: Print full decomposition prompt to console for debugging tests
+        print("\n" + "=" * 80)
+        print("📋 FULL DECOMPOSITION PROMPT:")
+        print("=" * 80)
+        print(decomposition_prompt)
+        print("=" * 80)
+
         try:
-            response = await self.llm.generate(decomposition_prompt, max_tokens=2000)
+            response = await self.llm.generate_text(decomposition_prompt, max_tokens=2000)
+
+            # DEBUG: Print LLM response for debugging
+            print("\n" + "🤖 LLM DECOMPOSITION RESPONSE:")
+            print("=" * 80)
+            print(response)
+            print("=" * 80)
+
             workflow = self._parse_llm_decomposition(workflow_id, request, response)
+
+            # DEBUG: Print parsed workflow info
+            print(f"\n📋 PARSED WORKFLOW: {len(workflow.tasks)} tasks")
+            for task_id, task in workflow.tasks.items():
+                print(f"  - {task_id}: {task.description}")
+                print(f"    Capabilities: {task.required_capabilities}")
+            print()
+
             return workflow
 
         except Exception as e:
             #  Decomposer warning - TODO: add observability
-            _ = e  # remove this after implementing observability
+            print(f"\n❌ LLM DECOMPOSITION FAILED: {type(e).__name__}: {e}")
+            print("🔄 Falling back to heuristic decomposition")
             return self._heuristic_decompose_request(workflow_id, request, analysis)
 
     def _create_decomposition_prompt(
@@ -190,7 +238,7 @@ class TaskDecomposer:
         analysis: Optional[RequestAnalysis] = None,
     ) -> str:
         """
-        Create sophisticated decomposition prompt for LLM.
+        Create sophisticated decomposition prompt for LLM from template file.
 
         Args:
             request: User's request
@@ -200,6 +248,21 @@ class TaskDecomposer:
         Returns:
             Decomposition prompt for LLM
         """
+        # Read the prompt template from file
+        template_path = Path(__file__).parent / "decomposition_prompt.md"
+        try:
+            with open(template_path, "r", encoding="utf-8") as f:
+                template = f.read()
+        except FileNotFoundError:
+            # Fallback to basic template if file not found
+            template = (
+                "<user_request>{{request}}</user_request>\n"
+                "<context>{{context_info}}</context>\n"
+                "<analysis>{{analysis_info}}</analysis>\n"
+                "<capabilities>{{capabilities_info}}</capabilities>"
+            )
+
+        # Prepare template variables
         context_info = ""
         if context:
             context_info = f"\nContext: {context}"
@@ -213,50 +276,185 @@ Analysis Results:
 - Implicit Subtasks: {', '.join(analysis.implicit_subtasks)}
 """
 
-        return f"""
-You are an expert workflow designer.
-Break down this user request into a structured workflow of interconnected tasks.
+        capabilities_info = self._get_available_capabilities_info()
 
-User Request: "{request}"{context_info}{analysis_info}
+        # Replace template placeholders
+        return (
+            template.replace("{{request}}", request)
+            .replace("{{context_info}}", context_info)
+            .replace("{{analysis_info}}", analysis_info)
+            .replace("{{capabilities_info}}", capabilities_info)
+        )
 
-Analyze the request using chain-of-thought reasoning and create a workflow with the following structure:
+    def _get_available_capabilities_info(self) -> str:
+        """
+        Dynamically generate information about available agent capabilities and MCP tools.
 
-WORKFLOW_ANALYSIS:
-[Think through the logical steps required, what capabilities are needed, and how tasks depend on each other]
+        Returns:
+            Formatted string with current agent capabilities and available tools
+        """
+        info_parts = ["Available agent capabilities and tools:\n"]
 
-TASKS:
-For each task, provide:
-Task_ID: [unique identifier like task_1, task_2, etc.]
-Description: [clear description of what this task accomplishes]
-Required_Capabilities: [list capabilities like research, writing, data_analysis, coding, etc.]
-Dependencies: [list of task IDs that must complete before this task, use "none" if no dependencies]
-Estimated_Complexity: [1-10 scale]
-Inputs: [what inputs this task needs]
-Outputs: [what this task produces]
+        # Get agent capabilities
+        if self.agent_registry:
+            # # DEBUG: Log agent registry for troubleshooting
+            # print(f"\n🏗️  DEBUG TASKDECOMPOSER AGENT REGISTRY:")
+            # print(f"  Registry size: {len(self.agent_registry)}")
+            # for agent_id, agent in self.agent_registry.items():
+            #     specialties = getattr(agent, 'specialties', [])
+            #     print(f"  - {agent_id}: {specialties}")
+            # print("  " + "="*60)
 
-EXECUTION_STRATEGY:
-[Explain the optimal execution order and which tasks can run in parallel]
+            info_parts.append("**Available Agents and Their Capabilities:**")
+            for agent_id, agent in self.agent_registry.items():
+                # Get all agent attributes
+                agent_name = getattr(agent, "name", agent_id)
+                agent_description = getattr(agent, "description", "")
+                agent_role = getattr(agent, "role", "general")
 
-Guidelines:
-1. Break complex work into logical, manageable steps
-2. Identify clear dependencies between tasks
-3. Design for parallel execution where possible
-4. Each task should have clear inputs and outputs
-5. Map tasks to appropriate agent capabilities
-6. Ensure the workflow accomplishes the original request
+                # Try multiple ways to get specialties/capabilities
+                specialties = (
+                    getattr(agent, "specialization", None)
+                    or getattr(agent, "specialties", None)
+                    or getattr(agent, "capabilities", None)
+                    or []
+                )
 
-Example capabilities to choose from:
-- research: Web research, information gathering
-- writing: Content creation, documentation
-- data_analysis: Processing and analyzing data
-- coding: Programming and development
-- design: Visual design and mockups
-- business_analysis: Strategy and business insights
-- file_operations: File processing and management
-- communication: Messaging and notifications
+                # Format agent info with name, description, and capabilities
+                info_parts.append(f"\n**{agent_name}** (ID: {agent_id})")
+                if agent_description:
+                    info_parts.append(f"  Description: {agent_description}")
+                info_parts.append(f"  Role: {agent_role}")
 
-Provide a clear, structured response that can be parsed into executable tasks.
-"""
+                if specialties:
+                    specialty_list = ", ".join(specialties)
+                    info_parts.append(f"  Capabilities: {specialty_list}")
+                else:
+                    info_parts.append("  Capabilities: general-purpose")
+
+                # Add a note about what this agent is best suited for based on capabilities
+                specialties_str = str(specialties).lower()
+
+                if "research" in specialties_str:
+                    info_parts.append("  Best for: Information gathering, analysis, web searches")
+                elif "writing" in specialties_str:
+                    info_parts.append("  Best for: Creating documents, reports, content generation")
+                elif "coding" in specialties_str or "development" in specialties_str:
+                    info_parts.append("  Best for: Writing code, software development tasks")
+                elif "analysis" in specialties_str or "data_analysis" in specialties_str:
+                    info_parts.append("  Best for: Data analysis, pattern recognition, insights")
+                elif specialties and len(specialties) > 0:
+                    # For any other specific capabilities (platforms, tools, etc.)
+                    # Describe them generically without hardcoding names
+                    capability_str = ", ".join(specialties)
+                    info_parts.append(
+                        f"  Best for: Operations requiring {capability_str} capability"
+                    )
+
+            info_parts.append("")
+        else:
+            info_parts.append("**No agent registry available**")
+            info_parts.append("")
+
+        # Get MCP tool capabilities
+        if self.mcp_service:
+            try:
+                # Get available servers and their tools
+                servers = getattr(self.mcp_service, "servers", {})
+                if servers:
+                    info_parts.append("**Available MCP Tools:**")
+                    for server_id, server_info in servers.items():
+                        capabilities = (
+                            server_info.get("capabilities", [])
+                            if isinstance(server_info, dict)
+                            else []
+                        )
+                        if capabilities:
+                            cap_list = ", ".join(capabilities)
+                            info_parts.append(f"- {server_id}: {cap_list}")
+                    info_parts.append("")
+            except Exception:
+                # If MCP introspection fails, continue without it
+                pass
+
+        # Add dynamic guidance for task mapping based on available capabilities
+        info_parts.append("**Task Mapping Guidelines:**")
+
+        # Collect all unique capabilities
+        all_capabilities = set()
+        capability_examples = {}
+
+        if self.agent_registry:
+            for agent_id, agent in self.agent_registry.items():
+                specialties = (
+                    getattr(agent, "specialization", None)
+                    or getattr(agent, "specialties", None)
+                    or getattr(agent, "capabilities", None)
+                    or []
+                )
+                for capability in specialties:
+                    all_capabilities.add(capability)
+                    if capability not in capability_examples:
+                        capability_examples[capability] = getattr(agent, "name", agent_id)
+
+        # Generate dynamic guidelines based on actual capabilities
+        info_parts.append("- Match task requirements to agent capabilities listed above")
+        info_parts.append("- Consider each agent's description and what they're 'Best for'")
+
+        # Add specific guidance for known capability patterns
+        if "research" in all_capabilities or "web_search" in all_capabilities:
+            info_parts.append(
+                "- Research/info gathering → use capability: "
+                "'research' (NOT 'research-specialist' or 'information-gathering')"
+            )
+
+        if "writing" in all_capabilities or "documentation" in all_capabilities:
+            info_parts.append(
+                "- Content creation/docs → use capability: 'writing' (NOT 'content-creation' or 'documentation')"
+            )
+
+        if "analysis" in all_capabilities or "data_analysis" in all_capabilities:
+            info_parts.append(
+                "- Data analysis → use capability: 'analysis' or 'data_analysis' exactly as shown"
+            )
+
+        # Check for platform capabilities (without hardcoding specific platforms)
+        platform_capabilities = [
+            cap
+            for cap in all_capabilities
+            if cap
+            not in [
+                "research",
+                "writing",
+                "analysis",
+                "coding",
+                "development",
+                "general",
+                "web_search",
+                "documentation",
+                "data_analysis",
+            ]
+        ]
+
+        if platform_capabilities:
+            cap_list = ", ".join(platform_capabilities)
+            info_parts.append(f"- Platform operations (issues, tickets) → use EXACTLY: {cap_list}")
+            info_parts.append(
+                "- DO NOT use 'project-management' or 'issue-tracking' - use the exact capability name shown above"
+            )
+            info_parts.append(
+                "- Platform operations are simple API calls (complexity 1-3), NOT coding tasks"
+            )
+
+        if "coding" in all_capabilities or "development" in all_capabilities:
+            info_parts.append(
+                "- Software development → agents with 'coding'/'development' capabilities"
+            )
+            info_parts.append("- Only use coding agents for actual development, not API operations")
+
+        info_parts.append("")
+
+        return "\n".join(info_parts)
 
     def _parse_llm_decomposition(self, workflow_id: str, request: str, response: str) -> Workflow:
         """
@@ -273,18 +471,42 @@ Provide a clear, structured response that can be parsed into executable tasks.
         try:
             tasks = {}
 
-            # Extract tasks section
+            # Extract tasks section - handle markdown formatting
             tasks_section = re.search(
-                r"TASKS:(.*?)(?=EXECUTION_STRATEGY:|$)", response, re.DOTALL | re.IGNORECASE
+                r"###\s*TASKS:(.*?)(?=###\s*EXECUTION_STRATEGY:|$)",
+                response,
+                re.DOTALL | re.IGNORECASE,
             )
             if not tasks_section:
+                tasks_section = re.search(
+                    r"\*\*TASKS:\*\*(.*?)(?=\*\*EXECUTION_STRATEGY:\*\*|$)",
+                    response,
+                    re.DOTALL | re.IGNORECASE,
+                )
+            if not tasks_section:
+                # Fallback to plain text format
+                tasks_section = re.search(
+                    r"TASKS:(.*?)(?=EXECUTION_STRATEGY:|$)", response, re.DOTALL | re.IGNORECASE
+                )
+            if not tasks_section:
                 # Fallback if structure is different
+                print("⚠️  WARNING: Could not find TASKS section in LLM response")
+                print(f"Response preview: {response[:500]}...")
                 return self._heuristic_decompose_request(workflow_id, request)
 
             tasks_text = tasks_section.group(1)
 
-            # Parse individual tasks
-            task_blocks = re.split(r"Task_ID:", tasks_text)[1:]  # Skip empty first element
+            # Parse individual tasks - handle markdown formatting and numbered lists
+            # Try different patterns to split tasks
+            task_blocks = re.split(r"\d+\.\s*\*\*Task_ID\*\*:\s*", tasks_text)
+            if len(task_blocks) == 1:
+                task_blocks = re.split(r"-\s*\*\*Task_ID\*\*:\s*", tasks_text)
+            if len(task_blocks) == 1:
+                task_blocks = re.split(r"\*\*Task_ID:\*\*", tasks_text)
+            if len(task_blocks) == 1:
+                # Fallback to plain text format
+                task_blocks = re.split(r"Task_ID:\s*", tasks_text)
+            task_blocks = task_blocks[1:]  # Skip empty first element
 
             for block in task_blocks:
                 try:
@@ -298,6 +520,10 @@ Provide a clear, structured response that can be parsed into executable tasks.
 
             if not tasks:
                 # If no tasks parsed, create fallback
+                # print(f"⚠️  WARNING: No tasks parsed from LLM response")
+                # print(f"Task blocks found: {len(task_blocks)}")
+                # if task_blocks:
+                #     print(f"First block preview: {task_blocks[0][:200]}...")
                 return self._heuristic_decompose_request(workflow_id, request)
 
             workflow = Workflow(
@@ -326,10 +552,16 @@ Provide a clear, structured response that can be parsed into executable tasks.
             task_data = {}
 
             for line in lines:
+                # Skip empty lines
+                if not line.strip():
+                    continue
+                # Handle lines with dashes and stars
+                line = line.strip().lstrip("-").strip()
                 if ":" in line:
                     key, value = line.split(":", 1)
-                    key = key.strip().lower().replace(" ", "_")
-                    value = value.strip()
+                    # Clean up markdown formatting from key and value
+                    key = key.strip().lower().replace(" ", "_").replace("*", "")
+                    value = value.strip().replace("*", "").strip()
                     task_data[key] = value
 
             # Extract required fields
@@ -341,6 +573,15 @@ Provide a clear, structured response that can be parsed into executable tasks.
             if capabilities_text.startswith("[") and capabilities_text.endswith("]"):
                 capabilities_text = capabilities_text[1:-1]
             required_capabilities = [cap.strip() for cap in capabilities_text.split(",")]
+
+            # DEBUG: Log capability assignment for troubleshooting platform tasks
+            # if any(platform in str(required_capabilities) for platform in ['linear', 'github', 'jira', 'slack']):
+            #     print(f"\n🎯 DEBUG PLATFORM TASK DECOMPOSITION:")
+            #     print(f"  Task ID: {task_id}")
+            #     print(f"  Task description: {description}")
+            #     print(f"  Raw capabilities text: '{capabilities_text}'")
+            #     print(f"  Parsed capabilities: {required_capabilities}")
+            #     print("  " + "="*60)
 
             # Parse dependencies
             dependencies_text = task_data.get("dependencies", "none")
@@ -478,28 +719,25 @@ Provide a clear, structured response that can be parsed into executable tasks.
             Human-readable plan preview
         """
         try:
-            plan_prompt = f"""
-Convert this technical workflow into a clear, natural plan that a user can easily understand and approve.
+            plan_prompt = (
+                "Convert this technical workflow into a clear plan that a user can easily understand and approve.\n\n"
+                f"Original Request: {original_request}\n\n"
+                f"Technical Workflow:\n"
+                f"{self._workflow_to_text(workflow)}\n\n"
+                "Instructions:\n"
+                "1. Start with \"Here's my proposed approach for your request:\"\n"
+                "2. Explain the workflow steps in logical order\n"
+                "3. Mention which specialists will be involved for each phase\n"
+                "4. IMPORTANT: Preserve the exact task descriptions from the workflow - do NOT reinterpret or rename them\n"  # noqa: E501
+                "5. If a task involves creating issues/tickets on any platform, keep that description - do NOT call it \"Implement Solution\" or \"Development\"\n"  # noqa: E501
+                "6. Explain why this approach makes sense\n"
+                "7. End with \"Does this approach work for you? Should I proceed with this plan?\"\n\n"
+                "Use a direct, professional tone. Accurately represent what each task will do based on its description.\n"  # noqa: E501
+                "Keep it concise but comprehensive.\n\n"
+                "IMPORTANT: Always reply in the same language as the user's original request\n"
+            )
 
-Original Request: {original_request}
-
-Technical Workflow:
-{self._workflow_to_text(workflow)}
-
-Instructions:
-1. Explain the approach in conversational language
-2. Outline the main steps in logical order
-3. Mention which specialists will be involved
-4. Explain why this approach makes sense
-5. Estimate overall timeline
-6. Ask for approval to proceed
-
-Format as a natural conversation from the overlord's perspective.
-Use "I will..." statements and explain the reasoning.
-Keep it concise but comprehensive.
-"""
-
-            plan_preview = await self.llm.generate(plan_prompt, max_tokens=800)
+            plan_preview = await self.llm.generate_text(plan_prompt, max_tokens=800)
             return plan_preview
 
         except Exception as e:
@@ -725,7 +963,6 @@ class ApprovalManager:
     async def present_plan_for_approval(self, workflow: Workflow) -> str:
         """Present plan to user and return formatted message"""
 
-        # Debug: Entry point
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_PLANNING_STARTED,
             level=observability.EventLevel.INFO,
@@ -748,7 +985,6 @@ class ApprovalManager:
 
         workflow.approval_status = ApprovalStatus.AWAITING_APPROVAL
 
-        # Debug: Success
         observability.observe(
             event_type=observability.ConversationEvents.REQUEST_COMPLETED,
             level=observability.EventLevel.INFO,
