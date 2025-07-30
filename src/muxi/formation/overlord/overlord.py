@@ -4087,14 +4087,29 @@ class Overlord:
                                 del self._pending_clarifications[session_id]
                                 self.workflow_manager.remove_pending_approval(workflow_id)
 
-                                # Execute the approved workflow
-                                return await self._execute_workflow(
-                                    workflow=workflow,
-                                    message=original_message or message,
-                                    user_id=user_id,
-                                    session_id=session_id,
-                                    request_id=request_id,
+                                # NEW: Check if execution should be async now that approval is obtained
+                                should_execute_async = await self._should_execute_workflow_async(
+                                    workflow, original_message or message
                                 )
+
+                                if should_execute_async:
+                                    # Execute asynchronously with webhook notification
+                                    return await self._execute_workflow_async(
+                                        workflow=workflow,
+                                        message=original_message or message,
+                                        user_id=user_id,
+                                        session_id=session_id,
+                                        request_id=request_id,
+                                    )
+                                else:
+                                    # Execute synchronously (existing code)
+                                    return await self._execute_workflow(
+                                        workflow=workflow,
+                                        message=original_message or message,
+                                        user_id=user_id,
+                                        session_id=session_id,
+                                        request_id=request_id,
+                                    )
 
                             elif approval_status == ApprovalStatus.REJECTED:
                                 # Clean up pending states
@@ -4480,6 +4495,34 @@ class Overlord:
 
         return result
 
+    async def would_need_workflow_approval(
+        self,
+        message: str,
+        agent_name: Optional[str]
+    ) -> bool:
+        """
+        Quick check if request would need workflow approval.
+
+        This is used by the async decision logic to avoid going async
+        before user approval is obtained.
+        """
+        # No workflow if auto_decomposition disabled or specific agent requested
+        if not self.auto_decomposition or agent_name is not None:
+            return False
+
+        try:
+            # Use existing request analyzer
+            analysis = await self.request_analyzer.analyze_request(message)
+
+            # Would need approval if complex enough for workflow AND approval
+            return (
+                analysis.complexity_score >= self.complexity_threshold and
+                analysis.complexity_score >= self.plan_approval_threshold
+            )
+        except Exception:
+            # If analysis fails, assume no approval needed (safe default)
+            return False
+
     async def _process_with_workflow(
         self,
         message: str,
@@ -4791,6 +4834,216 @@ class Overlord:
         )
 
         return response
+
+    async def _should_execute_workflow_async(
+        self,
+        workflow: Workflow,
+        original_message: str
+    ) -> bool:
+        """
+        Determine if approved workflow should execute asynchronously.
+
+        This re-applies the async decision logic after approval is obtained.
+        """
+        # Get async configuration
+        async_webhook_url = self.formation_config.get("async", {}).get("webhook_url")
+        threshold_seconds = getattr(self, "async_threshold_seconds", 30)
+
+        # Need webhook URL for async execution
+        if not async_webhook_url:
+            return False
+
+        # Need time estimator
+        if not hasattr(self, "time_estimator") or not self.time_estimator:
+            return False
+
+        try:
+            # Re-estimate execution time (workflow execution only, not planning)
+            context = {
+                "workflow_id": workflow.id,
+                "task_count": len(workflow.tasks),
+                "complexity_scores": [task.estimated_complexity for task in workflow.tasks.values()],
+            }
+
+            estimated_time = await self.time_estimator.estimate_processing_time(
+                request=f"Execute workflow: {original_message}",
+                context=context,
+            )
+
+            if estimated_time is None:
+                return False
+
+            should_async = estimated_time > threshold_seconds
+
+            # Log the decision
+            observability.observe(
+                event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "workflow_id": workflow.id,
+                    "estimated_time": estimated_time,
+                    "threshold_seconds": threshold_seconds,
+                    "decision": "async" if should_async else "sync",
+                    "phase": "post_approval_execution",
+                },
+                description=f"Post-approval async decision: {'async' if should_async else 'sync'}",
+            )
+
+            return should_async
+
+        except Exception as e:
+            # Default to sync if estimation fails
+            observability.observe(
+                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e), "workflow_id": workflow.id},
+                description="Post-approval time estimation failed, using sync execution",
+            )
+            return False
+
+    async def _execute_workflow_async(
+        self,
+        workflow: Workflow,
+        message: str,
+        user_id: str,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Execute approved workflow asynchronously with webhook notification.
+        """
+        # Get webhook URL from configuration
+        webhook_url = self.formation_config.get("async", {}).get("webhook_url")
+
+        # Mark request as async for observability
+        if hasattr(self, 'observability_manager'):
+            self.observability_manager.mark_request_async(request_id)
+
+        # Return immediate response
+        response_data = {
+            "request_id": request_id,
+            "status": "processing",
+            "message": (
+                "Your workflow has been approved and is now running in the background. "
+                "I'll notify you when it's complete."
+            ),
+            "workflow_id": workflow.id,
+            "timestamp": datetime.utcnow().isoformat(),
+        }
+
+        # Execute workflow in background
+        asyncio.create_task(self._execute_workflow_background(
+            workflow=workflow,
+            message=message,
+            user_id=user_id,
+            session_id=session_id,
+            request_id=request_id,
+            webhook_url=webhook_url,
+        ))
+
+        return response_data
+
+    async def _execute_workflow_background(
+        self,
+        workflow: Workflow,
+        message: str,
+        user_id: str,
+        session_id: Optional[str],
+        request_id: Optional[str],
+        webhook_url: str,
+    ):
+        """Execute workflow in background and send webhook notification."""
+        try:
+            # Execute the workflow normally
+            result = await self._execute_workflow(
+                workflow=workflow,
+                message=message,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+            )
+
+            # Send success webhook (reuse existing webhook logic if available)
+            await self._send_completion_webhook(
+                webhook_url=webhook_url,
+                request_id=request_id,
+                status="completed",
+                result=result,
+                workflow_id=workflow.id,
+            )
+
+        except Exception as e:
+            # Send error webhook
+            await self._send_completion_webhook(
+                webhook_url=webhook_url,
+                request_id=request_id,
+                status="failed",
+                error=str(e),
+                workflow_id=workflow.id,
+            )
+
+    async def _send_completion_webhook(
+        self,
+        webhook_url: str,
+        request_id: Optional[str],
+        status: str,
+        workflow_id: str,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+    ):
+        """Send webhook notification for completed workflow."""
+        try:
+            import aiohttp
+            from datetime import datetime
+
+            payload = {
+                "request_id": request_id,
+                "workflow_id": workflow_id,
+                "status": status,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+
+            if result:
+                payload["result"] = result
+            if error:
+                payload["error"] = error
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(webhook_url, json=payload) as response:
+                    if response.status != 200:
+                        observability.observe(
+                            event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "webhook_url": webhook_url,
+                                "status_code": response.status,
+                                "request_id": request_id,
+                            },
+                            description=f"Webhook notification failed with status {response.status}",
+                        )
+                    else:
+                        observability.observe(
+                            event_type=observability.ConversationEvents.ASYNC_THRESHOLD_DETECTED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "webhook_url": webhook_url,
+                                "request_id": request_id,
+                                "status": status,
+                            },
+                            description="Webhook notification sent successfully",
+                        )
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.ASYNC_PROCESSING_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "webhook_url": webhook_url,
+                    "error": str(e),
+                    "request_id": request_id,
+                },
+                description=f"Failed to send webhook notification: {str(e)}",
+            )
 
     async def _execute_workflow(
         self,
