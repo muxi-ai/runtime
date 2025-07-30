@@ -19,7 +19,7 @@ from typing import Dict, Any
 
 
 # Configuration from environment or defaults
-SERVER_URL = os.environ.get("API_SERVER_URL", "http://127.0.0.1:3000")
+SERVER_URL = os.environ.get("API_SERVER_URL", "http://127.0.0.1:8271")
 ADMIN_KEY = os.environ.get("ADMIN_API_KEY", None)
 
 
