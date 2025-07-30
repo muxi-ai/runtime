@@ -286,13 +286,13 @@ class FormationServer:
         from fastapi import HTTPException
         from fastapi.responses import JSONResponse
         from .responses import create_error_response
-        
+
         @app.exception_handler(HTTPException)
         async def http_exception_handler(request, exc: HTTPException):
             """Convert HTTPException to proper API envelope format."""
             # Get request ID if available
             request_id = getattr(request.state, "request_id", None)
-            
+
             # Map status codes to error codes
             error_code = "INTERNAL_ERROR"
             if exc.status_code == 400:
@@ -311,14 +311,14 @@ class FormationServer:
                 error_code = "METHOD_NOT_FOUND"
             elif exc.status_code == 503:
                 error_code = "SYSTEM_OVERLOAD"
-            
+
             # Create structured error response
             error_response = create_error_response(
                 error_code=error_code,
                 message=str(exc.detail),
                 request_id=request_id,
             )
-            
+
             return JSONResponse(
                 status_code=exc.status_code,
                 content=error_response.model_dump(),
@@ -333,9 +333,13 @@ class FormationServer:
 
     def _register_health_routes(self, app: FastAPI) -> None:
         """Register health and status endpoints."""
-        from .routes.health import router
+        from .routes.health import router, root_status
+
+        # Register root status endpoint at / without prefix
+        app.add_api_route("/", endpoint=root_status, methods=["GET"], include_in_schema=False)
 
         # Health routes are mounted under /v1 to match OpenAPI spec
+        # This will make the root_status available at /v1/ as well
         app.include_router(router, prefix="/v1", tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:
