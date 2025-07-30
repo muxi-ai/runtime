@@ -20,7 +20,7 @@ from muxi.formation.formation import Formation  # noqa: E402
 
 
 async def main():
-    formation_path = Path(__file__).parent.parent / "test-formations" / "formation-multi-agent"
+    formation_path = Path(__file__).parent.parent / "test-formations" / "formation-api"
     # await formation.load("../../test-formations/formation-knowledge/formation.yaml")
 
     formation = None
