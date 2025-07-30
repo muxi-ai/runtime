@@ -37,6 +37,12 @@ The MUXI Runtime Workflow System provides intelligent task decomposition and mul
    - Status tracking and management
    - Integration with external systems
 
+6. **[Deferred Async Execution](deferred_async_execution.md)** 🆕
+   - Approval-aware async decision logic
+   - Post-approval async re-evaluation
+   - Webhook notifications for background execution
+   - Migration guide and troubleshooting
+
 ## 🚀 Getting Started
 
 If you're new to the MUXI Workflow System, we recommend reading the documentation in this order:
