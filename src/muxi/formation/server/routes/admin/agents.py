@@ -54,11 +54,6 @@ async def list_agents(request: Request) -> JSONResponse:
     # Get agents from formation config
     agents = formation.config.get("agents", [])
 
-    # Add source information
-    for agent in agents:
-        if "source" not in agent:
-            agent["source"] = "yaml"
-
     # Create structured response
     response = agent_list_response(agents, request_id)
     return JSONResponse(content=response.model_dump(), status_code=200)
