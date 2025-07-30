@@ -247,6 +247,7 @@ class FormationLoader:
                 is_active = agent_config.get("active", True)
 
                 if is_active:
+                    agent_config["source"] = "formation"
                     config["agents"].append(agent_config)
                     #  Agent loaded successfully - TODO: add observability
                     #  AGENT_MESSAGE_PROCESSING
@@ -285,6 +286,7 @@ class FormationLoader:
             is_active = agent_config.get("active", True)
 
             if is_active:
+                agent_config["source"] = "formation"
                 filtered_agents.append(agent_config)
                 #  Agent loaded successfully - TODO: add observability
                 #  AGENT_MESSAGE_PROCESSING
@@ -317,6 +319,7 @@ class FormationLoader:
             is_active = server_config.get("active", True)
 
             if is_active:
+                server_config["source"] = "formation"
                 filtered_servers.append(server_config)
                 #  MCP server loaded successfully - TODO: add observability
                 #  MCP_SERVER_CONNECTING
@@ -376,6 +379,7 @@ class FormationLoader:
                 is_active = mcp_config.get("active", True)
 
                 if is_active:
+                    mcp_config["source"] = "formation"
                     config["mcp"]["servers"].append(mcp_config)
                     #  MCP server discovered - TODO: add observability
                     #  MCP_SERVER_CONNECTING

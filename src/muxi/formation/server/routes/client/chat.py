@@ -1,23 +1,22 @@
 """
-Client interaction endpoints.
+Chat interaction endpoints.
 
-These endpoints provide user interaction capabilities,
+These endpoints provide chat functionality for users,
 requiring client API key authentication.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Optional, List, Dict, Any
 import json
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from ....services import observability
+from .....services import observability
 
-router = APIRouter()
+router = APIRouter(tags=["Chat"])
 
 
-# Pydantic models
 class ChatRequest(BaseModel):
     """Model for chat requests."""
 
@@ -31,26 +30,8 @@ class ChatRequest(BaseModel):
     files: Optional[List[Dict[str, Any]]] = None
 
 
-class ChatResponse(BaseModel):
-    """Model for chat responses."""
-
-    request_id: str
-    mode: str
-    content: Optional[str] = None
-    estimated_seconds: Optional[int] = None
-
-
-class MemoryCreate(BaseModel):
-    """Model for creating a memory."""
-
-    content: str
-    metadata: Optional[Dict[str, Any]] = None
-
-
 @router.post("/chat")
-async def chat(
-    request: Request, chat_request: ChatRequest
-) -> StreamingResponse:
+async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse:
     """
     Send a message to the formation and receive a response.
 
@@ -66,7 +47,7 @@ async def chat(
     formation = request.app.state.formation
 
     # Ensure we have an overlord
-    if not hasattr(formation, "_overlord") or not formation._overlord:
+    if not formation.is_overlord_running():
         raise HTTPException(status_code=503, detail="Overlord not available")
 
     # Use user_id from request body
@@ -111,8 +92,8 @@ async def chat(
                 agent_name=chat_request.agent_id,
                 files=chat_request.files,
             ):
-                # Format as SSE
-                data = json.dumps({"token": token, "role": "assistant"})
+                # Format as SSE (removed "role" to save bandwidth as requested)
+                data = json.dumps({"token": token})
                 yield f"data: {data}\n\n"
 
             # Send completion event
@@ -149,116 +130,3 @@ async def chat(
             "Connection": "keep-alive",
         },
     )
-
-
-@router.get("/events/{user_id}")
-async def user_events(request: Request, user_id: str) -> StreamingResponse:
-    """
-    SSE stream for async updates for a specific user.
-
-    Args:
-        user_id: User ID to get events for
-
-    Returns:
-        Server-sent event stream
-    """
-    # TODO: Implement user event streaming
-    raise HTTPException(status_code=501, detail="Event streaming not yet implemented")
-
-
-@router.get("/jobs/{user_id}")
-async def list_user_jobs(request: Request, user_id: str) -> List[Dict[str, Any]]:
-    """
-    List async jobs for a user.
-
-    Args:
-        user_id: User ID to get jobs for
-
-    Returns:
-        List of job details
-    """
-    # formation = request.app.state.formation  # TODO: Use when implementing job tracking
-
-    # TODO: Get jobs from request tracker
-    return []
-
-
-@router.delete("/jobs/{user_id}/{job_id}")
-async def cancel_job(request: Request, user_id: str, job_id: str) -> Dict[str, str]:
-    """
-    Cancel or delete an async job.
-
-    Args:
-        user_id: User ID who owns the job
-        job_id: Job ID to cancel
-
-    Returns:
-        Success message
-    """
-    # TODO: Implement job cancellation
-    raise HTTPException(status_code=501, detail="Job cancellation not yet implemented")
-
-
-@router.get("/memories/{user_id}")
-async def get_user_memories(
-    request: Request, user_id: str, limit: int = 10, offset: int = 0
-) -> List[Dict[str, Any]]:
-    """
-    Get memories for a user.
-
-    Args:
-        user_id: User ID to get memories for
-        limit: Maximum number of memories to return
-        offset: Offset for pagination
-
-    Returns:
-        List of user memories
-    """
-    formation = request.app.state.formation
-
-    # Check if persistent memory is configured
-    if not hasattr(formation, "_long_term_memory") or not formation._long_term_memory:
-        return []
-
-    # TODO: Implement memory retrieval
-    return []
-
-
-@router.post("/memories/{user_id}")
-async def create_user_memory(
-    request: Request, user_id: str, memory: MemoryCreate
-) -> Dict[str, Any]:
-    """
-    Create a memory for a user.
-
-    Args:
-        user_id: User ID to create memory for
-        memory: Memory content and metadata
-
-    Returns:
-        Created memory details
-    """
-    formation = request.app.state.formation
-
-    # Check if persistent memory is configured
-    if not hasattr(formation, "_long_term_memory") or not formation._long_term_memory:
-        raise HTTPException(status_code=503, detail="Persistent memory not configured")
-
-    # TODO: Implement memory creation
-    raise HTTPException(status_code=501, detail="Memory creation not yet implemented")
-
-
-@router.delete("/memories/{user_id}/{memory_id}")
-async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> Dict[str, str]:
-    """
-    Delete a user memory.
-
-    Args:
-        user_id: User ID who owns the memory
-        memory_id: Memory ID to delete
-
-    Returns:
-        Success message
-    """
-    # TODO: Implement memory deletion
-    raise HTTPException(status_code=501, detail="Memory deletion not yet implemented")

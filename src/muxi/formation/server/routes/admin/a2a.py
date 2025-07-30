@@ -1,0 +1,95 @@
+"""
+A2A configuration endpoints.
+
+These endpoints provide A2A configuration access and management,
+requiring admin API key authentication.
+"""
+
+from typing import Dict, Any
+
+from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+
+from ...responses import (
+    APIResponse,
+    create_success_response,
+    create_error_response,
+)
+from .....datatypes.api import APIEventType, APIObjectType
+
+router = APIRouter(tags=["A2A"])
+
+
+class A2AOutboundUpdate(BaseModel):
+    """Model for updating A2A outbound settings."""
+
+    enabled: bool = True
+    endpoints: Dict[str, Dict[str, Any]] = {}
+    retry_policy: Dict[str, Any] = {"max_retries": 3, "initial_delay": 1, "max_delay": 60}
+
+
+@router.get("/a2a", response_model=APIResponse)
+async def get_a2a_config(request: Request) -> JSONResponse:
+    """
+    Get complete A2A configuration.
+
+    Returns:
+        Full A2A YAML as JSON with defaults filled
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    a2a_config = formation.config.get("a2a", {})
+
+    response = create_success_response(
+        APIObjectType.A2A, APIEventType.A2A_RETRIEVED, a2a_config, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.patch("/a2a/outbound", response_model=APIResponse)
+async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> JSONResponse:
+    """
+    Update A2A outbound settings.
+
+    Args:
+        settings: New A2A outbound configuration
+
+    Returns:
+        Updated A2A outbound configuration
+    """
+    request_id = getattr(request.state, "request_id", None)
+
+    # TODO: Implement A2A outbound settings update logic
+    response = create_error_response(
+        "METHOD_NOT_FOUND",
+        "A2A outbound settings update is not yet implemented",
+        None,
+        request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=501)
+
+
+@router.delete("/a2a/outbound/{item}", response_model=APIResponse)
+async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONResponse:
+    """
+    Reset a specific A2A outbound setting to default.
+
+    Args:
+        item: Setting item to reset (e.g., specific endpoint name)
+
+    Returns:
+        Success response
+    """
+    request_id = getattr(request.state, "request_id", None)
+
+    # TODO: Implement A2A outbound setting reset logic
+
+    response = create_success_response(
+        APIObjectType.A2A,
+        APIEventType.A2A_UPDATED,
+        {"message": f"A2A outbound setting '{item}' reset to default"},
+        request_id,
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)

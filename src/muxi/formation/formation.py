@@ -26,12 +26,12 @@
 #   # Cleanup
 #   formation.stop_overlord()    # Graceful shutdown
 #   # formation.kill_overlord()  # Immediate shutdown
-#   formation.stop()             # Full cleanup
+#   formation.shutdown()         # Full cleanup
 #
 # =============================================================================
 
 import asyncio
-from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING, Awaitable
+from typing import Any, Dict, List, Optional, Union, TYPE_CHECKING
 import yaml
 from pathlib import Path
 import os
@@ -2406,18 +2406,26 @@ class Formation:
 
     def shutdown(self, code: int = 0) -> None:
         """
-        Immediately shutdown the formation and exit the process.
+        Immediately shutdown the formation and exit the process (synchronous).
 
         This method performs an IMMEDIATE shutdown:
         - Kills the overlord without waiting for agents to finish
-        - Exits the process immediately
+        - Exits the process immediately with os._exit(code)
         - No graceful cleanup or state saving
+        - Skips Python's cleanup (atexit handlers, etc.)
 
         Use this when:
         - You need to exit RIGHT NOW (emergency shutdown)
         - In synchronous code where you can't use await
         - In error handlers or signal handlers
         - For simple scripts that don't need graceful shutdown
+        - You want a quick exit without cleanup overhead
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues
+        - shutdown(): No cleanup, immediate exit (THIS METHOD)
+        - ashutdown(): Graceful cleanup, then exit
+        - kill(): Emergency abort, immediate exit
 
         For graceful shutdown, use ashutdown() instead.
 
@@ -2445,19 +2453,27 @@ class Formation:
 
     async def ashutdown(self, code: int = 0) -> None:
         """
-        Gracefully shutdown the formation and exit the process.
+        Gracefully shutdown the formation and exit the process (async).
 
         This method performs a GRACEFUL shutdown:
         - Waits for agents to finish their current work (up to 5 seconds)
         - Properly disconnects from MCP servers
         - Saves state and cleans up resources
-        - Then exits the process cleanly
+        - Then exits the process cleanly with os._exit(code)
+        - Best effort: falls back to kill if graceful shutdown fails
 
         Use this when:
         - In production services for controlled shutdown
         - You want agents to complete their current tasks
         - You need to save state or close connections properly
         - In async applications (most modern Python code)
+        - Data integrity is important
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues
+        - shutdown(): No cleanup, immediate exit
+        - ashutdown(): Graceful cleanup, then exit (THIS METHOD)
+        - kill(): Emergency abort, immediate exit
 
         For immediate shutdown without waiting, use shutdown() instead.
 
@@ -2493,9 +2509,84 @@ class Formation:
         # Use os._exit to skip Python cleanup (including async generator cleanup)
         os._exit(code)
 
-    def start_server(
+    def kill(self, code: int = 1) -> None:
+        """
+        IMMEDIATELY KILL EVERYTHING AND EXIT THE PROCESS - NUCLEAR OPTION!
+
+        This is the most aggressive shutdown that:
+        - Kills the overlord instantly (no waiting)
+        - Doesn't bother with ANY cleanup
+        - Skips ALL cleanup procedures
+        - EXITS THE PROCESS IMMEDIATELY with os._exit(code)
+        - Last resort logging attempt before exit
+
+        Use this when:
+        - You need to STOP EVERYTHING NOW
+        - Emergency shutdown is required
+        - Something has gone catastrophically wrong
+        - You don't care about cleanup, you just want OUT
+        - Second Ctrl+C in shutdown scripts
+        - Deadlocks or hanging processes
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues
+        - shutdown(): No cleanup, immediate exit
+        - ashutdown(): Graceful cleanup, then exit
+        - kill(): Emergency abort, immediate exit (THIS METHOD)
+
+        WARNING: This is the most destructive option!
+
+        Args:
+            code: Exit code (default: 1 for error, 0 for success)
+
+        Example:
+            formation = Formation()
+            await formation.load("formation.yaml")
+            await formation.start_overlord()
+
+            # Something goes catastrophically wrong...
+            formation.kill()  # STOP EVERYTHING AND EXIT NOW!
+            # This line will never execute
+        """
+        import sys
+
+        # Try to kill overlord if it exists (don't wait for anything)
+        if self._is_running and self._overlord:
+            try:
+                self._overlord = None
+                self._is_running = False
+            except Exception:
+                pass  # Don't care about errors when killing
+
+        # Log that we're killing everything (if possible)
+        try:
+            observability.observe(
+                event_type=observability.SystemEvents.CLEANUP,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "service": "formation",
+                    "action": "kill",
+                    "formation_id": self.formation_id,
+                    "exit_code": code,
+                },
+                description=f"FORMATION KILLED - EMERGENCY EXIT WITH CODE {code}",
+            )
+        except Exception:
+            pass  # Don't care if logging fails
+
+        # Flush output streams (try to get any final messages out)
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+
+        # EXIT NOW!
+        os._exit(code)
+
+    async def start_server(
         self, host: Optional[str] = None, port: Optional[int] = None, block: bool = True
-    ) -> Union["FormationServer", Awaitable["FormationServer"]]:
+    ) -> "FormationServer":
         """
         Start the Formation API server.
 
@@ -2506,13 +2597,12 @@ class Formation:
         Args:
             host: Override host from formation.yaml (default: use config value)
             port: Override port from formation.yaml (default: use config value)
-            block: Whether to block until server stops (default: True)
-                   If True, this method will block until the server is stopped.
+            block: Whether to block until server starts (default: True)
+                   If True, this method will block until the server is started.
                    If False, returns an awaitable that resolves when startup completes.
 
         Returns:
-            FormationServer: The running server instance (when block=True)
-            Awaitable[FormationServer]: Awaitable server instance (when block=False)
+            FormationServer: The running server instance
 
         Raises:
             RuntimeError: If server configuration is missing or invalid
@@ -2521,7 +2611,7 @@ class Formation:
             # Block mode (typical for standalone server)
             formation = Formation()
             await formation.load("my-formation.yaml")
-            server = formation.start_server()  # Auto-starts overlord, then blocks
+            server = await formation.start_server()  # Auto-starts overlord, then blocks
 
             # Non-blocking mode with proper error handling
             formation = Formation()
@@ -2564,7 +2654,7 @@ class Formation:
                         "action": "replacing_stopped_server",
                         "formation_id": self.formation_id,
                     },
-                    description="Replacing existing stopped server instance"
+                    description="Replacing existing stopped server instance",
                 )
 
         # Import FormationServer here to avoid circular imports
@@ -2609,93 +2699,14 @@ class Formation:
             )
 
             # Auto-start overlord for cleaner API
-            try:
-                # Check if we're in an async context
-                try:
-                    loop = asyncio.get_running_loop()
-                    # We're in an async context, but start_overlord is async
-                    # We need to handle this properly
-                    if loop.is_running():
-                        # Create a task to start overlord
-                        async def start_overlord_task():
-                            await self.start_overlord()
-
-                        # This is tricky - we can't await in a sync context
-                        # For now, raise an error asking user to start overlord first
-                        raise RuntimeError(
-                            "Cannot auto-start overlord in async context. "
-                            "Please call 'await formation.start_overlord()' "
-                            "before start_server()."
-                        )
-                    else:
-                        # Not in running loop, can use asyncio.run
-                        asyncio.run(self.start_overlord())
-                except RuntimeError:
-                    # No event loop, safe to create one
-                    asyncio.run(self.start_overlord())
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.SystemEvents.INITIALIZING,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "service": "formation_api_server",
-                        "formation_id": self.formation_id,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    description=f"Failed to auto-start overlord: {e}",
-                )
-                raise RuntimeError(
-                    f"Failed to auto-start overlord: {e}. "
-                    "Please start the overlord manually with "
-                    "'await formation.start_overlord()'"
-                )
+            await self.start_overlord()
 
         # Start the server
+        # Don't install signal handlers - let the parent process handle them
         if block:
-            # Run in blocking mode using asyncio
-            try:
-                asyncio.run(self._formation_server.start(block=True))
-            except KeyboardInterrupt:
-                observability.observe(
-                    event_type=observability.SystemEvents.CLEANUP,
-                    level=observability.EventLevel.INFO,
-                    data={
-                        "service": "formation_api_server",
-                        "formation_id": self.formation_id,
-                        "shutdown_reason": "user_interrupt",
-                    },
-                    description="Formation API server interrupted by user",
-                )
-            except Exception as e:
-                observability.observe(
-                    event_type=observability.SystemEvents.CLEANUP,
-                    level=observability.EventLevel.ERROR,
-                    data={
-                        "service": "formation_api_server",
-                        "formation_id": self.formation_id,
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    },
-                    description=f"Formation API server error: {e}",
-                )
-                raise
+            await self._formation_server.start(block=True, install_signal_handlers=False)
         else:
-            # Run in non-blocking mode
-            # This requires the server to be started in an existing event loop
-            loop = asyncio.get_event_loop()
-            if not loop.is_running():
-                raise RuntimeError(
-                    "Non-blocking mode requires a running event loop. "
-                    "Either use block=True or run this in an async context."
-                )
-
-            # Return an awaitable that starts the server and returns it
-            async def start_server_async() -> "FormationServer":
-                await self._formation_server.start(block=False)
-                return self._formation_server
-
-            return start_server_async()
+            await self._formation_server.start(block=False, install_signal_handlers=False)
 
         return self._formation_server
 
@@ -2706,18 +2717,71 @@ class Formation:
         Returns:
             bool: True if server exists and is running, False otherwise
         """
-        return (
-            self._formation_server is not None
-            and self._formation_server.is_running
-        )
+        return self._formation_server is not None and self._formation_server.is_running
+
+    def is_overlord_running(self) -> bool:
+        """
+        Check if the Overlord is currently running.
+
+        Returns:
+            bool: True if overlord exists and is running, False otherwise
+        """
+        return self._overlord is not None
+
+    def has_persistent_memory(self) -> bool:
+        """
+        Check if persistent memory is configured and available.
+
+        Returns:
+            bool: True if long-term memory is configured, False otherwise
+        """
+        return hasattr(self, "_long_term_memory") and self._long_term_memory is not None
+
+    def _clear_config_dict(self, config_name: str) -> None:
+        """
+        Helper method to clear a configuration dictionary if it exists and has a clear method.
+
+        Args:
+            config_name: Name of the configuration attribute to clear
+        """
+        if hasattr(self, config_name):
+            config_obj = getattr(self, config_name)
+            if hasattr(config_obj, "clear"):
+                config_obj.clear()
 
     def stop(self) -> None:
         """
-        Stop formation infrastructure and cleanup resources.
+        Stop formation infrastructure and cleanup resources WITHOUT exiting the process.
 
-        Performs final cleanup of formation-level resources including services,
-        configurations, and connections. Call this after stopping the overlord
-        to ensure complete cleanup.
+        This method performs resource cleanup only:
+        - Cancels all active operations
+        - Stops the overlord gracefully (if running)
+        - Stops the API server (if running)
+        - Clears all configurations and service references
+        - Cleans up memory and connections
+        - Your Python script continues running after this
+
+        Use this when:
+        - You want to stop the formation but continue your script
+        - You need to restart the formation with different config
+        - You're testing or debugging and want to clean up without exiting
+        - You want full control over when your process exits
+
+        Compare with other shutdown methods:
+        - stop(): Cleanup only, process continues (THIS METHOD)
+        - shutdown(): No cleanup, immediate exit
+        - ashutdown(): Graceful cleanup, then exit
+        - kill(): Emergency abort, immediate exit
+
+        Example:
+            formation = Formation()
+            await formation.load("formation.yaml")
+            await formation.start_overlord()
+
+            # Use the formation...
+
+            formation.stop()  # Stop formation
+            print("Formation stopped, doing other work...")  # Script continues
         """
         try:
             # Cancel all active operations first
@@ -2773,15 +2837,22 @@ class Formation:
             self._formation_cancellation_token = None
 
             # Clear individual service configurations
-            self._llm_config.clear()
-            self._memory_config.clear()
-            self._mcp_config.clear()
-            self._a2a_config.clear()
-            self._logging_config.clear()
-            self._clarification_config.clear()
-            self._document_processing_config.clear()
-            self._scheduler_config.clear()
-            self._agents_config.clear()
+            config_attributes = [
+                "_llm_config",
+                "_memory_config",
+                "_mcp_config",
+                "_a2a_config",
+                "_logging_config",
+                "_clarification_config",
+                "_scheduler_config",
+                "_agents_config"
+            ]
+            
+            for config_attr in config_attributes:
+                self._clear_config_dict(config_attr)
+            
+            # Document processing config is not a dict, so just set to None
+            self._document_processing_config = None
 
         except Exception as e:
             print(f"❌ Error during formation cleanup: {e}")
@@ -3182,9 +3253,7 @@ class Formation:
             agent_config["source"] = "api"
             self.config["agents"].append(agent_config)
 
-    def update_agent_in_config(
-        self, agent_id: str, updates: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def update_agent_in_config(self, agent_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """
         Safely update an agent in the formation config with thread synchronization.
 
@@ -3232,10 +3301,7 @@ class Formation:
                 raise RuntimeError("Formation config not loaded")
 
             agents = self.config.get("agents", [])
-            agent_idx = next(
-                (i for i, a in enumerate(agents) if a.get("id") == agent_id),
-                None
-            )
+            agent_idx = next((i for i, a in enumerate(agents) if a.get("id") == agent_id), None)
 
             if agent_idx is None:
                 raise ValueError(f"Agent '{agent_id}' not found")
@@ -3244,7 +3310,9 @@ class Formation:
 
             # Check if agent can be removed
             if agent.get("source") != "api":
-                raise ValueError(f"Agent '{agent_id}' was not created via API and cannot be removed")
+                raise ValueError(
+                    f"Agent '{agent_id}' was not created via API and cannot be removed"
+                )
 
             # Remove agent
             agents.pop(agent_idx)

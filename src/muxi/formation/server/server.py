@@ -33,20 +33,14 @@ class FormationServer:
     - Health and status monitoring
     """
 
-    def __init__(
-        self,
-        formation: "Formation",
-        host: str = "0.0.0.0",
-        port: int = 3000,
-        **kwargs
-    ):
+    def __init__(self, formation: "Formation", host: str = "0.0.0.0", port: int = 8271, **kwargs):
         """
         Initialize the Formation server.
 
         Args:
             formation: The Formation instance to serve
             host: Host to bind to (default: 0.0.0.0)
-            port: Port to bind to (default: 3000)
+            port: Port to bind to (default: 8271)
             **kwargs: Additional server configuration
         """
         self.formation = formation
@@ -78,7 +72,7 @@ class FormationServer:
                 "has_client_key": bool(self.client_key),
                 "formation_id": formation.formation_id,
             },
-            description=f"Initializing Formation server on {self.host}:{self.port}"
+            description=f"Initializing Formation server on {self.host}:{self.port}",
         )
 
     @asynccontextmanager
@@ -98,7 +92,7 @@ class FormationServer:
                 "formation_id": self.formation.formation_id,
                 "endpoints_count": len(app.routes),
             },
-            description="Formation server started successfully"
+            description="Formation server started successfully",
         )
 
         # Log server startup
@@ -113,7 +107,7 @@ class FormationServer:
                 "server_url": f"http://{self.host}:{self.port}",
                 "endpoints_count": len(app.routes),
             },
-            description=f"Formation API server started on http://{self.host}:{self.port}"
+            description=f"Formation API server started on http://{self.host}:{self.port}",
         )
 
         # Handle API key display and warnings
@@ -133,14 +127,14 @@ class FormationServer:
                     "admin_key": "••••••••" if "admin" in generated_keys else None,
                     "client_key": "••••••••" if "client" in generated_keys else None,
                 },
-                description="Auto-generated API keys created - NOT recommended for production use"
+                description="Auto-generated API keys created - NOT recommended for production use",
             )
 
             # Still print to console for development visibility
             print(f"\n✅ Formation server started on http://{self.host}:{self.port}")
-            print("\n" + "="*60)
+            print("\n" + "=" * 60)
             print("⚠️  AUTO-GENERATED API KEYS - DEVELOPMENT ONLY")
-            print("="*60)
+            print("=" * 60)
             print("🔒 The following API keys were automatically generated")
             print("   because none were provided in your formation configuration.")
             print()
@@ -149,8 +143,8 @@ class FormationServer:
             print()
             print("   server:")
             print("     api_keys:")
-            print("       admin_key: \"${{ secrets.FORMATION_ADMIN_API_KEY }}\"")
-            print("       client_key: \"${{ secrets.FORMATION_CLIENT_API_KEY }}\"")
+            print('       admin_key: "${{ secrets.FORMATION_ADMIN_API_KEY }}"')
+            print('       client_key: "${{ secrets.FORMATION_CLIENT_API_KEY }}"')
             print()
             print("📋 Generated API Keys:")
 
@@ -158,7 +152,7 @@ class FormationServer:
                 print(f"   Admin API Key:  {generated_keys['admin']}")
             if "client" in generated_keys:
                 print(f"   Client API Key: {generated_keys['client']}")
-            print("="*60)
+            print("=" * 60)
             print()
         else:
             # Log that keys were loaded from configuration
@@ -171,7 +165,7 @@ class FormationServer:
                     "has_admin_key": bool(self.admin_key),
                     "has_client_key": bool(self.client_key),
                 },
-                description="API keys loaded from formation configuration"
+                description="API keys loaded from formation configuration",
             )
 
             # Minimal console output for configured keys
@@ -192,7 +186,7 @@ class FormationServer:
                 "active_connections": len(self._active_connections),
                 "shutdown_timeout": self._shutdown_timeout,
             },
-            description="Formation server shutting down - draining connections"
+            description="Formation server shutting down - draining connections",
         )
 
         # Wait for active connections to complete
@@ -205,12 +199,15 @@ class FormationServer:
                     "active_connections": len(self._active_connections),
                     "action": "draining_connections",
                 },
-                description=f"Waiting for {len(self._active_connections)} active connections to complete"
+                description=f"Waiting for {len(self._active_connections)} active connections to complete",
             )
 
             # Wait for connections to finish with timeout
             start_time = asyncio.get_event_loop().time()
-            while self._active_connections and (asyncio.get_event_loop().time() - start_time) < self._shutdown_timeout:
+            while (
+                self._active_connections
+                and (asyncio.get_event_loop().time() - start_time) < self._shutdown_timeout
+            ):
                 await asyncio.sleep(0.1)
 
             remaining_connections = len(self._active_connections)
@@ -224,7 +221,7 @@ class FormationServer:
                         "timeout_seconds": self._shutdown_timeout,
                         "action": "force_close",
                     },
-                    description=f"Shutdown timeout reached - {remaining_connections} connections still active"
+                    description=f"Shutdown timeout reached - {remaining_connections} connections still active",
                 )
             else:
                 observability.observe(
@@ -235,7 +232,7 @@ class FormationServer:
                         "action": "connections_drained",
                         "drain_time_seconds": asyncio.get_event_loop().time() - start_time,
                     },
-                    description="All connections drained successfully"
+                    description="All connections drained successfully",
                 )
 
     def _create_app(self) -> FastAPI:
@@ -270,7 +267,7 @@ class FormationServer:
             ErrorHandlingMiddleware,
             RequestTrackingMiddleware,
             APILoggingMiddleware,
-            ConnectionTrackingMiddleware
+            ConnectionTrackingMiddleware,
         )
 
         # 2. Connection tracking (for graceful shutdown)
@@ -285,67 +282,132 @@ class FormationServer:
         # 5. API logging (log requests)
         app.add_middleware(APILoggingMiddleware)
 
+        # Add exception handler for HTTPException to ensure proper envelope format
+        from fastapi import HTTPException
+        from fastapi.responses import JSONResponse
+        from .responses import create_error_response
+
+        @app.exception_handler(HTTPException)
+        async def http_exception_handler(request, exc: HTTPException):
+            """Convert HTTPException to proper API envelope format."""
+            # Get request ID if available
+            request_id = getattr(request.state, "request_id", None)
+
+            # Map status codes to error codes
+            error_code = "INTERNAL_ERROR"
+            if exc.status_code == 400:
+                error_code = "INVALID_REQUEST"
+            elif exc.status_code == 401:
+                error_code = "UNAUTHORIZED"
+            elif exc.status_code == 403:
+                error_code = "FORBIDDEN"
+            elif exc.status_code == 404:
+                error_code = "RESOURCE_NOT_FOUND"
+            elif exc.status_code == 422:
+                error_code = "INVALID_PARAMS"
+            elif exc.status_code == 429:
+                error_code = "RATE_LIMITED"
+            elif exc.status_code == 501:
+                error_code = "METHOD_NOT_FOUND"
+            elif exc.status_code == 503:
+                error_code = "SYSTEM_OVERLOAD"
+
+            # Create structured error response
+            error_response = create_error_response(
+                error_code=error_code,
+                message=str(exc.detail),
+                request_id=request_id,
+            )
+
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=error_response.model_dump(),
+            )
+
         # Register routers
         self._register_health_routes(app)
         self._register_admin_routes(app)
         self._register_client_routes(app)
-        self._register_mcp_routes(app)
 
         return app
 
     def _register_health_routes(self, app: FastAPI) -> None:
         """Register health and status endpoints."""
-        from .routes.health import router
-        # Health routes are not versioned for easier monitoring
-        app.include_router(router, tags=["health"])
+        from .routes.health import router, root_status
+
+        # Register root status endpoint at / without prefix
+        app.add_api_route("/", endpoint=root_status, methods=["GET"], include_in_schema=False)
+
+        # Health routes are mounted under /v1 to match OpenAPI spec
+        # This will make the root_status available at /v1/ as well
+        app.include_router(router, prefix="/v1", tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:
         """Register admin management endpoints."""
-        from .routes.admin import router
         from .auth import AdminKeyAuth
         from fastapi import Depends
+
+        # Import all admin route modules
+        from .routes.admin import (
+            agents,
+            secrets,
+            config,
+            overlord,
+            mcp,
+            llm,
+            logging,
+            memory,
+            scheduler,
+            a2a,
+        )
+        from .routes.admin.async_routes import router as async_router
 
         # Create auth dependency
         admin_auth = AdminKeyAuth(self.admin_key)
 
-        app.include_router(
-            router,
-            prefix="/v1/admin",
-            tags=["admin"],
-            dependencies=[Depends(admin_auth)]
-        )
+        # Register all admin routers with auth dependency
+        admin_routers = [
+            agents.router,
+            secrets.router,
+            config.router,
+            overlord.router,
+            mcp.router,
+            llm.router,
+            logging.router,
+            memory.router,
+            async_router,
+            scheduler.router,
+            a2a.router,
+        ]
+
+        for router in admin_routers:
+            app.include_router(router, prefix="/v1", dependencies=[Depends(admin_auth)])
 
     def _register_client_routes(self, app: FastAPI) -> None:
         """Register client interaction endpoints."""
-        from .routes.client import router
         from .auth import ClientKeyAuth
         from fastapi import Depends
+
+        # Import all client route modules
+        from .routes.client import chat, events, jobs, memory
 
         # Create auth dependency
         client_auth = ClientKeyAuth(self.client_key)
 
-        app.include_router(
-            router,
-            prefix="/v1/api",
-            tags=["client"],
-            dependencies=[Depends(client_auth)]
-        )
+        # Register all client routers with auth dependency
+        client_routers = [chat.router, events.router, jobs.router, memory.router]
 
-    def _register_mcp_routes(self, app: FastAPI) -> None:
-        """Register MCP endpoint."""
-        from .routes.mcp import router
-        app.include_router(
-            router,
-            prefix="/v1/mcp",
-            tags=["mcp"]
-        )
+        for router in client_routers:
+            app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])
 
-    async def start(self, block: bool = True) -> None:
+    async def start(self, block: bool = True, install_signal_handlers: bool = True) -> None:
         """
         Start the Formation server.
 
         Args:
             block: Whether to block until server stops (default: True)
+            install_signal_handlers: Whether to install signal handlers (default: True)
+                                   Set to False if parent process handles signals
         """
         if self._server_task and not self._server_task.done():
             raise RuntimeError("Server is already running")
@@ -364,29 +426,10 @@ class FormationServer:
 
         self._server = uvicorn.Server(config)
 
-        # Setup asyncio-safe signal handlers for graceful shutdown
-        def signal_handler(sig_num):
-            observability.observe(
-                event_type=observability.SystemEvents.CLEANUP,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "formation_api_server",
-                    "signal": str(sig_num),
-                    "formation_id": self.formation.formation_id,
-                },
-                description=f"Received signal {sig_num}, initiating graceful shutdown"
-            )
-            self._shutdown_event.set()
-
-        # Use asyncio event loop signal handlers for async safety
-        try:
-            loop = asyncio.get_running_loop()
-            loop.add_signal_handler(signal.SIGINT, signal_handler, signal.SIGINT)
-            loop.add_signal_handler(signal.SIGTERM, signal_handler, signal.SIGTERM)
-        except (NotImplementedError, RuntimeError):
-            # Fallback for platforms that don't support asyncio signal handlers
-            # Use traditional signal handlers with proper async event handling
-            def sync_signal_handler(sig_num, frame):
+        # Only install signal handlers if requested
+        if install_signal_handlers:
+            # Setup asyncio-safe signal handlers for graceful shutdown
+            def signal_handler(sig_num):
                 observability.observe(
                     event_type=observability.SystemEvents.CLEANUP,
                     level=observability.EventLevel.INFO,
@@ -395,17 +438,38 @@ class FormationServer:
                         "signal": str(sig_num),
                         "formation_id": self.formation.formation_id,
                     },
-                    description=f"Received signal {sig_num}, initiating shutdown"
+                    description=f"Received signal {sig_num}, initiating graceful shutdown",
                 )
-                # Schedule the event setting on the event loop
-                try:
-                    loop.call_soon_threadsafe(self._shutdown_event.set)
-                except RuntimeError:
-                    # If event loop is not running, fall back to direct call
-                    asyncio.create_task(self._set_shutdown_event())
+                self._shutdown_event.set()
 
-            signal.signal(signal.SIGINT, sync_signal_handler)
-            signal.signal(signal.SIGTERM, sync_signal_handler)
+            # Use asyncio event loop signal handlers for async safety
+            try:
+                loop = asyncio.get_running_loop()
+                loop.add_signal_handler(signal.SIGINT, signal_handler, signal.SIGINT)
+                loop.add_signal_handler(signal.SIGTERM, signal_handler, signal.SIGTERM)
+            except (NotImplementedError, RuntimeError):
+                # Fallback for platforms that don't support asyncio signal handlers
+                # Use traditional signal handlers with proper async event handling
+                def sync_signal_handler(sig_num, frame):
+                    observability.observe(
+                        event_type=observability.SystemEvents.CLEANUP,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "service": "formation_api_server",
+                            "signal": str(sig_num),
+                            "formation_id": self.formation.formation_id,
+                        },
+                        description=f"Received signal {sig_num}, initiating shutdown",
+                    )
+                    # Schedule the event setting on the event loop
+                    try:
+                        loop.call_soon_threadsafe(self._shutdown_event.set)
+                    except RuntimeError:
+                        # If event loop is not running, set directly
+                        self._shutdown_event.set()
+
+                signal.signal(signal.SIGINT, sync_signal_handler)
+                signal.signal(signal.SIGTERM, sync_signal_handler)
 
         # Start server
         if block:
@@ -426,10 +490,6 @@ class FormationServer:
                 except Exception as e:
                     raise RuntimeError(f"Failed to start server: {e}")
 
-    async def _set_shutdown_event(self) -> None:
-        """Helper method to set shutdown event asynchronously."""
-        self._shutdown_event.set()
-
     async def stop(self) -> None:
         """Stop the Formation server gracefully."""
         if not self._server:
@@ -443,7 +503,7 @@ class FormationServer:
                 "formation_id": self.formation.formation_id,
                 "server_url": f"http://{self.host}:{self.port}",
             },
-            description="Stopping Formation API server"
+            description="Stopping Formation API server",
         )
 
         self._shutdown_event.set()
@@ -465,7 +525,7 @@ class FormationServer:
                         "timeout_seconds": 30,
                         "action": "force_cancel",
                     },
-                    description="Server shutdown timed out after 30 seconds, forcing cancellation"
+                    description="Server shutdown timed out after 30 seconds, forcing cancellation",
                 )
                 self._server_task.cancel()
 
@@ -480,16 +540,13 @@ class FormationServer:
                 "formation_id": self.formation.formation_id,
                 "status": "stopped",
             },
-            description="Formation API server stopped successfully"
+            description="Formation API server stopped successfully",
         )
 
     @property
     def is_running(self) -> bool:
         """Check if the server is currently running."""
-        return (
-            self._server_task is not None
-            and not self._server_task.done()
-        )
+        return self._server_task is not None and not self._server_task.done()
 
     @property
     def url(self) -> str:
