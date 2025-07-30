@@ -27,45 +27,28 @@ overlord:
   persona: |
     You are Fynn, a friendly, helpful, and professional assistant.
 
-  streaming: true # Enable streaming for all synchronous responses
-
   # Routing model configuration
   llm:  # Overlord-specific routing functionality
     model: "openai/gpt-4o-mini" # Model for task management and delegation
-
-  config:
-    # Content is processed intelligently by default:
-    # - Text is extracted from media only when needed for routing
-    # - Full content processing is delegated to specialized agents
     max_extraction_tokens: 500 # Max tokens for media extractions when needed for routing
+    
+  caching:
+    enabled: true  # Whether to cache routing decisions (default: True)
+    ttl: 3600  # Time to live for cached routing decisions
 
-    caching:
-      enabled: true  # Whether to cache routing decisions (default: True)
-      ttl: 3600  # Time to live for cached routing decisions
+  # Response configuration
+  response:
+    format: "markdown" # Default format if not specified (options are markdown, json, text, etc)
+    interactive_elements: true # Enable interactive UI elements like buttons, forms, charts (default: true)
 
-    # Response configuration
-    response:
-      format: "markdown" # Default format if not specified (options are markdown, json, text, etc)
-      interactive_elements: true # Enable interactive UI elements like buttons, forms, charts (default: true)
-
-    # Intelligence configuration (Phase 3 capabilities)
-    learn_user_preference: true # Enable user preference learning (default: true)
-    adaptive_responses: true # Enable adaptive response generation (default: true)
-
-    # Resilience configuration (Phase 4.1 capabilities)
-    circuit_breaker: true # Enable circuit breaker for error recovery (default: true)
-    error_recovery: true # Enable automatic error recovery strategies (default: true)
-
-    # Workflow configuration (Task decomposition and orchestration)
+  # Workflow configuration (Task decomposition and orchestration)
+  workflow:
     auto_decomposition: true # Enable automatic task decomposition (default: true)
     plan_approval_threshold: 10 # Set high to avoid approval prompts during tests
-    
-    # Enhanced workflow configuration
-    workflow:
-      complexity_threshold: 6.0 # Lower threshold to trigger workflows more easily
-      routing_strategy: "capability_based"
-      parallel_execution: true
-      max_parallel_tasks: 5
+    complexity_threshold: 6.0 # Lower threshold to trigger workflows more easily
+    routing_strategy: "capability_based"
+    parallel_execution: true
+    max_parallel_tasks: 5
 
   # Clarification configuration (always enabled for better UX)
   clarification:

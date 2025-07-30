@@ -13,32 +13,31 @@ llm:
         max_tokens: 2000
 
 overlord:
-  streaming: false
-  
   llm:
     model: "openai/gpt-4o-mini"
   
-  config:
-    # Workflow configuration
-    auto_decomposition: false
-    complexity_threshold: 100.0
+  response:
+    streaming: false
     
-    workflow:
-      routing_strategy: "capability_based"
-      parallel_execution: true
-      max_parallel_tasks: 5
-      
-      # Robust retry configuration
-      error_recovery: "retry_with_backoff"
-      retry:
-        max_attempts: 5
-        initial_delay: 2.0
-        backoff_factor: 2.0
-        max_delay: 120.0
-      
-      timeouts:
-        task_timeout: 300
-        workflow_timeout: 1800
+  # Workflow configuration
+  workflow:
+    complexity_threshold: 100.0
+    auto_decomposition: false
+    routing_strategy: "capability_based"
+    parallel_execution: true
+    max_parallel_tasks: 5
+    
+    # Robust retry configuration
+    error_recovery: "retry_with_backoff"
+    retry:
+      max_attempts: 5
+      initial_delay: 2.0
+      backoff_factor: 2.0
+      max_delay: 120.0
+    
+    timeouts:
+      task_timeout: 300
+      workflow_timeout: 1800
 
 memory:
   buffer:

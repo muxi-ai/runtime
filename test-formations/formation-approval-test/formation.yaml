@@ -10,24 +10,23 @@ llm:
     - text: "openai/gpt-4o-mini"
 
 overlord:
-  streaming: false
-  
   llm:
     model: "openai/gpt-4o-mini"
   
-  config:
-    # Workflow configuration with LOW approval threshold
+  response:
+    streaming: false
+    
+  # Workflow configuration with LOW approval threshold    
+  workflow:
     auto_decomposition: true
     plan_approval_threshold: 5  # LOW threshold to trigger approval
+    complexity_threshold: 4.0  # LOW to trigger workflow easily
+    routing_strategy: "capability_based"
     
-    workflow:
-      complexity_threshold: 4.0  # LOW to trigger workflow easily
-      routing_strategy: "capability_based"
-      
-      retry:
-        max_attempts: 3
-        initial_delay: 1.0
-        backoff_factor: 2.0
+    retry:
+      max_attempts: 3
+      initial_delay: 1.0
+      backoff_factor: 2.0
 
 memory:
   buffer:

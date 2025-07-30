@@ -12,5 +12,5 @@ system_message: |
 role: "specialist"
 specialties:
   - "linear"
-  - "project management"
+  - "project-management"
 

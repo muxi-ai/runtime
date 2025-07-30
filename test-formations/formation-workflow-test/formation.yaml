@@ -25,30 +25,27 @@ memory:
     multiplier: 5
 
 overlord:
-  config:
+  workflow:
     auto_decomposition: true
-    complexity_threshold: 7.0
     plan_approval_threshold: 10  # Higher to avoid approval prompts
+    complexity_method: "heuristic"
+    complexity_threshold: 7.0
+    routing_strategy: "capability_based"
+    error_recovery: "retry_with_backoff"
     
-    workflow:
-      complexity_method: "heuristic"
-      complexity_threshold: 7.0
-      routing_strategy: "capability_based"
-      error_recovery: "retry_with_backoff"
-      
-      retry:
-        max_attempts: 2  # Fewer retries for faster tests
-        initial_delay: 1.0
-        max_delay: 5.0
-        backoff_factor: 2.0
-      
-      timeouts:
-        task_timeout: 60  # Shorter timeout for tests
-        workflow_timeout: 180
-        enable_adaptive_timeout: false  # Disable for consistency
-      
-      parallel_execution: false  # Sequential for consistency
-      max_parallel_tasks: 1
+    retry:
+      max_attempts: 2  # Fewer retries for faster tests
+      initial_delay: 1.0
+      max_delay: 5.0
+      backoff_factor: 2.0
+    
+    timeouts:
+      task_timeout: 60  # Shorter timeout for tests
+      workflow_timeout: 180
+      enable_adaptive_timeout: false  # Disable for consistency
+    
+    parallel_execution: false  # Sequential for consistency
+    max_parallel_tasks: 1
 
 # Minimal MCP configuration for testing
 mcp:
