@@ -92,7 +92,7 @@ async def main():
     # First test if server is reachable
     async with httpx.AsyncClient(timeout=httpx.Timeout(10.0)) as client:
         try:
-            response = await client.get(f"{SERVER_URL}/health")
+            response = await client.get(f"{SERVER_URL}/v1/health")
             if response.status_code != 200:
                 print(f"✗ Server health check failed: {response.status_code}")
                 return
