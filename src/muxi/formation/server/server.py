@@ -461,8 +461,8 @@ class FormationServer:
                     try:
                         loop.call_soon_threadsafe(self._shutdown_event.set)
                     except RuntimeError:
-                        # If event loop is not running, fall back to direct call
-                        asyncio.create_task(self._set_shutdown_event())
+                        # If event loop is not running, set directly
+                        self._shutdown_event.set()
 
                 signal.signal(signal.SIGINT, sync_signal_handler)
                 signal.signal(signal.SIGTERM, sync_signal_handler)
@@ -485,10 +485,6 @@ class FormationServer:
                     await self._server_task
                 except Exception as e:
                     raise RuntimeError(f"Failed to start server: {e}")
-
-    async def _set_shutdown_event(self) -> None:
-        """Helper method to set shutdown event asynchronously."""
-        self._shutdown_event.set()
 
     async def stop(self) -> None:
         """Stop the Formation server gracefully."""

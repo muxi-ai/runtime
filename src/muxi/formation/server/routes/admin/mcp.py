@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Dict, Any, Optional, List
+import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -172,19 +173,40 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
     Returns:
         Created MCP server configuration
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Implement MCP server creation logic
-    # Generate server ID and add to configuration
+    # Get existing servers to check for duplicates
+    existing_servers = formation.config.get("mcp", {}).get("servers", [])
+    
+    # Check if a server with the same name already exists
+    if any(s.get("name") == server.name for s in existing_servers):
+        response = create_error_response(
+            "DUPLICATE_RESOURCE",
+            f"MCP server with name '{server.name}' already exists",
+            None,
+            request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=409)
+    
+    # Generate unique ID using UUID
+    server_id = f"mcp-server-{uuid.uuid4().hex[:8]}"
+    
+    # Ensure the generated ID is unique (very unlikely to collide with 8 hex chars)
+    while any(s.get("id") == server_id for s in existing_servers):
+        server_id = f"mcp-server-{uuid.uuid4().hex[:8]}"
 
     server_config = {
-        "id": f"mcp-server-{server.name}",
+        "id": server_id,
         "name": server.name,
         "command": server.command,
         "args": server.args,
         "env": server.env,
         "enabled": server.enabled,
     }
+    
+    # TODO: Add server to formation configuration
+    # For now, this just returns the created config without persisting
 
     response = create_success_response(
         APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_CREATED, server_config, request_id
@@ -359,11 +381,39 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
         )
         return JSONResponse(content=response.model_dump(), status_code=200)
 
-    except Exception as e:
-        # TODO: Add observability event for MCP tool error
-
+    except ValueError as e:
+        # Handle expected validation errors with specific messages
+        # TODO: Add observability event for MCP tool validation error
         response = create_error_response(
-            "TOOL_EXECUTION_ERROR", f"Tool execution failed: {str(e)}", None, request_id
+            "INVALID_PARAMS", str(e), None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+    
+    except AttributeError as e:
+        # Handle missing attributes/methods (e.g., formation components not available)
+        # TODO: Add observability event for MCP tool configuration error
+        response = create_error_response(
+            "TOOL_EXECUTION_ERROR", "Tool configuration error: required component not available", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+    
+    except KeyError as e:
+        # Handle missing required arguments
+        # TODO: Add observability event for MCP tool argument error
+        response = create_error_response(
+            "INVALID_PARAMS", f"Missing required argument: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+    
+    except Exception as e:
+        # Handle unexpected errors without exposing internal details
+        # TODO: Add observability event for MCP tool unexpected error with full details
+        # Log the actual error internally but return generic message to client
+        import traceback
+        error_details = traceback.format_exc()  # This would be logged internally
+        
+        response = create_error_response(
+            "TOOL_EXECUTION_ERROR", "An unexpected error occurred during tool execution", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
 
@@ -424,14 +474,13 @@ async def _handle_list_agents(formation, **kwargs):
 
 async def _handle_update_agent(formation, agent_id: str, updates: Dict[str, Any], **kwargs):
     """Update agent handler."""
-    agents = formation.config.get("agents", [])
-    agent = next((a for a in agents if a.get("id") == agent_id), None)
-
-    if not agent:
-        raise ValueError(f"Agent '{agent_id}' not found")
-
-    agent.update(updates)
-    return agent
+    # Use formation's thread-safe update method to persist changes
+    try:
+        updated_agent = formation.update_agent_in_config(agent_id, updates)
+        return updated_agent
+    except ValueError as e:
+        # Re-raise with consistent error message
+        raise ValueError(f"Agent '{agent_id}' not found") from e
 
 
 async def _handle_manage_secrets(formation, action: str, key: str, value: str = None, **kwargs):

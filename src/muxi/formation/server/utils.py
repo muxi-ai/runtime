@@ -17,11 +17,8 @@ def get_header_case_insensitive(headers: Headers, header_name: str) -> Optional[
     Returns:
         The header value if found, None otherwise
     """
-    header_name_lower = header_name.lower()
-    for name, value in headers.items():
-        if name.lower() == header_name_lower:
-            return value
-    return None
+    # Starlette Headers class already handles case-insensitive lookups
+    return headers.get(header_name)
 
 
 def has_header_case_insensitive(headers: Headers, header_name: str) -> bool:

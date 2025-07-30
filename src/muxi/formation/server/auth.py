@@ -46,22 +46,18 @@ class AdminKeyAuth:
                 status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Admin API key not configured"
             )
 
-        # Look for the header case-insensitively
-        api_key = None
-        for header_name, header_value in request.headers.items():
-            if header_name.lower() == "x-muxi-admin-key":
-                api_key = header_value
-                break
+        # FastAPI request.headers supports case-insensitive lookups
+        api_key = request.headers.get("x-muxi-admin-key")
 
         if not api_key:
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, 
+                status_code=HTTP_403_FORBIDDEN,
                 detail="A valid admin API key is required. Please provide the 'X-Muxi-Admin-Key' header."
             )
 
         if not secrets.compare_digest(api_key, self.admin_key):
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, 
+                status_code=HTTP_403_FORBIDDEN,
                 detail="Invalid admin API key. Please check your 'X-Muxi-Admin-Key' header value."
             )
 
@@ -103,22 +99,18 @@ class ClientKeyAuth:
                 status_code=HTTP_500_INTERNAL_SERVER_ERROR, detail="Client API key not configured"
             )
 
-        # Look for the header case-insensitively
-        api_key = None
-        for header_name, header_value in request.headers.items():
-            if header_name.lower() == "x-muxi-client-key":
-                api_key = header_value
-                break
+        # FastAPI request.headers supports case-insensitive lookups
+        api_key = request.headers.get("x-muxi-client-key")
 
         if not api_key:
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, 
+                status_code=HTTP_403_FORBIDDEN,
                 detail="A valid client API key is required. Please provide the 'X-Muxi-Client-Key' header."
             )
 
         if not secrets.compare_digest(api_key, self.client_key):
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, 
+                status_code=HTTP_403_FORBIDDEN,
                 detail="Invalid client API key. Please check your 'X-Muxi-Client-Key' header value."
             )
 

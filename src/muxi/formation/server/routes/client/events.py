@@ -21,6 +21,9 @@ async def user_events(request: Request, user_id: str) -> StreamingResponse:
 
     Returns:
         Server-sent event stream
+        
+    Note:
+        Client API key authentication is enforced at the router level
     """
     # TODO: Implement user event streaming
     raise HTTPException(status_code=501, detail="Event streaming not yet implemented")

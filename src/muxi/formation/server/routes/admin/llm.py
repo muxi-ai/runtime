@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from ...responses import (
     APIResponse,
     create_success_response,
+    create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
 
@@ -81,10 +82,30 @@ async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
     Returns:
         Success response
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
+    # Define valid LLM settings that can be reset
+    VALID_LLM_SETTINGS = {"temperature", "max_tokens", "timeout_seconds"}
+
+    # Validate the item parameter
+    if item not in VALID_LLM_SETTINGS:
+        response = create_error_response(
+            "INVALID_PARAMS",
+            f"Invalid LLM setting '{item}'. Valid settings are: {', '.join(sorted(VALID_LLM_SETTINGS))}",
+            None,
+            request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
     # TODO: Implement LLM setting reset logic
-    # Check if setting exists and reset to default
+    # For now, just update the configuration to remove the setting
+    llm_config = formation.config.get("llm", {})
+    settings = llm_config.get("settings", {})
+
+    if item in settings:
+        del settings[item]
+        # Note: This only updates the in-memory config, not persisted
 
     response = create_success_response(
         APIObjectType.LLM,

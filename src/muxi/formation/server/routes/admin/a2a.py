@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from ...responses import (
     APIResponse,
     create_success_response,
+    create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
 
@@ -61,20 +62,13 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     request_id = getattr(request.state, "request_id", None)
 
     # TODO: Implement A2A outbound settings update logic
-
-    outbound_config = {
-        "enabled": settings.enabled,
-        "endpoints": settings.endpoints,
-        "retry_policy": settings.retry_policy,
-    }
-
-    response = create_success_response(
-        APIObjectType.A2A,
-        APIEventType.A2A_UPDATED,
-        outbound_config,
-        request_id,
+    response = create_error_response(
+        "METHOD_NOT_FOUND",
+        "A2A outbound settings update is not yet implemented",
+        None,
+        request_id
     )
-    return JSONResponse(content=response.model_dump(), status_code=200)
+    return JSONResponse(content=response.model_dump(), status_code=501)
 
 
 @router.delete("/a2a/outbound/{item}", response_model=APIResponse)

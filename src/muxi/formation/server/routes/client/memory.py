@@ -7,7 +7,7 @@ requiring client API key authentication.
 
 from typing import Dict, Any, Optional
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
@@ -29,7 +29,10 @@ class MemoryCreate(BaseModel):
 
 @router.get("/memories/{user_id}", response_model=APIResponse)
 async def get_user_memories(
-    request: Request, user_id: str, limit: int = 10, offset: int = 0
+    request: Request, 
+    user_id: str, 
+    limit: int = Query(10, ge=1, le=100, description="Maximum number of memories to return"),
+    offset: int = Query(0, ge=0, description="Offset for pagination")
 ) -> JSONResponse:
     """
     Get memories for a user.
@@ -46,7 +49,7 @@ async def get_user_memories(
     request_id = getattr(request.state, "request_id", None)
 
     # Check if persistent memory is configured
-    if not hasattr(formation, "_long_term_memory") or not formation._long_term_memory:
+    if not formation.has_persistent_memory():
         response = memory_list_response([], request_id)
         return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -71,7 +74,7 @@ async def create_user_memory(request: Request, user_id: str, memory: MemoryCreat
     request_id = getattr(request.state, "request_id", None)
 
     # Check if persistent memory is configured
-    if not hasattr(formation, "_long_term_memory") or not formation._long_term_memory:
+    if not formation.has_persistent_memory():
         response = create_error_response(
             "SERVICE_UNAVAILABLE", "Persistent memory not configured", None, request_id
         )
@@ -96,7 +99,15 @@ async def delete_user_memory(request: Request, user_id: str, memory_id: str) -> 
     Returns:
         Success response
     """
+    formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
+
+    # Check if persistent memory is configured
+    if not formation.has_persistent_memory():
+        response = create_error_response(
+            "SERVICE_UNAVAILABLE", "Persistent memory not configured", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=503)
 
     # TODO: Implement memory deletion
     response = create_error_response(

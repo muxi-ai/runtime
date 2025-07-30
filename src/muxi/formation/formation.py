@@ -2517,7 +2517,7 @@ class Formation:
         - Kills the overlord instantly (no waiting)
         - Doesn't bother with ANY cleanup
         - Skips ALL cleanup procedures
-        - EXITS THE PROCESS IMMEDIATELY with sys.exit(code)
+        - EXITS THE PROCESS IMMEDIATELY with os._exit(code)
         - Last resort logging attempt before exit
 
         Use this when:
@@ -2582,7 +2582,7 @@ class Formation:
             pass
 
         # EXIT NOW!
-        sys.exit(code)
+        os._exit(code)
 
     async def start_server(
         self, host: Optional[str] = None, port: Optional[int] = None, block: bool = True
@@ -2728,6 +2728,27 @@ class Formation:
         """
         return self._overlord is not None
 
+    def has_persistent_memory(self) -> bool:
+        """
+        Check if persistent memory is configured and available.
+
+        Returns:
+            bool: True if long-term memory is configured, False otherwise
+        """
+        return hasattr(self, "_long_term_memory") and self._long_term_memory is not None
+
+    def _clear_config_dict(self, config_name: str) -> None:
+        """
+        Helper method to clear a configuration dictionary if it exists and has a clear method.
+
+        Args:
+            config_name: Name of the configuration attribute to clear
+        """
+        if hasattr(self, config_name):
+            config_obj = getattr(self, config_name)
+            if hasattr(config_obj, "clear"):
+                config_obj.clear()
+
     def stop(self) -> None:
         """
         Stop formation infrastructure and cleanup resources WITHOUT exiting the process.
@@ -2816,24 +2837,22 @@ class Formation:
             self._formation_cancellation_token = None
 
             # Clear individual service configurations
-            if hasattr(self._llm_config, "clear"):
-                self._llm_config.clear()
-            if hasattr(self._memory_config, "clear"):
-                self._memory_config.clear()
-            if hasattr(self._mcp_config, "clear"):
-                self._mcp_config.clear()
-            if hasattr(self._a2a_config, "clear"):
-                self._a2a_config.clear()
-            if hasattr(self._logging_config, "clear"):
-                self._logging_config.clear()
-            if hasattr(self._clarification_config, "clear"):
-                self._clarification_config.clear()
+            config_attributes = [
+                "_llm_config",
+                "_memory_config",
+                "_mcp_config",
+                "_a2a_config",
+                "_logging_config",
+                "_clarification_config",
+                "_scheduler_config",
+                "_agents_config"
+            ]
+            
+            for config_attr in config_attributes:
+                self._clear_config_dict(config_attr)
+            
             # Document processing config is not a dict, so just set to None
             self._document_processing_config = None
-            if hasattr(self._scheduler_config, "clear"):
-                self._scheduler_config.clear()
-            if hasattr(self._agents_config, "clear"):
-                self._agents_config.clear()
 
         except Exception as e:
             print(f"❌ Error during formation cleanup: {e}")

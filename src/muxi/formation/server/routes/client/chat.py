@@ -47,7 +47,7 @@ async def chat(request: Request, chat_request: ChatRequest) -> StreamingResponse
     formation = request.app.state.formation
 
     # Ensure we have an overlord
-    if not hasattr(formation, "_overlord") or not formation._overlord:
+    if not formation.is_overlord_running():
         raise HTTPException(status_code=503, detail="Overlord not available")
 
     # Use user_id from request body

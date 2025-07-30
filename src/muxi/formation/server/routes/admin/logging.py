@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from ...responses import (
     APIResponse,
     create_success_response,
+    create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
 
@@ -64,8 +65,21 @@ async def update_logging_stream(
     """
     request_id = getattr(request.state, "request_id", None)
 
+    # Define valid logging stream names
+    VALID_LOGGING_STREAMS = {"console", "file", "syslog"}
+    
+    # Validate the stream name
+    if name not in VALID_LOGGING_STREAMS:
+        response = create_error_response(
+            "INVALID_PARAMS",
+            f"Invalid logging stream '{name}'. Valid streams are: {', '.join(sorted(VALID_LOGGING_STREAMS))}",
+            None,
+            request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
     # TODO: Implement logging stream update logic
-    # Validate stream name and update configuration
+    # Update configuration for the validated stream
 
     stream_config = {
         "name": name,
