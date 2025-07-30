@@ -245,6 +245,18 @@ if complexity_score >= plan_approval_threshold:
         return approval.response
 ```
 
+#### Approval-Aware Async Execution 🆕
+
+The workflow system now features approval-aware async decision logic that ensures approval flows remain synchronous:
+
+- **Automatic Sync for Approvals**: When a workflow requires approval, async execution is automatically disabled
+- **Post-Approval Re-evaluation**: After approval, the system re-evaluates if execution should be async
+- **Webhook Notifications**: Background workflows send completion notifications via webhooks
+
+This elegant solution prevents approval flows from being disrupted by async execution while still allowing performance benefits when appropriate.
+
+See [Deferred Async Execution](deferred_async_execution.md) for detailed implementation and configuration.
+
 ### 4. Parallel Task Execution
 
 Tasks without dependencies can execute in parallel:
