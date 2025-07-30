@@ -44,7 +44,7 @@ async def get_async_config(request: Request) -> JSONResponse:
     async_config = formation.config.get("async", {})
 
     response = create_success_response(
-        APIObjectType("async"), APIEventType("async.retrieved"), async_config, request_id
+        APIObjectType.ASYNC, APIEventType.ASYNC_RETRIEVED, async_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -72,7 +72,7 @@ async def update_async_settings(request: Request, settings: AsyncSettingsUpdate)
     }
 
     response = create_success_response(
-        APIObjectType("async"), APIEventType("async.updated"), async_config, request_id
+        APIObjectType.ASYNC, APIEventType.ASYNC_UPDATED, async_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 

@@ -107,7 +107,7 @@ async def get_mcp_config(request: Request) -> JSONResponse:
     mcp_config = formation.config.get("mcp", {})
 
     response = create_success_response(
-        APIObjectType("mcp"), APIEventType("mcp.retrieved"), mcp_config, request_id
+        APIObjectType.MCP, APIEventType.MCP_RETRIEVED, mcp_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -134,7 +134,7 @@ async def update_mcp_defaults(request: Request, defaults: MCPDefaultsUpdate) -> 
     }
 
     response = create_success_response(
-        APIObjectType("mcp"), APIEventType("mcp.updated"), {"defaults": mcp_defaults}, request_id
+        APIObjectType.MCP, APIEventType.MCP_UPDATED, {"defaults": mcp_defaults}, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -153,8 +153,8 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
     servers = formation.config.get("mcp", {}).get("servers", [])
 
     response = create_success_response(
-        APIObjectType("mcp_server_list"),
-        APIEventType("mcp_server.list"),
+        APIObjectType.MCP_SERVER_LIST,
+        APIEventType.MCP_SERVER_LIST,
         {"servers": servers, "count": len(servers)},
         request_id,
     )
@@ -187,7 +187,7 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
     }
 
     response = create_success_response(
-        APIObjectType("mcp_server"), APIEventType("mcp_server.created"), server_config, request_id
+        APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_CREATED, server_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=201)
 
@@ -217,7 +217,7 @@ async def get_mcp_server(request: Request, server_id: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=404)
 
     response = create_success_response(
-        APIObjectType("mcp_server"), APIEventType("mcp_server.retrieved"), server, request_id
+        APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_RETRIEVED, server, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -247,7 +247,7 @@ async def update_mcp_server(
     server_config = {"id": server_id, **update_data}
 
     response = create_success_response(
-        APIObjectType("mcp_server"), APIEventType("mcp_server.updated"), server_config, request_id
+        APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_UPDATED, server_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -269,8 +269,8 @@ async def delete_mcp_server(request: Request, server_id: str) -> JSONResponse:
     # Find and remove server from configuration
 
     response = create_success_response(
-        APIObjectType("mcp_server"),
-        APIEventType("mcp_server.deleted"),
+        APIObjectType.MCP_SERVER,
+        APIEventType.MCP_SERVER_DELETED,
         {"message": f"MCP server '{server_id}' deleted successfully"},
         request_id,
     )
@@ -303,8 +303,8 @@ async def list_mcp_tools(request: Request) -> JSONResponse:
         )
 
     response = create_success_response(
-        APIObjectType("mcp_tool_list"),
-        APIEventType("mcp_tool.list"),
+        APIObjectType.MCP_TOOL_LIST,
+        APIEventType.MCP_TOOL_LIST,
         {"tools": available_tools, "count": len(available_tools)},
         request_id,
     )
@@ -352,8 +352,8 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
         # TODO: Add observability event for MCP tool called
 
         response = create_success_response(
-            APIObjectType("mcp_tool_result"),
-            APIEventType("mcp_tool.executed"),
+            APIObjectType.MCP_TOOL_RESULT,
+            APIEventType.MCP_TOOL_EXECUTED,
             {"tool": tool_call.tool, "result": result},
             request_id,
         )

@@ -33,8 +33,8 @@ async def get_config_navigation(request: Request) -> JSONResponse:
         "agents": {"total": len(formation.config.get("agents", [])), "resource": "/v1/agents"},
         "secrets": {
             "total": (
-                len(getattr(formation.secrets_manager, "list_secrets", lambda: {})())
-                if hasattr(formation, "secrets_manager")
+                len(await formation.secrets_manager.list_secrets())
+                if hasattr(formation, "secrets_manager") and formation.secrets_manager
                 else 0
             ),
             "resource": "/v1/secrets",
@@ -53,7 +53,7 @@ async def get_config_navigation(request: Request) -> JSONResponse:
     }
 
     response = create_success_response(
-        APIObjectType("navigation"), APIEventType("config.retrieved"), navigation, request_id
+        APIObjectType.CONFIG, APIEventType.CONFIG_RETRIEVED, navigation, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -76,7 +76,7 @@ async def get_formation_config(request: Request) -> JSONResponse:
     # TODO: Implement secret masking logic
 
     response = create_success_response(
-        APIObjectType("formation"), APIEventType("formation.retrieved"), config, request_id
+        APIObjectType.CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -113,6 +113,6 @@ async def get_formation_status(request: Request) -> JSONResponse:
     }
 
     response = create_success_response(
-        APIObjectType("status"), APIEventType("status.retrieved"), status, request_id
+        APIObjectType.STATUS, APIEventType.STATUS_RETRIEVED, status, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

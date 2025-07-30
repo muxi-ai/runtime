@@ -26,7 +26,7 @@ class LLMSettingsUpdate(BaseModel):
     settings: Dict[str, Any]
 
 
-@router.get("/llm", response_model=APIResponse)
+@router.get("/llm/settings", response_model=APIResponse)
 async def get_llm_config(request: Request) -> JSONResponse:
     """
     Get complete LLM configuration.
@@ -40,7 +40,7 @@ async def get_llm_config(request: Request) -> JSONResponse:
     llm_config = formation.config.get("llm", {})
 
     response = create_success_response(
-        APIObjectType("llm"), APIEventType("llm.retrieved"), llm_config, request_id
+        APIObjectType.LLM, APIEventType.LLM_RETRIEVED, llm_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -62,8 +62,8 @@ async def update_llm_settings(request: Request, settings: LLMSettingsUpdate) -> 
     # For now, just return success with the provided settings
 
     response = create_success_response(
-        APIObjectType("llm"),
-        APIEventType("llm.updated"),
+        APIObjectType.LLM,
+        APIEventType.LLM_UPDATED,
         {"settings": settings.settings},
         request_id,
     )
@@ -87,8 +87,8 @@ async def reset_llm_setting(request: Request, item: str) -> JSONResponse:
     # Check if setting exists and reset to default
 
     response = create_success_response(
-        APIObjectType("llm"),
-        APIEventType("llm.reset"),
+        APIObjectType.LLM,
+        APIEventType.LLM_RESET,
         {"message": f"LLM setting '{item}' reset to default"},
         request_id,
     )

@@ -42,8 +42,8 @@ async def get_scheduler_config(request: Request) -> JSONResponse:
     scheduler_config = formation.config.get("scheduler", {})
 
     response = create_success_response(
-        APIObjectType("scheduler"),
-        APIEventType("scheduler.retrieved"),
+        APIObjectType.SCHEDULER,
+        APIEventType.SCHEDULER_RETRIEVED,
         scheduler_config,
         request_id,
     )
@@ -68,7 +68,7 @@ async def update_scheduler(request: Request, config: SchedulerUpdate) -> JSONRes
     scheduler_config = {"enabled": config.enabled, "timezone": config.timezone, "jobs": config.jobs}
 
     response = create_success_response(
-        APIObjectType("scheduler"), APIEventType("scheduler.updated"), scheduler_config, request_id
+        APIObjectType.SCHEDULER, APIEventType.SCHEDULER_UPDATED, scheduler_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -90,8 +90,8 @@ async def remove_scheduled_job(request: Request, job_id: str) -> JSONResponse:
     # Check if job exists and remove it
 
     response = create_success_response(
-        APIObjectType("scheduler"),
-        APIEventType("scheduler_job.deleted"),
+        APIObjectType.SCHEDULER,
+        APIEventType.SCHEDULER_UPDATED,
         {"message": f"Scheduled job '{job_id}' removed successfully"},
         request_id,
     )

@@ -42,7 +42,7 @@ async def get_a2a_config(request: Request) -> JSONResponse:
     a2a_config = formation.config.get("a2a", {})
 
     response = create_success_response(
-        APIObjectType("a2a"), APIEventType("a2a.retrieved"), a2a_config, request_id
+        APIObjectType.A2A, APIEventType.A2A_RETRIEVED, a2a_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -69,8 +69,8 @@ async def update_a2a_outbound(request: Request, settings: A2AOutboundUpdate) -> 
     }
 
     response = create_success_response(
-        APIObjectType("a2a_outbound"),
-        APIEventType("a2a_outbound.updated"),
+        APIObjectType.A2A,
+        APIEventType.A2A_UPDATED,
         outbound_config,
         request_id,
     )
@@ -93,8 +93,8 @@ async def reset_a2a_outbound_setting(request: Request, item: str) -> JSONRespons
     # TODO: Implement A2A outbound setting reset logic
 
     response = create_success_response(
-        APIObjectType("a2a_outbound"),
-        APIEventType("a2a_outbound.reset"),
+        APIObjectType.A2A,
+        APIEventType.A2A_UPDATED,
         {"message": f"A2A outbound setting '{item}' reset to default"},
         request_id,
     )

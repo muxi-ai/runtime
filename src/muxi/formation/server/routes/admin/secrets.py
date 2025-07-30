@@ -47,11 +47,18 @@ async def list_secrets(request: Request) -> JSONResponse:
     if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
         masked_secrets = {}
     else:
-        # Get all secret keys
-        secrets = formation.secrets_manager.list_secrets()
+        try:
+            # Get all secret names (async call)
+            secret_names = await formation.secrets_manager.list_secrets()
 
-        # Mask values with consistent pattern (no length disclosure)
-        masked_secrets = {key: "••••••••" for key, value in secrets.items()}
+            # Mask values with consistent pattern (no length disclosure)
+            masked_secrets = {name: "••••••••" for name in secret_names}
+        except Exception as e:
+            # Handle secrets manager errors gracefully
+            response = create_error_response(
+                "SECRETS_ERROR", f"Error retrieving secrets: {str(e)}", None, request_id
+            )
+            return JSONResponse(content=response.model_dump(), status_code=500)
 
     # Create structured response
     response = secret_list_response({"secrets": masked_secrets}, request_id)

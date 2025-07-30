@@ -55,11 +55,15 @@ class AdminKeyAuth:
 
         if not api_key:
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Missing X-Muxi-Admin-Key header"
+                status_code=HTTP_403_FORBIDDEN, 
+                detail="A valid admin API key is required. Please provide the 'X-Muxi-Admin-Key' header."
             )
 
         if not secrets.compare_digest(api_key, self.admin_key):
-            raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid admin API key")
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN, 
+                detail="Invalid admin API key. Please check your 'X-Muxi-Admin-Key' header value."
+            )
 
         return api_key
 
@@ -108,10 +112,14 @@ class ClientKeyAuth:
 
         if not api_key:
             raise HTTPException(
-                status_code=HTTP_403_FORBIDDEN, detail="Missing X-Muxi-Client-Key header"
+                status_code=HTTP_403_FORBIDDEN, 
+                detail="A valid client API key is required. Please provide the 'X-Muxi-Client-Key' header."
             )
 
         if not secrets.compare_digest(api_key, self.client_key):
-            raise HTTPException(status_code=HTTP_403_FORBIDDEN, detail="Invalid client API key")
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN, 
+                detail="Invalid client API key. Please check your 'X-Muxi-Client-Key' header value."
+            )
 
         return api_key

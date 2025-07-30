@@ -43,7 +43,7 @@ async def get_logging_config(request: Request) -> JSONResponse:
     logging_config = formation.config.get("logging", {})
 
     response = create_success_response(
-        APIObjectType("logging"), APIEventType("logging.retrieved"), logging_config, request_id
+        APIObjectType.LOGGING, APIEventType.LOGGING_RETRIEVED, logging_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -76,8 +76,8 @@ async def update_logging_stream(
     }
 
     response = create_success_response(
-        APIObjectType("logging_stream"),
-        APIEventType("logging_stream.updated"),
+        APIObjectType.LOGGING,
+        APIEventType.LOGGING_UPDATED,
         stream_config,
         request_id,
     )

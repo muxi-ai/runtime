@@ -31,7 +31,7 @@ async def get_overlord_config(request: Request) -> JSONResponse:
     overlord_config = formation.config.get("overlord", {})
 
     response = create_success_response(
-        APIObjectType("overlord"), APIEventType("overlord.retrieved"), overlord_config, request_id
+        APIObjectType.OVERLORD, APIEventType.OVERLORD_RETRIEVED, overlord_config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -50,8 +50,8 @@ async def get_overlord_persona(request: Request) -> JSONResponse:
     persona = formation.config.get("overlord", {}).get("persona", "")
 
     response = create_success_response(
-        APIObjectType("persona"),
-        APIEventType("persona.retrieved"),
+        APIObjectType.PERSONA,
+        APIEventType.PERSONA_RETRIEVED,
         {"persona": persona},
         request_id,
     )

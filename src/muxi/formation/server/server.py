@@ -282,6 +282,48 @@ class FormationServer:
         # 5. API logging (log requests)
         app.add_middleware(APILoggingMiddleware)
 
+        # Add exception handler for HTTPException to ensure proper envelope format
+        from fastapi import HTTPException
+        from fastapi.responses import JSONResponse
+        from .responses import create_error_response
+        
+        @app.exception_handler(HTTPException)
+        async def http_exception_handler(request, exc: HTTPException):
+            """Convert HTTPException to proper API envelope format."""
+            # Get request ID if available
+            request_id = getattr(request.state, "request_id", None)
+            
+            # Map status codes to error codes
+            error_code = "INTERNAL_ERROR"
+            if exc.status_code == 400:
+                error_code = "INVALID_REQUEST"
+            elif exc.status_code == 401:
+                error_code = "UNAUTHORIZED"
+            elif exc.status_code == 403:
+                error_code = "FORBIDDEN"
+            elif exc.status_code == 404:
+                error_code = "RESOURCE_NOT_FOUND"
+            elif exc.status_code == 422:
+                error_code = "INVALID_PARAMS"
+            elif exc.status_code == 429:
+                error_code = "RATE_LIMITED"
+            elif exc.status_code == 501:
+                error_code = "METHOD_NOT_FOUND"
+            elif exc.status_code == 503:
+                error_code = "SYSTEM_OVERLOAD"
+            
+            # Create structured error response
+            error_response = create_error_response(
+                error_code=error_code,
+                message=str(exc.detail),
+                request_id=request_id,
+            )
+            
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=error_response.model_dump(),
+            )
+
         # Register routers
         self._register_health_routes(app)
         self._register_admin_routes(app)
@@ -293,8 +335,8 @@ class FormationServer:
         """Register health and status endpoints."""
         from .routes.health import router
 
-        # Health routes are not versioned for easier monitoring
-        app.include_router(router, tags=["health"])
+        # Health routes are mounted under /v1 to match OpenAPI spec
+        app.include_router(router, prefix="/v1", tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:
         """Register admin management endpoints."""
@@ -354,12 +396,14 @@ class FormationServer:
         for router in client_routers:
             app.include_router(router, prefix="/v1", dependencies=[Depends(client_auth)])
 
-    async def start(self, block: bool = True) -> None:
+    async def start(self, block: bool = True, install_signal_handlers: bool = True) -> None:
         """
         Start the Formation server.
 
         Args:
             block: Whether to block until server stops (default: True)
+            install_signal_handlers: Whether to install signal handlers (default: True)
+                                   Set to False if parent process handles signals
         """
         if self._server_task and not self._server_task.done():
             raise RuntimeError("Server is already running")
@@ -378,29 +422,10 @@ class FormationServer:
 
         self._server = uvicorn.Server(config)
 
-        # Setup asyncio-safe signal handlers for graceful shutdown
-        def signal_handler(sig_num):
-            observability.observe(
-                event_type=observability.SystemEvents.CLEANUP,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "formation_api_server",
-                    "signal": str(sig_num),
-                    "formation_id": self.formation.formation_id,
-                },
-                description=f"Received signal {sig_num}, initiating graceful shutdown",
-            )
-            self._shutdown_event.set()
-
-        # Use asyncio event loop signal handlers for async safety
-        try:
-            loop = asyncio.get_running_loop()
-            loop.add_signal_handler(signal.SIGINT, signal_handler, signal.SIGINT)
-            loop.add_signal_handler(signal.SIGTERM, signal_handler, signal.SIGTERM)
-        except (NotImplementedError, RuntimeError):
-            # Fallback for platforms that don't support asyncio signal handlers
-            # Use traditional signal handlers with proper async event handling
-            def sync_signal_handler(sig_num, frame):
+        # Only install signal handlers if requested
+        if install_signal_handlers:
+            # Setup asyncio-safe signal handlers for graceful shutdown
+            def signal_handler(sig_num):
                 observability.observe(
                     event_type=observability.SystemEvents.CLEANUP,
                     level=observability.EventLevel.INFO,
@@ -409,17 +434,38 @@ class FormationServer:
                         "signal": str(sig_num),
                         "formation_id": self.formation.formation_id,
                     },
-                    description=f"Received signal {sig_num}, initiating shutdown",
+                    description=f"Received signal {sig_num}, initiating graceful shutdown",
                 )
-                # Schedule the event setting on the event loop
-                try:
-                    loop.call_soon_threadsafe(self._shutdown_event.set)
-                except RuntimeError:
-                    # If event loop is not running, fall back to direct call
-                    asyncio.create_task(self._set_shutdown_event())
+                self._shutdown_event.set()
 
-            signal.signal(signal.SIGINT, sync_signal_handler)
-            signal.signal(signal.SIGTERM, sync_signal_handler)
+            # Use asyncio event loop signal handlers for async safety
+            try:
+                loop = asyncio.get_running_loop()
+                loop.add_signal_handler(signal.SIGINT, signal_handler, signal.SIGINT)
+                loop.add_signal_handler(signal.SIGTERM, signal_handler, signal.SIGTERM)
+            except (NotImplementedError, RuntimeError):
+                # Fallback for platforms that don't support asyncio signal handlers
+                # Use traditional signal handlers with proper async event handling
+                def sync_signal_handler(sig_num, frame):
+                    observability.observe(
+                        event_type=observability.SystemEvents.CLEANUP,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "service": "formation_api_server",
+                            "signal": str(sig_num),
+                            "formation_id": self.formation.formation_id,
+                        },
+                        description=f"Received signal {sig_num}, initiating shutdown",
+                    )
+                    # Schedule the event setting on the event loop
+                    try:
+                        loop.call_soon_threadsafe(self._shutdown_event.set)
+                    except RuntimeError:
+                        # If event loop is not running, fall back to direct call
+                        asyncio.create_task(self._set_shutdown_event())
+
+                signal.signal(signal.SIGINT, sync_signal_handler)
+                signal.signal(signal.SIGTERM, sync_signal_handler)
 
         # Start server
         if block:
