@@ -77,7 +77,7 @@ async def main():
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"http://{server_config.get('host', '0.0.0.0')}:{server_config.get('port', 8271)}/health"
+                    f"http://{server_config.get('host', '0.0.0.0')}:{server_config.get('port', 8271)}/v1/health"
                 )
                 print(f"   ✅ Server health check: {response.status_code}")
         except Exception as e:

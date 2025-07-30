@@ -10,9 +10,9 @@ server:
 
   # API Keys (auto-generated if not provided)
   api_keys:
-    admin_key: "test-admin-key"
+    admin_key: "sk_muxi_admin_some_api_key"
     # Used for formation management operations (start/stop, add/remove agents, etc.)
-    client_key: "test-client-key"
+    client_key: "sk_muxi_client_some_api_key"
     # Used for user interactions (chat, memories, etc), requires user_id header
 
 llm:
