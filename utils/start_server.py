@@ -3,7 +3,7 @@
 Start a test server for API testing.
 
 Usage:
-    python utils/start_test_server.py [formation_path]
+    python utils/start_server.py [formation_path]
 
 If no formation path is provided, uses test-formations/formation-multi-agent
 """
