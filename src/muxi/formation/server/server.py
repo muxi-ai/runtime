@@ -33,14 +33,14 @@ class FormationServer:
     - Health and status monitoring
     """
 
-    def __init__(self, formation: "Formation", host: str = "0.0.0.0", port: int = 3000, **kwargs):
+    def __init__(self, formation: "Formation", host: str = "0.0.0.0", port: int = 8271, **kwargs):
         """
         Initialize the Formation server.
 
         Args:
             formation: The Formation instance to serve
             host: Host to bind to (default: 0.0.0.0)
-            port: Port to bind to (default: 3000)
+            port: Port to bind to (default: 8271)
             **kwargs: Additional server configuration
         """
         self.formation = formation
