@@ -154,47 +154,32 @@ Sequential agent selection for even distribution.
 
 ```yaml
 overlord:
-  config:
-    # Workflow system settings
+  # Workflow system settings
+  workflow:
     auto_decomposition: true
-    complexity_threshold: 7.0
     plan_approval_threshold: 10
+    
+    # Complexity calculation
+    complexity_method: "heuristic"  # heuristic, llm, custom, hybrid
+    complexity_threshold: 7.0
 
-    workflow:
-      # Complexity calculation method
-      complexity_method: "heuristic"  # heuristic, llm, custom, hybrid
+    # Task routing strategy
+    routing_strategy: "capability_based"  # load_balanced, round_robin
 
-      # Task routing strategy
-      routing_strategy: "capability_based"  # load_balanced, round_robin
+    # Error recovery strategy
+    error_recovery: "retry_with_backoff"  # fail_fast, skip_and_continue
 
-      # Error recovery strategy
-      error_recovery: "retry_with_backoff"  # fail_fast, skip_and_continue
+    # Retry configuration
+    retry:
+      max_attempts: 3
+      initial_delay: 1.0
+      backoff_factor: 2.0
 
-      # Retry configuration
-      retry:
-        max_attempts: 3
-        initial_delay: 1.0
-        backoff_factor: 2.0
-
-      # Timeout configuration
-      timeouts:
-        task_timeout: 300
-        workflow_timeout: 3600
-        enable_adaptive_timeout: true
-
-      # Workflow-specific overrides
-      overrides:
-        - pattern: "research"
-          priority: 10
-          config:
-            complexity_threshold: 5.0
-            max_parallel_tasks: 10
-
-      # Custom routing rules
-      routing_rules:
-        - pattern: "code review"
-          agents: ["code-expert", "senior-dev"]
-          weight: 0.9
+    # Timeout configuration
+    timeouts:
+      task_timeout: 300
+      workflow_timeout: 3600
+      enable_adaptive_timeout: true
 ```
 
 ### Runtime Configuration
@@ -459,10 +444,9 @@ Enable detailed workflow logging:
 
 ```yaml
 overlord:
-  config:
-    workflow:
-      debug_logging: true
-      log_level: "DEBUG"
+  workflow:
+    debug_logging: true
+    log_level: "DEBUG"
 ```
 
 ## Security Considerations
@@ -501,11 +485,10 @@ overlord:
 
 # New configuration
 overlord:
-  config:
+  workflow:
     auto_decomposition: true
     complexity_threshold: 7.0
-    workflow:
-      routing_strategy: "capability_based"
+    routing_strategy: "capability_based"
 ```
 
 ## Future Enhancements
