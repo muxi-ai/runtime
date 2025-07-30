@@ -559,7 +559,7 @@ class Overlord:
             complexity_threshold=self.workflow_config.complexity_threshold,
             complexity_weights=self.workflow_config.complexity_weights,
         )
-        self.task_decomposer = TaskDecomposer(llm=None)  # Will be set later
+        # TaskDecomposer will be initialized after MCP service is available
         self.approval_manager = ApprovalManager()
         # Use ResilientWorkflowExecutor for better error handling
         self.workflow_executor = ResilientWorkflowExecutor(
@@ -708,6 +708,13 @@ class Overlord:
         self.a2a_server: Optional[A2AServer] = None
         self.mcp_service = MCPService.get_instance()  # Get existing instance
         self.scheduler_service: Optional[SchedulerService] = None
+
+        # Initialize TaskDecomposer now that MCP service is available
+        self.task_decomposer = TaskDecomposer(
+            llm=None,  # Will be set later
+            agent_registry=self.agents,
+            mcp_service=self.mcp_service
+        )
 
         # Initialize agent tracking for delayed external registration
         self.pending_external_registrations = set()
@@ -893,6 +900,17 @@ class Overlord:
         # Load agents from formation configuration
         # Load agents from formation's pre-processed configuration
         await self._load_agents_from_formation()
+
+        # Update TaskDecomposer with loaded agents
+        if hasattr(self, 'task_decomposer') and self.task_decomposer:
+            self.task_decomposer.agent_registry = self.agents
+
+        # Update workflow executor with loaded agents
+        if hasattr(self, 'workflow_executor') and self.workflow_executor:
+            self.workflow_executor.agent_registry = self.agents
+            print(f"\n📋 DEBUG: Workflow executor updated with {len(self.agents)} agents:")
+            for agent_id, agent in self.agents.items():
+                print(f"  - {agent_id}: {agent.name} (specialties: {getattr(agent, 'specialties', [])})")
 
         # Document processing configuration is now initialized by Formation
         if hasattr(self, "_configured_services") and self._configured_services:
@@ -1126,6 +1144,10 @@ class Overlord:
             system_message=agent_config.get("system_message"),
             knowledge_config=agent_config.get("knowledge"),
         )
+
+        # Set agent role and specialties from config
+        agent.role = agent_config.get("role", "general")
+        agent.specialties = agent_config.get("specialties", [])
 
         return agent
 
@@ -1363,36 +1385,30 @@ class Overlord:
                 api_key=llm_config.get("api_key"),
             )
 
-            # Configure overlord behavior from overlord.config
-            config_section = overlord_config.get("config", {})
+            # Configure overlord behavior from flattened structure
 
             # Caching configuration
-            caching_config = config_section.get("caching", {})
+            caching_config = overlord_config.get("caching", {})
             self.routing_cache_enabled = caching_config.get("enabled", True)
             self.routing_cache_ttl = caching_config.get("ttl", 3600)
 
-            # Additional configuration fields
-            self.max_extraction_tokens = config_section.get("max_extraction_tokens", 500)
+            # Additional configuration fields from LLM section
+            self.max_extraction_tokens = llm_config.get("max_extraction_tokens", 500)
 
             # Response configuration
-            response_config = config_section.get("response", {})
+            response_config = overlord_config.get("response", {})
             self.response_format = response_config.get("format", "markdown")
             self.use_interactive_elements = response_config.get("interactive_elements", True)
+            self.streaming = response_config.get("streaming", True)
 
-            # Intelligence configuration
-            self.learn_user_preference = config_section.get("learn_user_preference", True)
-            self.adaptive_responses = config_section.get("adaptive_responses", True)
+            # Resilience is handled by the resilient workflow executor
 
-            # Resilience configuration
-            self.circuit_breaker = config_section.get("circuit_breaker", True)
-            self.error_recovery = config_section.get("error_recovery", True)
+            # Load workflow configuration
+            workflow_config_data = overlord_config.get("workflow", {})
 
-            # Workflow configuration
-            self.auto_decomposition = config_section.get("auto_decomposition", True)
-            self.plan_approval_threshold = config_section.get("plan_approval_threshold", 7)
-
-            # Load detailed workflow configuration if present
-            workflow_config_data = config_section.get("workflow", {})
+            # Core workflow settings
+            self.auto_decomposition = workflow_config_data.get("auto_decomposition", True)
+            self.plan_approval_threshold = workflow_config_data.get("plan_approval_threshold", 7)
             if workflow_config_data:
                 # Create WorkflowConfig from formation data
                 # Parse retry configuration
@@ -1477,9 +1493,6 @@ class Overlord:
                         self.workflow_config.complexity_weights
                     )
 
-            # Streaming configuration
-            self.streaming = overlord_config.get("streaming", True)
-
             # Initialize cache expiry tracking if TTL is configured
             if self.routing_cache_ttl > 0:
                 self._routing_cache_expiry: Dict[str, float] = {}
@@ -1492,10 +1505,6 @@ class Overlord:
             #     f"max_extraction_tokens={self.max_extraction_tokens}, "
             #     f"response_format={self.response_format}, "
             #     f"interactive_elements={self.use_interactive_elements}, "
-            #     f"learn_user_preference={self.learn_user_preference}, "
-            #     f"adaptive_responses={self.adaptive_responses}, "
-            #     f"circuit_breaker={self.circuit_breaker}, "
-            #     f"error_recovery={self.error_recovery}, "
             #     f"auto_decomposition={self.auto_decomposition}, "
             #     f"plan_approval_threshold={self.plan_approval_threshold}"
             # )
@@ -1537,15 +1546,47 @@ class Overlord:
                         description=f"Updated request_analyzer LLM: {self.request_analyzer.llm is not None}",
                     )
                 if hasattr(self, "task_decomposer"):
-                    self.task_decomposer.llm = self.extraction_model
+                    # Use overlord.llm.model if available, fallback to text model
+                    decomposer_model = None
+
+                    # First try: overlord.llm.model
+                    if hasattr(self, "routing_model") and self.routing_model:
+                        decomposer_model = self.routing_model
+                        model_source = "overlord.llm.model"
+                    # Second try: text capability model
+                    elif hasattr(self, "_capability_models") and "text" in self._capability_models:
+                        text_model_config = self._capability_models["text"]
+                        if isinstance(text_model_config, dict) and "model" in text_model_config:
+                            # Create model instance from text capability
+                            decomposer_model = await self.create_model(
+                                model=text_model_config["model"],
+                                temperature=text_model_config.get("settings", {}).get("temperature", 0.7),
+                                max_tokens=text_model_config.get("settings", {}).get("max_tokens", 2000),
+                                api_key=text_model_config.get("api_key"),
+                            )
+                            model_source = "llm.models.text"
+                        elif isinstance(text_model_config, str):
+                            # Simple string model name
+                            decomposer_model = await self.create_model(model=text_model_config)
+                            model_source = "llm.models.text"
+                    # Final fallback: extraction model
+                    else:
+                        decomposer_model = self.extraction_model
+                        model_source = "extraction_model_fallback"
+
+                    self.task_decomposer.llm = decomposer_model
                     observability.observe(
                         event_type=observability.ServerEvents.SERVER_STARTED,
                         level=observability.EventLevel.INFO,
                         data={
                             "component": "task_decomposer",
                             "has_llm": self.task_decomposer.llm is not None,
+                            "model_source": model_source,
                         },
-                        description=f"Updated task_decomposer LLM: {self.task_decomposer.llm is not None}",
+                        description=(
+                            f"Updated task_decomposer LLM from {model_source}: "
+                            f"{self.task_decomposer.llm is not None}"
+                        ),
                     )
                 if hasattr(self, "multimodal_fusion_engine"):
                     self.multimodal_fusion_engine.llm = self.extraction_model
@@ -4843,52 +4884,18 @@ class Overlord:
                 description=f"Starting execution of workflow {workflow_id}",
             )
 
-            # Check if resilient workflow manager should handle this
-            if hasattr(self, "resilient_workflow_manager") and self.formation_config.get(
-                "resilience", {}
-            ).get("enable_workflow_resilience", True):
-                # Execute with resilience monitoring
-                resilient_result = await self.resilient_workflow_manager.execute_resilient_workflow(
-                    workflow,
-                    resilience_config=ResilienceConfig(
-                        **self.formation_config.get("resilience", {})
-                    ),
-                )
-
-                # Check if circuit breaker was triggered
-                if resilient_result.circuit_breaker_triggered:
-                    return MuxiResponse(
-                        role="assistant",
-                        content=(
-                            "I'm experiencing some technical difficulties with external services. "
-                            "Let me provide you with the best information I can based on my knowledge."
-                        ),
-                        metadata={
-                            "fallback_mode": True,
-                            "workflow_id": workflow_id,
-                            "circuit_breaker_triggered": True,
-                        },
-                    )
-
-                # If resilience handled it, use that result
-                if resilient_result.result and isinstance(resilient_result.result, Workflow):
-                    completed_workflow = resilient_result.result
-                else:
-                    # Otherwise continue with normal execution
-                    completed_workflow = await self.workflow_executor.execute_workflow(
-                        workflow, context=execution_context
-                    )
-            else:
-                # Normal execution without resilience monitoring
-                completed_workflow = await self.workflow_executor.execute_workflow(
-                    workflow, context=execution_context
-                )
+            # Use the ResilientWorkflowExecutor directly (which has our capability fixes)
+            # The resilient_workflow_manager has architectural issues with workflow execution
+            completed_workflow = await self.workflow_executor.execute_workflow(
+                workflow, context=execution_context
+            )
 
             # Collect all task results
             task_results = []
             for task in completed_workflow.tasks.values():
                 # Handle both enum objects and string values due to use_enum_values=True
-                if task.status in {TaskStatus.DONE, TaskStatus.DONE.value}:
+                # Check for COMPLETED status (not DONE which doesn't exist)
+                if task.status in {TaskStatus.COMPLETED, TaskStatus.COMPLETED.value, "completed"}:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
@@ -4896,7 +4903,7 @@ class Overlord:
                         "status": "completed",
                     }
                     task_results.append(task_result)
-                elif task.status in {TaskStatus.FAILED, TaskStatus.FAILED.value}:
+                elif task.status in {TaskStatus.FAILED, TaskStatus.FAILED.value, "failed"}:
                     task_result = {
                         "task_id": task.id,
                         "description": task.description,
@@ -5248,21 +5255,33 @@ class Overlord:
                 )
 
             # Try to use LLM for intelligent synthesis if available
-            synthesis_model = (
+            synthesis_model_config = (
                 self._capability_models.get("text") if hasattr(self, "_capability_models") else None
             )
 
-            if synthesis_model and self.llm_service:
+            if synthesis_model_config:
                 # Prepare synthesis prompt
                 synthesis_prompt = self._create_synthesis_prompt(
                     original_request, successful_results, task_results
                 )
 
                 try:
+                    # Create LLM instance for synthesis
+                    from ...services.llm import LLM
+                    # Extract just the model name from the config
+                    model_name = (
+                        synthesis_model_config.get("model")
+                        if isinstance(synthesis_model_config, dict)
+                        else synthesis_model_config
+                    )
+                    synthesis_llm = LLM(
+                        model=model_name,
+                        temperature=0.7,
+                        max_tokens=2000,
+                    )
+
                     # Use LLM to synthesize results
-                    synthesis_response = await self.llm_service.execute(
-                        operation_id=f"synthesis_{workflow.id}",
-                        model=synthesis_model,
+                    synthesis_response = await synthesis_llm.chat(
                         messages=[
                             {
                                 "role": "system",
@@ -5274,14 +5293,16 @@ class Overlord:
                             },
                             {"role": "user", "content": synthesis_prompt},
                         ],
-                        temperature=0.7,
-                        max_tokens=2000,
+                        metadata={
+                            "operation": "workflow_synthesis",
+                            "workflow_id": workflow.id,
+                        }
                     )
 
-                    if synthesis_response and synthesis_response.get("text"):
+                    if synthesis_response:
                         return MuxiResponse(
                             role="assistant",
-                            content=synthesis_response["text"],
+                            content=synthesis_response,
                             metadata={"synthesis_method": "llm_synthesis"},
                         )
 
@@ -5326,33 +5347,30 @@ class Overlord:
         prompt_parts = [
             f"Original User Request: {original_request}",
             "",
-            "Task Results to Synthesize:",
+            "Workflow Execution Summary:",
             "",
         ]
 
-        # Add successful task results
+        # Add successful task results with only key outcomes
         for i, result in enumerate(successful_results, 1):
-            prompt_parts.append(f"Task {i}: {result.get('description', 'Unknown task')}")
+            task_desc = result.get('description', 'Unknown task')
+            prompt_parts.append(f"Task {i}: {task_desc}")
 
-            # Extract content from outputs
+            # Extract only key actionable outcomes from outputs
             outputs = result.get("outputs", {})
-            if isinstance(outputs, dict):
-                content = (
-                    outputs.get("content")
-                    or outputs.get("written_content")
-                    or outputs.get("analysis_results")
-                    or outputs.get("research_findings", "")
-                )
-            else:
-                content = str(outputs)
+            key_outcomes = self._extract_key_outcomes(outputs, task_desc)
 
-            prompt_parts.append(f"Result: {content}")
+            if key_outcomes:
+                prompt_parts.append(f"Key Outcomes: {key_outcomes}")
+            else:
+                # For tasks without specific outcomes, just note completion
+                prompt_parts.append("Status: Completed successfully")
             prompt_parts.append("")
 
         # Note any failed tasks
         failed_tasks = [r for r in all_results if r.get("status") == "failed"]
         if failed_tasks:
-            prompt_parts.append("Note: The following tasks failed and should be acknowledged:")
+            prompt_parts.append("Failed Tasks:")
             for task in failed_tasks:
                 prompt_parts.append(
                     f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
@@ -5361,17 +5379,77 @@ class Overlord:
 
         prompt_parts.extend(
             [
-                "Please synthesize these results into a comprehensive response that:",
-                "1. Directly addresses the user's original request",
-                "2. Integrates information from all successful tasks coherently",
-                "3. Acknowledges any failed tasks if relevant",
-                "4. Provides a clear, well-structured answer",
+                "Please provide a brief confirmation message that:",
+                "1. Confirms what was accomplished (focus on concrete outcomes like created issues, documents, etc.)",
+                "2. Mentions any specific IDs, URLs, or references the user needs",
+                "3. Acknowledges any failures if relevant",
+                "4. Keep it concise - 2-3 sentences maximum",
                 "",
-                "Synthesized Response:",
+                "Confirmation Message:",
             ]
         )
 
         return "\n".join(prompt_parts)
+
+    def _extract_key_outcomes(self, outputs: Dict[str, Any], task_description: str) -> str:
+        """
+        Extract only key actionable outcomes from task outputs.
+
+        This method looks for specific patterns like issue IDs, URLs, document titles,
+        etc. rather than including all the raw content.
+
+        Args:
+            outputs: Task outputs dictionary
+            task_description: Description of the task for context
+
+        Returns:
+            String with key outcomes or empty string if none found
+        """
+        key_items = []
+
+        # Convert outputs to string for pattern matching if needed
+        output_str = str(outputs) if outputs else ""
+
+        # Look for Linear issue patterns (MX-123 format)
+        import re
+        linear_pattern = r'MX-\d+'
+        linear_matches = re.findall(linear_pattern, output_str)
+        if linear_matches:
+            key_items.append(f"Linear issues: {', '.join(set(linear_matches))}")
+
+        # Look for URLs (especially Linear URLs)
+        url_pattern = r'https?://[^\s<>"{}|\\^`\[\]]+linear[^\s<>"{}|\\^`\[\]]*'
+        url_matches = re.findall(url_pattern, output_str, re.IGNORECASE)
+        if url_matches:
+            # Just include first URL to keep it concise
+            key_items.append(f"URL: {url_matches[0]}")
+
+        # Check for specific outcome fields in outputs dict
+        if isinstance(outputs, dict):
+            # Common outcome fields to check
+            outcome_fields = [
+                'issue_id', 'issue_url', 'document_id', 'file_path',
+                'created_id', 'updated_id', 'ticket_id', 'pr_url',
+                'issue_number', 'pull_request', 'artifact_id'
+            ]
+
+            for field in outcome_fields:
+                if field in outputs and outputs[field]:
+                    # Capitalize and format the field name nicely
+                    field_name = field.replace('_', ' ').title()
+                    key_items.append(f"{field_name}: {outputs[field]}")
+
+            # Check for creation confirmations
+            if outputs.get('created') or outputs.get('success'):
+                if 'linear' in task_description.lower():
+                    key_items.append("Linear issue created successfully")
+                elif 'document' in task_description.lower():
+                    key_items.append("Document created successfully")
+                elif 'file' in task_description.lower():
+                    key_items.append("File created successfully")
+
+        # If we found key items, join them; otherwise return empty string
+        return "; ".join(key_items) if key_items else ""
 
     def _fallback_synthesis(
         self,
@@ -5380,39 +5458,35 @@ class Overlord:
         all_results: List[Dict[str, Any]],
     ) -> MuxiResponse:
         """Fallback synthesis when LLM is not available."""
-        response_parts = [
-            f'I\'ve completed processing your request: "{original_request}"',
-            "",
-            "Here are the results:",
-            "",
-        ]
+        response_parts = []
 
-        # Add successful results
-        for i, result in enumerate(successful_results, 1):
-            response_parts.append(f"**{result.get('description', f'Task {i}')}:**")
-
-            # Extract content from outputs
-            outputs = result.get("outputs", {})
-            if isinstance(outputs, dict):
-                content = (
-                    outputs.get("content")
-                    or outputs.get("written_content")
-                    or outputs.get("analysis_results")
-                    or outputs.get("research_findings", "No output")
-                )
-            else:
-                content = str(outputs)
-
-            response_parts.append(content)
+        # Start with a brief summary
+        task_count = len(successful_results)
+        if task_count > 0:
+            response_parts.append(f"✅ Successfully completed {task_count} task{'s' if task_count != 1 else ''}")
             response_parts.append("")
 
-        # Note any failed tasks
+        # Extract key outcomes from successful tasks
+        key_outcomes = []
+        for result in successful_results:
+            task_desc = result.get('description', 'Task')
+            outputs = result.get("outputs", {})
+            outcomes = self._extract_key_outcomes(outputs, task_desc)
+            if outcomes:
+                key_outcomes.append(f"• {task_desc}: {outcomes}")
+
+        if key_outcomes:
+            response_parts.append("**Key Outcomes:**")
+            response_parts.extend(key_outcomes)
+            response_parts.append("")
+
+        # Note any failed tasks briefly
         failed_tasks = [r for r in all_results if r.get("status") == "failed"]
         if failed_tasks:
-            response_parts.append("**Note:** Some tasks could not be completed:")
+            response_parts.append(f"⚠️ {len(failed_tasks)} task{'s' if len(failed_tasks) != 1 else ''} failed:")
             for task in failed_tasks:
                 response_parts.append(
-                    f"- {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
+                    f"• {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"
                 )
 
         return MuxiResponse(

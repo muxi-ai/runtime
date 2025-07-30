@@ -863,6 +863,7 @@ class Agent:
                 # Format tools for LLM if any are available
                 if available_tools:
                     tools = []
+
                     for server_id, server_tools in available_tools.items():
                         for tool_name, tool_info in server_tools.items():
                             # Convert MCP tool format to OpenAI function format
@@ -2073,7 +2074,7 @@ class Agent:
             The tool execution result.
 
         Raises:
-            Exception: If tool invocation fails.
+            Exception: If tool invocation fails or tool is not allowed.
         """
         from ..memory.credential_resolver import MissingCredentialError
 

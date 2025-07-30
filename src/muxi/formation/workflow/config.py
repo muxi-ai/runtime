@@ -14,7 +14,6 @@ from enum import Enum
 from pydantic import BaseModel, Field, ConfigDict, field_validator
 from datetime import datetime, timezone
 import asyncio
-import re
 
 
 class TaskRoutingStrategy(Enum):
@@ -534,24 +533,12 @@ class WorkflowErrorHandler:
 
 
 class WorkflowConfigManager:
-    """Manage workflow configurations with overrides and validation"""
+    """Manage workflow configurations with custom functions"""
 
     def __init__(self, base_config: WorkflowConfig):
         self.base_config = base_config
-        self.overrides: List[WorkflowOverride] = []
-        self.routing_rules: List[AgentRoutingRule] = []
         self.custom_complexity_fn: Optional[Callable] = None
         self.custom_routing_fn: Optional[Callable] = None
-
-    def add_override(self, override: WorkflowOverride):
-        """Add a workflow-specific configuration override"""
-        self.overrides.append(override)
-        # Sort by priority (descending)
-        self.overrides.sort(key=lambda x: x.priority, reverse=True)
-
-    def add_routing_rule(self, rule: AgentRoutingRule):
-        """Add a custom agent routing rule"""
-        self.routing_rules.append(rule)
 
     def set_custom_complexity_function(self, fn: Callable[[str, Optional[Dict[str, Any]]], float]):
         """Set custom complexity calculation function"""
@@ -562,113 +549,5 @@ class WorkflowConfigManager:
         self.custom_routing_fn = fn
 
     def get_config_for_workflow(self, workflow_id: str, user_request: str) -> WorkflowConfig:
-        """Get configuration with applied overrides for a specific workflow"""
-        # Start with base config
-        config_dict = self.base_config.model_dump()
-
-        # Apply matching overrides in priority order
-        for override in self.overrides:
-            if self._matches_pattern(workflow_id, user_request, override.workflow_pattern):
-                # Merge overrides
-                self._merge_config(config_dict, override.config_overrides)
-
-        # Create new config instance with merged values
-        return WorkflowConfig(**config_dict)
-
-    def get_routing_rules_for_task(self, task_description: str, capabilities: List[str]) -> List[AgentRoutingRule]:
-        """Get applicable routing rules for a task"""
-        matching_rules = []
-
-        for rule in self.routing_rules:
-            if self._matches_task_pattern(task_description, capabilities, rule):
-                matching_rules.append(rule)
-
-        # Sort by weight (descending)
-        matching_rules.sort(key=lambda x: x.weight, reverse=True)
-        return matching_rules
-
-    def _matches_pattern(self, workflow_id: str, user_request: str, pattern: str) -> bool:
-        """Check if workflow matches override pattern using regex.
-
-        Supports:
-        - Regular expressions: '^workflow_.*' matches workflows starting with 'workflow_'
-        - Case-insensitive matching by default
-        - Wildcard '*' matches anything
-        - Plain strings are treated as regex patterns that can match anywhere in the text
-
-        Args:
-            workflow_id: The workflow identifier
-            user_request: The user's request text
-            pattern: The pattern to match (regex or wildcard)
-
-        Returns:
-            True if pattern matches either workflow_id or user_request
-        """
-        # Handle wildcard
-        if pattern == "*":
-            return True
-
-        try:
-            # Compile pattern as regex with case-insensitive flag
-            regex_pattern = re.compile(pattern, re.IGNORECASE)
-
-            # Check workflow ID
-            if regex_pattern.search(workflow_id):
-                return True
-
-            # Check user request
-            if regex_pattern.search(user_request):
-                return True
-
-        except re.error:
-            # If pattern is not valid regex, fall back to substring matching
-            pattern_lower = pattern.lower()
-            if pattern_lower in workflow_id.lower() or pattern_lower in user_request.lower():
-                return True
-
-        return False
-
-    def _matches_task_pattern(self, description: str, capabilities: List[str], rule: AgentRoutingRule) -> bool:
-        """Check if task matches routing rule pattern using regex.
-
-        Supports:
-        - Regular expressions: 'code.*review' matches tasks containing 'code' followed by 'review'
-        - Case-insensitive matching by default
-        - Capability-based matching when required_capabilities are specified
-
-        Args:
-            description: Task description
-            capabilities: Available agent capabilities
-            rule: The routing rule containing pattern and requirements
-
-        Returns:
-            True if task matches the pattern or has required capabilities
-        """
-        try:
-            # Compile pattern as regex with case-insensitive flag
-            regex_pattern = re.compile(rule.task_pattern, re.IGNORECASE)
-
-            # Check description
-            if regex_pattern.search(description):
-                return True
-
-        except re.error:
-            # If pattern is not valid regex, fall back to substring matching
-            pattern_lower = rule.task_pattern.lower()
-            if pattern_lower in description.lower():
-                return True
-
-        # Check required capabilities
-        if rule.required_capabilities:
-            if all(cap in capabilities for cap in rule.required_capabilities):
-                return True
-
-        return False
-
-    def _merge_config(self, base: Dict[str, Any], overrides: Dict[str, Any]):
-        """Recursively merge configuration overrides"""
-        for key, value in overrides.items():
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                self._merge_config(base[key], value)
-            else:
-                base[key] = value
+        """Get configuration for a specific workflow (currently just returns base config)"""
+        return self.base_config

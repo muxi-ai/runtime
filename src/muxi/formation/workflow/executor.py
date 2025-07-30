@@ -666,6 +666,16 @@ class WorkflowExecutor:
 
             # Select agent using the specification for cleaner logic
             agent = self._select_agent_for_spec(spec, state)
+
+            # # DEBUG: Log capability routing for ALL tasks to find the issue
+            # print(f"\n🔍 DEBUG CAPABILITY ROUTING:")
+            # print(f"  Task: {task.description[:150]}...")
+            # print(f"  Required capabilities: {spec.required_capabilities}")
+            # print(f"  Selected agent: {agent.name if agent else 'None'} (id: {agent.agent_id if agent else 'None'})")
+            # print(f"  Agent specialties: {getattr(agent, 'specialties', []) if agent else 'N/A'}")
+            # print(f"  Routing strategy: {self.config.routing_strategy}")
+            # print("  " + "="*80)
+
             if not agent:
                 raise ValueError(f"No suitable agent found for task {task.id}")
 
@@ -863,8 +873,12 @@ class WorkflowExecutor:
         # For all other strategies, find agents with required capabilities
         capable_agents = []
         for agent_id, agent in self.agent_registry.items():
-            # Check if agent has any required capability
-            agent_caps = getattr(agent, "specialization", [])
+            # Check if agent has any required capability - try both specialties and specialization
+            agent_caps = (
+                getattr(agent, "specialties", None) or
+                getattr(agent, "specialization", None) or
+                []
+            )
             if any(cap in agent_caps for cap in spec.required_capabilities):
                 capable_agents.append((agent_id, agent))
 
@@ -886,7 +900,11 @@ class WorkflowExecutor:
             # Select agent with most matching capabilities
             max_matches = 0
             for agent_id, agent in capable_agents:
-                agent_caps = getattr(agent, "specialization", [])
+                agent_caps = (
+                    getattr(agent, "specialties", None) or
+                    getattr(agent, "specialization", None) or
+                    []
+                )
                 matches = sum(1 for cap in spec.required_capabilities if cap in agent_caps)
                 if matches > max_matches:
                     max_matches = matches
@@ -960,27 +978,69 @@ class WorkflowExecutor:
         return self._route_by_capability(task)
 
     def _route_by_capability(self, task: SubTask) -> Optional[Agent]:
-        """Route based on agent capabilities"""
+        """Route based on agent capabilities with smart matching"""
         if not task.required_capabilities:
             # Use any available agent
             return next(iter(self.agent_registry.values()), None)
 
-        # Try to find agent with matching capability
-        for capability in task.required_capabilities:
-            # Look for agents with matching specialization
-            for agent_id, agent in self.agent_registry.items():
-                # Check agent affinity if enabled
-                if self.config.enable_agent_affinity:
-                    affinity_score = self._calculate_agent_affinity(agent_id, task)
-                    if affinity_score > 0.7:  # High affinity threshold
-                        return agent
+        # Find the best agent based on capability matching
+        best_agent = None
+        best_score = 0
 
-                # Simple capability matching
-                if capability in ["research", "writing", "analysis", "coding", "general"]:
+        # Priority capabilities (more specific/rare capabilities get higher priority)
+        priority_caps = {"linear", "github", "slack", "mcp"}  # Tool-specific capabilities
+
+        for agent_id, agent in self.agent_registry.items():
+            # Check agent affinity if enabled
+            if self.config.enable_agent_affinity:
+                affinity_score = self._calculate_agent_affinity(agent_id, task)
+                if affinity_score > 0.7:  # High affinity threshold
                     return agent
 
-        # Fallback to any available agent
-        return next(iter(self.agent_registry.values()), None)
+            # Check if agent has required capabilities
+            agent_caps = (
+                getattr(agent, "specialties", None) or
+                getattr(agent, "specialization", None) or
+                []
+            )
+
+            # Calculate matching score
+            matching_caps = [cap for cap in task.required_capabilities if cap in agent_caps]
+            if not matching_caps:
+                continue  # Agent doesn't match any required capabilities
+
+            # Calculate score: base score + bonus for priority capabilities
+            score = len(matching_caps)  # Base score: number of matching capabilities
+
+            # Add bonus for priority capabilities (like "linear" for Linear issues)
+            priority_bonus = sum(2 for cap in matching_caps if cap in priority_caps)
+            score += priority_bonus
+
+            # Prefer agents that match more capabilities
+            if score > best_score:
+                best_score = score
+                best_agent = agent
+
+        if best_agent:
+            return best_agent
+
+        # No matching agent found - try to find the most general agent
+        # Look for agents with "general" or broad capabilities
+        for agent_id, agent in self.agent_registry.items():
+            agent_caps = (
+                getattr(agent, "specialties", None) or
+                getattr(agent, "specialization", None) or
+                []
+            )
+            if "general" in agent_caps or len(agent_caps) == 0:
+                return agent
+
+        # Last resort fallback - return first available agent with logging
+        fallback_agent = next(iter(self.agent_registry.values()), None)
+        if fallback_agent:
+            print(f"⚠️  WARNING: No suitable agent found for capabilities {task.required_capabilities}")
+            print(f"   Falling back to: {fallback_agent.name} (id: {fallback_agent.agent_id})")
+        return fallback_agent
 
     def _route_by_load_balance(self, task: SubTask) -> Optional[Agent]:
         """Route to least loaded agent"""
@@ -1089,6 +1149,15 @@ class WorkflowExecutor:
         Returns:
             Task execution result
         """
+        # # DEBUG: Log all task executions to find the Linear task
+        # if "linear" in task.description.lower() or "issue" in task.description.lower():
+        #     print(f"\n🚀 DEBUG TASK EXECUTION:")
+        #     print(f"  Task: {task.description[:100]}...")
+        #     print(f"  Executing with agent: {agent.name} (id: {agent.agent_id})")
+        #     print(f"  Agent specialties: {getattr(agent, 'specialties', [])}")
+        #     print(f"  Task capabilities: {task.required_capabilities}")
+        #     print("  " + "="*60)
+
         # Create task prompt
         task_prompt = self._create_task_prompt(task, context)
 
@@ -1139,8 +1208,6 @@ class WorkflowExecutor:
         prompt_parts = [
             f"## Task: {task.description}",
             "",
-            f"Original Request: {context.get('user_request', 'N/A')}",
-            "",
             "Task Details:",
             f"- Required Capabilities: {', '.join(task.required_capabilities)}",
             f"- Estimated Complexity: {task.estimated_complexity}/10",
@@ -1150,11 +1217,30 @@ class WorkflowExecutor:
         if context.get("inputs"):
             prompt_parts.extend(["", "Available Inputs:", json.dumps(context["inputs"], indent=2)])
 
+        # Add topic/subject context if the task description is generic
+        if "write" in task.description.lower() or "create" in task.description.lower():
+            # Try to extract topic from original request or previous task outputs
+            topic = None
+            if context.get("inputs"):
+                # Look for research findings or topic in inputs
+                for input_key, input_val in context.get("inputs", {}).items():
+                    if isinstance(input_val, dict) and "topic" in input_val:
+                        topic = input_val["topic"]
+                        break
+                    elif isinstance(input_val, str) and len(input_val) > 50:
+                        # Use first substantial input as context
+                        topic = input_val[:200] + "..."
+                        break
+
+            if topic:
+                prompt_parts.extend(["", f"Context/Topic: {topic}"])
+
         prompt_parts.extend(
             [
                 "",
-                "Please complete this task thoroughly and provide the results.",
-                "Focus on delivering exactly what's needed for this specific task.",
+                "Please complete THIS SPECIFIC TASK ONLY. Do not attempt to complete other parts of the workflow.",
+                "Focus on delivering exactly what's described in the task above.",
+                "Your output will be used by other agents to complete the overall workflow.",
             ]
         )
 
