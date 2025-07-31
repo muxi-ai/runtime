@@ -152,6 +152,12 @@ class RequestTrackingMiddleware(BaseHTTPMiddleware):
         # Calculate processing time
         processing_time = time.time() - start_time
 
+        # Increment request counter
+        if hasattr(request.app.state, 'formation'):
+            server = getattr(request.app.state.formation, '_server', None)
+            if server:
+                server._request_count += 1
+
         # Log response
         if request_id:
             observability.observe(

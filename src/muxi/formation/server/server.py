@@ -8,6 +8,7 @@ It handles both admin operations (formation management) and client operations
 
 import asyncio
 import signal
+import time
 from contextlib import asynccontextmanager
 from typing import Optional, TYPE_CHECKING
 
@@ -58,6 +59,10 @@ class FormationServer:
         self._shutdown_event = asyncio.Event()
         self._active_connections: set = set()
         self._shutdown_timeout = 30.0
+
+        # Server metrics
+        self._start_time = time.time()
+        self._request_count = 0
 
         # Extract API keys from formation
         self.admin_key = formation._api_keys.get("admin", "")

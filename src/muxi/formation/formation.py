@@ -2698,6 +2698,9 @@ class Formation:
             access_log=self._server_config.get("access_log", False)
         )
 
+        # Store server reference for status endpoint
+        self._server = self._formation_server
+
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
