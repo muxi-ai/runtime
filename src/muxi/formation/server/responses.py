@@ -183,12 +183,26 @@ def agent_response(agent: Dict[str, Any], request_id: Optional[str] = None) -> A
     )
 
 
-def agent_list_response(agents: List[Dict[str, Any]], request_id: Optional[str] = None) -> APIResponse:
+def agent_list_response(
+    agents: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
     """Create a response for a list of agents."""
     return create_success_response(
         APIObjectType.AGENT_LIST,
         APIEventType.AGENT_LIST,
         {"agents": agents, "count": len(agents)},
+        request_id,
+    )
+
+
+def agent_list_response_spec(
+    agents: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
+    """Create a spec-compliant response for a list of agents."""
+    return create_success_response(
+        APIObjectType.LIST,
+        APIEventType.AGENT_LIST,
+        agents,
         request_id,
     )
 
@@ -203,7 +217,9 @@ def secret_list_response(secrets: Dict[str, Any], request_id: Optional[str] = No
     )
 
 
-def memory_list_response(memories: List[Dict[str, Any]], request_id: Optional[str] = None) -> APIResponse:
+def memory_list_response(
+    memories: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
     """Create a response for a list of memories."""
     return create_success_response(
         APIObjectType.MEMORY_LIST,
@@ -219,5 +235,17 @@ def job_list_response(jobs: List[Dict[str, Any]], request_id: Optional[str] = No
         APIObjectType.JOB_LIST,
         APIEventType.JOB_LIST,
         {"jobs": jobs, "count": len(jobs)},
+        request_id,
+    )
+
+
+def job_list_response_spec(
+    jobs: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
+    """Create a spec-compliant response for a list of jobs."""
+    return create_success_response(
+        APIObjectType.LIST,
+        APIEventType.JOB_LIST,
+        jobs,
         request_id,
     )

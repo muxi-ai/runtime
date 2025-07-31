@@ -68,9 +68,9 @@ async def list_memory_buffers(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     response = create_success_response(
-        APIObjectType.MEMORY_LIST,
+        APIObjectType.LIST,
         APIEventType.MEMORY_LIST,
-        {"memories": [], "count": 0},
+        [],
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -85,10 +85,10 @@ async def clear_memory_buffers(request: Request) -> JSONResponse:
         Not implemented response
     """
     request_id = getattr(request.state, "request_id", None)
-    
+
     # TODO: Implement memory buffer clearing
     # This would require access to the formation's overlord and buffer memory manager
-    
+
     response = create_error_response(
         error_code="METHOD_NOT_FOUND",
         message="Memory buffer clearing is not yet implemented",
@@ -115,7 +115,7 @@ async def update_memory_config(request: Request, config: MemoryConfigUpdate) -> 
     current_config = formation.config.get("memory", {})
     if not current_config:
         current_config = {"buffer": {}, "working": {}}
-    
+
     # Update only provided fields (non-None values)
     if config.buffer_size is not None:
         current_config.setdefault("buffer", {})["size"] = config.buffer_size
@@ -126,11 +126,13 @@ async def update_memory_config(request: Request, config: MemoryConfigUpdate) -> 
     if config.working_max_memory_mb is not None:
         current_config.setdefault("working", {})["max_memory_mb"] = config.working_max_memory_mb
     if config.working_fifo_interval_min is not None:
-        current_config.setdefault("working", {})["fifo_interval_min"] = config.working_fifo_interval_min
-    
+        current_config.setdefault("working", {})[
+            "fifo_interval_min"
+        ] = config.working_fifo_interval_min
+
     # Update formation configuration
     formation.config["memory"] = current_config
-    
+
     # TODO: Persist configuration to file/database if needed
     # For now, configuration is only updated in memory
 

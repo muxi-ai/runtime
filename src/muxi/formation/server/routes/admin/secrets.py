@@ -11,7 +11,6 @@ from pydantic import BaseModel
 
 from ...responses import (
     APIResponse,
-    secret_list_response,
     create_success_response,
     create_error_response,
 )
@@ -45,14 +44,16 @@ async def list_secrets(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
-        masked_secrets = {}
+        secret_list = []
     else:
         try:
             # Get all secret names (async call)
             secret_names = await formation.secrets_manager.list_secrets()
 
-            # Mask values with consistent pattern (no length disclosure)
-            masked_secrets = {name: "••••••••" for name in secret_names}
+            # Create array of secret objects with masked values
+            secret_list = [
+                {"key": name, "value": "••••••••", "masked": True} for name in secret_names
+            ]
         except Exception as e:
             # Handle secrets manager errors gracefully
             response = create_error_response(
@@ -60,8 +61,10 @@ async def list_secrets(request: Request) -> JSONResponse:
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
 
-    # Create structured response
-    response = secret_list_response({"secrets": masked_secrets}, request_id)
+    # Create structured response with spec-compliant format
+    response = create_success_response(
+        APIObjectType.LIST, APIEventType.SECRET_LIST, secret_list, request_id
+    )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 

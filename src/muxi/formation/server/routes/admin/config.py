@@ -18,48 +18,34 @@ router = APIRouter(tags=["Configuration"])
 
 
 @router.get("/config", response_model=APIResponse)
-async def get_config_navigation(request: Request) -> JSONResponse:
+async def get_formation_config(request: Request) -> JSONResponse:
     """
-    Get formation configuration navigation structure.
+    Get complete formation configuration.
 
     Returns:
-        Navigation structure with resource counts and endpoints
+        Full formation YAML as JSON with defaults filled and secrets masked
     """
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Build navigation structure
-    navigation = {
-        "agents": {"total": len(formation.config.get("agents", [])), "resource": "/v1/agents"},
-        "secrets": {
-            "total": (
-                len(await formation.secrets_manager.list_secrets())
-                if hasattr(formation, "secrets_manager") and formation.secrets_manager
-                else 0
-            ),
-            "resource": "/v1/secrets",
-        },
-        "mcp": {
-            "servers": {
-                "total": len(formation.config.get("mcp", {}).get("servers", [])),
-                "resource": "/v1/mcp/servers",
-            },
-            "tools": {"resource": "/v1/mcp/tools"},
-        },
-        "llm": {"resource": "/v1/llm"},
-        "logging": {"resource": "/v1/logging"},
-        "memory": {"resource": "/v1/memory"},
-        "overlord": {"resource": "/v1/overlord"},
-    }
+    # Get full config with defaults
+    config = formation.config.copy()
+
+    # Mask hardcoded secrets but preserve references
+    # This is a simplified implementation - in production you'd want more sophisticated masking
+    if "llm" in config and "api_keys" in config["llm"]:
+        for key, value in config["llm"]["api_keys"].items():
+            if isinstance(value, str) and not value.startswith("${{ secrets."):
+                config["llm"]["api_keys"][key] = "••••••••"
 
     response = create_success_response(
-        APIObjectType.CONFIG, APIEventType.CONFIG_RETRIEVED, navigation, request_id
+        APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.get("/formation", response_model=APIResponse)
-async def get_formation_config(request: Request) -> JSONResponse:
+async def get_formation_config_detailed(request: Request) -> JSONResponse:
     """
     Get complete formation configuration.
 
@@ -76,7 +62,7 @@ async def get_formation_config(request: Request) -> JSONResponse:
     # TODO: Implement secret masking logic
 
     response = create_success_response(
-        APIObjectType.CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
+        APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -113,6 +99,6 @@ async def get_formation_status(request: Request) -> JSONResponse:
     }
 
     response = create_success_response(
-        APIObjectType.STATUS, APIEventType.STATUS_RETRIEVED, status, request_id
+        APIObjectType.FORMATION_STATUS, APIEventType.STATUS_RETRIEVED, status, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

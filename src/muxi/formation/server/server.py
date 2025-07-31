@@ -286,47 +286,60 @@ class FormationServer:
         # 5. API logging (log requests)
         app.add_middleware(APILoggingMiddleware)
 
-        # Add exception handler for HTTPException to ensure proper envelope format
+        # Add exception handlers to ensure proper envelope format
         from fastapi import HTTPException
         from fastapi.responses import JSONResponse
+        from starlette.exceptions import HTTPException as StarletteHTTPException
         from .responses import create_error_response
 
-        @app.exception_handler(HTTPException)
-        async def http_exception_handler(request, exc: HTTPException):
-            """Convert HTTPException to proper API envelope format."""
-            # Get request ID if available
-            request_id = getattr(request.state, "request_id", None)
+        def create_http_exception_handler():
+            """Create a reusable HTTP exception handler."""
 
-            # Map status codes to error codes
-            error_code = "INTERNAL_ERROR"
-            if exc.status_code == 400:
-                error_code = "INVALID_REQUEST"
-            elif exc.status_code == 401:
-                error_code = "UNAUTHORIZED"
-            elif exc.status_code == 403:
-                error_code = "FORBIDDEN"
-            elif exc.status_code == 404:
-                error_code = "RESOURCE_NOT_FOUND"
-            elif exc.status_code == 422:
-                error_code = "INVALID_PARAMS"
-            elif exc.status_code == 429:
-                error_code = "RATE_LIMITED"
-            elif exc.status_code == 501:
-                error_code = "METHOD_NOT_FOUND"
-            elif exc.status_code == 503:
-                error_code = "SYSTEM_OVERLOAD"
+            async def handler(request, exc):
+                # Get request ID if available
+                request_id = getattr(request.state, "request_id", None)
 
-            # Create structured error response
-            error_response = create_error_response(
-                error_code=error_code,
-                message=str(exc.detail),
-                request_id=request_id,
-            )
+                # Get status code and detail from exception
+                status_code = getattr(exc, "status_code", 500)
+                detail = getattr(exc, "detail", str(exc))
 
-            return JSONResponse(
-                status_code=exc.status_code,
-                content=error_response.model_dump(),
-            )
+                # Map status codes to error codes
+                error_code = "INTERNAL_ERROR"
+                if status_code == 400:
+                    error_code = "INVALID_REQUEST"
+                elif status_code == 401:
+                    error_code = "UNAUTHORIZED"
+                elif status_code == 403:
+                    error_code = "FORBIDDEN"
+                elif status_code == 404:
+                    error_code = "RESOURCE_NOT_FOUND"
+                elif status_code == 422:
+                    error_code = "INVALID_PARAMS"
+                elif status_code == 429:
+                    error_code = "RATE_LIMITED"
+                elif status_code == 501:
+                    error_code = "METHOD_NOT_FOUND"
+                elif status_code == 503:
+                    error_code = "SYSTEM_OVERLOAD"
+
+                # Create structured error response
+                error_response = create_error_response(
+                    error_code=error_code,
+                    message=str(detail),
+                    request_id=request_id,
+                )
+
+                return JSONResponse(
+                    status_code=status_code,
+                    content=error_response.model_dump(),
+                )
+
+            return handler
+
+        # Register the same handler for both FastAPI and Starlette HTTP exceptions
+        http_handler = create_http_exception_handler()
+        app.add_exception_handler(HTTPException, http_handler)
+        app.add_exception_handler(StarletteHTTPException, http_handler)
 
         # Register routers
         self._register_health_routes(app)
@@ -342,8 +355,10 @@ class FormationServer:
         # Register root status endpoint at / without prefix
         app.add_api_route("/", endpoint=root_status, methods=["GET"], include_in_schema=False)
 
+        # Register /v1 status endpoint (same as root)
+        app.add_api_route("/v1", endpoint=root_status, methods=["GET"], include_in_schema=False)
+
         # Health routes are mounted under /v1 to match OpenAPI spec
-        # This will make the root_status available at /v1/ as well
         app.include_router(router, prefix="/v1", tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:

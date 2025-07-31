@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from ...responses import (
     APIResponse,
-    agent_list_response,
+    agent_list_response_spec,
     create_success_response,
     create_error_response,
 )
@@ -55,7 +55,7 @@ async def list_agents(request: Request) -> JSONResponse:
     agents = formation.config.get("agents", [])
 
     # Create structured response
-    response = agent_list_response(agents, request_id)
+    response = agent_list_response_spec(agents, request_id)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 

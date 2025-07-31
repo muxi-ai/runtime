@@ -88,9 +88,7 @@ async def list_async_jobs(request: Request) -> JSONResponse:
     # TODO: Implement async job tracking
     request_id = getattr(request.state, "request_id", None)
 
-    response = create_success_response(
-        APIObjectType.JOB_LIST, APIEventType.JOB_LIST, {"jobs": [], "count": 0}, request_id
-    )
+    response = create_success_response(APIObjectType.LIST, APIEventType.JOB_LIST, [], request_id)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 

@@ -154,9 +154,9 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
     servers = formation.config.get("mcp", {}).get("servers", [])
 
     response = create_success_response(
-        APIObjectType.MCP_SERVER_LIST,
+        APIObjectType.LIST,
         APIEventType.MCP_SERVER_LIST,
-        {"servers": servers, "count": len(servers)},
+        servers,
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -178,20 +178,20 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
 
     # Get existing servers to check for duplicates
     existing_servers = formation.config.get("mcp", {}).get("servers", [])
-    
+
     # Check if a server with the same name already exists
     if any(s.get("name") == server.name for s in existing_servers):
         response = create_error_response(
             "DUPLICATE_RESOURCE",
             f"MCP server with name '{server.name}' already exists",
             None,
-            request_id
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=409)
-    
+
     # Generate unique ID using UUID
     server_id = f"mcp-server-{uuid.uuid4().hex[:8]}"
-    
+
     # Ensure the generated ID is unique (very unlikely to collide with 8 hex chars)
     while any(s.get("id") == server_id for s in existing_servers):
         server_id = f"mcp-server-{uuid.uuid4().hex[:8]}"
@@ -204,7 +204,7 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
         "env": server.env,
         "enabled": server.enabled,
     }
-    
+
     # TODO: Add server to formation configuration
     # For now, this just returns the created config without persisting
 
@@ -325,9 +325,9 @@ async def list_mcp_tools(request: Request) -> JSONResponse:
         )
 
     response = create_success_response(
-        APIObjectType.MCP_TOOL_LIST,
+        APIObjectType.LIST,
         APIEventType.MCP_TOOL_LIST,
-        {"tools": available_tools, "count": len(available_tools)},
+        available_tools,
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -384,19 +384,20 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     except ValueError as e:
         # Handle expected validation errors with specific messages
         # TODO: Add observability event for MCP tool validation error
-        response = create_error_response(
-            "INVALID_PARAMS", str(e), None, request_id
-        )
+        response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
         return JSONResponse(content=response.model_dump(), status_code=400)
-    
-    except AttributeError as e:
+
+    except AttributeError:
         # Handle missing attributes/methods (e.g., formation components not available)
         # TODO: Add observability event for MCP tool configuration error
         response = create_error_response(
-            "TOOL_EXECUTION_ERROR", "Tool configuration error: required component not available", None, request_id
+            "TOOL_EXECUTION_ERROR",
+            "Tool configuration error: required component not available",
+            None,
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
-    
+
     except KeyError as e:
         # Handle missing required arguments
         # TODO: Add observability event for MCP tool argument error
@@ -404,16 +405,16 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
             "INVALID_PARAMS", f"Missing required argument: {str(e)}", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
-    
-    except Exception as e:
+
+    except Exception:
         # Handle unexpected errors without exposing internal details
         # TODO: Add observability event for MCP tool unexpected error with full details
         # Log the actual error internally but return generic message to client
-        import traceback
-        error_details = traceback.format_exc()  # This would be logged internally
-        
         response = create_error_response(
-            "TOOL_EXECUTION_ERROR", "An unexpected error occurred during tool execution", None, request_id
+            "TOOL_EXECUTION_ERROR",
+            "An unexpected error occurred during tool execution",
+            None,
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
 

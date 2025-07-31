@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 
 from ...responses import (
     APIResponse,
-    job_list_response,
+    job_list_response_spec,
     create_error_response,
 )
 
@@ -32,7 +32,7 @@ async def list_user_jobs(request: Request, user_id: str) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # TODO: Get jobs from request tracker
-    response = job_list_response([], request_id)
+    response = job_list_response_spec([], request_id)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
