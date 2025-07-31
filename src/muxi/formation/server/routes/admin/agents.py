@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Optional
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -17,6 +18,7 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Agents"])
@@ -52,7 +54,12 @@ async def list_agents(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Get agents from formation config
-    agents = formation.config.get("agents", [])
+    agents = deepcopy(formation.config.get("agents", []))
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"agents": agents}
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    agents = temp_config.get("agents", [])
 
     # Create structured response
     response = agent_list_response_spec(agents, request_id)
@@ -115,13 +122,21 @@ async def get_agent(request: Request, agent_id: str) -> JSONResponse:
 
     # Find agent
     agents = formation.config.get("agents", [])
-    agent = next((a for a in agents if a.get("id") == agent_id), None)
+    agent_index = next((i for i, a in enumerate(agents) if a.get("id") == agent_id), None)
 
-    if not agent:
+    if agent_index is None:
         response = create_error_response(
             "AGENT_NOT_FOUND", f"Agent '{agent_id}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
+
+    # Get a deep copy of the agent
+    agent = deepcopy(agents[agent_index])
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"agents": [agent]}
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    agent = temp_config.get("agents", [{}])[0]
 
     response = create_success_response(
         APIObjectType.AGENT, APIEventType.AGENT_RETRIEVED, agent, request_id

@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Dict, Any
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,7 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["LLM"])
@@ -38,7 +40,12 @@ async def get_llm_config(request: Request) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    llm_config = formation.config.get("llm", {})
+    llm_config = deepcopy(formation.config.get("llm", {}))
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"llm": llm_config}
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    llm_config = temp_config.get("llm", {})
 
     response = create_success_response(
         APIObjectType.LLM, APIEventType.LLM_RETRIEVED, llm_config, request_id

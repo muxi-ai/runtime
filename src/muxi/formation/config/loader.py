@@ -97,7 +97,7 @@ class ConfigLoader:
     @staticmethod
     async def process_secrets(
         config: Dict[str, Any], secrets_manager: Optional[Any] = None
-    ) -> tuple[Dict[str, Any], set[str]]:
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
         Process secrets variables in the configuration and track secrets in use.
 
@@ -113,13 +113,15 @@ class ConfigLoader:
             Tuple of:
             - Dict[str, Any]: The processed configuration with secrets replaced
             - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
 
         Raises:
             ValueError: If a required secret is not found
         """
         secrets_in_use = set()
+        placeholder_registry = {}
 
-        async def replace_secrets(obj: Any) -> Any:
+        async def replace_secrets(obj: Any, path: str = "") -> Any:
             if isinstance(obj, str):
                 # Find all ${{ secrets.SECRET_NAME }} patterns (whitespace tolerant)
                 secret_pattern = r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}"
@@ -136,6 +138,13 @@ class ConfigLoader:
                 for cred_name in user_cred_matches:
                     # Track USER_CREDENTIALS_X secret as being in use
                     secrets_in_use.add(f"USER_CREDENTIALS_{cred_name.upper().replace('-', '_')}")
+
+                # Check if this string contains any secret patterns
+                has_secrets = bool(matches) or bool(user_cred_matches)
+
+                # If this string contains secrets, store the original placeholder in registry
+                if has_secrets and path:
+                    placeholder_registry[path] = obj
 
                 # Only process secrets if a secrets manager is provided
                 if secrets_manager is not None:
@@ -157,18 +166,20 @@ class ConfigLoader:
             elif isinstance(obj, dict):
                 result = {}
                 for k, v in obj.items():
-                    result[k] = await replace_secrets(v)
+                    new_path = f"{path}.{k}" if path else k
+                    result[k] = await replace_secrets(v, new_path)
                 return result
             elif isinstance(obj, list):
                 result = []
-                for item in obj:
-                    result.append(await replace_secrets(item))
+                for i, item in enumerate(obj):
+                    new_path = f"{path}[{i}]"
+                    result.append(await replace_secrets(item, new_path))
                 return result
             else:
                 return obj
 
         processed_config = await replace_secrets(config)
-        return processed_config, secrets_in_use
+        return processed_config, secrets_in_use, placeholder_registry
 
     @staticmethod
     def validate_config(config: Dict[str, Any]) -> None:
@@ -236,7 +247,7 @@ class ConfigLoader:
 
     async def load_and_process(
         self, path: str, secrets_manager: Optional[Any] = None
-    ) -> tuple[Dict[str, Any], set[str]]:
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
         Load, validate, and process a configuration file.
 
@@ -255,12 +266,13 @@ class ConfigLoader:
             Tuple of:
             - Dict[str, Any]: The processed configuration
             - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
 
         Raises:
             ValueError: If the configuration is invalid
             FileNotFoundError: If the file does not exist
         """
         config = self.load(path)
-        config, secrets_in_use = await self.process_secrets(config, secrets_manager)
+        config, secrets_in_use, placeholder_registry = await self.process_secrets(config, secrets_manager)
         self.validate_config(config)
-        return config, secrets_in_use
+        return config, secrets_in_use, placeholder_registry

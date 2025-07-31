@@ -7,7 +7,6 @@ requiring admin API key authentication.
 
 import time
 from copy import deepcopy
-from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -15,36 +14,76 @@ from ...responses import (
     APIResponse,
     create_success_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Configuration"])
 
 
-def _mask_secrets_in_config(config: Dict[str, Any]) -> None:
-    """
-    Mask hardcoded secrets in formation config while preserving template references.
-
-    This is a simplified implementation focused on known secret locations.
-    TODO: Implement more comprehensive secret detection and masking system.
-
-    Args:
-        config: Formation configuration dictionary (modified in place)
-    """
-    # Mask LLM API keys
-    if "llm" in config and "api_keys" in config["llm"]:
-        for key, value in config["llm"]["api_keys"].items():
-            if isinstance(value, str) and not value.startswith("${{ secrets."):
-                config["llm"]["api_keys"][key] = "••••••••"
-
-    # Add more secret masking patterns here as needed
-    # Examples for future expansion:
-    # - Database connection strings with passwords
-    # - Webhook secrets
-    # - Third-party service tokens
-
-
 @router.get("/config", response_model=APIResponse)
 async def get_formation_config(request: Request) -> JSONResponse:
+    """
+    Get formation configuration summary.
+
+    Returns:
+        Formation metadata with resource links instead of full configuration
+    """
+    formation = request.app.state.formation
+    request_id = getattr(request.state, "request_id", None)
+
+    # Build configuration summary with resource links
+    config_summary = {
+        "formation_id": formation.config.get("id", "unknown"),
+        "version": formation.config.get("version", "1.0.0"),
+        "description": formation.config.get("description", ""),
+        "schema_version": formation.config.get("schema", "1.0.0"),
+        "agents": {
+            "total": len(formation.config.get("agents", [])),
+            "resource": "/v1/agents"
+        },
+        "secrets": {
+            "total": len(formation._secrets_in_use) if hasattr(formation, '_secrets_in_use') else 0,
+            "resource": "/v1/secrets"
+        },
+        "mcp": {
+            "default_retry_attempts": formation.config.get("mcp", {}).get("default_retry_attempts", 3),
+            "default_timeout_seconds": formation.config.get("mcp", {}).get("default_timeout_seconds", 30),
+            "servers": {
+                "total": len(formation.config.get("mcp", {}).get("servers", [])),
+                "resource": "/v1/mcp/servers"
+            }
+        },
+        "overlord": {
+            "resource": "/v1/overlord"
+        },
+        "llm": {
+            "resource": "/v1/llm/settings"
+        },
+        "memory": {
+            "resource": "/v1/memory"
+        },
+        "async": {
+            "resource": "/v1/async"
+        },
+        "scheduler": {
+            "resource": "/v1/scheduler"
+        },
+        "a2a": {
+            "resource": "/v1/a2a"
+        },
+        "logging": {
+            "resource": "/v1/logging"
+        }
+    }
+
+    response = create_success_response(
+        APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config_summary, request_id
+    )
+    return JSONResponse(content=response.model_dump(), status_code=200)
+
+
+@router.get("/formation", response_model=APIResponse)
+async def get_formation_config_detailed(request: Request) -> JSONResponse:
     """
     Get complete formation configuration.
 
@@ -56,32 +95,7 @@ async def get_formation_config(request: Request) -> JSONResponse:
 
     # Get full config with defaults
     config = deepcopy(formation.config)
-
-    # Mask hardcoded secrets but preserve references
-    _mask_secrets_in_config(config)
-
-    response = create_success_response(
-        APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
-    )
-    return JSONResponse(content=response.model_dump(), status_code=200)
-
-
-@router.get("/formation", response_model=APIResponse)
-async def get_formation_config_detailed(request: Request) -> JSONResponse:
-    """
-    Get complete formation configuration.
-
-    Returns:
-        Full formation YAML as JSON with defaults filled
-    """
-    formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
-
-    # Get full config with defaults
-    config = deepcopy(formation.config)
-
-    # Mask hardcoded secrets but preserve references
-    _mask_secrets_in_config(config)
+    config = restore_secret_placeholders(config, formation._secret_placeholders)
 
     response = create_success_response(
         APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id

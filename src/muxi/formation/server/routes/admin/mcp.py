@@ -7,6 +7,7 @@ requiring admin API key authentication.
 
 from typing import Dict, Any, Optional, List
 import uuid
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -18,6 +19,7 @@ from ...responses import (
     create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
+from ...secrets import restore_secret_placeholders
 from ...utils import get_header_case_insensitive
 
 router = APIRouter(tags=["MCP"])
@@ -151,7 +153,12 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    servers = formation.config.get("mcp", {}).get("servers", [])
+    servers = deepcopy(formation.config.get("mcp", {}).get("servers", []))
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"mcp": {"servers": servers}}
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    servers = temp_config.get("mcp", {}).get("servers", [])
 
     response = create_success_response(
         APIObjectType.LIST,
@@ -230,13 +237,21 @@ async def get_mcp_server(request: Request, server_id: str) -> JSONResponse:
 
     # TODO: Find server in configuration
     servers = formation.config.get("mcp", {}).get("servers", [])
-    server = next((s for s in servers if s.get("id") == server_id), None)
+    server_index = next((i for i, s in enumerate(servers) if s.get("id") == server_id), None)
 
-    if not server:
+    if server_index is None:
         response = create_error_response(
             "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
+
+    # Get a deep copy of the server
+    server = deepcopy(servers[server_index])
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"mcp": {"servers": [server]}}
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    server = temp_config.get("mcp", {}).get("servers", [{}])[0]
 
     response = create_success_response(
         APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_RETRIEVED, server, request_id

@@ -198,6 +198,9 @@ class Formation:
         # Track secrets in use
         self._secrets_in_use: set[str] = set()
 
+        # Track secret placeholder mappings
+        self._secret_placeholders: Dict[str, str] = {}
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -780,9 +783,13 @@ class Formation:
 
             async def _timeout_operation():
                 formation_loader = FormationLoader()
-                config, secrets_in_use = await formation_loader.load(loader_path, self.secrets_manager)
+                config, secrets_in_use, placeholder_registry = await formation_loader.load(
+                    loader_path, self.secrets_manager
+                )
                 # Store the secrets in use set
                 self._secrets_in_use = secrets_in_use
+                # Store the placeholder registry
+                self._secret_placeholders = placeholder_registry
                 return config
 
             result = await execute_with_timeout(
@@ -1731,6 +1738,7 @@ class Formation:
         """
         # Normalize the secret name the same way SecretsManager does
         import re
+
         normalized_name = re.sub(r"[^A-Z0-9_]", "_", secret_name.upper())
         normalized_name = re.sub(r"_+", "_", normalized_name)
         normalized_name = normalized_name.strip("_")
@@ -2695,7 +2703,7 @@ class Formation:
             host=actual_host,
             port=actual_port,
             debug=self._server_config.get("debug", False),
-            access_log=self._server_config.get("access_log", False)
+            access_log=self._server_config.get("access_log", False),
         )
 
         # Store server reference for status endpoint
@@ -3017,7 +3025,7 @@ class Formation:
             # File path - use FormationLoader to load and process
             try:
                 formation_loader = FormationLoader()
-                loaded_config = await formation_loader.load(schema, self.secrets_manager)
+                loaded_config, _, _ = await formation_loader.load(schema, self.secrets_manager)
 
                 # For individual components, extract the relevant section
                 if schema_type == "agent":

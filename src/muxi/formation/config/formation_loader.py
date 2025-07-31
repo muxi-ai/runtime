@@ -67,7 +67,9 @@ class FormationLoader:
         """Initialize the formation loader."""
         self.config_loader = ConfigLoader()
 
-    async def load(self, path: str, secrets_manager: Optional[Any] = None) -> tuple[Dict[str, Any], set[str]]:
+    async def load(
+        self, path: str, secrets_manager: Optional[Any] = None
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
         Load formation configuration from either a file or directory.
 
@@ -79,6 +81,7 @@ class FormationLoader:
             Tuple of:
             - Dict[str, Any]: The processed formation configuration
             - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
 
         Raises:
             ValueError: If the path doesn't exist or configuration is invalid
@@ -104,7 +107,7 @@ class FormationLoader:
 
     async def _load_flattened_formation(
         self, file_path: str, secrets_manager: Optional[Any] = None
-    ) -> tuple[Dict[str, Any], set[str]]:
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
         Load a flattened formation file.
 
@@ -116,10 +119,13 @@ class FormationLoader:
             Tuple of:
             - Dict[str, Any]: The processed formation configuration
             - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
         """
         # Use existing ConfigLoader to load and process the file
         config = self.config_loader.load(file_path)
-        config, secrets_in_use = await self.config_loader.process_secrets(config, secrets_manager)
+        config, secrets_in_use, placeholder_registry = await self.config_loader.process_secrets(
+            config, secrets_manager
+        )
 
         # Filter inline agents by active field
         self._filter_inline_agents_by_active(config)
@@ -133,19 +139,25 @@ class FormationLoader:
 
         # Auto-discover and merge component configurations if available
         # This allows flattened formations to also benefit from auto-discovery
-        await self._discover_and_merge_agents(config, formation_dir_path, secrets_manager, secrets_in_use)
-        await self._discover_and_merge_mcp_servers(config, formation_dir_path, secrets_manager, secrets_in_use)
-        await self._discover_and_merge_a2a_services(config, formation_dir_path, secrets_manager, secrets_in_use)
+        await self._discover_and_merge_agents(
+            config, formation_dir_path, secrets_manager, secrets_in_use, placeholder_registry
+        )
+        await self._discover_and_merge_mcp_servers(
+            config, formation_dir_path, secrets_manager, secrets_in_use, placeholder_registry
+        )
+        await self._discover_and_merge_a2a_services(
+            config, formation_dir_path, secrets_manager, secrets_in_use, placeholder_registry
+        )
 
         config = self._resolve_knowledge_paths(config, formation_dir)
 
         #  Formation loaded successfully - TODO: add observability
         #  CONFIG_FORMATION_LOADED
-        return config, secrets_in_use
+        return config, secrets_in_use, placeholder_registry
 
     async def _load_modular_formation(
         self, directory_path: str, secrets_manager: Optional[Any] = None
-    ) -> tuple[Dict[str, Any], set[str]]:
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
         Load a modular formation from a directory structure.
 
@@ -174,6 +186,7 @@ class FormationLoader:
             Tuple of:
             - Dict[str, Any]: The processed formation configuration
             - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
         """
         formation_dir = Path(directory_path)
 
@@ -184,7 +197,9 @@ class FormationLoader:
 
         # Load the main configuration
         main_config = self.config_loader.load(str(main_config_path))
-        main_config, secrets_in_use = await self.config_loader.process_secrets(main_config, secrets_manager)
+        main_config, secrets_in_use, placeholder_registry = (
+            await self.config_loader.process_secrets(main_config, secrets_manager)
+        )
 
         # Filter inline agents by active field before merging external agents
         self._filter_inline_agents_by_active(main_config)
@@ -193,20 +208,30 @@ class FormationLoader:
         self._filter_inline_mcp_servers_by_active(main_config)
 
         # Auto-discover and merge component configurations
-        await self._discover_and_merge_agents(main_config, formation_dir, secrets_manager, secrets_in_use)
-        await self._discover_and_merge_mcp_servers(main_config, formation_dir, secrets_manager, secrets_in_use)
-        await self._discover_and_merge_a2a_services(main_config, formation_dir, secrets_manager, secrets_in_use)
+        await self._discover_and_merge_agents(
+            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
+        )
+        await self._discover_and_merge_mcp_servers(
+            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
+        )
+        await self._discover_and_merge_a2a_services(
+            main_config, formation_dir, secrets_manager, secrets_in_use, placeholder_registry
+        )
 
         # Resolve knowledge paths relative to formation directory
         main_config = self._resolve_knowledge_paths(main_config, str(formation_dir))
 
         #  Modular formation loaded successfully - TODO: add observability
         #  CONFIG_FORMATION_LOADED
-        return main_config, secrets_in_use
+        return main_config, secrets_in_use, placeholder_registry
 
     async def _discover_and_merge_agents(
-        self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None,
-        secrets_in_use: Optional[set[str]] = None
+        self,
+        config: Dict[str, Any],
+        formation_dir: Path,
+        secrets_manager: Optional[Any] = None,
+        secrets_in_use: Optional[set[str]] = None,
+        placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Discover agent configurations in the agents/ directory and merge them.
@@ -216,6 +241,7 @@ class FormationLoader:
             formation_dir: Path to the formation directory
             secrets_manager: SecretsManager instance for secret interpolation
             secrets_in_use: Set to accumulate secret names in use
+            placeholder_registry: Registry to accumulate placeholder mappings
         """
         agents_dir = formation_dir / "agents"
         if not agents_dir.exists():
@@ -243,13 +269,23 @@ class FormationLoader:
                 #  Agent config loading - TODO: add observability
                 #  AGENT_MESSAGE_PROCESSING
                 agent_config = self.config_loader.load(str(agent_file))
-                agent_config, agent_secrets = await self.config_loader.process_secrets(
-                    agent_config, secrets_manager
+                agent_config, agent_secrets, agent_placeholders = (
+                    await self.config_loader.process_secrets(agent_config, secrets_manager)
                 )
 
                 # Accumulate secrets from this agent
                 if secrets_in_use is not None:
                     secrets_in_use.update(agent_secrets)
+
+                # Accumulate placeholders with adjusted paths for agent array
+                if placeholder_registry is not None:
+                    agent_index = len(config["agents"])
+                    for path, placeholder in agent_placeholders.items():
+                        # Adjust path to include agent array index
+                        adjusted_path = (
+                            f"agents[{agent_index}].{path}" if path else f"agents[{agent_index}]"
+                        )
+                        placeholder_registry[adjusted_path] = placeholder
 
                 # Ensure agent has an ID (use filename if not specified)
                 if "id" not in agent_config:
@@ -343,8 +379,12 @@ class FormationLoader:
         config["mcp"]["servers"] = filtered_servers
 
     async def _discover_and_merge_mcp_servers(
-        self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None,
-        secrets_in_use: Optional[set[str]] = None
+        self,
+        config: Dict[str, Any],
+        formation_dir: Path,
+        secrets_manager: Optional[Any] = None,
+        secrets_in_use: Optional[set[str]] = None,
+        placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Discover MCP server configurations in the mcp/ directory and merge them.
@@ -354,6 +394,7 @@ class FormationLoader:
             formation_dir: Path to the formation directory
             secrets_manager: SecretsManager instance for secret interpolation
             secrets_in_use: Set to accumulate secret names in use
+            placeholder_registry: Registry to accumulate placeholder mappings
         """
         mcp_dir = formation_dir / "mcp"
         if not mcp_dir.exists():
@@ -383,11 +424,25 @@ class FormationLoader:
                 #  MCP config loading - TODO: add observability
                 #  MCP_SERVER_CONNECTING
                 mcp_config = self.config_loader.load(str(mcp_file))
-                mcp_config, mcp_secrets = await self.config_loader.process_secrets(mcp_config, secrets_manager)
+                mcp_config, mcp_secrets, mcp_placeholders = (
+                    await self.config_loader.process_secrets(mcp_config, secrets_manager)
+                )
 
                 # Accumulate secrets from this MCP server
                 if secrets_in_use is not None:
                     secrets_in_use.update(mcp_secrets)
+
+                # Accumulate placeholders with adjusted paths for MCP server array
+                if placeholder_registry is not None:
+                    server_index = len(config["mcp"]["servers"])
+                    for path, placeholder in mcp_placeholders.items():
+                        # Adjust path to include MCP server array index
+                        adjusted_path = (
+                            f"mcp.servers[{server_index}].{path}"
+                            if path
+                            else f"mcp.servers[{server_index}]"
+                        )
+                        placeholder_registry[adjusted_path] = placeholder
 
                 # Ensure MCP server has an ID (use filename if not specified)
                 if "id" not in mcp_config:
@@ -418,8 +473,12 @@ class FormationLoader:
         # )
 
     async def _discover_and_merge_a2a_services(
-        self, config: Dict[str, Any], formation_dir: Path, secrets_manager: Optional[Any] = None,
-        secrets_in_use: Optional[set[str]] = None
+        self,
+        config: Dict[str, Any],
+        formation_dir: Path,
+        secrets_manager: Optional[Any] = None,
+        secrets_in_use: Optional[set[str]] = None,
+        placeholder_registry: Optional[Dict[str, str]] = None,
     ) -> None:
         """
         Discover A2A service configurations in the a2a/ directory and merge them.
@@ -429,6 +488,7 @@ class FormationLoader:
             formation_dir: Path to the formation directory
             secrets_manager: SecretsManager instance for secret interpolation
             secrets_in_use: Set to accumulate secret names in use
+            placeholder_registry: Registry to accumulate placeholder mappings
         """
         a2a_dir = formation_dir / "a2a"
         if not a2a_dir.exists():
@@ -460,11 +520,25 @@ class FormationLoader:
                 #  A2A config loading - TODO: add observability
                 #  A2A_MESSAGE_SENT
                 a2a_config = self.config_loader.load(str(a2a_file))
-                a2a_config, a2a_secrets = await self.config_loader.process_secrets(a2a_config, secrets_manager)
+                a2a_config, a2a_secrets, a2a_placeholders = (
+                    await self.config_loader.process_secrets(a2a_config, secrets_manager)
+                )
 
                 # Accumulate secrets from this A2A service
                 if secrets_in_use is not None:
                     secrets_in_use.update(a2a_secrets)
+
+                # Accumulate placeholders with adjusted paths for A2A service array
+                if placeholder_registry is not None:
+                    service_index = len(config["a2a"]["outbound"]["services"])
+                    for path, placeholder in a2a_placeholders.items():
+                        # Adjust path to include A2A service array index
+                        adjusted_path = (
+                            f"a2a.outbound.services[{service_index}].{path}"
+                            if path
+                            else f"a2a.outbound.services[{service_index}]"
+                        )
+                        placeholder_registry[adjusted_path] = placeholder
 
                 # Ensure A2A service has an ID (use filename if not specified)
                 if "id" not in a2a_config:

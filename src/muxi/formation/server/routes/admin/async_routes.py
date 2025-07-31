@@ -16,6 +16,7 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Async"])
@@ -42,6 +43,12 @@ async def get_async_config(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     async_config = formation.config.get("async", {})
+
+    # Create a temporary config structure to apply placeholders
+    from copy import deepcopy
+    temp_config = {"async": deepcopy(async_config)}
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    async_config = temp_config.get("async", {})
 
     response = create_success_response(
         APIObjectType.ASYNC, APIEventType.ASYNC_RETRIEVED, async_config, request_id
