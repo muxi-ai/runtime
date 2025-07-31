@@ -1115,7 +1115,6 @@ class Formation:
         self._server_config = {
             "host": server_config.get("host", "0.0.0.0"),
             "port": server_config.get("port", 8271),
-            "debug": server_config.get("debug", False),
             "access_log": server_config.get("access_log", False),
             "api_keys": self._api_keys,
         }

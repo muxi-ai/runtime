@@ -47,9 +47,8 @@ class FormationServer:
         self.host = host
         self.port = port
         self.config = kwargs
-        
-        # Extract debug and access_log settings
-        self.debug = kwargs.get("debug", False)
+
+        # Extract access_log setting
         self.access_log = kwargs.get("access_log", False)
 
         # Server state
@@ -75,7 +74,6 @@ class FormationServer:
                 "has_admin_key": bool(self.admin_key),
                 "has_client_key": bool(self.client_key),
                 "formation_id": formation.formation_id,
-                "debug": self.debug,
                 "access_log": self.access_log,
             },
             description=f"Initializing Formation server on {self.host}:{self.port}",
@@ -428,7 +426,6 @@ class FormationServer:
             port=self.port,
             log_level="info",
             access_log=self.access_log,
-            reload=self.debug,  # Auto-reload when debug is enabled
         )
 
         self._server = uvicorn.Server(config)
