@@ -9,6 +9,7 @@ httpx-sse>=0.4.0
 rich>=13.6.0
 colorama>=0.4.6
 platformdirs>=4.0.0
+psutil>=5.9.0  # System and process utilities
 
 # LLM Package
 onellm>=0.1.0
