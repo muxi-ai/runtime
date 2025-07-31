@@ -15,7 +15,7 @@ All endpoints use clean resource-based paths with `/v1` prefix. Authentication d
 | Resource | Path | Methods | Description |
 |----------|------|---------|-------------|
 | Config | `/v1/config` | GET | Full formation configuration |
-| Status | `/v1/status` | GET | Formation status snapshot |
+| Status | `/v1/status` | GET | Formation runtime status with stats |
 | Overlord | `/v1/overlord` | GET | Overlord configuration |
 | Overlord | `/v1/overlord/persona` | GET | Overlord persona |
 | Agents | `/v1/agents` | GET, POST | List and create agents |
@@ -166,6 +166,52 @@ When wrapped by multi-formation servers:
 - **Not verbose**: No redundant `/admin` or `/client` prefixes
 
 ## Configuration Management
+
+### Status API
+
+The `/v1/status` endpoint provides real-time formation runtime statistics and resource usage.
+
+#### Response Structure
+```json
+{
+  "formation": {
+    "id": "my-formation",
+    "name": "my-formation",  // Uses formation id if name not specified
+    "description": "Production formation",
+    "version": "1.0.0"
+  },
+  "agents": {
+    "count": 3,
+    "active": 2
+  },
+  "mcp_servers": {
+    "count": 2,
+    "active": 2
+  },
+  "stats": {
+    "running": {
+      "seconds": 3600,
+      "since": 1706612400  // Epoch timestamp when formation started
+    },
+    "memory": {
+      "working_memory_mb": 512,  // Configured working memory limit
+      "memory_usage_mb": 256.7   // Actual process memory usage
+    },
+    "requests": {
+      "total": 100,      // Total requests served since startup
+      "active": 10       // Currently active requests (excluding this one)
+    },
+    "buffer_size": 1000,
+    "cpu_percent": 12.5  // System-wide CPU usage (instantaneous)
+  }
+}
+```
+
+#### Key Features
+- **Name defaulting**: If formation name is not configured, uses formation ID
+- **Request tracking**: Counts total requests served and currently active connections
+- **Resource monitoring**: Real-time CPU and memory usage (requires psutil)
+- **Uptime tracking**: Shows how long the formation has been running
 
 ### Secrets API
 

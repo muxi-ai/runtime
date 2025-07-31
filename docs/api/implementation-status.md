@@ -28,7 +28,7 @@ All major API discrepancies have been resolved to align with the OpenAPI specifi
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
 | Get Config | GET | `/config` | ✅ | Returns full formation configuration with `formation_config` object type |
-| Get Status | GET | `/status` | ✅ | Returns formation status snapshot with `formation_status` object type |
+| Get Status | GET | `/status` | ✅ | Returns formation runtime status with stats. Includes request tracking, resource monitoring (CPU/memory), and uptime. Uses formation_id as name if name not specified. |
 
 ### Overlord
 | Endpoint | Method | Path | Status | Notes |

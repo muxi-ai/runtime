@@ -66,7 +66,12 @@ paths:
   /status:
     get:
       tags: [Configuration]
-      summary: Get formation status snapshot
+      summary: Get formation runtime status with stats
+      description: |-
+        Returns real-time formation status including:
+        - Formation details (uses ID as name if name not configured)
+        - Agent and MCP server counts
+        - Runtime statistics (uptime, memory, CPU, requests)
       security:
         - AdminKey: []
       responses:
@@ -76,6 +81,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                status:
+                  value:
+                    object: "formation_status"
+                    timestamp: 1706616000000
+                    type: "formation.status.retrieved"
+                    request:
+                      id: "req_status123"
+                      idempotency_key: null
+                    success: true
+                    error: null
+                    data:
+                      formation:
+                        id: "my-formation"
+                        name: "my-formation"
+                        description: "Production formation"
+                        version: "1.0.0"
+                      agents:
+                        count: 3
+                        active: 2
+                      mcp_servers:
+                        count: 2
+                        active: 2
+                      stats:
+                        running:
+                          seconds: 3600
+                          since: 1706612400
+                        memory:
+                          working_memory_mb: 512
+                          memory_usage_mb: 256.7
+                        requests:
+                          total: 100
+                          active: 10
+                        buffer_size: 1000
+                        cpu_percent: 12.5
 
   # Overlord
   /overlord:
@@ -206,6 +246,12 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
         '404':
           description: Secret not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Secret is in use
           content:
             application/json:
               schema:
