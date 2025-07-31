@@ -4,6 +4,18 @@
 
 This document tracks the detailed implementation status of each Formation API endpoint.
 
+## Recent Updates
+
+### 2025-01-31: API Specification Alignment Completed ✅
+All major API discrepancies have been resolved to align with the OpenAPI specification:
+
+- **Envelope Format**: All endpoints now use consistent envelope format with proper error handling
+- **Object Types**: Updated to use spec-compliant object types (`formation_status`, `formation_config`)  
+- **List Endpoints**: All list endpoints now return arrays directly with generic `list` object type
+- **Authentication**: Fixed HTTP status codes (401 instead of 403 for auth errors)
+- **Error Handling**: 404 and other HTTP exceptions now use proper envelope structure
+- **Root Endpoints**: Both `/` and `/v1` return HTML status pages as specified
+
 ## Status Legend
 - ✅ **Implemented** - Fully functional and tested
 - 🔶 **Partial** - Core functionality exists but missing features
@@ -15,8 +27,8 @@ This document tracks the detailed implementation status of each Formation API en
 ### Configuration & Status
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
-| Get Config | GET | `/config` | ✅ | Returns full formation configuration |
-| Get Status | GET | `/status` | ✅ | Returns formation status snapshot |
+| Get Config | GET | `/config` | ✅ | Returns full formation configuration with `formation_config` object type |
+| Get Status | GET | `/status` | ✅ | Returns formation status snapshot with `formation_status` object type |
 
 ### Overlord
 | Endpoint | Method | Path | Status | Notes |
@@ -27,7 +39,7 @@ This document tracks the detailed implementation status of each Formation API en
 ### Secrets Management
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
-| List Secrets | GET | `/secrets` | ✅ | Returns masked secret keys |
+| List Secrets | GET | `/secrets` | ✅ | Returns masked secret keys as array with `list` object type |
 | Create Secret | POST | `/secrets` | ✅ | Creates new secret |
 | Update Secret | PUT | `/secrets/{key}` | ✅ | Updates existing secret |
 | Delete Secret | DELETE | `/secrets/{key}` | ✅ | Deletes secret (TODO: validate not in use) |
@@ -35,7 +47,7 @@ This document tracks the detailed implementation status of each Formation API en
 ### Agent Management
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
-| List Agents | GET | `/agents` | ✅ | Returns all agents |
+| List Agents | GET | `/agents` | ✅ | Returns all agents as array with `list` object type |
 | Create Agent | POST | `/agents` | ✅ | Creates agent with `source: "api"` |
 | Get Agent | GET | `/agents/{agent_id}` | ✅ | Returns specific agent |
 | Update Agent | PATCH | `/agents/{agent_id}` | ✅ | Updates agent (TODO: notify overlord) |
@@ -46,12 +58,12 @@ This document tracks the detailed implementation status of each Formation API en
 |----------|--------|------|--------|-------|
 | Get MCP Defaults | GET | `/mcp` | ✅ | Returns global MCP defaults |
 | Update MCP Defaults | PATCH | `/mcp` | ✅ | Updates retry/timeout settings |
-| List MCP Servers | GET | `/mcp/servers` | ✅ | Returns all MCP servers |
+| List MCP Servers | GET | `/mcp/servers` | ✅ | Returns all MCP servers as array with `list` object type |
 | Create MCP Server | POST | `/mcp/servers` | ✅ | Creates server with `source: "api"` |
 | Get MCP Server | GET | `/mcp/servers/{server_id}` | ✅ | Returns specific server |
 | Update MCP Server | PATCH | `/mcp/servers/{server_id}` | ✅ | Updates server settings |
 | Delete MCP Server | DELETE | `/mcp/servers/{server_id}` | ✅ | Deletes API-created servers only |
-| List MCP Tools | GET | `/mcp/tools` | ✅ | Returns available tools |
+| List MCP Tools | GET | `/mcp/tools` | ✅ | Returns available tools as array with `list` object type |
 | Execute MCP Tool | POST | `/mcp/tools/call` | ✅ | Executes tool (admin only) |
 
 ### LLM Settings
@@ -111,7 +123,7 @@ This document tracks the detailed implementation status of each Formation API en
 ### Jobs
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
-| List Jobs | GET | `/jobs/{user_id}` | 🔶 | Needs async job system implementation |
+| List Jobs | GET | `/jobs/{user_id}` | 🔶 | Returns jobs as array with `list` object type, needs async job system implementation |
 | Cancel Job | DELETE | `/jobs/{user_id}/{job_id}` | 🔶 | Needs async job system implementation |
 
 ### Memories
@@ -125,8 +137,9 @@ This document tracks the detailed implementation status of each Formation API en
 
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
-| Health Check | GET | `/health` | ✅ | Basic health check |
-| Root Status | GET | `/` | ✅ | Returns API version and status |
+| Health Check | GET | `/health` | ✅ | Basic health check with envelope format |
+| Root Status | GET | `/` | ✅ | Returns HTML status page (Up/Down) |
+| V1 Status | GET | `/v1` | ✅ | Returns HTML status page (Up/Down) |
 
 ## Implementation TODOs
 
@@ -150,10 +163,11 @@ This document tracks the detailed implementation status of each Formation API en
 
 ## Testing Status
 
-| Component | Unit Tests | Integration Tests | E2E Tests |
-|-----------|------------|-------------------|-----------|
-| Auth Middleware | ✅ | ✅ | 🔶 |
-| Admin Routes | 🔶 | ❌ | ❌ |
-| Client Routes | 🔶 | ❌ | ❌ |
-| Response Format | ✅ | ✅ | 🔶 |
-| Error Handling | ✅ | ✅ | 🔶 |
+| Component | Unit Tests | Integration Tests | E2E Tests | Notes |
+|-----------|------------|-------------------|-----------|-------|
+| Auth Middleware | ✅ | ✅ | 🔶 | HTTP 401 status codes verified |
+| Admin Routes | 🔶 | ❌ | ❌ | Core endpoints functional |
+| Client Routes | 🔶 | ❌ | ❌ | Core endpoints functional |
+| Response Format | ✅ | ✅ | ✅ | Envelope format compliance verified |
+| Error Handling | ✅ | ✅ | ✅ | HTTP exceptions use envelope format |
+| API Compliance | ✅ | ✅ | 🔶 | OpenAPI spec alignment verified |

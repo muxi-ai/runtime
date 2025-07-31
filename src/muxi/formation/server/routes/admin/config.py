@@ -5,6 +5,8 @@ These endpoints provide formation configuration and status,
 requiring admin API key authentication.
 """
 
+from copy import deepcopy
+from typing import Any, Dict
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -15,6 +17,29 @@ from ...responses import (
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Configuration"])
+
+
+def _mask_secrets_in_config(config: Dict[str, Any]) -> None:
+    """
+    Mask hardcoded secrets in formation config while preserving template references.
+
+    This is a simplified implementation focused on known secret locations.
+    TODO: Implement more comprehensive secret detection and masking system.
+
+    Args:
+        config: Formation configuration dictionary (modified in place)
+    """
+    # Mask LLM API keys
+    if "llm" in config and "api_keys" in config["llm"]:
+        for key, value in config["llm"]["api_keys"].items():
+            if isinstance(value, str) and not value.startswith("${{ secrets."):
+                config["llm"]["api_keys"][key] = "••••••••"
+
+    # Add more secret masking patterns here as needed
+    # Examples for future expansion:
+    # - Database connection strings with passwords
+    # - Webhook secrets
+    # - Third-party service tokens
 
 
 @router.get("/config", response_model=APIResponse)
@@ -29,14 +54,10 @@ async def get_formation_config(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Get full config with defaults
-    config = formation.config.copy()
+    config = deepcopy(formation.config)
 
     # Mask hardcoded secrets but preserve references
-    # This is a simplified implementation - in production you'd want more sophisticated masking
-    if "llm" in config and "api_keys" in config["llm"]:
-        for key, value in config["llm"]["api_keys"].items():
-            if isinstance(value, str) and not value.startswith("${{ secrets."):
-                config["llm"]["api_keys"][key] = "••••••••"
+    _mask_secrets_in_config(config)
 
     response = create_success_response(
         APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id
@@ -56,10 +77,10 @@ async def get_formation_config_detailed(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Get full config with defaults
-    config = formation.config.copy()
+    config = deepcopy(formation.config)
 
     # Mask hardcoded secrets but preserve references
-    # TODO: Implement secret masking logic
+    _mask_secrets_in_config(config)
 
     response = create_success_response(
         APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id

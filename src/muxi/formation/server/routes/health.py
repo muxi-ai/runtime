@@ -14,6 +14,25 @@ from ....datatypes.api import APIEventType, APIObjectType
 router = APIRouter(tags=["Health"])
 
 
+def _check_formation_health(formation) -> bool:
+    """
+    Check if the formation is healthy.
+
+    Args:
+        formation: The formation instance to check
+
+    Returns:
+        bool: True if formation is healthy, False otherwise
+    """
+    try:
+        # Check if formation is loaded
+        if not hasattr(formation, "config") or formation.config is None:
+            return False
+        return True
+    except Exception:
+        return False
+
+
 @router.get("/")
 async def root_status(request: Request) -> HTMLResponse:
     """
@@ -24,15 +43,7 @@ async def root_status(request: Request) -> HTMLResponse:
     """
     # Check if the formation is healthy
     formation = request.app.state.formation
-    is_healthy = True
-
-    # Basic health checks
-    try:
-        # Check if formation is loaded
-        if not hasattr(formation, "config") or formation.config is None:
-            is_healthy = False
-    except Exception:
-        is_healthy = False
+    is_healthy = _check_formation_health(formation)
 
     # Determine status, color, and status code
     if is_healthy:
@@ -86,25 +97,19 @@ async def health_check(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Check if the formation is healthy
-    is_healthy = True
-    try:
-        # Check if formation is loaded
-        if not hasattr(formation, "config") or formation.config is None:
-            is_healthy = False
-    except Exception:
-        is_healthy = False
+    is_healthy = _check_formation_health(formation)
 
     # Build health data
     health_data = {
         "status": "healthy" if is_healthy else "unhealthy",
         "formation_id": (
             formation.config.get("id", "unknown")
-            if is_healthy and hasattr(formation, "config")
+            if is_healthy and hasattr(formation, "config") and isinstance(formation.config, dict)
             else "unknown"
         ),
         "version": (
             formation.config.get("version", "1.0.0")
-            if is_healthy and hasattr(formation, "config")
+            if is_healthy and hasattr(formation, "config") and isinstance(formation.config, dict)
             else "1.0.0"
         ),
     }

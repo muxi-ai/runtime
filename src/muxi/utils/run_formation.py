@@ -13,11 +13,23 @@ import asyncio
 import sys
 from pathlib import Path
 
-# Add the project root to Python path
-project_root = Path(__file__).parent.parent.parent.parent
-sys.path.insert(0, str(project_root))
+# Import using relative imports to avoid sys.path manipulation
+try:
+    from ...formation import Formation
+except ImportError:
+    # Fallback for development environments where package isn't installed
+    # Find project root by looking for pyproject.toml or setup.py
+    current_dir = Path(__file__).parent
+    project_root = current_dir
+    while project_root.parent != project_root:
+        if (project_root / "pyproject.toml").exists() or (project_root / "setup.py").exists():
+            break
+        project_root = project_root.parent
 
-from src.muxi.formation import Formation  # noqa: E402
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+
+    from src.muxi.formation import Formation
 
 
 async def run_formation(formation_path: str):
@@ -52,12 +64,7 @@ def main():
 
     formation_path = sys.argv[1]
 
-    # Check if file exists
-    if not Path(formation_path).exists():
-        print(f"Error: Formation file not found: {formation_path}")
-        sys.exit(1)
-
-    # Run the formation
+    # Run the formation - file existence will be checked during loading
     asyncio.run(run_formation(formation_path))
 
 

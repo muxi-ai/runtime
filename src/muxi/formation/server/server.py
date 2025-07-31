@@ -289,6 +289,7 @@ class FormationServer:
         # Add exception handlers to ensure proper envelope format
         from fastapi import HTTPException
         from fastapi.responses import JSONResponse
+        from fastapi.exceptions import RequestValidationError
         from starlette.exceptions import HTTPException as StarletteHTTPException
         from .responses import create_error_response
 
@@ -335,6 +336,44 @@ class FormationServer:
                 )
 
             return handler
+
+        # Create specialized handler for validation errors
+        @app.exception_handler(RequestValidationError)
+        async def validation_exception_handler(request, exc: RequestValidationError):
+            """Handle FastAPI validation errors with detailed error information."""
+            # Get request ID if available
+            request_id = getattr(request.state, "request_id", None)
+
+            # Extract detailed validation errors
+            validation_errors = []
+            for error in exc.errors():
+                validation_errors.append(
+                    {
+                        "loc": list(
+                            error["loc"]
+                        ),  # Location of the error (e.g., ["body", "field_name"])
+                        "msg": error["msg"],  # Error message
+                        "type": error["type"],  # Error type (e.g., "value_error.missing")
+                    }
+                )
+
+            # Create detailed error message
+            error_message = f"Validation failed: {len(validation_errors)} error(s)"
+
+            # Create structured error response with validation details
+            error_response = create_error_response(
+                error_code="INVALID_PARAMS",
+                message=error_message,
+                request_id=request_id,
+            )
+
+            # Add validation details to the response data
+            error_response.data = {"validation_errors": validation_errors}
+
+            return JSONResponse(
+                status_code=422,
+                content=error_response.model_dump(),
+            )
 
         # Register the same handler for both FastAPI and Starlette HTTP exceptions
         http_handler = create_http_exception_handler()

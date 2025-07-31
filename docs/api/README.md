@@ -91,7 +91,13 @@ All API responses use a consistent envelope format:
 
 ## 🔄 Recent Updates
 
-### 2025-01-31
+### 2025-01-31: API Specification Alignment Completed ✅
+- **Envelope Format**: All endpoints now use consistent envelope format with proper error handling
+- **Object Types**: Updated to use spec-compliant object types (`formation_status`, `formation_config`)  
+- **List Endpoints**: All list endpoints now return arrays directly with generic `list` object type
+- **Authentication**: Fixed HTTP status codes (401 instead of 403 for auth errors)
+- **Error Handling**: 404 and other HTTP exceptions now use proper envelope structure
+- **Root Endpoints**: Both `/` and `/v1` return HTML status pages as specified
 - Initial API documentation structure created
 - Implemented endpoints documented in OpenAPI spec
 - Implementation status tracking established
