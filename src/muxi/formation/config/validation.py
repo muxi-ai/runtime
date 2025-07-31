@@ -2423,15 +2423,15 @@ def validate_user_credentials_requirements(
 
     # Check MCP servers for user credentials that need initialization secrets
     mcp_config = config.get("mcp", {})
-    servers = mcp_config.get("servers", [])
+    servers = list(mcp_config.get("servers", []))  # Create a copy for validation
 
-    # Also check agent-level MCP servers
+    # Also check agent-level MCP servers (add to validation copy only)
     agents = config.get("agents", [])
     for agent in agents:
         if isinstance(agent, dict) and "mcp_servers" in agent:
             agent_servers = agent["mcp_servers"]
             if isinstance(agent_servers, list):
-                servers.extend(agent_servers)
+                servers.extend(agent_servers)  # Only extend the validation copy
 
     # Find all user credentials in MCP server configurations
     found_credentials = set()
@@ -2528,15 +2528,15 @@ async def validate_user_credentials_requirements_async(
 
     # Check MCP servers for user credentials that need initialization secrets
     mcp_config = config.get("mcp", {})
-    servers = mcp_config.get("servers", [])
+    servers = list(mcp_config.get("servers", []))  # Create a copy for validation
 
-    # Also check agent-level MCP servers
+    # Also check agent-level MCP servers (add to validation copy only)
     agents = config.get("agents", [])
     for agent in agents:
         if isinstance(agent, dict) and "mcp_servers" in agent:
             agent_servers = agent["mcp_servers"]
             if isinstance(agent_servers, list):
-                servers.extend(agent_servers)
+                servers.extend(agent_servers)  # Only extend the validation copy
 
     # Find all user credentials in MCP server configurations
     found_credentials = set()

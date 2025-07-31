@@ -857,8 +857,8 @@ class Agent:
         if self.overlord and hasattr(self.overlord, "mcp_service"):
             try:
                 mcp_service = self.overlord.mcp_service
-                # Access tool_registry directly
-                available_tools = mcp_service.tool_registry
+                # Use agent-specific tool registry to get only tools this agent has access to
+                available_tools = mcp_service.get_tool_registry(self.agent_id)
 
                 # Format tools for LLM if any are available
                 if available_tools:

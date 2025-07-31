@@ -594,47 +594,9 @@ class Formation:
                     )
                     continue
 
-        # Discover MCP servers from mcp/ directory
-        mcp_dir = formation_dir / "mcp"
-        if mcp_dir.exists() and mcp_dir.is_dir():
-            # Initialize MCP structure if not present
-            if "mcp" not in config:
-                config["mcp"] = {}
-            if "servers" not in config["mcp"]:
-                config["mcp"]["servers"] = []
-
-            # Load each MCP server file
-            for mcp_file in sorted(mcp_dir.glob("*.yaml")) + sorted(mcp_dir.glob("*.yml")):
-                try:
-                    with open(mcp_file, "r") as f:
-                        mcp_config = yaml.safe_load(f)
-
-                    # Interpolate secrets in MCP config
-                    if self.secrets_manager:
-                        mcp_config = self._interpolate_secrets_sync(mcp_config)
-
-                    # Ensure MCP server has an ID
-                    if "id" not in mcp_config:
-                        mcp_config["id"] = mcp_file.stem
-
-                    # Check if server is active (default to True)
-                    if mcp_config.get("active", True):
-                        config["mcp"]["servers"].append(mcp_config)
-                        observability.observe(
-                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
-                            level=observability.EventLevel.DEBUG,
-                            data={"server_id": mcp_config["id"], "file": str(mcp_file)},
-                            description=f"Discovered MCP server: {mcp_config['id']}",
-                        )
-
-                except Exception as e:
-                    observability.observe(
-                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"mcp_file": str(mcp_file), "error": str(e)},
-                        description=f"Failed to load MCP file {mcp_file}: {e}",
-                    )
-                    continue
+        # NOTE: MCP server discovery is now handled by FormationLoader
+        # This eliminates duplicate MCP server registration that was happening
+        # when both Formation and FormationLoader processed the mcp/ directory
 
         # Discover A2A services from a2a/ directory
         a2a_dir = formation_dir / "a2a"
