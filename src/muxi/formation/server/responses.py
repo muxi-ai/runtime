@@ -202,7 +202,7 @@ def agent_list_response_spec(
     return create_success_response(
         APIObjectType.LIST,
         APIEventType.AGENT_LIST,
-        agents,
+        {"agents": agents, "count": len(agents)},
         request_id,
     )
 
