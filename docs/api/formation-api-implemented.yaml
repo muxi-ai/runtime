@@ -52,16 +52,59 @@ paths:
   /config:
     get:
       tags: [Configuration]
-      summary: Get full formation configuration
+      summary: Get formation configuration summary
+      description: Returns formation metadata with resource links instead of full configuration
       security:
         - AdminKey: []
       responses:
         '200':
-          description: Formation configuration
+          description: Formation configuration summary
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                config:
+                  value:
+                    object: "formation_config"
+                    timestamp: 1706616000000
+                    type: "config.retrieved"
+                    request:
+                      id: "req_config123"
+                      idempotency_key: null
+                    success: true
+                    error: null
+                    data:
+                      formation_id: "my-formation"
+                      version: "1.0.0"
+                      description: "Production formation"
+                      schema_version: "1.0.0"
+                      agents:
+                        total: 3
+                        resource: "/v1/agents"
+                      secrets:
+                        total: 5
+                        resource: "/v1/secrets"
+                      mcp:
+                        default_retry_attempts: 3
+                        default_timeout_seconds: 30
+                        servers:
+                          total: 2
+                          resource: "/v1/mcp/servers"
+                      overlord:
+                        resource: "/v1/overlord"
+                      llm:
+                        resource: "/v1/llm/settings"
+                      memory:
+                        resource: "/v1/memory"
+                      async:
+                        resource: "/v1/async"
+                      scheduler:
+                        resource: "/v1/scheduler"
+                      a2a:
+                        resource: "/v1/a2a"
+                      logging:
+                        resource: "/v1/logging"
 
   /status:
     get:

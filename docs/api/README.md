@@ -7,6 +7,7 @@ This directory contains the living documentation for the MUXI Formation API impl
 - **[formation-api-implemented.yaml](./formation-api-implemented.yaml)** - OpenAPI 3.0 specification containing ONLY implemented endpoints
 - **[implementation-status.md](./implementation-status.md)** - Detailed tracking of implementation progress with notes
 - **[migration-guide.md](./migration-guide.md)** - Guide for API changes from design to implementation
+- **[secret-handling.md](./secret-handling.md)** - Comprehensive documentation of secret protection mechanisms
 
 ## 🚀 Quick Start
 
@@ -90,6 +91,15 @@ All API responses use a consistent envelope format:
 ```
 
 ## 🔄 Recent Updates
+
+### 2025-01-31: Secret Protection Implementation ✅
+- **Placeholder Tracking**: Formation loader now tracks original secret placeholders during configuration loading
+- **Secret Restoration**: All API endpoints restore placeholders instead of exposing actual secret values
+- **Hardcoded Secret Masking**: Automatic detection and masking of hardcoded secrets at known paths
+- **Pattern Detection**: Recognizes common API key patterns (OpenAI, Anthropic, Google, etc.)
+- **Comprehensive Coverage**: Applied to all configuration endpoints (/v1/config, /v1/llm/settings, /v1/agents, etc.)
+- **Config Endpoint Update**: `/v1/config` now returns summary with resource links per spec
+- **Formation Endpoint**: `/v1/formation` returns full config with secrets properly masked
 
 ### 2025-01-31: API Specification Alignment Completed ✅
 - **Envelope Format**: All endpoints now use consistent envelope format with proper error handling
