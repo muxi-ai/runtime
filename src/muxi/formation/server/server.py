@@ -9,18 +9,66 @@ It handles both admin operations (formation management) and client operations
 import asyncio
 import signal
 import time
+import threading
 from contextlib import asynccontextmanager
 from typing import Optional, TYPE_CHECKING
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ...services import observability
 from ...utils.version import get_version
 
 if TYPE_CHECKING:
     from ..formation import Formation
+
+
+def create_http_exception_handler():
+    """Create a reusable HTTP exception handler."""
+    from .responses import create_error_response
+
+    async def handler(request, exc):
+        # Get request ID if available
+        request_id = getattr(request.state, "request_id", None)
+
+        # Get status code and detail from exception
+        status_code = getattr(exc, "status_code", 500)
+        detail = getattr(exc, "detail", str(exc))
+
+        # Map status codes to error codes
+        error_code = "INTERNAL_ERROR"
+        if status_code == 400:
+            error_code = "INVALID_REQUEST"
+        elif status_code == 401:
+            error_code = "UNAUTHORIZED"
+        elif status_code == 403:
+            error_code = "FORBIDDEN"
+        elif status_code == 404:
+            error_code = "RESOURCE_NOT_FOUND"
+        elif status_code == 422:
+            error_code = "INVALID_PARAMS"
+        elif status_code == 429:
+            error_code = "RATE_LIMITED"
+        elif status_code == 501:
+            error_code = "METHOD_NOT_FOUND"
+        elif status_code == 503:
+            error_code = "SYSTEM_OVERLOAD"
+
+        # Create structured error response
+        error_response = create_error_response(
+            error_code=error_code,
+            message=str(detail),
+            request_id=request_id,
+        )
+
+        return JSONResponse(
+            status_code=status_code,
+            content=error_response.model_dump(),
+        )
+
+    return handler
 
 
 class FormationServer:
@@ -58,11 +106,13 @@ class FormationServer:
         self._server_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
         self._active_connections: set = set()
+        self._active_connections_lock = threading.Lock()
         self._shutdown_timeout = 30.0
 
         # Server metrics
         self._start_time = time.time()
         self._request_count = 0
+        self._request_count_lock = threading.Lock()
 
         # Extract API keys from formation
         self.admin_key = formation._api_keys.get("admin", "")
@@ -292,55 +342,9 @@ class FormationServer:
         app.add_middleware(APILoggingMiddleware)
 
         # Add exception handlers to ensure proper envelope format
-        from fastapi import HTTPException
-        from fastapi.responses import JSONResponse
         from fastapi.exceptions import RequestValidationError
         from starlette.exceptions import HTTPException as StarletteHTTPException
         from .responses import create_error_response
-
-        def create_http_exception_handler():
-            """Create a reusable HTTP exception handler."""
-
-            async def handler(request, exc):
-                # Get request ID if available
-                request_id = getattr(request.state, "request_id", None)
-
-                # Get status code and detail from exception
-                status_code = getattr(exc, "status_code", 500)
-                detail = getattr(exc, "detail", str(exc))
-
-                # Map status codes to error codes
-                error_code = "INTERNAL_ERROR"
-                if status_code == 400:
-                    error_code = "INVALID_REQUEST"
-                elif status_code == 401:
-                    error_code = "UNAUTHORIZED"
-                elif status_code == 403:
-                    error_code = "FORBIDDEN"
-                elif status_code == 404:
-                    error_code = "RESOURCE_NOT_FOUND"
-                elif status_code == 422:
-                    error_code = "INVALID_PARAMS"
-                elif status_code == 429:
-                    error_code = "RATE_LIMITED"
-                elif status_code == 501:
-                    error_code = "METHOD_NOT_FOUND"
-                elif status_code == 503:
-                    error_code = "SYSTEM_OVERLOAD"
-
-                # Create structured error response
-                error_response = create_error_response(
-                    error_code=error_code,
-                    message=str(detail),
-                    request_id=request_id,
-                )
-
-                return JSONResponse(
-                    status_code=status_code,
-                    content=error_response.model_dump(),
-                )
-
-            return handler
 
         # Create specialized handler for validation errors
         @app.exception_handler(RequestValidationError)

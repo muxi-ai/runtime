@@ -21,6 +21,7 @@ from ...responses import (
 from .....datatypes.api import APIEventType, APIObjectType
 from ...secrets import restore_secret_placeholders
 from ...utils import get_header_case_insensitive
+from .agents import get_config_item_with_secrets_restored
 
 router = APIRouter(tags=["MCP"])
 
@@ -235,23 +236,14 @@ async def get_mcp_server(request: Request, server_id: str) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Find server in configuration
-    servers = formation.config.get("mcp", {}).get("servers", [])
-    server_index = next((i for i, s in enumerate(servers) if s.get("id") == server_id), None)
+    # Get server with secrets restored
+    server, _ = get_config_item_with_secrets_restored(formation, ["mcp", "servers"], server_id)
 
-    if server_index is None:
+    if server is None:
         response = create_error_response(
             "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
-
-    # Get a deep copy of the server
-    server = deepcopy(servers[server_index])
-
-    # Create a temporary config structure to apply placeholders
-    temp_config = {"mcp": {"servers": [server]}}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
-    server = temp_config.get("mcp", {}).get("servers", [{}])[0]
 
     response = create_success_response(
         APIObjectType.MCP_SERVER, APIEventType.MCP_SERVER_RETRIEVED, server, request_id

@@ -170,7 +170,9 @@ async def get_formation_status(request: Request) -> JSONResponse:
             },
             "requests": {
                 "total": request_count,
-                "active": max(0, len(server._active_connections) - 1) if server else 0,  # Subtract current request
+                "active": max(0, len(server._active_connections) - 1) if server and hasattr(
+                    server, '_active_connections') else 0,  # Subtract current request
+
             },
             "buffer_size": formation.config.get("memory", {}).get("buffer", {}).get("size", 1000),
             "cpu_percent": cpu_percent,

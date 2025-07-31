@@ -21,6 +21,85 @@ from ...responses import (
 from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
+
+def get_config_item_with_secrets_restored(formation, config_path: list, item_id: str, id_field: str = "id"):
+    """
+    Get configuration item with secrets restored.
+
+    Args:
+        formation: Formation instance
+        config_path: Path to the config array (e.g., ["agents"] or ["mcp", "servers"])
+        item_id: ID of item to retrieve
+        id_field: Field name containing the ID (default: "id")
+
+    Returns:
+        Tuple of (item_config_with_secrets_restored, item_index) or (None, None) if not found
+    """
+    # Navigate to the config array
+    config_section = formation.config
+    for path_part in config_path:
+        config_section = config_section.get(path_part, {})
+
+    # Handle case where config_section is a list (final path element)
+    if isinstance(config_section, dict) and len(config_path) > 0:
+        config_section = config_section.get(config_path[-1], [])
+
+    # Ensure we have a list
+    if not isinstance(config_section, list):
+        return None, None
+
+    # Find item
+    item_index = next((i for i, item in enumerate(config_section) if item.get(id_field) == item_id), None)
+
+    if item_index is None:
+        return None, None
+
+    # Get a deep copy of the item
+    item = deepcopy(config_section[item_index])
+
+    # Create a temporary config structure to apply placeholders
+    # Build the nested structure based on config_path
+    temp_config = {}
+    current_level = temp_config
+    for i, path_part in enumerate(config_path[:-1]):
+        current_level[path_part] = {}
+        current_level = current_level[path_part]
+
+    # Set the final array with our item
+    if config_path:
+        current_level[config_path[-1]] = [item]
+    else:
+        temp_config = [item]
+
+    # Restore secrets
+    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+
+    # Extract the restored item
+    restored_item = temp_config
+    for path_part in config_path:
+        restored_item = restored_item.get(path_part, {})
+
+    if isinstance(restored_item, list) and len(restored_item) > 0:
+        restored_item = restored_item[0]
+
+    return restored_item, item_index
+
+
+def get_agent_with_secrets_restored(formation, agent_id: str):
+    """
+    Get agent configuration with secrets restored.
+
+    Args:
+        formation: Formation instance
+        agent_id: ID of agent to retrieve
+
+    Returns:
+        Agent configuration with secrets restored, or None if not found
+    """
+    item, _ = get_config_item_with_secrets_restored(formation, ["agents"], agent_id)
+    return item
+
+
 router = APIRouter(tags=["Agents"])
 
 
@@ -120,23 +199,14 @@ async def get_agent(request: Request, agent_id: str) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Find agent
-    agents = formation.config.get("agents", [])
-    agent_index = next((i for i, a in enumerate(agents) if a.get("id") == agent_id), None)
+    # Get agent with secrets restored
+    agent = get_agent_with_secrets_restored(formation, agent_id)
 
-    if agent_index is None:
+    if agent is None:
         response = create_error_response(
             "AGENT_NOT_FOUND", f"Agent '{agent_id}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
-
-    # Get a deep copy of the agent
-    agent = deepcopy(agents[agent_index])
-
-    # Create a temporary config structure to apply placeholders
-    temp_config = {"agents": [agent]}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
-    agent = temp_config.get("agents", [{}])[0]
 
     response = create_success_response(
         APIObjectType.AGENT, APIEventType.AGENT_RETRIEVED, agent, request_id

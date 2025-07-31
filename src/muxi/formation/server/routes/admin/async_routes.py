@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Dict, Any
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -45,7 +46,6 @@ async def get_async_config(request: Request) -> JSONResponse:
     async_config = formation.config.get("async", {})
 
     # Create a temporary config structure to apply placeholders
-    from copy import deepcopy
     temp_config = {"async": deepcopy(async_config)}
     temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
     async_config = temp_config.get("async", {})
