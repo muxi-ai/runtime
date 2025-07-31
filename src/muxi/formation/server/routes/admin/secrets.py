@@ -5,6 +5,7 @@ These endpoints provide secret CRUD operations,
 requiring admin API key authentication.
 """
 
+import re
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -44,16 +45,68 @@ async def list_secrets(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
-        secret_list = []
+        secret_list = {
+            "secrets": {},
+            "count": 0
+        }
     else:
         try:
             # Get all secret names (async call)
             secret_names = await formation.secrets_manager.list_secrets()
 
-            # Create array of secret objects with masked values
-            secret_list = [
-                {"key": name, "value": "••••••••", "masked": True} for name in secret_names
-            ]
+            # Create secrets object with partially masked values
+            secrets_dict = {}
+            for name in secret_names:
+                # Get the actual secret value to partially mask it
+                try:
+                    secret_value = await formation.secrets_manager.get_secret(name)
+                    if not secret_value:
+                        masked_value = "••••••••"
+                    else:
+                        # Check for protocols (preserve these)
+                        protocol_match = re.match(r'^([a-zA-Z][a-zA-Z0-9+.-]*://)', secret_value)
+                        protocol = protocol_match.group(1) if protocol_match else ""
+                        value_after_protocol = secret_value[len(protocol):]
+
+                        # Check for common API key prefixes
+                        common_prefixes = ["sk-", "pk-", "ghp_", "ghs_", "pat_", "key-", "tok-", "lin_"]
+                        prefix_len = 0
+                        for prefix in common_prefixes:
+                            if value_after_protocol.startswith(prefix):
+                                prefix_len = len(prefix)
+                                break
+
+                        if protocol:
+                            # For URLs with protocols, be more careful about what we show
+                            # Show protocol + first 2 chars + dots + last few chars
+                            if len(value_after_protocol) > 8:
+                                masked_value = f"{protocol}{value_after_protocol[:2]}•••••••{value_after_protocol[-4:]}"
+                            else:
+                                masked_value = f"{protocol}••••••••"
+                        elif len(value_after_protocol) > 12:
+                            if prefix_len > 0:
+                                # Show prefix + 2 chars and last 4 chars
+                                masked_value = f"{value_after_protocol[:prefix_len+2]}••••••{value_after_protocol[-4:]}"
+                            else:
+                                # Show first 4 and last 4 characters
+                                masked_value = f"{value_after_protocol[:4]}••••••••{value_after_protocol[-4:]}"
+                        elif len(value_after_protocol) > 6:
+                            # For medium secrets, show first 3 and last 3
+                            masked_value = f"{value_after_protocol[:3]}••••{value_after_protocol[-3:]}"
+                        else:
+                            # For very short secrets, just mask them entirely
+                            masked_value = "••••••••"
+                except Exception:
+                    # If we can't get the secret, just use a generic mask
+                    masked_value = "••••••••"
+
+                secrets_dict[name] = masked_value
+
+            # Return in spec-compliant format
+            secret_list = {
+                "secrets": secrets_dict,
+                "count": len(secret_names)
+            }
         except Exception as e:
             # Handle secrets manager errors gracefully
             response = create_error_response(
@@ -63,7 +116,7 @@ async def list_secrets(request: Request) -> JSONResponse:
 
     # Create structured response with spec-compliant format
     response = create_success_response(
-        APIObjectType.LIST, APIEventType.SECRET_LIST, secret_list, request_id
+        APIObjectType.SECRET_LIST, APIEventType.SECRET_LIST, secret_list, request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -89,14 +142,14 @@ async def create_secret(request: Request, secret: SecretCreate) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Check if secret already exists
-    if formation.secrets_manager.has_secret(secret.key):
+    if await formation.secrets_manager.secret_exists(secret.key):
         response = create_error_response(
             "SECRET_EXISTS", f"Secret '{secret.key}' already exists", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=409)
 
     # Create secret
-    formation.secrets_manager.set_secret(secret.key, secret.value)
+    await formation.secrets_manager.store_secret(secret.key, secret.value)
 
     # TODO: Add observability event for secret created
 
@@ -109,7 +162,7 @@ async def create_secret(request: Request, secret: SecretCreate) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=201)
 
 
-@router.put("/secrets/{key}", response_model=APIResponse)
+@router.put("/secrets/{key}")
 async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSONResponse:
     """
     Update an existing secret.
@@ -131,27 +184,25 @@ async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSO
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Check if secret exists
-    if not formation.secrets_manager.has_secret(key):
+    if not await formation.secrets_manager.secret_exists(key):
         response = create_error_response(
             "SECRET_NOT_FOUND", f"Secret '{key}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
 
     # Update secret
-    formation.secrets_manager.set_secret(key, secret.value)
+    await formation.secrets_manager.store_secret(key, secret.value, overwrite=True)
 
     # TODO: Add observability event for secret updated
 
-    response = create_success_response(
-        APIObjectType.SECRET,
-        APIEventType.SECRET_UPDATED,
-        {"key": key, "value": "••••••••"},
-        request_id,
+    # Return simple response format as per spec
+    return JSONResponse(
+        content={"message": f"Secret '{key}' updated successfully"},
+        status_code=200
     )
-    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/secrets/{key}", response_model=APIResponse)
+@router.delete("/secrets/{key}")
 async def delete_secret(request: Request, key: str) -> JSONResponse:
     """
     Delete a secret.
@@ -172,21 +223,29 @@ async def delete_secret(request: Request, key: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Check if secret exists
-    if not formation.secrets_manager.has_secret(key):
+    if not await formation.secrets_manager.secret_exists(key):
         response = create_error_response(
             "SECRET_NOT_FOUND", f"Secret '{key}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
 
+    # Check if secret is in use
+    if formation.is_secret_in_use(key):
+        response = create_error_response(
+            "SECRET_IN_USE",
+            f"Cannot delete secret '{key}' because it is currently in use by the formation configuration",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=409)
+
     # Delete secret
-    formation.secrets_manager.delete_secret(key)
+    await formation.secrets_manager.delete_secret(key)
 
     # TODO: Add observability event for secret deleted
 
-    response = create_success_response(
-        APIObjectType.SECRET,
-        APIEventType.SECRET_DELETED,
-        {"message": f"Secret '{key}' deleted successfully"},
-        request_id,
+    # Return simple response format as per spec
+    return JSONResponse(
+        content={"message": f"Secret '{key}' deleted successfully"},
+        status_code=200
     )
-    return JSONResponse(content=response.model_dump(), status_code=200)

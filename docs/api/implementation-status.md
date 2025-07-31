@@ -39,10 +39,10 @@ All major API discrepancies have been resolved to align with the OpenAPI specifi
 ### Secrets Management
 | Endpoint | Method | Path | Status | Notes |
 |----------|--------|------|--------|-------|
-| List Secrets | GET | `/secrets` | ✅ | Returns masked secret keys as array with `list` object type |
-| Create Secret | POST | `/secrets` | ✅ | Creates new secret |
-| Update Secret | PUT | `/secrets/{key}` | ✅ | Updates existing secret |
-| Delete Secret | DELETE | `/secrets/{key}` | ✅ | Deletes secret (TODO: validate not in use) |
+| List Secrets | GET | `/secrets` | ✅ | Returns dict with partially masked values, case-insensitive names |
+| Create Secret | POST | `/secrets` | ✅ | Creates new secret, normalizes key to uppercase |
+| Update Secret | PUT | `/secrets/{key}` | ✅ | Updates existing secret, case-insensitive key |
+| Delete Secret | DELETE | `/secrets/{key}` | ✅ | Validates not in use, returns 409 if secret is referenced |
 
 ### Agent Management
 | Endpoint | Method | Path | Status | Notes |
@@ -151,9 +151,8 @@ All major API discrepancies have been resolved to align with the OpenAPI specifi
 
 ### Medium Priority
 1. **Overlord notifications** - Notify overlord when agents/MCP servers are added/removed
-2. **Secret usage validation** - Check if secret is in use before deletion
-3. **Observability events** - Add events for all state changes
-4. **Request ID handling** - Pass through request_id from request body where applicable
+2. **Observability events** - Add events for all state changes
+3. **Request ID handling** - Pass through request_id from request body where applicable
 
 ### Low Priority
 1. **Idempotency keys** - Should be implemented at formation/overlord layer

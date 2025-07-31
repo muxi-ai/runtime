@@ -107,6 +107,12 @@ paths:
                 $ref: '#/components/schemas/SuccessResponse'
 
   # Secrets
+  #
+  # Note: Secret names are case-insensitive and normalized. All names are converted to uppercase
+  # with non-alphanumeric characters replaced by underscores. For example:
+  # - "api-key", "API_KEY", "Api-Key" all refer to the same secret: "API_KEY"
+  # - "my-secret-123" becomes "MY_SECRET_123"
+  # - Special characters are replaced: "user@email" becomes "USER_EMAIL"
   /secrets:
     get:
       tags: [Secrets]
@@ -932,9 +938,9 @@ components:
       name: key
       in: path
       required: true
+      description: Name of the secret key (case-insensitive, will be normalized to uppercase)
       schema:
         type: string
-      description: Secret key
     
     AgentId:
       name: agent_id

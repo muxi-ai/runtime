@@ -80,15 +80,20 @@ const chatResponse = await fetch('/v1/chat', {
   body: JSON.stringify({ message: "Hello!", user_id: "user123" })
 });
 
-// Create a secret (admin)
+// Create a secret (admin) - note: key will be normalized to uppercase
 const secretResponse = await fetch('/v1/secrets', {
   method: 'POST',
   headers: {
     'X-Muxi-Admin-Key': adminKey,
     'Content-Type': 'application/json'
   },
-  body: JSON.stringify({ key: "NEW_API_KEY", value: "secret_value" })
+  body: JSON.stringify({ key: "new-api-key", value: "sk-1234567890" })
 });
+
+// Update secret - all these paths update the same secret
+await fetch('/v1/secrets/new-api-key', { method: 'PUT', ... });
+await fetch('/v1/secrets/NEW_API_KEY', { method: 'PUT', ... });
+await fetch('/v1/secrets/new_api_key', { method: 'PUT', ... });
 ```
 
 ### Python
@@ -108,12 +113,17 @@ response = requests.post(
     json={"message": "Hello!", "user_id": "user123"}
 )
 
-# Create a secret (admin)
+# Create a secret (admin) - note: key will be normalized to uppercase
 response = requests.post(
     f"{base_url}/v1/secrets",
     headers={"X-Muxi-Admin-Key": admin_key},
-    json={"key": "NEW_API_KEY", "value": "secret_value"}
+    json={"key": "new-api-key", "value": "sk-1234567890"}
 )
+
+# Update secret - all these paths update the same secret
+requests.put(f"{base_url}/v1/secrets/new-api-key", ...)
+requests.put(f"{base_url}/v1/secrets/NEW_API_KEY", ...)
+requests.put(f"{base_url}/v1/secrets/new_api_key", ...)
 ```
 
 ## Key Features
@@ -158,9 +168,34 @@ When wrapped by multi-formation servers:
 ## Configuration Management
 
 ### Secrets API
-- `POST /v1/secrets` with JSON payload: `{"key": "...", "value": "..."}`
-- Hardcoded values masked in responses
-- Secret references preserved: `${{ secrets.API_KEY }}`
+
+#### Key Features
+- **Case-insensitive names**: Secret names are normalized to uppercase
+- **Character normalization**: Non-alphanumeric characters replaced with underscores
+- **Partial masking**: Response shows partial values for identification (e.g., `sk-pr••••••••hG8t`)
+- **Usage protection**: Cannot delete secrets currently in use by formation
+
+#### Name Normalization Examples
+- `api-key`, `API_KEY`, `Api-Key` → all refer to `API_KEY`
+- `my-secret-123` → `MY_SECRET_123`
+- `user@email` → `USER_EMAIL`
+
+#### Endpoints
+- `GET /v1/secrets` - List all secrets with partially masked values
+- `POST /v1/secrets` - Create new secret with JSON: `{"key": "...", "value": "..."}`
+- `PUT /v1/secrets/{key}` - Update existing secret value
+- `DELETE /v1/secrets/{key}` - Delete secret (blocked if in use)
+
+#### Response Format
+```json
+{
+  "secrets": {
+    "OPENAI_API_KEY": "sk-pr••••••••hG8t",
+    "DATABASE_URL": "postgresql://us••••••••5432"
+  },
+  "count": 2
+}
+```
 
 ### Resource Updates
 - Use PATCH for partial updates (following REST semantics)
