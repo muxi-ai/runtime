@@ -1114,7 +1114,9 @@ class Formation:
         # Store server configuration for later use
         self._server_config = {
             "host": server_config.get("host", "0.0.0.0"),
-            "port": server_config.get("port", 3000),
+            "port": server_config.get("port", 8271),
+            "debug": server_config.get("debug", False),
+            "access_log": server_config.get("access_log", False),
             "api_keys": self._api_keys,
         }
 
@@ -2668,8 +2670,14 @@ class Formation:
         actual_host = host or config_host
         actual_port = port or config_port
 
-        # Create server instance
-        self._formation_server = FormationServer(formation=self, host=actual_host, port=actual_port)
+        # Create server instance with debug and access_log settings
+        self._formation_server = FormationServer(
+            formation=self,
+            host=actual_host,
+            port=actual_port,
+            debug=self._server_config.get("debug", False),
+            access_log=self._server_config.get("access_log", False)
+        )
 
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
