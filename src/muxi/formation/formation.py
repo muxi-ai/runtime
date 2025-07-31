@@ -195,6 +195,9 @@ class Formation:
         self._runtime_config: Dict[str, Any] = {}
         self._agents_config: list = []
 
+        # Track secrets in use
+        self._secrets_in_use: set[str] = set()
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -777,8 +780,10 @@ class Formation:
 
             async def _timeout_operation():
                 formation_loader = FormationLoader()
-                result = await formation_loader.load(loader_path, self.secrets_manager)
-                return result
+                config, secrets_in_use = await formation_loader.load(loader_path, self.secrets_manager)
+                # Store the secrets in use set
+                self._secrets_in_use = secrets_in_use
+                return config
 
             result = await execute_with_timeout(
                 _timeout_operation,
@@ -1713,10 +1718,25 @@ class Formation:
             print(f"❌ Permission denied accessing secret '{name}': {e}")
             print("💡 Suggestion: Check file permissions for secrets storage")
             return None
-        except Exception as e:
-            print(f"❌ Unexpected error retrieving secret '{name}': {e}")
-            print("💡 Suggestion: Verify secrets manager is properly initialized")
-            return None
+
+    def is_secret_in_use(self, secret_name: str) -> bool:
+        """
+        Check if a secret is being used in the current formation configuration.
+
+        Args:
+            secret_name: Name of the secret to check
+
+        Returns:
+            bool: True if the secret is in use, False otherwise
+        """
+        # Normalize the secret name the same way SecretsManager does
+        import re
+        normalized_name = re.sub(r"[^A-Z0-9_]", "_", secret_name.upper())
+        normalized_name = re.sub(r"_+", "_", normalized_name)
+        normalized_name = normalized_name.strip("_")
+
+        # Check if the secret is in our tracked set
+        return normalized_name in self._secrets_in_use
 
     async def list_secrets(self) -> List[str]:
         """
