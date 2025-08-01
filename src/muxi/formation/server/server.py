@@ -25,6 +25,19 @@ if TYPE_CHECKING:
     from ..formation import Formation
 
 
+# HTTP status code to error code mapping
+STATUS_CODE_TO_ERROR_CODE = {
+    400: "INVALID_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "RESOURCE_NOT_FOUND",
+    422: "INVALID_PARAMS",
+    429: "RATE_LIMITED",
+    501: "METHOD_NOT_FOUND",
+    503: "SYSTEM_OVERLOAD",
+}
+
+
 def create_http_exception_handler():
     """Create a reusable HTTP exception handler."""
     from .responses import create_error_response
@@ -37,24 +50,8 @@ def create_http_exception_handler():
         status_code = getattr(exc, "status_code", 500)
         detail = getattr(exc, "detail", str(exc))
 
-        # Map status codes to error codes
-        error_code = "INTERNAL_ERROR"
-        if status_code == 400:
-            error_code = "INVALID_REQUEST"
-        elif status_code == 401:
-            error_code = "UNAUTHORIZED"
-        elif status_code == 403:
-            error_code = "FORBIDDEN"
-        elif status_code == 404:
-            error_code = "RESOURCE_NOT_FOUND"
-        elif status_code == 422:
-            error_code = "INVALID_PARAMS"
-        elif status_code == 429:
-            error_code = "RATE_LIMITED"
-        elif status_code == 501:
-            error_code = "METHOD_NOT_FOUND"
-        elif status_code == 503:
-            error_code = "SYSTEM_OVERLOAD"
+        # Map status codes to error codes using dictionary lookup
+        error_code = STATUS_CODE_TO_ERROR_CODE.get(status_code, "INTERNAL_ERROR")
 
         # Create structured error response
         error_response = create_error_response(

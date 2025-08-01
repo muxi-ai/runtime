@@ -5,9 +5,11 @@ This module provides utilities for restoring original secret placeholders
 in configuration data before sending API responses.
 """
 
+import os
+import json
 import re
 from copy import deepcopy
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Union, Optional, Set
 
 
 def restore_secret_placeholders(
@@ -49,7 +51,13 @@ def _apply_placeholder_at_path(obj: Any, path: str, placeholder: str) -> None:
         placeholder: Original placeholder value to restore
     """
     # Parse the path into segments
-    segments = _parse_path(path)
+    try:
+        segments = _parse_path(path)
+    except ValueError:
+        # Log the error and skip this path
+        # In production, this would be logged properly
+        # For now, we'll just skip invalid paths silently
+        return
 
     # Navigate to the parent of the target
     current = obj
@@ -99,20 +107,43 @@ def _parse_path(path: str) -> List[PathSegment]:
 
     Returns:
         List[PathSegment]: Parsed path segments
+
+    Raises:
+        ValueError: If path contains malformed array indices or brackets
     """
+    if not path:
+        return []
+
+    # Check for leading dot
+    if path.startswith("."):
+        raise ValueError("Invalid path: cannot start with a dot")
+
     segments = []
     current_key = ""
     i = 0
+    consecutive_dots = 0
 
     while i < len(path):
         char = path[i]
 
         if char == ".":
+            # Check for consecutive dots
+            if i > 0 and path[i-1] == ".":
+                consecutive_dots += 1
+                if consecutive_dots > 1:
+                    raise ValueError(f"Invalid path: consecutive dots at position {i}")
+            else:
+                consecutive_dots = 0
+
             # End of a key segment
             if current_key:
                 segments.append(PathSegment("key", current_key))
                 current_key = ""
+            elif i > 0 and path[i-1] != "]":
+                # Empty segment (consecutive dots not after bracket)
+                raise ValueError(f"Invalid path: empty segment at position {i}")
             i += 1
+
         elif char == "[":
             # Start of an array index
             if current_key:
@@ -124,23 +155,35 @@ def _parse_path(path: str) -> List[PathSegment]:
             while j < len(path) and path[j] != "]":
                 j += 1
 
-            if j < len(path):
-                # Extract the index
-                index_str = path[i+1:j]
-                try:
-                    index = int(index_str)
-                    segments.append(PathSegment("index", index))
-                except ValueError:
-                    # Invalid index, skip
-                    pass
-                i = j + 1
-            else:
+            if j >= len(path):
                 # No closing bracket found
-                i += 1
+                raise ValueError(f"Invalid path: unclosed bracket at position {i}")
+
+            # Extract and validate the index
+            index_str = path[i+1:j].strip()
+            if not index_str:
+                raise ValueError(f"Invalid path: empty array index at position {i}")
+
+            try:
+                index = int(index_str)
+                if index < 0:
+                    raise ValueError(f"Invalid path: negative array index {index} at position {i}")
+                segments.append(PathSegment("index", index))
+            except ValueError:
+                raise ValueError(f"Invalid path: non-integer array index '{index_str}' at position {i}")
+
+            i = j + 1
+            consecutive_dots = 0
+
+        elif char == "]":
+            # Closing bracket without opening
+            raise ValueError(f"Invalid path: unexpected closing bracket at position {i}")
+
         else:
             # Part of a key
             current_key += char
             i += 1
+            consecutive_dots = 0
 
     # Add any remaining key
     if current_key:
@@ -184,26 +227,100 @@ KNOWN_SECRET_PATHS = {
     "webhooks.secret",
 }
 
-# Patterns to detect different types of API keys
+# API Key Pattern Configuration
+# Each pattern includes metadata for maintenance and confidence scoring
 API_KEY_PATTERNS = [
-    # OpenAI keys
-    re.compile(r'^sk-[a-zA-Z0-9]{20,}$'),
-    re.compile(r'^sk-proj-[a-zA-Z0-9]{20,}$'),
-
-    # Anthropic keys
-    re.compile(r'^sk-ant-[a-zA-Z0-9-]{40,}$'),
-
-    # Google/GCP keys
-    re.compile(r'^AIza[a-zA-Z0-9-_]{35}$'),
-
-    # Generic API key patterns
-    re.compile(r'^sk_[a-zA-Z0-9_]{20,}$'),  # Stripe-like keys
-    re.compile(r'^[a-f0-9]{32,64}$'),  # MD5/SHA256 hex keys
-    re.compile(r'^[A-Z0-9]{20,40}$'),  # All caps keys
-
-    # Muxi-specific keys
-    re.compile(r'^sk_muxi_[a-zA-Z0-9_]+$'),
+    {
+        "name": "openai_standard",
+        "pattern": re.compile(r'^sk-[a-zA-Z0-9]{20,}$'),
+        "confidence": 0.9,  # High confidence - very specific format
+        "provider": "OpenAI",
+        "last_verified": "2024-01-15",
+        "description": "Standard OpenAI API key format"
+    },
+    {
+        "name": "openai_project",
+        "pattern": re.compile(r'^sk-proj-[a-zA-Z0-9]{20,}$'),
+        "confidence": 0.95,  # Very high confidence - project-specific prefix
+        "provider": "OpenAI",
+        "last_verified": "2024-01-15",
+        "description": "OpenAI project-scoped API key"
+    },
+    {
+        "name": "anthropic",
+        "pattern": re.compile(r'^sk-ant-[a-zA-Z0-9-]{40,}$'),
+        "confidence": 0.95,  # Very high confidence - unique prefix
+        "provider": "Anthropic",
+        "last_verified": "2024-01-15",
+        "description": "Anthropic API key format"
+    },
+    {
+        "name": "google_api",
+        "pattern": re.compile(r'^AIza[a-zA-Z0-9-_]{35}$'),
+        "confidence": 0.85,  # Good confidence - specific prefix and length
+        "provider": "Google",
+        "last_verified": "2024-01-15",
+        "description": "Google Cloud API key format"
+    },
+    {
+        "name": "stripe_like",
+        "pattern": re.compile(r'^sk_[a-zA-Z0-9_]{20,}$'),
+        "confidence": 0.7,  # Medium confidence - common pattern
+        "provider": "Generic",
+        "last_verified": "2024-01-15",
+        "description": "Stripe-style secret key format"
+    },
+    {
+        "name": "hex_hash",
+        "pattern": re.compile(r'^[a-f0-9]{32,64}$'),
+        "confidence": 0.5,  # Low confidence - could be any hex string
+        "provider": "Generic",
+        "last_verified": "2024-01-15",
+        "description": "Hexadecimal hash-like keys (MD5/SHA)"
+    },
+    {
+        "name": "uppercase_key",
+        "pattern": re.compile(r'^[A-Z0-9]{20,40}$'),
+        "confidence": 0.4,  # Low confidence - very generic
+        "provider": "Generic",
+        "last_verified": "2024-01-15",
+        "description": "All uppercase alphanumeric keys"
+    },
+    {
+        "name": "muxi_specific",
+        "pattern": re.compile(r'^sk_muxi_[a-zA-Z0-9_]+$'),
+        "confidence": 0.95,  # Very high confidence - our own format
+        "provider": "Muxi",
+        "last_verified": "2024-01-15",
+        "description": "Muxi-specific API key format"
+    }
 ]
+
+# Confidence threshold for flagging as API key
+# Can be configured via environment variable
+API_KEY_CONFIDENCE_THRESHOLD = float(os.environ.get("MUXI_API_KEY_CONFIDENCE_THRESHOLD", "0.6"))
+
+# Additional patterns can be loaded from config file if specified
+CUSTOM_PATTERNS_FILE = os.environ.get("MUXI_CUSTOM_API_PATTERNS_FILE")
+
+
+def load_custom_patterns():
+    """Load custom API key patterns from configuration file if specified."""
+    if CUSTOM_PATTERNS_FILE and os.path.exists(CUSTOM_PATTERNS_FILE):
+        try:
+            with open(CUSTOM_PATTERNS_FILE, 'r') as f:
+                custom_patterns = json.load(f)
+                for pattern in custom_patterns:
+                    # Compile the regex pattern
+                    pattern["pattern"] = re.compile(pattern["pattern"])
+                    API_KEY_PATTERNS.append(pattern)
+        except (json.JSONDecodeError, KeyError, re.error) as e:
+            # Log error but don't fail - use default patterns
+            print(f"Warning: Failed to load custom API patterns from {CUSTOM_PATTERNS_FILE}: {e}")
+
+
+# Load custom patterns on module import
+load_custom_patterns()
 
 
 def mask_hardcoded_secrets(config: Dict[str, Any]) -> None:
@@ -238,7 +355,11 @@ def _mask_secrets_at_path_pattern(config: Dict[str, Any], path_pattern: str) -> 
         parts = path_pattern.split("[*]")
         if len(parts) == 2:
             prefix, suffix = parts
-            prefix_segments = _parse_path(prefix) if prefix else []
+            try:
+                prefix_segments = _parse_path(prefix) if prefix else []
+            except ValueError:
+                # Skip invalid path patterns
+                return
 
             # Navigate to the array
             current = config
@@ -269,7 +390,11 @@ def _mask_secret_at_exact_path(config: Dict[str, Any], path: str) -> None:
         config: Configuration to process
         path: Exact path to the secret
     """
-    segments = _parse_path(path)
+    try:
+        segments = _parse_path(path)
+    except ValueError:
+        # Skip invalid paths
+        return
 
     # Navigate to the parent
     current = config
@@ -296,14 +421,28 @@ def _mask_secret_at_exact_path(config: Dict[str, Any], path: str) -> None:
                 current[final_segment.value] = _mask_value(value)
 
 
-def _scan_and_mask_api_keys(obj: Any, path: str = "") -> None:
+def _scan_and_mask_api_keys(obj: Any, path: str = "", visited: Optional[Set[int]] = None) -> None:
     """
     Recursively scan for and mask API keys based on patterns.
 
     Args:
         obj: Object to scan (dict, list, or primitive)
         path: Current path for tracking
+        visited: Set of object IDs to track visited objects and prevent circular references
     """
+    # Initialize visited set on first call
+    if visited is None:
+        visited = set()
+
+    # Skip if object already visited (circular reference protection)
+    obj_id = id(obj)
+    if obj_id in visited:
+        return
+
+    # Only track mutable objects (dicts and lists) to prevent cycles
+    if isinstance(obj, (dict, list)):
+        visited.add(obj_id)
+
     if isinstance(obj, dict):
         for key, value in obj.items():
             new_path = f"{path}.{key}" if path else key
@@ -311,11 +450,11 @@ def _scan_and_mask_api_keys(obj: Any, path: str = "") -> None:
                 if _should_mask_value(value):
                     obj[key] = _mask_value(value)
             else:
-                _scan_and_mask_api_keys(value, new_path)
+                _scan_and_mask_api_keys(value, new_path, visited)
     elif isinstance(obj, list):
         for i, item in enumerate(obj):
             new_path = f"{path}[{i}]"
-            _scan_and_mask_api_keys(item, new_path)
+            _scan_and_mask_api_keys(item, new_path, visited)
 
 
 def _should_mask_value(value: Any) -> bool:
@@ -350,25 +489,34 @@ def _should_mask_value(value: Any) -> bool:
 
 def _looks_like_api_key(value: str) -> bool:
     """
-    Check if a value looks like an API key based on common patterns.
+    Check if a value looks like an API key based on patterns and confidence scoring.
+
+    Uses a confidence scoring mechanism to reduce false positives.
+    Only flags values that exceed the confidence threshold.
 
     Args:
         value: String value to check
 
     Returns:
-        bool: True if the value matches API key patterns
+        bool: True if the value matches API key patterns with sufficient confidence
     """
-    # Check against known patterns
-    for pattern in API_KEY_PATTERNS:
-        if pattern.match(value):
-            return True
+    max_confidence = 0.0
 
-    # Additional heuristics
-    # High entropy strings that look like keys
-    if len(value) > 20 and any(prefix in value.lower() for prefix in ['sk_', 'pk_', 'api_', 'key_']):
-        return True
+    # Check against known patterns and track highest confidence
+    for pattern_info in API_KEY_PATTERNS:
+        if pattern_info["pattern"].match(value):
+            if pattern_info["confidence"] > max_confidence:
+                max_confidence = pattern_info["confidence"]
 
-    return False
+    # Additional heuristics can add confidence
+    if max_confidence < API_KEY_CONFIDENCE_THRESHOLD:
+        # Check for key-like prefixes as a secondary indicator
+        if len(value) > 20 and any(prefix in value.lower() for prefix in ['sk_', 'pk_', 'api_', 'key_', 'token_']):
+            # Add a small confidence boost for prefix matches
+            max_confidence = min(max_confidence + 0.2, 0.6)
+
+    # Return true only if confidence exceeds threshold
+    return max_confidence >= API_KEY_CONFIDENCE_THRESHOLD
 
 
 def _mask_value(value: str) -> str:

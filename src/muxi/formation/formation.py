@@ -1726,6 +1726,15 @@ class Formation:
             print("💡 Suggestion: Check file permissions for secrets storage")
             return None
 
+    def get_secrets_count(self) -> int:
+        """
+        Get the count of secrets currently in use by the formation.
+
+        Returns:
+            int: Number of secrets in use
+        """
+        return len(self._secrets_in_use) if hasattr(self, '_secrets_in_use') else 0
+
     def is_secret_in_use(self, secret_name: str) -> bool:
         """
         Check if a secret is being used in the current formation configuration.
@@ -2706,9 +2715,6 @@ class Formation:
             access_log=self._server_config.get("access_log", False),
         )
 
-        # Store server reference for status endpoint
-        self._server = self._formation_server
-
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
             level=observability.EventLevel.INFO,
@@ -2937,8 +2943,8 @@ class Formation:
 
     @property
     def secret_placeholders(self) -> Dict[str, str]:
-        """Get the secret placeholder mappings."""
-        return self._secret_placeholders
+        """Get the secret placeholder mappings (returns a copy to prevent external modification)."""
+        return self._secret_placeholders.copy()
 
     def get_formation_id(self) -> str:
         """Get the formation ID."""

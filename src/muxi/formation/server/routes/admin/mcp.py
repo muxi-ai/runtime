@@ -156,10 +156,9 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
 
     servers = deepcopy(formation.config.get("mcp", {}).get("servers", []))
 
-    # Create a temporary config structure to apply placeholders
-    temp_config = {"mcp": {"servers": servers}}
-    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
-    servers = temp_config.get("mcp", {}).get("servers", [])
+    # Apply secret placeholder restoration directly to servers list
+    if servers:
+        servers = restore_secret_placeholders(servers, formation.secret_placeholders)
 
     response = create_success_response(
         APIObjectType.LIST,

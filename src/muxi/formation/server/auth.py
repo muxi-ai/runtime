@@ -53,12 +53,14 @@ class AdminKeyAuth:
             raise HTTPException(
                 status_code=HTTP_401_UNAUTHORIZED,
                 detail="A valid admin API key is required. Please provide the 'X-Muxi-Admin-Key' header.",
+                headers={"WWW-Authenticate": "ApiKey realm=\"admin\", header=\"X-Muxi-Admin-Key\""},
             )
 
         if not secrets.compare_digest(api_key, self.admin_key):
             raise HTTPException(
                 status_code=HTTP_401_UNAUTHORIZED,
                 detail="Invalid admin API key. Please check your 'X-Muxi-Admin-Key' header value.",
+                headers={"WWW-Authenticate": "ApiKey realm=\"admin\", header=\"X-Muxi-Admin-Key\""},
             )
 
         return api_key
@@ -106,12 +108,14 @@ class ClientKeyAuth:
             raise HTTPException(
                 status_code=HTTP_401_UNAUTHORIZED,
                 detail="A valid client API key is required. Please provide the 'X-Muxi-Client-Key' header.",
+                headers={"WWW-Authenticate": "ApiKey realm=\"client\", header=\"X-Muxi-Client-Key\""},
             )
 
         if not secrets.compare_digest(api_key, self.client_key):
             raise HTTPException(
                 status_code=HTTP_401_UNAUTHORIZED,
                 detail="Invalid client API key. Please check your 'X-Muxi-Client-Key' header value.",
+                headers={"WWW-Authenticate": "ApiKey realm=\"client\", header=\"X-Muxi-Client-Key\""},
             )
 
         return api_key

@@ -5,7 +5,6 @@ These endpoints provide secret CRUD operations,
 requiring admin API key authentication.
 """
 
-import re
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -15,6 +14,7 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...utils import mask_secret_value
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Secrets"])
@@ -60,45 +60,10 @@ async def list_secrets(request: Request) -> JSONResponse:
                 # Get the actual secret value to partially mask it
                 try:
                     secret_value = await formation.secrets_manager.get_secret(name)
-                    if not secret_value:
-                        masked_value = "••••••••"
-                    else:
-                        # Check for protocols (preserve these)
-                        protocol_match = re.match(r'^([a-zA-Z][a-zA-Z0-9+.-]*://)', secret_value)
-                        protocol = protocol_match.group(1) if protocol_match else ""
-                        value_after_protocol = secret_value[len(protocol):]
-
-                        # Check for common API key prefixes
-                        common_prefixes = ["sk-", "pk-", "ghp_", "ghs_", "pat_", "key-", "tok-", "lin_"]
-                        prefix_len = 0
-                        for prefix in common_prefixes:
-                            if value_after_protocol.startswith(prefix):
-                                prefix_len = len(prefix)
-                                break
-
-                        if protocol:
-                            # For URLs with protocols, be more careful about what we show
-                            # Show protocol + first 2 chars + dots + last few chars
-                            if len(value_after_protocol) > 8:
-                                masked_value = f"{protocol}{value_after_protocol[:2]}•••••••{value_after_protocol[-4:]}"
-                            else:
-                                masked_value = f"{protocol}••••••••"
-                        elif len(value_after_protocol) > 12:
-                            if prefix_len > 0:
-                                # Show prefix + 2 chars and last 4 chars
-                                masked_value = f"{value_after_protocol[:prefix_len+2]}••••••{value_after_protocol[-4:]}"
-                            else:
-                                # Show first 4 and last 4 characters
-                                masked_value = f"{value_after_protocol[:4]}••••••••{value_after_protocol[-4:]}"
-                        elif len(value_after_protocol) > 6:
-                            # For medium secrets, show first 3 and last 3
-                            masked_value = f"{value_after_protocol[:3]}••••{value_after_protocol[-3:]}"
-                        else:
-                            # For very short secrets, just mask them entirely
-                            masked_value = "••••••••"
+                    masked_value = mask_secret_value(secret_value)
                 except Exception:
                     # If we can't get the secret, just use a generic mask
-                    masked_value = "••••••••"
+                    masked_value = mask_secret_value(None)
 
                 secrets_dict[name] = masked_value
 

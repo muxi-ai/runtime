@@ -7,7 +7,7 @@ from .config_utils import (
 )
 
 __all__ = [
-    'SecretsManager',
-    'get_config_item_with_secrets_restored',
     'get_agent_with_secrets_restored',
+    'get_config_item_with_secrets_restored',
+    'SecretsManager',
 ]

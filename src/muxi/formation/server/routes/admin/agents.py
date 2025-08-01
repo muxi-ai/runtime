@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from ...responses import (
     APIResponse,
-    agent_list_response_spec,
+    agent_list_response,
     create_success_response,
     create_error_response,
 )
@@ -63,8 +63,8 @@ async def list_agents(request: Request) -> JSONResponse:
     temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     agents = temp_config.get("agents", [])
 
-    # Create structured response
-    response = agent_list_response_spec(agents, request_id)
+    # Create structured response using spec-compliant format
+    response = agent_list_response(agents, request_id, use_generic_type=True)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 

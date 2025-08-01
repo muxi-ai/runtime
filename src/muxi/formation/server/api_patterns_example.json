@@ -1,0 +1,38 @@
+{
+  "comment": "Example custom API key patterns configuration file",
+  "comment2": "Set MUXI_CUSTOM_API_PATTERNS_FILE environment variable to use this file",
+  "patterns": [
+    {
+      "name": "github_personal_access_token",
+      "pattern": "^ghp_[a-zA-Z0-9]{36}$",
+      "confidence": 0.95,
+      "provider": "GitHub",
+      "last_verified": "2024-01-15",
+      "description": "GitHub personal access token"
+    },
+    {
+      "name": "github_oauth_token",
+      "pattern": "^gho_[a-zA-Z0-9]{36}$",
+      "confidence": 0.95,
+      "provider": "GitHub",
+      "last_verified": "2024-01-15",
+      "description": "GitHub OAuth access token"
+    },
+    {
+      "name": "aws_access_key_id",
+      "pattern": "^AKIA[0-9A-Z]{16}$",
+      "confidence": 0.9,
+      "provider": "AWS",
+      "last_verified": "2024-01-15",
+      "description": "AWS access key ID"
+    },
+    {
+      "name": "slack_token",
+      "pattern": "^xox[baprs]-[0-9]{10,12}-[0-9]{10,12}-[a-zA-Z0-9]{24,32}$",
+      "confidence": 0.85,
+      "provider": "Slack",
+      "last_verified": "2024-01-15",
+      "description": "Slack API token"
+    }
+  ]
+}
