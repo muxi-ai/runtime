@@ -302,12 +302,14 @@ async def extract_artifacts_from_tool_results(
             )
             continue
 
-    observability.observe(
-        event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
-        level=observability.EventLevel.INFO,
-        data={"service": "artifact", "action": "extract_from_tools", "artifacts_count": len(artifacts)},
-        description=f"Extracted {len(artifacts)} artifacts from tool results"
-    )
+    # Only log if artifacts were actually extracted
+    if artifacts:
+        observability.observe(
+            event_type=observability.ConversationEvents.DOCUMENT_PROCESSING_COMPLETED,
+            level=observability.EventLevel.INFO,
+            data={"service": "artifact", "action": "extract_from_tools", "artifacts_count": len(artifacts)},
+            description=f"Extracted {len(artifacts)} artifacts from tool results"
+        )
 
     # Optional: Clean up the entire muxi_artifacts directory if it's empty
     try:

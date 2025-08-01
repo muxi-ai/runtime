@@ -1185,7 +1185,7 @@ class Overlord:
 
                 # Prepare registration parameters
                 registration_params = {
-                    "server_id": f"{agent_id}-{server_id}",  # Prefix with agent ID to ensure uniqueness
+                    "server_id": server_id,  # Use original server_id for agent-specific registrations
                     "agent_id": agent_id,  # Pass agent ID for proper registration
                 }
 
@@ -1222,8 +1222,7 @@ class Overlord:
                     level=observability.EventLevel.INFO,
                     data={
                         "agent_id": agent_id,
-                        "server_id": server_id,
-                        "full_server_id": registration_params["server_id"]
+                        "server_id": server_id
                     },
                     description=f"MCP server {server_id} registered for agent {agent_id}"
                 )
@@ -5367,7 +5366,7 @@ class Overlord:
 
         try:
             # Yield initial workflow information
-            yield f"🔄 Starting workflow: {workflow.name or workflow_id}\n"
+            yield f"🔄 Starting workflow: {workflow_id}\n"
             yield f"📋 Total tasks: {len(workflow.tasks)}\n\n"
 
             # Track completed content for final synthesis

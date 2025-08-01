@@ -30,7 +30,7 @@ Generate a list of atomic tasks. Each task must have a single purpose and clear 
 ### For each task, include:
 - Task_ID: task_1, task_2, etc. (use sequential IDs)
 - Description: concise and actionable explanation of what the task accomplishes (follow separation rules above)
-- Required_Capabilities: EXACT capability names from the <capabilities> section below. CRITICAL: Use the exact strings like "linear", "research", "writing" - do NOT make up new capability names like "project-management" or "issue-tracking"
+- Required_Capabilities: EXACT capability names from the <capabilities> section below. CRITICAL: Use the exact strings shown in the capabilities list - do NOT use generic terms like "research" or "writing" if the actual capabilities are "web_research" or "technical_writing"
 - Dependencies: list Task_IDs this task depends on (or "none" if independent)
 - Estimated_Complexity: 1–10 scale (1 = trivial, 10 = extremely complex)
 - Inputs: what this task needs to begin (e.g. prior outputs, external info, context)
@@ -44,8 +44,10 @@ Provide a short paragraph explaining:
 - Any risks, bottlenecks, or optimization opportunities
 
 ### IMPORTANT RULES:
+- ALWAYS use capabilities EXACTLY as shown in the <capabilities> section - check the list!
 - Only use "coding" if actual software development is required (writing .py, .js files etc)
-- Use writing for content/doc generation, research for info gathering
+- For info gathering, use the exact research capability shown (e.g., "web_research" not "research")
+- For content creation, use the exact writing capability shown (e.g., "technical_writing" not "writing")
 - Issue/ticket creation is a SEPARATE task needing platform capability
 - "Create issue" tasks are NOT implementation/development - they're simple API operations (complexity 1-3)
 - No vague task descriptions – each task must have clear responsibilities, inputs, and outputs

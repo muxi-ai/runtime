@@ -402,15 +402,20 @@ Analysis Results:
         info_parts.append("- Consider each agent's description and what they're 'Best for'")
 
         # Add specific guidance for known capability patterns
-        if "research" in all_capabilities or "web_search" in all_capabilities:
+        # Find actual research-related capabilities
+        research_caps = [cap for cap in all_capabilities if 'research' in cap.lower()]
+        if research_caps:
+            caps_str = "' or '".join(research_caps)
             info_parts.append(
-                "- Research/info gathering → use capability: "
-                "'research' (NOT 'research-specialist' or 'information-gathering')"
+                f"- Research/info gathering → use capability: '{caps_str}'"
             )
 
-        if "writing" in all_capabilities or "documentation" in all_capabilities:
+        # Find actual writing-related capabilities
+        writing_caps = [cap for cap in all_capabilities if 'writing' in cap.lower() or 'documentation' in cap.lower()]
+        if writing_caps:
+            caps_str = "' or '".join(writing_caps)
             info_parts.append(
-                "- Content creation/docs → use capability: 'writing' (NOT 'content-creation' or 'documentation')"
+                f"- Content creation/docs → use capability: '{caps_str}'"
             )
 
         if "analysis" in all_capabilities or "data_analysis" in all_capabilities:

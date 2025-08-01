@@ -136,6 +136,7 @@ src/muxi/formation/server/__init__.py
 src/muxi/formation/server/auth.py
 src/muxi/formation/server/middleware.py
 src/muxi/formation/server/responses.py
+src/muxi/formation/server/secrets.py
 src/muxi/formation/server/server.py
 src/muxi/formation/server/utils.py
 src/muxi/formation/server/routes/__init__.py
@@ -279,6 +280,7 @@ src/muxi/services/scheduler/rewriter.py
 src/muxi/services/scheduler/service.py
 src/muxi/services/scheduler/validation.py
 src/muxi/services/secrets/__init__.py
+src/muxi/services/secrets/config_utils.py
 src/muxi/services/secrets/secrets_manager.py
 src/muxi/services/secrets/standalone.py
 src/muxi/utils/__init__.py
@@ -315,5 +317,6 @@ tests/test_muxi_clean_exit.py
 tests/test_muxi_shutdown.py
 tests/test_observability_system.py
 tests/test_task5_observability.py
+tests/test_thread_safe_counters.py
 tests/test_user_id_enhancement.py
 tests/test_user_id_enhancement_fixed.py

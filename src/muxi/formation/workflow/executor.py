@@ -879,7 +879,13 @@ class WorkflowExecutor:
                 getattr(agent, "specialization", None) or
                 []
             )
-            if any(cap in agent_caps for cap in spec.required_capabilities):
+
+            # Check if any required capability matches agent capabilities OR agent ID
+            # This handles cases where the decomposer uses agent IDs as capabilities
+            capability_match = any(cap in agent_caps for cap in spec.required_capabilities)
+            id_match = agent_id in spec.required_capabilities
+
+            if capability_match or id_match:
                 capable_agents.append((agent_id, agent))
 
         if not capable_agents:
@@ -1004,8 +1010,8 @@ class WorkflowExecutor:
                 []
             )
 
-            # Calculate matching score
-            matching_caps = [cap for cap in task.required_capabilities if cap in agent_caps]
+            # Calculate matching score - include agent ID as a capability
+            matching_caps = [cap for cap in task.required_capabilities if cap in agent_caps or cap == agent_id]
             if not matching_caps:
                 continue  # Agent doesn't match any required capabilities
 
