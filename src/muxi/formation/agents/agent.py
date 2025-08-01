@@ -139,6 +139,10 @@ class Agent:
 
         # Initialize the context with system message
         self._messages = []
+
+        # Initialize A2A history for loop detection
+        self._a2a_history = []
+
         if self.system_message:
             # Check if any MCP servers use user credentials
             user_cred_servers = []
@@ -920,6 +924,210 @@ class Agent:
                     description=f"Failed to get MCP tools for agent {self.agent_id}: {str(e)}",
                 )
 
+        # Check if this is a workflow task
+        user_message = message_obj.content if hasattr(message_obj, 'content') else str(message_obj)
+        is_workflow_task = (
+            # Check for workflow context indicators
+            ("## Task:" in user_message) or  # Workflow task prompt format
+            ("Task Details:" in user_message) or  # Another workflow indicator
+            ("Required Capabilities:" in user_message) or  # Workflow metadata
+            ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
+        )
+
+        if is_workflow_task:
+            # Log that we're bypassing planning for workflow task
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "phase": "planning_bypassed",
+                    "reason": "workflow_task_detected",
+                    "message_preview": user_message[:100] + "..." if len(user_message) > 100 else user_message,
+                },
+                description=f"Agent {self.agent_id} bypassing planning phase for workflow task",
+            )
+
+        # Variables to store planning results
+        execution_plan = None
+        my_results = {}
+        planning_response_parts = []  # Collect response parts during planning
+
+        # Only plan for user messages that might need multiple steps (skip for workflow tasks)
+        if self._messages and self._messages[-1]["role"] == "user" and tools and not is_workflow_task:
+            try:
+                execution_plan = await self._plan_before_execution(user_message, tools)
+
+                # Log the execution plan
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "phase": "execution_plan_ready",
+                        "has_my_steps": bool(execution_plan and execution_plan.get("my_steps")),
+                        "has_delegate_steps": bool(
+                            execution_plan and execution_plan.get("delegate_steps")
+                        ),
+                        "my_steps_count": (
+                            len(execution_plan.get("my_steps", [])) if execution_plan else 0
+                        ),
+                        "delegate_steps_count": (
+                            len(execution_plan.get("delegate_steps", [])) if execution_plan else 0
+                        ),
+                    },
+                    description=f"Execution plan ready for {self.agent_id}",
+                )
+
+                # EXECUTION PHASE: Execute my_steps first
+                if execution_plan and execution_plan.get("my_steps"):
+                    for step in execution_plan.get("my_steps", []):
+                        try:
+                            # Execute the tool
+                            tool_name = step.get("tool_name")
+                            if tool_name:
+                                # Find the tool in available tools
+                                tool_def = next(
+                                    (
+                                        t
+                                        for t in tools
+                                        if t.get("function", {}).get("name") == tool_name
+                                    ),
+                                    None,
+                                )
+
+                                if tool_def:
+                                    # Execute the tool with basic parameters
+                                    tool_result = await self.invoke_tool(
+                                        tool_name=tool_name,
+                                        parameters={},  # TODO: Extract parameters from request
+                                        user_id=user_id,
+                                    )
+
+                                    # Store result with placeholder key
+                                    placeholder = step.get(
+                                        "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
+                                    )
+                                    my_results[placeholder] = tool_result
+
+                                    # Log successful execution
+                                    observability.observe(
+                                        event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
+                                        level=observability.EventLevel.INFO,
+                                        data={
+                                            "agent_id": self.agent_id,
+                                            "tool_name": tool_name,
+                                            "step_action": step.get("action"),
+                                            "phase": "planning_execution",
+                                        },
+                                        description=f"Executed planned step: {step.get('action')}",
+                                    )
+                        except Exception as e:
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "agent_id": self.agent_id,
+                                    "error": str(e),
+                                    "step": step.get("action"),
+                                    "phase": "planning_execution",
+                                },
+                                description=f"Failed to execute planned step: {str(e)}",
+                            )
+
+                # DELEGATION PHASE: Handle delegate_steps
+                if execution_plan and execution_plan.get("delegate_steps"):
+                    # We have steps to delegate - process them after my_steps
+                    for delegate_step in execution_plan.get("delegate_steps", []):
+                        # Get delegation prompt with placeholders replaced
+                        delegation_prompt = delegate_step.get("delegation_prompt", user_message)
+
+                        # Replace placeholders with actual results from my_steps
+                        for placeholder, result in my_results.items():
+                            if placeholder in delegation_prompt:
+                                # Extract useful information from result
+                                result_text = str(result)
+                                if isinstance(result, dict):
+                                    # Try to extract the most relevant info
+                                    result_text = (
+                                        result.get("result", result.get("output", str(result)))
+                                    )
+                                delegation_prompt = delegation_prompt.replace(placeholder, result_text)
+
+                        # Request A2A assistance with enriched prompt
+                        a2a_response = await self._request_a2a_assistance(
+                            delegation_prompt,
+                            needed_capability=delegate_step.get(
+                                "capability_needed", "Unknown capability"
+                            ),
+                        )
+
+                        if a2a_response:
+                            # Collect A2A response
+                            planning_response_parts.append(a2a_response)
+
+                # If we handled everything through planning, skip the regular flow
+                if execution_plan and (
+                    execution_plan.get("my_steps") or execution_plan.get("delegate_steps")
+                ):
+                    # Compile response from planning execution
+                    response_content = ""
+
+                    # Add results from my_steps
+                    if my_results:
+                        for placeholder, result in my_results.items():
+                            if isinstance(result, dict):
+                                result_text = result.get("result", result.get("output", str(result)))
+                            else:
+                                result_text = str(result)
+                            response_content += f"{result_text}\n\n"
+
+                    # Add A2A responses
+                    if planning_response_parts:
+                        response_content += "\n\n".join(planning_response_parts)
+
+                    # Create response message
+                    response = MuxiResponse(
+                        role="assistant",
+                        content=response_content.strip() or "I've completed the requested tasks."
+                    )
+
+                    # Add response to conversation context
+                    self._messages.append({"role": "assistant", "content": response.content})
+
+                    # Log completion
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_PLANNING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "phase": "planning_completed",
+                            "my_steps_executed": len(my_results),
+                            "delegations_made": len(
+                                [
+                                    s
+                                    for s in execution_plan.get("delegate_steps", [])
+                                    if "delegation_prompt" in s
+                                ]
+                            ),
+                        },
+                        description="Planning-based execution completed",
+                    )
+                    return response
+
+            except Exception as e:
+                # If planning fails, continue with normal flow
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "planning_phase",
+                    },
+                    description=f"Planning phase failed, continuing with normal flow: {str(e)}",
+                )
+
         # Process the message with the model, including tools if available
         if tools:
             try:
@@ -1001,7 +1209,19 @@ class Agent:
                 # Fallback to no tools
                 raw_response = await self.model.chat(self._messages)
         else:
-            raw_response = await self.model.chat(self._messages)
+            # No tools available - try A2A for non-workflow tasks
+            if not is_workflow_task:
+                a2a_response = await self._request_a2a_assistance(user_message)
+
+                if a2a_response:
+                    # Use the A2A response as the agent's response
+                    raw_response = a2a_response
+                else:
+                    # Normal chat without tools
+                    raw_response = await self.model.chat(self._messages)
+            else:
+                # Workflow task without tools - just respond normally
+                raw_response = await self.model.chat(self._messages)
 
         # Extract the actual content string from the response
         if isinstance(raw_response, str):
@@ -2275,6 +2495,400 @@ class Agent:
                 description=f"Agent {self.agent_id} tool call failed: {str(e)}",
             )
             raise
+
+    async def _request_a2a_assistance(
+        self, user_message: str, needed_capability: Optional[str] = None
+    ) -> Optional[str]:
+        """
+        Request A2A assistance when the agent needs capabilities it doesn't have.
+        Simply passes the user message to another agent for execution.
+
+        Args:
+            user_message: The original user request
+            needed_capability: Optional hint about what capability is needed
+
+        Returns:
+            The A2A response if successful, None otherwise
+        """
+        try:
+            # Check if this is a workflow task - if so, don't use A2A
+            is_workflow_task = (
+                ("## Task:" in user_message) or
+                ("Task Details:" in user_message) or
+                ("Required Capabilities:" in user_message) or
+                ("THIS SPECIFIC TASK ONLY" in user_message)
+            )
+
+            if is_workflow_task:
+                # For workflow tasks, just return None to indicate we can't help
+                # The workflow executor should handle reassignment
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_A2A,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "phase": "a2a_bypassed",
+                        "reason": "workflow_task_detected",
+                        "needed_capability": needed_capability,
+                    },
+                    description=f"Agent {self.agent_id} bypassing A2A for workflow task",
+                )
+                return None
+            # Check for A2A loops - prevent infinite delegation
+            request_hash = f"{self.agent_id}:{needed_capability}:{user_message[:50]}"
+            if request_hash in self._a2a_history:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": "A2A loop detected",
+                        "capability": needed_capability,
+                        "history": self._a2a_history,
+                    },
+                    description="Detected A2A loop - stopping delegation",
+                )
+                return None
+
+            # Add to history
+            self._a2a_history.append(request_hash)
+
+            # Limit history size to prevent memory issues
+            if len(self._a2a_history) > 10:
+                self._a2a_history = self._a2a_history[-5:]
+            # Discover available agents via A2A coordinator
+            if self.overlord and hasattr(self.overlord, "a2a_coordinator"):
+                available_agents = self.overlord.a2a_coordinator.get_available_agents_for_a2a(
+                    self.agent_id
+                )
+            else:
+                available_agents = {}
+
+            if not available_agents:
+                return None
+
+            # Find any available agent that might help
+            best_agent_id = None
+
+            # Just pick the first available agent for now
+            for agent_id in available_agents.keys():
+                if agent_id != self.agent_id:  # Skip self
+                    best_agent_id = agent_id
+                    break
+
+            if not best_agent_id:
+                return None
+
+            # Send A2A request for assistance
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "target_agent_id": best_agent_id,
+                    "needed_capability": needed_capability,
+                    "reason": "Agent needs capability it doesn't have",
+                },
+                description=f"Agent {self.agent_id} requesting A2A assistance from {best_agent_id}",
+            )
+
+            # Craft the A2A message using proper A2A protocol format
+            from ...utils.id_generator import generate_nanoid
+
+            a2a_message = {
+                "role": "user",
+                "messageId": f"msg_{generate_nanoid()}",
+                "parts": [
+                    {"type": "TextPart", "text": user_message},
+                    {
+                        "type": "DataPart",
+                        "data": {
+                            "action": "execute_task",
+                            "original_request": user_message,
+                            "needed_capability": needed_capability,
+                            "requesting_agent": self.agent_id,
+                            "execution_required": True,
+                        },
+                    },
+                ],
+            }
+
+            # Log the A2A request details
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "target_agent_id": best_agent_id,
+                    "message_content": a2a_message,
+                    "execution_requested": True,
+                },
+                description=f"A2A execution request: {self.agent_id} -> {best_agent_id}",
+            )
+
+            # Send A2A message directly using the proper protocol format
+            response = await self.send_a2a_message(
+                target_agent_id=best_agent_id,
+                message=a2a_message,
+                message_type="request",  # Standard A2A request type
+                wait_for_response=True,
+                timeout=60,  # Give more time for complex requests
+            )
+
+            if response and response.get("status") == "success":
+                # Get response content (could be in 'response' or 'advice' field)
+                result_content = response.get("response", response.get("advice", ""))
+                execution_completed = response.get("execution_completed", False)
+
+                # Log the A2A response
+                observability.observe(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "source_agent_id": best_agent_id,
+                        "execution_completed": execution_completed,
+                        "response_length": len(result_content) if result_content else 0,
+                    },
+                    description=f"A2A response received: execution={execution_completed}",
+                )
+
+                if result_content:
+                    # Format the collaborative response
+                    if execution_completed:
+                        # Task was executed by the other agent
+                        return result_content  # Return the actual execution result
+                    else:
+                        # Only consultation/advice was provided
+                        return (
+                            f"I'll collaborate with {best_agent_id} to help you with this.\n\n"
+                            f"{result_content}"
+                        )
+
+            return None
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "phase": "a2a_assistance_request",
+                },
+                description=f"Failed to request A2A assistance: {str(e)}",
+            )
+            return None
+
+    async def _plan_before_execution(
+        self, user_message: str, available_tools: List[Dict] = None
+    ) -> Dict[str, Any]:
+        """
+        Force agent to plan before executing any tools.
+        Returns a structured plan for multi-step requests.
+        """
+        # Log available tools for debugging
+        tool_names = [t.get("function", {}).get("name", "") for t in (available_tools or [])]
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_PLANNING,
+            level=observability.EventLevel.INFO,  # Changed to INFO to always see it
+            data={
+                "agent_id": self.agent_id,
+                "phase": "planning_start",
+                "available_tools": tool_names,  # Show all tools, not just first 10
+                "tool_count": len(tool_names),
+            },
+            description=f"Agent {self.agent_id} starting planning with {len(tool_names)} tools",
+        )
+
+        planning_prompt = f"""Analyze this request and create an execution plan.
+Request: {user_message}
+
+Break down this request into ALL necessary steps to fully complete it. For each step:
+1. What specific action must be taken
+2. What tool/capability is required
+3. Whether you can do it with your available tools
+4. What data from previous steps is needed
+
+IMPORTANT: If the request asks you to DO something with data (like "create an issue with X"),
+that's a separate step from gathering the data!
+
+Available tools: {', '.join([t.get('function', {}).get('name', '') for t in (available_tools or [])][:20])}
+
+IMPORTANT: You can ONLY mark "can_i_do_this": true for tools that are EXACTLY in the available tools list above!
+If a tool is NOT in the list above, you MUST set "can_i_do_this": false, even if you think you should have it!
+
+Tool names must match EXACTLY as shown above, including any prefixes or suffixes.
+
+You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the available tools list above:
+{{
+    "steps": [
+        {{
+            "step_number": 1,
+            "action": "describe what this step does",
+            "capability_needed": "what type of capability",
+            "tool_name": "EXACT_TOOL_NAME_FROM_AVAILABLE_LIST",
+            "can_i_do_this": true,
+            "data_needed": "none or previous step data",
+            "output_placeholder": "{{DESCRIPTIVE_NAME}}"
+        }},
+        {{
+            "step_number": 2,
+            "action": "describe what this step does",
+            "capability_needed": "what type of capability",
+            "tool_name": "EXACT_TOOL_NAME_FROM_AVAILABLE_LIST",
+            "can_i_do_this": false,
+            "data_needed": "data from previous steps",
+            "delegation_prompt": (
+                "Clear instructions for the delegated agent, "
+                "with {{PLACEHOLDER}} for data from previous steps"
+            )
+        }}
+    ],
+    "my_steps": [
+        {{
+            "action": "steps I can do myself",
+            "tool_name": "EXACT_TOOL_NAME_FROM_LIST",
+            "output_placeholder": "{{RESULT_NAME}}"
+        }}
+    ],
+    "delegate_steps": [
+        {{
+            "action": "steps I need to delegate",
+            "capability_needed": "type of capability needed",
+            "delegation_prompt": "Instructions with {{PLACEHOLDERS}} for data from my_steps"
+        }}
+    ],
+    "data_flow": "Description of how data flows between steps"
+}}"""
+
+        try:
+            # Create messages for planning
+            planning_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a planning assistant. Analyze requests and "
+                        "create structured execution plans. Always respond with valid JSON only."
+                    ),
+                },
+                {"role": "user", "content": planning_prompt},
+            ]
+
+            # Get plan from LLM
+            plan_response = await self.model.chat(
+                planning_messages,
+                temperature=0.1,  # Low temperature for structured output
+                max_tokens=1000,
+            )
+
+            # Extract content from response
+            if hasattr(plan_response, "content"):
+                plan_content = plan_response.content
+            elif hasattr(plan_response, "text"):
+                plan_content = plan_response.text
+            else:
+                plan_content = str(plan_response)
+
+            # Parse JSON response
+            import json
+
+            # Log raw response for debugging
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.INFO,  # Changed to INFO to always see it
+                data={
+                    "agent_id": self.agent_id,
+                    "phase": "raw_response",
+                    "raw_plan": plan_content[:1000] if len(plan_content) > 1000 else plan_content,
+                },
+                description="Raw planning response from LLM",
+            )
+
+            # Remove markdown code blocks if present
+            if plan_content.strip().startswith("```"):
+                plan_content = plan_content.strip().split("```")[1]
+                if plan_content.startswith("json"):
+                    plan_content = plan_content[4:]
+            plan = json.loads(plan_content.strip())
+
+            # Validate and fix the plan - ensure agents don't claim tools they don't have
+            available_tool_names = set(
+                t.get("function", {}).get("name", "") for t in (available_tools or [])
+            )
+
+            # Fix any incorrect tool claims
+            for step in plan.get("steps", []):
+                tool_name = step.get("tool_name", "")
+                if tool_name and tool_name not in available_tool_names:
+                    # Tool not available - must delegate
+                    step["can_i_do_this"] = False
+
+            # Rebuild my_steps based on corrected can_i_do_this values
+            plan["my_steps"] = [
+                {
+                    "action": step["action"],
+                    "tool_name": step["tool_name"],
+                    "output_placeholder": step.get(
+                        "output_placeholder", f"{{{step['tool_name'].upper()}_OUTPUT}}"
+                    ),
+                }
+                for step in plan.get("steps", [])
+                if step.get("can_i_do_this") and step.get("tool_name") in available_tool_names
+            ]
+
+            # Rebuild delegate_steps
+            plan["delegate_steps"] = [
+                {
+                    "action": step["action"],
+                    "capability_needed": step.get("capability_needed", ""),
+                    "delegation_prompt": step.get("delegation_prompt", step["action"]),
+                }
+                for step in plan.get("steps", [])
+                if not step.get("can_i_do_this")
+                or step.get("tool_name") not in available_tool_names
+            ]
+
+            # Log the plan
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "request": (
+                        user_message[:100] + "..." if len(user_message) > 100 else user_message
+                    ),
+                    "plan": plan,
+                    "can_do_steps": len(plan.get("my_steps", [])),
+                    "need_help_steps": len(plan.get("delegate_steps", [])),
+                },
+                description=f"Agent {self.agent_id} created execution plan",
+            )
+
+            return plan
+
+        except Exception as e:
+            # If planning fails, return a simple plan
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"agent_id": self.agent_id, "error": str(e), "phase": "execution_planning"},
+                description=f"Failed to create execution plan: {str(e)}",
+            )
+
+            # Return a default plan that attempts direct execution
+            return {
+                "steps": [{"action": user_message, "can_i_do_this": False}],
+                "my_steps": [],
+                "delegate_steps": [
+                    {
+                        "action": user_message,
+                        "capability_needed": "unknown",
+                        "delegation_prompt": user_message,
+                    }
+                ],
+                "data_flow": "Direct delegation due to planning failure",
+            }
 
     async def send_a2a_message(
         self,
