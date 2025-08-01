@@ -1,0 +1,2993 @@
+# =============================================================================
+# FRONTMATTER
+# =============================================================================
+# Title:        Agent - AI Agent Implementation
+# Description:  Core implementation of AI agents with memory and tool use
+# Role:         Primary interface for language model interactions
+# Usage:        Created and managed by the Overlord to process user messages
+# Author:       Muxi Framework Team
+#
+# The Agent class is a fundamental component in the Muxi framework that:
+#
+# 1. Handles Direct Interactions
+#    - Processes user messages and generates responses
+#    - Maintains conversation context for coherent exchanges
+#    - Integrates with memory systems for contextual awareness
+#
+# 2. Tool Integration
+#    - Connects to external tools via MCP (Model Context Protocol)
+#    - Parses and processes tool calls from language model responses
+#    - Manages tool invocation and result incorporation
+#
+# 3. Memory Usage
+#    - Delegates memory storage to the overlord
+#    - Retrieves relevant context from memory systems
+#    - Works with overlord for information extraction
+#
+# Agents are typically created and managed by the Overlord:
+#
+# Programmatic creation:
+#   agent = overlord.create_agent(
+#       agent_id="assistant",
+#       model=model,
+#       system_message="You are a helpful assistant."
+#   )
+#
+# Direct usage:
+#   response = await agent.process_message("Hello, how can you help me?")
+#
+# This file defines both the Agent class and the supporting MCPServer class
+# for external tool integration.
+# =============================================================================
+
+import datetime
+import json
+import re
+import time
+from typing import Any, Dict, List, Optional, Union
+
+from ..artifacts.extractor import extract_artifacts_from_tool_results
+from ...utils.id_generator import generate_nanoid
+from ...datatypes.response import MuxiResponse
+from ...datatypes.intent import IntentType, IntentDetectionContext
+from ...services.mcp.service import MCPService
+from ...services.llm import LLM
+from ...services.intent import IntentDetectionService
+from ...services import observability
+
+
+class Agent:
+    """
+    An agent that interacts with users and tools.
+
+    The Agent class manages interactions between users and language models,
+    using its overlord's memory systems for context retention and retrieval.
+    It can process messages, invoke tools via MCP, and maintain conversation state.
+    """
+
+    def __init__(
+        self,
+        model: LLM,
+        overlord: Any,  # Forward reference to Overlord
+        system_message: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        name: Optional[str] = None,
+        request_timeout: Optional[int] = None,
+        a2a_internal: bool = True,
+        a2a_external: bool = True,
+        knowledge_config: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Initialize the agent with a model, overlord, and optional parameters.
+
+        Args:
+            model: The language model for the agent to use. This model handles
+                the core intelligence of the agent.
+            overlord: The overlord that manages this agent. Provides
+                access to memory systems and coordinates multi-agent systems.
+            system_message: Optional system message to set the agent's behavior
+                and persona. Defines the agent's role and capabilities.
+            agent_id: Optional unique ID for the agent. If None, generates a UUID.
+                Used for identification in memory systems and routing.
+            name: Optional name for the agent (e.g., "Customer Service Bot").
+                Used for display purposes.
+            request_timeout: Optional timeout in seconds for MCP requests.
+                Defaults to overlord's timeout if not specified.
+            a2a_internal: Whether this agent participates in intra-formation A2A
+                communication. Default True.
+            a2a_external: Whether this agent participates in external A2A
+                communication. Default True.
+            knowledge_config: Optional configuration for agent domain knowledge.
+                Contains sources and settings for the agent's knowledge base.
+        """
+        self.model = model
+        self.overlord = overlord
+
+        # Set up agent identification
+        self.agent_id = agent_id or f"agt_{generate_nanoid()}"
+        self.name = name or f"Agent-{self.agent_id}"
+
+        # Initialize role and specialties for enhanced routing
+        self.role = None  # Will be set from config during agent creation
+        self.specialties = []  # Will be set from config during agent creation
+
+        # Set up system message
+        self.system_message = system_message or (
+            "You are a helpful assistant that responds accurately to user queries. "
+            "Provide detailed, factual responses and be transparent about uncertainty."
+        )
+
+        # Set up A2A configuration (single source of truth)
+        self.a2a_internal = a2a_internal
+        self.a2a_external = a2a_external
+
+        # Set request timeout (use overlord's if not specified)
+        if request_timeout is not None:
+            self.request_timeout = request_timeout
+        elif hasattr(overlord, "request_timeout"):
+            self.request_timeout = overlord.request_timeout
+        else:
+            self.request_timeout = 60  # Default fallback
+
+        # Set up MCP service access
+        self._mcp_service = MCPService.get_instance()
+
+        # Initialize knowledge handler
+        self.knowledge_handler: Optional[Any] = None  # Will be KnowledgeHandler when imported
+        self._knowledge_config = knowledge_config  # Store config for deferred initialization
+        self._knowledge_initialized = False
+
+        # Initialize the context with system message
+        self._messages = []
+        if self.system_message:
+            # Check if any MCP servers use user credentials
+            user_cred_servers = []
+            if self._mcp_service:
+                user_cred_servers = self._mcp_service.get_user_credential_servers()
+
+            if user_cred_servers:
+                # Build explicit list
+                server_list = ", ".join(f"'{server}'" for server in user_cred_servers)
+
+                # Add instruction to the agent's system message
+                auth_instruction = (
+                    f"\n\nImportant MCP Authentication Guidance: "
+                    f"The following MCP servers authenticate using user-specific credentials: {server_list}. "
+                    f"When using tools from these servers, you MUST first use an identity discovery tool "
+                    f"(such as get_me, whoami, get_authenticated_user, or similar) to identify who you are "
+                    f"authenticated as before calling any other tools on that server. "
+                    f"This ensures you understand the context and permissions of your actions."
+                )
+                enhanced_system_message = self.system_message + auth_instruction
+                self._messages.append({"role": "system", "content": enhanced_system_message})
+            else:
+                self._messages.append({"role": "system", "content": self.system_message})
+
+        # Emit agent initialization event
+        observability.observe(
+            event_type=observability.SystemEvents.AGENT_INITIALIZED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "a2a_internal": self.a2a_internal,
+                "a2a_external": self.a2a_external,
+                "has_system_message": bool(self.system_message),
+                "has_knowledge_config": bool(knowledge_config),
+            },
+            description=f"Agent initialized: {self.agent_id}",
+        )
+
+    def get_mcp_service(self) -> MCPService:
+        """
+        Get the centralized MCP service for tool integrations.
+
+        Returns:
+            The MCPService instance used by this agent for connecting to
+            and interacting with external tools.
+        """
+        return self._mcp_service
+
+    async def _initialize_knowledge(self, knowledge_config: Dict[str, Any]) -> None:
+        """
+        Initialize the knowledge handler from configuration.
+
+        Args:
+            knowledge_config: Configuration dictionary containing knowledge sources
+                and settings for the agent's knowledge base.
+        """
+        try:
+            # Import KnowledgeHandler here to avoid circular imports
+            from .knowledge.handler import KnowledgeHandler
+
+            # Get embedding function from model for semantic search
+            # Knowledge handler needs a function that handles multiple texts
+            embedding_fn = None
+            if hasattr(self.model, "generate_embeddings"):
+                # Prefer batch embedding function for efficiency
+                embedding_fn = self.model.generate_embeddings
+            elif hasattr(self.model, "get_embeddings"):
+                embedding_fn = self.model.get_embeddings
+            elif hasattr(self.model, "embed"):
+                # Fallback: wrap single embed in a batch handler with error handling
+                async def batch_embed(texts):
+                    embeddings = []
+                    for i, text in enumerate(texts):
+                        try:
+                            embedding = await self.model.embed(text)
+                            embeddings.append(embedding)
+                        except Exception as e:
+                            # Log error but continue processing other texts
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                description="Failed to generate embedding for text in batch",
+                                data={
+                                    "text_index": i,
+                                    "text_preview": text[:100] if text else "",
+                                    "error": str(e),
+                                    "error_type": type(e).__name__
+                                }
+                            )
+                            # Append None to maintain index alignment
+                            embeddings.append(None)
+                    return embeddings
+                embedding_fn = batch_embed
+
+            # Get formation config from overlord if available
+            formation_config = None
+            if hasattr(self.overlord, "formation_config") and self.overlord.formation_config:
+                formation_config = self.overlord.formation_config
+
+            # Get formation_id from overlord
+            formation_id = getattr(self.overlord, "formation_id", "default-formation")
+
+            # Create knowledge handler using the factory method with formation config
+            self.knowledge_handler = await KnowledgeHandler.from_agent_config(
+                agent_id=self.agent_id,
+                knowledge_config=knowledge_config,
+                generate_embeddings_fn=embedding_fn,
+                formation_config=formation_config,
+                working_memory=getattr(self.overlord, "buffer_memory", None),
+                auto_inject_knowledge=True,
+                formation_id=formation_id,  # Pass formation_id explicitly
+            )
+
+            # Log successful knowledge initialization
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "knowledge_sources": len(knowledge_config.get("sources", [])),
+                    "knowledge_config_keys": list(knowledge_config.keys()),
+                    "knowledge_handler_created": self.knowledge_handler is not None,
+                },
+                description=f"Knowledge handler initialized for agent {self.agent_id}",
+            )
+
+        except Exception as e:
+            # Log error but don't fail agent initialization
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_INITIALIZATION_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "phase": "knowledge_initialization",
+                },
+                description=f"Failed to initialize knowledge for agent {self.agent_id}: {str(e)}",
+            )
+            self.knowledge_handler = None
+
+    async def _ensure_knowledge_initialized(self) -> None:
+        """
+        Ensure knowledge handler is initialized if configuration is available.
+        This is called on first use since constructor can't be async.
+        """
+        if self._knowledge_initialized or not self._knowledge_config:
+            return
+
+        await self._initialize_knowledge(self._knowledge_config)
+        self._knowledge_initialized = True
+
+    async def search_knowledge(
+        self,
+        query: str,
+        limit: int = 5,
+        include_memory: bool = True,
+        unified: bool = False,
+        # Enhanced coordination features (always enabled)
+        deduplicate: bool = True,
+        context_budget: Optional[int] = None,
+        session_id: Optional[str] = None,
+    ) -> Union[List[Dict[str, Any]], Dict[str, List[Dict[str, Any]]]]:
+        """
+        Search the agent's knowledge base and memory for relevant information.
+
+        This method provides unified search across both domain knowledge sources
+        and conversational memory, with enhanced coordination features always enabled.
+
+        Args:
+            query: The search query string
+            limit: Maximum number of results to return per source
+            include_memory: Whether to include memory search results
+            unified: Return full dictionary format with separate source results
+            deduplicate: Remove duplicate content between sources (always enabled)
+            context_budget: Total context budget to allocate across sources
+
+        Returns:
+            List of unified results (default) or dictionary with separate source results
+        """
+        if not self.knowledge_handler:
+            return {"knowledge": [], "memory": [], "unified": []} if unified else []
+
+        try:
+            # Smart query routing (always enabled)
+            strategy = await self._analyze_query_for_routing(query)
+
+            # Dynamic context budget management (always enabled)
+            if context_budget:
+                knowledge_limit, memory_limit = self._allocate_context_budget(
+                    context_budget, strategy, limit
+                )
+            else:
+                # Use strategy-based limits when no budget specified
+                if strategy == "knowledge_only":
+                    knowledge_limit, memory_limit = limit, 0
+                elif strategy == "memory_only":
+                    knowledge_limit, memory_limit = 0, limit
+                else:  # strategy == "both"
+                    knowledge_limit, memory_limit = limit, limit
+
+            # Perform unified search with allocated limits
+            results = await self.knowledge_handler.search_unified(
+                query=query,
+                knowledge_limit=knowledge_limit,
+                memory_limit=memory_limit if include_memory else 0,
+                include_memory=include_memory,
+                session_id=session_id,
+            )
+
+            # Content deduplication (always enabled)
+            if deduplicate and include_memory:
+                results = self._deduplicate_results(results)
+
+            # Enhanced unified ranking (always enabled)
+            if include_memory:
+                enhanced_unified = self._create_enhanced_unified_ranking(
+                    knowledge_results=results.get("knowledge", []),
+                    memory_results=results.get("memory", []),
+                    query=query,
+                    strategy=strategy,
+                    budget=context_budget or (limit * 2),
+                )
+                results["unified"] = enhanced_unified
+
+            # Return format based on unified parameter
+            if unified:
+                return results
+            else:
+                # Return enhanced unified results as the default
+                return results.get("unified", results.get("knowledge", []))
+
+        except Exception as e:
+            self.logger.error(f"Error in enhanced knowledge search: {e}")
+            return {"knowledge": [], "memory": [], "unified": []} if unified else []
+
+    async def _analyze_query_for_routing(self, query: str) -> str:
+        """
+        Analyze query to determine optimal search strategy.
+
+        Uses the IntentDetectionService for language-agnostic intent detection
+        to determine whether to search knowledge bases, memory, or both.
+
+        Args:
+            query: The search query to analyze
+
+        Returns:
+            Search strategy: "knowledge_only", "memory_only", or "both"
+        """
+        # Try to use intent detection service if available
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Use existing model instance
+                llm_service = self.model
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Detect query type using LLM
+            # Add recent conversation context if available
+            context = IntentDetectionContext(
+                recent_messages=(
+                    [
+                        {"role": msg.role, "content": msg.content[:200]}
+                        for msg in self._messages[-5:]  # Last 5 messages
+                    ]
+                    if hasattr(self, "_messages") and self._messages
+                    else None
+                )
+            )
+
+            result = await self._intent_detector.detect_intent(
+                text=query, intent_type=IntentType.QUERY_TYPE, context=context
+            )
+
+            # Map intent to strategy
+            if result.confidence > 0.7:  # High confidence
+                if result.intent == "knowledge":
+                    return "knowledge_only"
+                elif result.intent == "memory":
+                    return "memory_only"
+                elif result.intent == "mixed":
+                    return "both"
+
+            # Low confidence or unclear - use both
+            return "both"
+
+        except Exception as e:
+            # Fall back to simple keyword-based detection
+            if hasattr(self, "logger"):
+                self.logger.warning(f"Intent detection failed, using fallback: {str(e)}")
+            return self._fallback_query_routing(query)
+
+    def _fallback_query_routing(self, query: str) -> str:
+        """
+        Fallback keyword-based query routing.
+
+        Used when intent detection service is not available.
+        """
+        query_lower = query.lower()
+
+        # Simple heuristics for fallback
+        memory_keywords = [
+            "remember",
+            "last time",
+            "previously",
+            "you said",
+            "we discussed",
+            "earlier",
+        ]
+        knowledge_keywords = ["what is", "how to", "explain", "define", "why", "tutorial"]
+
+        has_memory = any(keyword in query_lower for keyword in memory_keywords)
+        has_knowledge = any(keyword in query_lower for keyword in knowledge_keywords)
+
+        if has_memory and not has_knowledge:
+            return "memory_only"
+        elif has_knowledge and not has_memory:
+            return "knowledge_only"
+        else:
+            return "both"
+
+    def _allocate_context_budget(
+        self, total_budget: int, strategy: str, base_limit: int
+    ) -> tuple[int, int]:
+        """
+        Allocate context budget between knowledge and memory sources.
+
+        Allocates context budget between knowledge and memory sources by
+        intelligently distributing the available context budget based on the
+        determined search strategy.
+
+        Args:
+            total_budget: Total context budget to allocate
+            strategy: Search strategy ("knowledge_only", "memory_only", or "both")
+            base_limit: Base limit per source when strategy is "both"
+
+        Returns:
+            Tuple of (knowledge_limit, memory_limit)
+        """
+        if strategy == "knowledge_only":
+            return (total_budget, 0)
+        elif strategy == "memory_only":
+            return (0, total_budget)
+        else:
+            # For "both" strategy, allocate based on a balanced approach
+            # Give slight preference to knowledge for factual queries
+            # but ensure both sources get meaningful allocation
+
+            if total_budget <= 2:
+                # Very small budget - give one to each
+                return (1, 1)
+            elif total_budget <= 4:
+                # Small budget - split evenly
+                half = total_budget // 2
+                return (half, total_budget - half)
+            else:
+                # Larger budget - use 60/40 split favoring knowledge
+                # but ensure minimum of 2 for each source
+                knowledge_portion = max(2, int(total_budget * 0.6))
+                memory_portion = max(2, total_budget - knowledge_portion)
+
+                # Adjust if we exceeded total budget
+                if knowledge_portion + memory_portion > total_budget:
+                    knowledge_portion = total_budget - memory_portion
+
+                return (knowledge_portion, memory_portion)
+
+    def _deduplicate_results(
+        self, results: Dict[str, List[Dict[str, Any]]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Remove duplicate content between knowledge and memory results.
+
+        Removes duplicate content between knowledge and memory results by identifying
+        and removing semantically similar content between knowledge sources
+        and memory to avoid redundant information in the unified results.
+
+        Args:
+            results: Dictionary with 'knowledge' and 'memory' result lists
+
+        Returns:
+            Dictionary with deduplicated results
+        """
+        knowledge_results = results.get("knowledge", [])
+        memory_results = results.get("memory", [])
+
+        if not knowledge_results or not memory_results:
+            return results
+
+        # Simple text-based deduplication
+        # For more sophisticated deduplication, we could use embedding similarity
+        deduplicated_memory = []
+
+        # Extract content from knowledge results for comparison
+        knowledge_contents = set()
+        for k_result in knowledge_results:
+            content = k_result.get("content", "").strip().lower()
+            if content:
+                # Use first 100 characters as a fingerprint
+                knowledge_contents.add(content[:100])
+
+        # Filter memory results that don't significantly overlap with knowledge
+        for m_result in memory_results:
+            memory_content = m_result.get("content", "").strip().lower()
+            if not memory_content:
+                continue
+
+            # Check for significant overlap with knowledge content
+            memory_fingerprint = memory_content[:100]
+            is_duplicate = False
+
+            for k_fingerprint in knowledge_contents:
+                # Calculate simple overlap ratio
+                if len(memory_fingerprint) > 0 and len(k_fingerprint) > 0:
+                    # Simple string similarity check
+                    overlap = self._calculate_text_overlap(memory_fingerprint, k_fingerprint)
+                    if overlap > 0.7:  # 70% similarity threshold
+                        is_duplicate = True
+                        break
+
+            if not is_duplicate:
+                deduplicated_memory.append(m_result)
+
+        return {"knowledge": knowledge_results, "memory": deduplicated_memory}
+
+    def _calculate_text_overlap(self, text1: str, text2: str) -> float:
+        """
+        Calculate simple text overlap ratio between two strings.
+
+        Args:
+            text1: First text string
+            text2: Second text string
+
+        Returns:
+            Overlap ratio between 0.0 and 1.0
+        """
+        if not text1 or not text2:
+            return 0.0
+
+        # Simple word-based overlap calculation
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+
+        if not words1 or not words2:
+            return 0.0
+
+        intersection = words1.intersection(words2)
+        union = words1.union(words2)
+
+        return len(intersection) / len(union) if union else 0.0
+
+    def _create_enhanced_unified_ranking(
+        self,
+        knowledge_results: List[Dict[str, Any]],
+        memory_results: List[Dict[str, Any]],
+        query: str,
+        strategy: str,
+        budget: int,
+    ) -> List[Dict[str, Any]]:
+        """
+        Create enhanced unified ranking of knowledge and memory results.
+
+        Creates enhanced unified ranking of knowledge and memory results by intelligently
+        combining and ranking results from both sources based on relevance,
+        recency, and the search strategy used.
+
+        Args:
+            knowledge_results: Results from knowledge sources
+            memory_results: Results from memory sources
+            query: Original search query for relevance scoring
+            strategy: Search strategy used
+            budget: Total context budget to respect
+
+        Returns:
+            List of unified results ranked by enhanced scoring
+        """
+        unified_results = []
+
+        # Add knowledge results with enhanced scoring
+        for result in knowledge_results:
+            enhanced_result = result.copy()
+            enhanced_result["source_type"] = "knowledge"
+
+            # Calculate enhanced score based on strategy
+            base_score = result.get("relevance", result.get("score", 0.5))
+
+            if strategy == "knowledge_only":
+                # Boost knowledge scores when it's the primary source
+                enhanced_score = min(1.0, base_score * 1.2)
+            elif strategy == "both":
+                # Standard scoring for balanced approach
+                enhanced_score = base_score
+            else:
+                # Lower knowledge scores when memory is preferred
+                enhanced_score = base_score * 0.8
+
+            enhanced_result["enhanced_score"] = enhanced_score
+            unified_results.append(enhanced_result)
+
+        # Add memory results with enhanced scoring
+        for result in memory_results:
+            enhanced_result = result.copy()
+            enhanced_result["source_type"] = "memory"
+
+            # Calculate enhanced score based on strategy
+            base_score = result.get("relevance", result.get("score", 0.5))
+
+            # Memory results often have recency bonus
+            recency_bonus = self._calculate_recency_bonus(result)
+
+            if strategy == "memory_only":
+                # Boost memory scores when it's the primary source
+                enhanced_score = min(1.0, (base_score + recency_bonus) * 1.2)
+            elif strategy == "both":
+                # Add recency bonus for balanced approach
+                enhanced_score = min(1.0, base_score + recency_bonus)
+            else:
+                # Lower memory scores when knowledge is preferred
+                enhanced_score = (base_score + recency_bonus) * 0.8
+
+            enhanced_result["enhanced_score"] = enhanced_score
+            unified_results.append(enhanced_result)
+
+        # Sort by enhanced score (descending)
+        unified_results.sort(key=lambda x: x.get("enhanced_score", 0), reverse=True)
+
+        # Respect context budget
+        if len(unified_results) > budget:
+            unified_results = unified_results[:budget]
+
+        # Add ranking metadata
+        for i, result in enumerate(unified_results):
+            result["unified_rank"] = i + 1
+            result["strategy_used"] = strategy
+
+        return unified_results
+
+    def _calculate_recency_bonus(self, result: Dict[str, Any]) -> float:
+        """
+        Calculate recency bonus for memory results.
+
+        Args:
+            result: Memory search result
+
+        Returns:
+            Recency bonus value between 0.0 and 0.3
+        """
+        # Look for timestamp in various possible fields
+        timestamp = result.get("timestamp") or result.get("created_at") or result.get("time")
+
+        if not timestamp:
+            return 0.0
+
+        try:
+            current_time = time.time()
+
+            # Convert timestamp to float if it's not already
+            if isinstance(timestamp, str):
+                # Try to parse ISO format or other common formats
+                import datetime
+
+                try:
+                    dt = datetime.datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+                    timestamp = dt.timestamp()
+                except (ValueError, TypeError):
+                    return 0.0
+
+            # Calculate age in hours
+            age_hours = (current_time - timestamp) / 3600
+
+            # Recency bonus decreases with age
+            if age_hours < 1:
+                return 0.3  # Very recent (last hour)
+            elif age_hours < 24:
+                return 0.2  # Recent (last day)
+            elif age_hours < 168:  # Last week
+                return 0.1
+            else:
+                return 0.0  # Older than a week
+
+        except (ValueError, TypeError, AttributeError):
+            return 0.0
+
+    async def process_message(
+        self,
+        message: Union[str, MuxiResponse],
+        user_id: Any = None,
+        session_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+    ) -> MuxiResponse:
+        """
+        Process a message from the overlord and generate a response.
+
+        This method handles:
+        1. Converting input to MuxiResponse format
+        2. Adding the message to memory via the overlord
+        3. Updating conversation context
+        4. Searching domain knowledge (if available)
+        5. Processing the message with the model
+        6. Handling any tool calls in the response
+        7. Storing the response in memory
+        8. Supporting agent clarification requests to overlord
+
+        Args:
+            message: The message from the overlord, either as a string or an MuxiResponse.
+                Contains the content to be processed by the agent.
+            user_id: Optional user ID for multi-user support. Used for memory
+                isolation and user-specific context.
+
+        Returns:
+            The agent's response as an MuxiResponse, possibly including tool call results
+            or clarification requests in metadata.
+        """
+        # Convert string message to MuxiResponse if needed
+        if isinstance(message, str):
+            content = message
+            message_obj = MuxiResponse(role="user", content=content)
+        else:
+            content = message.content
+            message_obj = message
+
+        # Emit agent message processing event
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "message_length": len(content),
+            },
+            description=f"Agent {self.agent_id} processing message",
+        )
+
+        # Memory storage is handled by chat orchestrator - agent should not store messages
+        # This prevents duplicate storage of enhanced messages
+
+        # Add message to conversation context
+        self._messages.append({"role": "user", "content": message_obj.content})
+
+        # Store current user message for credential selection context
+        self._current_user_message = message_obj.content
+
+        # Search knowledge and memory if handler is available
+        context_enhancement = ""
+
+        # First, check for recent document uploads
+        recent_docs = []
+        if self.overlord and hasattr(self.overlord, "get_recent_documents"):
+            # Pass session_id to get documents from the current session
+            recent_docs = self.overlord.get_recent_documents(session_id=session_id)
+
+        if self._knowledge_config:  # Check if knowledge config exists
+            try:
+                # Use unified search to get both knowledge and memory context
+                search_results = await self.search_knowledge(
+                    query=content, limit=5, include_memory=True, unified=True, session_id=session_id
+                )
+
+                # Build enhanced context from unified results
+                knowledge_results = search_results.get("knowledge", [])
+                memory_results = search_results.get("memory", [])
+
+                if knowledge_results or memory_results or recent_docs:
+                    # Add enhanced context to the conversation
+                    enhanced_message = self._enhance_message_with_context(
+                        content, recent_docs, knowledge_results, memory_results
+                    )
+                    self._messages[-1]["content"] = enhanced_message
+
+                    # Log unified search success
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "knowledge_results_count": len(knowledge_results),
+                            "memory_results_count": len(memory_results),
+                            "recent_docs_count": len(recent_docs),
+                            "query": content[:100],
+                            "unified_search": True,
+                        },
+                        description=(
+                            f"Context search completed for agent {self.agent_id}: "
+                            f"{len(recent_docs)} recent docs, {len(knowledge_results)} knowledge, "
+                            f"{len(memory_results)} memory results"
+                        ),
+                    )
+            except Exception as e:
+                # Log error but don't fail message processing
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PROCESSING_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "knowledge_search",
+                    },
+                    description=f"Knowledge search failed for agent {self.agent_id}: {str(e)}",
+                )
+        else:
+            # No knowledge config, but still check for recent documents
+            # Get recent docs again if we didn't already
+            if not recent_docs and self.overlord and hasattr(self.overlord, "get_recent_documents"):
+                recent_docs = self.overlord.get_recent_documents(session_id=session_id)
+
+            if recent_docs:
+                # Add enhanced context to the conversation
+                enhanced_message = self._enhance_message_with_context(content, recent_docs)
+                self._messages[-1]["content"] = enhanced_message
+
+        # Check if we should include MCP tools
+        tools = None
+        if self.overlord and hasattr(self.overlord, "mcp_service"):
+            try:
+                mcp_service = self.overlord.mcp_service
+                # Access tool_registry directly
+                available_tools = mcp_service.tool_registry
+
+                # Format tools for LLM if any are available
+                if available_tools:
+                    tools = []
+
+                    for server_id, server_tools in available_tools.items():
+                        for tool_name, tool_info in server_tools.items():
+                            # Convert MCP tool format to OpenAI function format
+                            tool_def = {
+                                "type": "function",
+                                "function": {
+                                    "name": f"{server_id}__{tool_name}",  # Prefix with server_id
+                                    "description": tool_info.get("description", ""),
+                                    "parameters": tool_info.get(
+                                        "inputSchema", {"type": "object", "properties": {}}
+                                    ),
+                                },
+                            }
+                            tools.append(tool_def)
+                else:
+                    tools = []
+
+                # Always add the built-in generate_file tool if artifact service is available
+                if self.overlord and hasattr(self.overlord, "artifact_service"):
+                    generate_file_tool = {
+                        "type": "function",
+                        "function": {
+                            "name": "generate_file",
+                            "description": "Generate files (charts, documents, spreadsheets, images, presentations) by executing Python code with curated libraries.",  # noqa: E501
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "code": {
+                                        "type": "string",
+                                        "description": "Python code to execute for file generation. The code should save the output file in the current directory."  # noqa: E501
+                                    },
+                                    "filename": {
+                                        "type": "string",
+                                        "description": "Optional filename hint for the generated file"  # noqa: E501
+                                    }
+                                },
+                                "required": ["code"]
+                            }
+                        }
+                    }
+                    tools.append(generate_file_tool)
+            except Exception as e:
+                # Log but don't fail if we can't get tools
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "tool_discovery",
+                    },
+                    description=f"Failed to get MCP tools for agent {self.agent_id}: {str(e)}",
+                )
+
+        # Process the message with the model, including tools if available
+        if tools:
+            try:
+                # Get MCP configuration for message enhancement
+                mcp_config = {}
+                if self.overlord and hasattr(self.overlord, "_config") and self.overlord._config:
+                    mcp_config = self.overlord._config.get("mcp", {})
+
+                # Check if message enhancement is enabled
+                enhance_prompts = mcp_config.get("enhance_user_prompts", True)
+
+                # Enhance the last user message for better tool selection
+                if enhance_prompts and self._messages and self._messages[-1]["role"] == "user":
+                    original_message = self._messages[-1]["content"]
+
+                    # Extract tool names for context
+                    tool_names = [tool["function"]["name"] for tool in tools]
+                    server_names = list(
+                        set([name.split("__")[0] for name in tool_names if "__" in name])
+                    )
+
+                    # Use LLM to enhance the message for better tool selection
+                    enhancement_prompt = (
+                        f'The user said: "{original_message}"'
+                        f"\n\nAvailable tool servers: {', '.join(server_names)}"
+                        f"\nAvailable tools: {', '.join(tool_names[:10])}{'...' if len(tool_names) > 10 else ''}"
+                        f"\nPlease rewrite the user's message to be more explicit and clear for tool selection, without changing the intent or meaning. "  # noqa: E501
+                        'If the message mentions generic terms like "my repositories" or "my account", make it explicit that it refers to the user\'s account in the relevant service (e.g., GitHub).'  # noqa: E501
+                        "\n\nIMPORTANT: Preserve any specific account names mentioned (e.g., 'lily account', 'john's account', etc). These are crucial for credential selection."  # noqa: E501
+                        "\n\nImportant: Only return the enhanced message, nothing else. Do not explain or add any other text."  # noqa: E501
+                    )
+
+                    try:
+                        # Create a simple message list for enhancement
+                        enhancement_messages = [
+                            {
+                                "role": "system",
+                                "content": "You are a helpful assistant that enhances user messages for clarity.",
+                            },  # noqa: E501
+                            {"role": "user", "content": enhancement_prompt},
+                        ]
+
+                        # Get enhanced message from LLM
+                        enhancement_response = await self.model.chat(enhancement_messages)
+
+                        if (
+                            enhancement_response
+                            and isinstance(enhancement_response, str)
+                            and enhancement_response.strip()
+                        ):  # noqa: E501
+                            enhanced_message = enhancement_response.strip()
+
+                            # Only use enhancement if it's reasonable (not too long, not empty)
+                            if 10 < len(enhanced_message) < len(original_message) * 3:
+
+                                # Update the message
+                                self._messages[-1]["content"] = enhanced_message
+
+                                # Store original for potential rollback
+                                self._messages[-1]["_original_content"] = original_message
+                    except Exception:
+                        # If enhancement fails, just use original message
+                        # Message enhancement failed, continue with original message
+                        pass
+
+                raw_response = await self.model.chat_with_tools(self._messages, tools=tools)
+            except Exception as e:
+                # Log error and fallback to no tools
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                        "phase": "llm_call_with_tools",
+                    },
+                    description=f"Failed to call LLM with tools for agent {self.agent_id}: {str(e)}",
+                )
+                # Fallback to no tools
+                raw_response = await self.model.chat(self._messages)
+        else:
+            raw_response = await self.model.chat(self._messages)
+
+        # Extract the actual content string from the response
+        if isinstance(raw_response, str):
+            content = raw_response
+        elif hasattr(raw_response, "choices") and raw_response.choices:
+            # Handle ChatCompletionResponse object
+            message = raw_response.choices[0].message
+            if isinstance(message, dict):
+                content = message.get("content", "") or ""  # Handle None content
+            else:
+                # Handle message as object with content attribute/property
+                content = getattr(message, "content", "") or ""  # Handle None content
+        elif isinstance(raw_response, dict) and "choices" in raw_response:
+            # Handle dict response format
+            content = raw_response["choices"][0]["message"].get("content", "") or ""
+        else:
+            # Try to extract content from string representation if it's embedded
+            response_str = str(raw_response)
+            if "content': '" in response_str or 'content": "' in response_str:
+                # Try to extract content from string representation
+                import re
+
+                pattern = r"'content': '([^']*)'|\"content\": \"([^']*)\""
+                content_match = re.search(pattern, response_str)
+                if content_match:
+                    content = content_match.group(1) or content_match.group(2)
+                else:
+                    content = response_str
+            else:
+                content = response_str
+
+        # Clean response content to remove sandbox references and download links
+        content = self._clean_response_content(content)
+
+        # Check if agent needs clarification from user
+        clarification_request = await self._check_agent_clarification_needs(
+            content, message_obj.content
+        )
+
+        # Create response message
+        response = MuxiResponse(role="assistant", content=content)
+
+        # Note: clarification_request is tracked in observability but not stored in response
+
+        # Add response to conversation context
+        self._messages.append({"role": "assistant", "content": response.content})
+
+        # Emit agent response generated event
+        observability.observe(
+            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": self.agent_id,
+                "agent_name": self.name,
+                "response_length": len(response.content),
+                "has_clarification_request": bool(clarification_request),
+            },
+            description=f"Agent {self.agent_id} generated response",
+        )
+
+        # Response storage is handled by chat orchestrator - agent should not store responses
+        # The agent is just an executor, not the brain
+
+        # Start intelligent tool execution loop
+        # Get MCP configuration settings
+        mcp_config = {}
+        if self.overlord and hasattr(self.overlord, "_config") and self.overlord._config:
+            mcp_config = self.overlord._config.get("mcp", {})
+
+        # Extract configuration with defaults
+        max_iterations = mcp_config.get("max_tool_iterations", 10)
+        max_total_calls = mcp_config.get("max_tool_calls", 50)
+        max_repeated_errors = mcp_config.get("max_repeated_errors", 3)
+
+        # Generate unique chain ID for this tool execution sequence
+        chain_id = f"chn_{generate_nanoid()}"
+
+        # Initialize loop variables
+        iteration = 0
+        total_tool_calls = 0
+        error_history = []
+        current_raw_response = raw_response
+        current_content = content
+        all_tool_execution_results = []  # Store all tool results for artifact extraction
+
+        # Tool execution loop
+        while iteration < max_iterations:
+            # Check for tool calls in the response
+            tool_calls = None
+            if hasattr(current_raw_response, "choices") and current_raw_response.choices:
+                message = current_raw_response.choices[0].message
+                # Handle both dict and object message types
+                if isinstance(message, dict):
+                    if "tool_calls" in message and message["tool_calls"]:
+                        tool_calls = message["tool_calls"]
+                else:
+                    if hasattr(message, "tool_calls") and message.tool_calls:
+                        tool_calls = message.tool_calls
+            elif isinstance(current_raw_response, dict) and "choices" in current_raw_response:
+                message = current_raw_response["choices"][0]["message"]
+                if "tool_calls" in message and message["tool_calls"]:
+                    tool_calls = message["tool_calls"]
+
+            # If no tool calls, break the loop
+            if not tool_calls:
+                break
+
+            # Emit tool chain iteration started event
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "chain_id": chain_id,
+                    "iteration": iteration + 1,
+                    "total_iterations": max_iterations,
+                    "tool_calls_count": len(tool_calls),
+                    "total_tool_calls_so_far": total_tool_calls,
+                    "has_previous_errors": len(error_history) > 0,
+                },
+                description=f"Tool chain iteration {iteration + 1} started with {len(tool_calls)} tool calls",
+            )
+
+            # Execute tool calls
+            tool_results = []
+            current_errors = []
+
+            for tool_call in tool_calls:
+                if total_tool_calls >= max_total_calls:
+                    # Add system message about limit
+                    tool_results.append(
+                        {
+                            "tool_call_id": (
+                                tool_call.id if hasattr(tool_call, "id") else tool_call["id"]
+                            ),
+                            "role": "tool",
+                            "content": json.dumps(
+                                {
+                                    "error": (
+                                        f"Maximum tool call limit ({max_total_calls}) reached. "
+                                        "Please summarize your findings."
+                                    )
+                                }
+                            ),
+                        }
+                    )
+                    break
+
+                try:
+                    # Extract tool info
+                    if hasattr(tool_call, "function"):
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        tool_id = tool_call.id
+                    else:
+                        tool_name = tool_call["function"]["name"]
+                        tool_args = json.loads(tool_call["function"]["arguments"])
+                        tool_id = tool_call["id"]
+
+                    # Split server_id and actual tool name
+                    if "__" in tool_name:
+                        server_id, actual_tool_name = tool_name.split("__", 1)
+                    else:
+                        # Fallback if no server prefix
+                        server_id = None
+                        actual_tool_name = tool_name
+
+                    # Invoke the tool
+                    result = await self.invoke_tool(
+                        tool_name=actual_tool_name,
+                        parameters=tool_args,
+                        server_id=server_id,
+                        user_id=user_id,
+                    )
+
+                    # Store tool execution result for artifact extraction
+                    from ...datatypes.clarification import ToolExecutionResult
+
+                    # Debug log the result
+                    if actual_tool_name == "generate_file":
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "tool_name": actual_tool_name,
+                                "result_type": type(result).__name__,
+                                "result_content": str(result)[:500],  # First 500 chars
+                                "has_file_path": "file_path" in result if isinstance(result, dict) else False,
+                            },
+                            description=f"generate_file result: {str(result)[:200]}",
+                        )
+
+                    tool_exec_result = ToolExecutionResult(
+                        tool_name=actual_tool_name,
+                        parameters=tool_args,
+                        result=result,
+                        execution_time=0.0,  # We don't track this currently
+                        success=not isinstance(result, dict) or "error" not in result
+                    )
+                    all_tool_execution_results.append(tool_exec_result)
+
+                    total_tool_calls += 1
+
+                    # Check if result is an error
+                    is_error = False
+                    if isinstance(result, dict) and "error" in result:
+                        is_error = True
+                        current_errors.append(
+                            {
+                                "tool": tool_name,
+                                "error": result.get("error", "Unknown error"),
+                                "iteration": iteration,
+                            }
+                        )
+
+                    # Format tool result
+                    # Remove non-serializable fields before JSON encoding
+                    serializable_result = result.copy() if isinstance(result, dict) else result
+                    if isinstance(serializable_result, dict) and "_artifact" in serializable_result:
+                        serializable_result.pop("_artifact")
+
+                    tool_results.append(
+                        {"tool_call_id": tool_id, "role": "tool", "content": json.dumps(serializable_result)}
+                    )
+
+                except Exception as e:
+                    # Check if this is a credential error that needs to bubble up
+                    from ..memory.credential_resolver import (
+                        MissingCredentialError,
+                        AmbiguousCredentialError,
+                    )
+
+                    if isinstance(e, AmbiguousCredentialError):
+                        # Stop processing all remaining tool calls and bubble up immediately
+                        raise
+                    elif isinstance(e, MissingCredentialError):
+                        # Re-raise to let overlord handle the clarification
+                        raise
+
+                    import traceback
+
+                    error_trace = traceback.format_exc()
+                    observability.observe(
+                        event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+                        level=observability.EventLevel.ERROR,
+                        data={
+                            "agent_id": self.agent_id,
+                            "chain_id": chain_id,
+                            "iteration": iteration + 1,
+                            "tool_name": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
+                            "error_trace": error_trace,
+                        },
+                        description=f"Tool call execution failed: {str(e)}",
+                    )
+                    # Add error result
+                    tool_results.append(
+                        {
+                            "tool_call_id": tool_id if "tool_id" in locals() else "unknown",
+                            "role": "tool",
+                            "content": json.dumps({"error": str(e)}),
+                        }
+                    )
+                    current_errors.append(
+                        {
+                            "tool": tool_name if "tool_name" in locals() else "unknown",
+                            "error": str(e),
+                            "iteration": iteration,
+                        }
+                    )
+                    total_tool_calls += 1
+
+            # Add tool results to messages
+            if tool_results:
+                # Add the assistant message with tool calls
+                self._messages.append(
+                    {
+                        "role": "assistant",
+                        "content": current_content or "",
+                        "tool_calls": [
+                            {
+                                "id": tc.id if hasattr(tc, "id") else tc["id"],
+                                "type": "function",
+                                "function": {
+                                    "name": (
+                                        tc.function.name
+                                        if hasattr(tc, "function")
+                                        else tc["function"]["name"]
+                                    ),
+                                    "arguments": (
+                                        tc.function.arguments
+                                        if hasattr(tc, "function")
+                                        else tc["function"]["arguments"]
+                                    ),
+                                },
+                            }
+                            for tc in tool_calls
+                        ],
+                    }
+                )
+
+                # Add tool results
+                self._messages.extend(tool_results)
+
+                # Add errors to history
+                if current_errors:
+                    error_history.extend(current_errors)
+
+                    # Check if we're making no progress
+                    if self._is_making_no_progress(error_history, max_repeated_errors):
+                        # Add guidance about being stuck
+                        self._messages.append(
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You seem to be encountering repeated errors. "
+                                    "Please either find an alternative approach or explain why "
+                                    "the task cannot be completed."
+                                ),
+                            }
+                        )
+
+                # Add guidance for error recovery if needed
+                if current_errors:
+                    self._messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "The previous tool call(s) resulted in errors. "
+                                "Analyze the errors carefully and determine if there are other "
+                                "tools available that could help you make progress on the task. "
+                                "Only make additional tool calls if they would genuinely help "
+                                "resolve the issue or complete the task through an alternative approach."
+                            ),
+                        }
+                    )
+
+                # Get next response from model
+                next_response = await self.model.chat_with_tools(
+                    self._messages, tools=tools if tools else None
+                )
+
+                # Extract content from response
+                if isinstance(next_response, str):
+                    current_content = next_response
+                elif hasattr(next_response, "choices") and next_response.choices:
+                    message = next_response.choices[0].message
+                    if isinstance(message, dict):
+                        current_content = message.get("content", "") or ""
+                    else:
+                        current_content = getattr(message, "content", "") or ""
+                elif isinstance(next_response, dict) and "choices" in next_response:
+                    current_content = (
+                        next_response["choices"][0]["message"].get("content", "") or ""
+                    )
+                else:
+                    current_content = str(next_response)
+
+                # Update for next iteration
+                current_raw_response = next_response
+                content = current_content  # Update the main content variable
+
+                # Check if agent is about to retry the same failed operation
+                next_tool_calls = self._extract_tool_calls(next_response)
+                if (
+                    current_errors
+                    and next_tool_calls
+                    and self._is_repeating_failed_operation(next_tool_calls, error_history)
+                ):
+                    # Give agent one chance to reconsider
+                    self._messages.append(
+                        {
+                            "role": "system",
+                            "content": (
+                                "Warning: You are about to retry an operation that just "
+                                "failed with the same parameters. Please consider using a "
+                                "different tool or approach to make progress."
+                            ),
+                        }
+                    )
+                    reconsider_response = await self.model.chat_with_tools(
+                        self._messages, tools=tools if tools else None
+                    )
+
+                    # Update with reconsidered response
+                    if isinstance(reconsider_response, str):
+                        current_content = reconsider_response
+                    elif hasattr(reconsider_response, "choices") and reconsider_response.choices:
+                        message = reconsider_response.choices[0].message
+                        if isinstance(message, dict):
+                            current_content = message.get("content", "") or ""
+                        else:
+                            current_content = getattr(message, "content", "") or ""
+                    elif isinstance(reconsider_response, dict) and "choices" in reconsider_response:
+                        current_content = (
+                            reconsider_response["choices"][0]["message"].get("content", "")
+                            or ""
+                        )
+                    else:
+                        current_content = str(reconsider_response)
+
+                    current_raw_response = reconsider_response
+                    content = current_content
+
+            # Emit tool chain iteration completed event
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_ITERATION_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "chain_id": chain_id,
+                    "iteration": iteration + 1,
+                    "tool_calls_executed": len(tool_results),
+                    "errors_encountered": len(current_errors),
+                    "total_tool_calls": total_tool_calls,
+                    "continuing": bool(self._extract_tool_calls(current_raw_response)),
+                },
+                description=f"Tool chain iteration {iteration + 1} completed",
+            )
+
+            iteration += 1
+
+            # Check if we should stop due to limits
+            if total_tool_calls >= max_total_calls:
+                break
+
+        # Update the response content with final content
+        # Clean the content to remove sandbox references and download links
+        response.content = self._clean_response_content(content)
+
+        # Extract artifacts from tool results if any tools were executed
+        if total_tool_calls > 0 and all_tool_execution_results:
+            try:
+                artifacts = await extract_artifacts_from_tool_results(all_tool_execution_results)
+                if artifacts:
+                    response.artifacts = artifacts
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "artifacts_count": len(artifacts),
+                            "artifact_files": [a.filename for a in artifacts],
+                        },
+                        description=f"Agent {self.agent_id} extracted {len(artifacts)} artifacts from tool results",
+                    )
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                    },
+                    description=f"Failed to extract artifacts: {e}",
+                )
+
+        # Emit tool chain completed event
+        if iteration > 0:  # Only emit if we actually did tool chaining
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_TOOL_CHAIN_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "chain_id": chain_id,
+                    "total_iterations": iteration,
+                    "total_tool_calls": total_tool_calls,
+                    "total_errors": len(error_history),
+                    "reached_iteration_limit": iteration >= max_iterations,
+                    "reached_call_limit": total_tool_calls >= max_total_calls,
+                    "stopped_due_to_repeated_errors": self._is_making_no_progress(
+                        error_history, max_repeated_errors
+                    ),
+                },
+                description=f"Tool chain completed after {iteration} iterations and {total_tool_calls} tool calls",
+            )
+
+        # Add final response to context
+        self._messages.append({"role": "assistant", "content": content})
+
+        return response
+
+    def _format_recent_documents(self, recent_docs: List[Dict[str, Any]]) -> List[str]:
+        """
+        Format recent documents into context parts.
+
+        Args:
+            recent_docs: List of recent document dictionaries
+
+        Returns:
+            List of formatted context strings
+        """
+        context_parts = []
+        context_parts.append("--- Recently Uploaded Documents ---")
+        for doc in recent_docs:
+            context_parts.append(f"Filename: {doc.get('filename', 'Unknown')}")
+            # Join content list if it's a list
+            doc_content = doc.get("content", "")
+            if isinstance(doc_content, list):
+                # Check if list contains bytes
+                if doc_content and isinstance(doc_content[0], bytes):
+                    # List of bytes - try to decode each
+                    decoded_parts = []
+                    for part in doc_content:
+                        try:
+                            decoded_parts.append(
+                                part.decode("utf-8") if isinstance(part, bytes) else str(part)
+                            )
+                        except (UnicodeDecodeError, AttributeError) as e:
+                            observability.observe(
+                                event_type=observability.SystemEvents.SERVICE_WARNING,
+                                level=observability.EventLevel.WARNING,
+                                data={
+                                    "agent_id": self.agent_id,
+                                    "error": str(e),
+                                    "content_type": "binary_list_item",
+                                },
+                                description=f"Failed to decode binary content in document list: {type(e).__name__}",
+                            )
+                            decoded_parts.append("[Binary content]")
+                    doc_content = "\n".join(decoded_parts)
+                else:
+                    # List of strings
+                    doc_content = "\n".join(str(item) for item in doc_content)
+            elif isinstance(doc_content, bytes):
+                # Handle binary content - decode if possible or show placeholder
+                try:
+                    doc_content = doc_content.decode("utf-8")
+                except (UnicodeDecodeError, AttributeError) as e:
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_WARNING,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": self.agent_id,
+                            "error": str(e),
+                            "content_type": "binary_file",
+                        },
+                        description=f"Failed to decode binary file content: {type(e).__name__}",
+                    )
+                    doc_content = "[Binary file content - unable to display as text]"
+            context_parts.append(f"{doc_content}")
+            context_parts.append("")  # Empty line between docs
+        context_parts.append("--- End Recently Uploaded Documents ---")
+        return context_parts
+
+    def _enhance_message_with_context(
+        self,
+        content: str,
+        recent_docs: List[Dict[str, Any]] = None,
+        knowledge_results: List[Dict[str, Any]] = None,
+        memory_results: List[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        Enhance message content with context from recent documents, knowledge, and memory.
+
+        Args:
+            content: Original message content
+            recent_docs: List of recent document dictionaries
+            knowledge_results: List of knowledge search results
+            memory_results: List of memory search results
+
+        Returns:
+            Enhanced message content with context
+        """
+        if not (recent_docs or knowledge_results or memory_results):
+            return content
+
+        context_parts = []
+
+        # Add recent document uploads first (highest priority)
+        if recent_docs:
+            context_parts.extend(self._format_recent_documents(recent_docs))
+
+        # Add domain knowledge context
+        if knowledge_results:
+            context_parts.append("--- Domain Knowledge ---")
+            for result in knowledge_results:
+                context_parts.append(f"• {result.get('content', '')}")
+            context_parts.append("--- End Domain Knowledge ---")
+
+        # Add memory context
+        if memory_results:
+            context_parts.append("--- Recent Context ---")
+            for result in memory_results:
+                context_parts.append(f"• {result.get('content', '')}")
+            context_parts.append("--- End Recent Context ---")
+
+        context_enhancement = "\n\n" + "\n".join(context_parts) + "\n\n"
+        return f"{content}{context_enhancement}"
+
+    def _is_making_no_progress(
+        self, error_history: List[Dict[str, Any]], max_repeated_errors: int
+    ) -> bool:
+        """
+        Check if similar errors occurred too many times.
+
+        Args:
+            error_history: List of error dictionaries with 'tool', 'error', and 'iteration'
+            max_repeated_errors: Maximum number of similar errors allowed
+
+        Returns:
+            True if making no progress, False otherwise
+        """
+        if len(error_history) < max_repeated_errors:
+            return False
+
+        # Group errors by pattern (ignoring tool name for similarity)
+        error_counts = {}
+        lookback_window = max_repeated_errors * 2  # Check recent errors
+        for error in error_history[-lookback_window:]:
+            # Use error message pattern as key (first 50 chars)
+            key = error["error"][:50].lower()
+            error_counts[key] = error_counts.get(key, 0) + 1
+            if error_counts[key] >= max_repeated_errors:
+                return True
+        return False
+
+    def _is_repeating_failed_operation(
+        self, new_calls: List[Any], error_history: List[Dict[str, Any]]
+    ) -> bool:
+        """
+        Check if agent is retrying exact same failed operation.
+
+        Args:
+            new_calls: List of new tool calls to be made
+            error_history: History of errors
+
+        Returns:
+            True if repeating a failed operation, False otherwise
+        """
+        if not error_history:
+            return False
+
+        last_error = error_history[-1]
+        for call in new_calls:
+            # Extract tool name from call
+            if hasattr(call, "function"):
+                tool_name = call.function.name
+            else:
+                tool_name = call["function"]["name"]
+
+            # Check if it's the same tool that just failed
+            if tool_name == last_error["tool"]:
+                # Could also check parameters for exact match
+                return True
+        return False
+
+    def _extract_tool_calls(self, response: Any) -> List[Any]:
+        """
+        Extract tool calls from a model response.
+
+        Args:
+            response: The raw response from the model
+
+        Returns:
+            List of tool calls, or empty list if none found
+        """
+        tool_calls = []
+
+        if hasattr(response, "choices") and response.choices:
+            message = response.choices[0].message
+            # Handle both dict and object message types
+            if isinstance(message, dict):
+                if "tool_calls" in message and message["tool_calls"]:
+                    tool_calls = message["tool_calls"]
+            else:
+                if hasattr(message, "tool_calls") and message.tool_calls:
+                    tool_calls = message.tool_calls
+        elif isinstance(response, dict) and "choices" in response:
+            message = response["choices"][0]["message"]
+            if "tool_calls" in message and message["tool_calls"]:
+                tool_calls = message["tool_calls"]
+
+        return tool_calls
+
+    def _clean_response_content(self, content: str) -> str:
+        """
+        Clean response content to remove sandbox references and download links.
+
+        When files are generated, they are automatically attached as artifacts,
+        so we don't want agents mentioning file paths or download links.
+
+        Args:
+            content: The raw response content from the agent
+
+        Returns:
+            Cleaned content without file path references
+        """
+        import re
+
+        # Remove markdown download links with sandbox paths
+        content = re.sub(r'\[Download[^\]]*\]\(sandbox:[^\)]+\)', '', content)
+        content = re.sub(r'\[download[^\]]*\]\(sandbox:[^\)]+\)', '', content, re.IGNORECASE)
+
+        # Remove any remaining sandbox: references
+        content = re.sub(r'sandbox:[^\s\)]+', '', content)
+
+        # Remove common phrases about download links
+        replacements = [
+            (r'You can download it using the link below:\s*', ''),
+            (r'Click here to download[^\.\n]*\.?\s*', ''),
+            (r'Download link[s]?:\s*', ''),
+            (r'The file[s]? (?:is|are) available for download[^\.\n]*\.?\s*', ''),
+            (r'Use the download link[s]? to access[^\.\n]*\.?\s*', ''),
+        ]
+
+        for pattern, replacement in replacements:
+            content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
+
+        # Clean up any resulting double newlines or trailing spaces
+        content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
+        content = re.sub(r' +\n', '\n', content)
+        content = content.strip()
+
+        # If the content becomes too short after cleaning, add a note about attached files
+        if len(content) < 20 and any(word in content.lower() for word in ['created', 'generated', 'made']):
+            content += "\n\nThe file has been attached to this response."
+
+        return content
+
+    async def _check_agent_clarification_needs(
+        self, agent_response: str, user_message: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if the agent's response indicates it needs clarification from the user.
+
+        This method analyzes the agent's response to detect patterns that suggest
+        the agent needs additional information to complete the user's request.
+
+        Args:
+            agent_response: The response generated by the agent
+            user_message: The original user message being processed
+
+        Returns:
+            Dict with clarification metadata if clarification is needed, None otherwise.
+            Format: {
+                "needs_clarification": True,
+                "clarification_type": "information_request",
+                "required_info": {
+                    "budget": "What's your budget range for this project?",
+                    "timeline": "When do you need this completed?"
+                },
+                "agent_reasoning": "I need budget and timeline to provide accurate recommendations"
+            }
+        """
+        try:
+            # Patterns that suggest the agent needs clarification
+            clarification_patterns = [
+                # Direct requests for information
+                r"(?i)(?:what(?:'s| is)|how much|when|where|which|who)\s+"
+                r"(?:is|are|do|does|did|will|would|should|could|can)\s+(?:you|your)",
+                r"(?i)(?:i need|i require|could you (?:please )?(?:provide|tell|specify|clarify))",
+                r"(?i)(?:what(?:'s| is) your|could you specify|please (?:provide|clarify|specify))",
+                # Questions about preferences or requirements
+                r"(?i)(?:do you (?:prefer|want|need)|would you like|are you looking for)",
+                r"(?i)(?:what (?:type|kind|sort) of|which (?:option|approach|method))",
+                # Uncertainty indicators
+                r"(?i)(?:i(?:'m| am) not sure|unclear|ambiguous|could mean)",
+                r"(?i)(?:depends on|varies based on|need(?:s)? more "
+                r"(?:information|details|context))",
+                # Multiple options requiring choice
+                r"(?i)(?:several (?:options|ways|approaches)|multiple (?:possibilities|choices))",
+                r"(?i)(?:option [abc12]|approach [abc12]|method [abc12])",
+            ]
+
+            # Check if response contains clarification patterns
+            has_clarification_pattern = any(
+                re.search(pattern, agent_response) for pattern in clarification_patterns
+            )
+
+            if not has_clarification_pattern:
+                return None
+
+            # Extract specific information requests using more sophisticated parsing
+            required_info = await self._extract_information_requests(agent_response, user_message)
+
+            if not required_info:
+                return None
+
+            # Generate agent reasoning
+            reasoning = await self._generate_clarification_reasoning(agent_response, required_info)
+
+            return {
+                "needs_clarification": True,
+                "clarification_type": "information_request",
+                "required_info": required_info,
+                "agent_reasoning": reasoning,
+                "original_response": agent_response,
+            }
+
+        except Exception as e:
+            # Log error but don't block processing
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PROCESSING_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "phase": "clarification_check",
+                },
+                description=f"Error checking clarification needs: {str(e)}",
+            )
+            return None
+
+    async def _extract_information_requests(
+        self, agent_response: str, user_message: str
+    ) -> Dict[str, str]:
+        """
+        Extract specific information requests from agent response.
+
+        Uses the IntentDetectionService for language-agnostic clarification detection.
+
+        Args:
+            agent_response: The agent's response text
+            user_message: The original user message
+
+        Returns:
+            Dictionary mapping information categories to specific questions
+        """
+        try:
+            # Get or create intent detection service
+            if not hasattr(self, "_intent_detector"):
+                # Use existing model instance
+                llm_service = self.model
+
+                self._intent_detector = IntentDetectionService(
+                    llm_service=llm_service, enable_cache=True
+                )
+
+            # Use intent detection for clarification categories
+            context = IntentDetectionContext(
+                recent_messages=[
+                    {"role": "user", "content": user_message},
+                    {"role": "assistant", "content": agent_response},
+                ]
+            )
+
+            result = await self._intent_detector.detect_intent(
+                text=agent_response, intent_type=IntentType.CLARIFICATION_CATEGORY, context=context
+            )
+
+            required_info = {}
+
+            # If we detected a clarification category with good confidence
+            if result.confidence > 0.6 and result.intent != "none":
+                # Extract the actual question
+                question = result.extracted_question
+                if not question:
+                    # Fall back to extracting question from response
+                    question = await self._extract_question_for_category(
+                        agent_response, result.intent
+                    )
+
+                if question:
+                    required_info[result.intent] = question
+
+            # Check alternatives for additional categories
+            if result.alternatives:
+                for alt in result.alternatives:
+                    if alt["confidence"] > 0.5 and alt["intent"] not in required_info:
+                        question = await self._extract_question_for_category(
+                            agent_response, alt["intent"]
+                        )
+                        if question:
+                            required_info[alt["intent"]] = question
+
+            return required_info
+
+        except Exception as e:
+            # Fall back to keyword-based detection
+            if hasattr(self, "logger"):
+                self.logger.warning(
+                    f"Intent detection for clarification failed, using fallback: {str(e)}"
+                )
+            return await self._fallback_extract_information_requests(agent_response, user_message)
+
+    async def _fallback_extract_information_requests(
+        self, agent_response: str, user_message: str
+    ) -> Dict[str, str]:
+        """
+        Fallback keyword-based information request extraction.
+
+        Used when intent detection service is not available.
+        """
+        # Common information categories and their question patterns
+        info_categories = {
+            "budget": [
+                r"(?i)(?:budget|cost|price|money|funding|spend)",
+                r"(?i)(?:how much|what(?:'s| is) (?:the )?(?:cost|price))",
+            ],
+            "timeline": [
+                r"(?i)(?:when|timeline|deadline|schedule|time)",
+                r"(?i)(?:how (?:long|soon)|by when)",
+            ],
+            "preferences": [
+                r"(?i)(?:prefer|preference|like|want|style|approach)",
+                r"(?i)(?:which (?:type|kind|option)|what (?:type|kind))",
+            ],
+            "requirements": [
+                r"(?i)(?:require|requirement|need|must|should|specification)",
+                r"(?i)(?:what (?:features|capabilities|functionality))",
+            ],
+            "scope": [
+                r"(?i)(?:scope|scale|size|extent|coverage)",
+                r"(?i)(?:how (?:big|large|extensive|comprehensive))",
+            ],
+            "location": [
+                r"(?i)(?:where|location|place|region|area)",
+                r"(?i)(?:which (?:location|place|area))",
+            ],
+        }
+
+        required_info = {}
+
+        # Extract questions for each category found in the response
+        for category, patterns in info_categories.items():
+            for pattern in patterns:
+                if re.search(pattern, agent_response):
+                    # Extract the actual question from the response
+                    question = await self._extract_question_for_category(agent_response, category)
+                    if question:
+                        required_info[category] = question
+                        break
+
+        return required_info
+
+    async def _extract_question_for_category(self, response: str, category: str) -> Optional[str]:
+        """
+        Extract the specific question for a given information category.
+
+        Args:
+            response: Agent's response text
+            category: Information category (budget, timeline, etc.)
+
+        Returns:
+            The extracted question or a generated question for the category
+        """
+        # Split response into sentences
+        sentences = re.split(r"[.!?]+", response)
+
+        # Category-specific keywords to look for
+        category_keywords = {
+            "budget": ["budget", "cost", "price", "money", "funding", "spend"],
+            "timeline": ["when", "timeline", "deadline", "schedule", "time"],
+            "preferences": ["prefer", "preference", "like", "want", "style"],
+            "requirements": ["require", "requirement", "need", "must", "specification"],
+            "scope": ["scope", "scale", "size", "extent", "coverage"],
+            "location": ["where", "location", "place", "region", "area"],
+        }
+
+        keywords = category_keywords.get(category, [])
+
+        # Find sentence containing category keywords and question patterns
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+
+            # Check if sentence contains category keywords and question indicators
+            has_keyword = any(keyword.lower() in sentence.lower() for keyword in keywords)
+            has_question = any(
+                indicator in sentence.lower()
+                for indicator in ["what", "how", "when", "where", "which", "?"]
+            )
+
+            if has_keyword and (has_question or sentence.endswith("?")):
+                return sentence.strip() + ("?" if not sentence.endswith("?") else "")
+
+        # Fallback: generate a generic question for the category
+        generic_questions = {
+            "budget": "What's your budget range for this project?",
+            "timeline": "When do you need this completed?",
+            "preferences": "What are your preferences for this request?",
+            "requirements": "What are your specific requirements?",
+            "scope": "What's the scope of work you're looking for?",
+            "location": "Where should this be implemented or focused?",
+        }
+
+        return generic_questions.get(category)
+
+    async def _generate_clarification_reasoning(
+        self, agent_response: str, required_info: Dict[str, str]
+    ) -> str:
+        """
+        Generate reasoning for why the agent needs clarification.
+
+        Args:
+            agent_response: The agent's response
+            required_info: Dictionary of required information
+
+        Returns:
+            Human-readable explanation of why clarification is needed
+        """
+        if len(required_info) == 1:
+            category = list(required_info.keys())[0]
+            return f"I need to understand your {category} to provide the most helpful response."
+        elif len(required_info) == 2:
+            categories = list(required_info.keys())
+            return (
+                f"I need to understand your {categories[0]} and {categories[1]} "
+                f"to provide accurate recommendations."
+            )
+        else:
+            categories = list(required_info.keys())
+            return (
+                f"I need additional information about {', '.join(categories[:-1])}, "
+                f"and {categories[-1]} to give you the best possible assistance."
+            )
+
+    async def run(self, input_text: str, use_memory: bool = True) -> str:
+        """
+        Simplified interface to run the agent with a text input.
+
+        Args:
+            input_text: The input text to process.
+            use_memory: Whether to use memory for context (default: True).
+
+        Returns:
+            The agent's response as a string.
+        """
+        response = await self.process_message(input_text)
+        return response.content
+
+    async def get_relevant_memories(self, query: str, limit: int = 5) -> List[Dict[str, Any]]:
+        """
+        Get relevant memories for a query from the overlord's memory system.
+
+        Args:
+            query: The query to search for in memory.
+            limit: Maximum number of memories to return.
+
+        Returns:
+            List of relevant memory entries.
+        """
+        if self.overlord and hasattr(self.overlord, "get_relevant_memories"):
+            return await self.overlord.get_relevant_memories(query, limit)
+        return []
+
+    def discover_agents(
+        self, capability_filter: Optional[List[str]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Discover available agents in the formation.
+
+        Args:
+            capability_filter: Optional list of capabilities to filter by.
+
+        Returns:
+            Dictionary of agent_id -> agent_info for discovered agents.
+        """
+        if self.overlord and hasattr(self.overlord, "discover_agents"):
+            return self.overlord.discover_agents(capability_filter)
+        return {}
+
+    async def invoke_tool(
+        self,
+        tool_name: str,
+        parameters: Dict[str, Any],
+        server_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Invoke a tool via MCP.
+
+        Args:
+            tool_name: Name of the tool to invoke.
+            parameters: Parameters to pass to the tool.
+            server_id: Optional server ID for multi-server setups.
+            user_id: Optional user ID for credential resolution.
+
+        Returns:
+            The tool execution result.
+
+        Raises:
+            Exception: If tool invocation fails or tool is not allowed.
+        """
+        from ..memory.credential_resolver import MissingCredentialError
+
+        try:
+            # Special handling for generate_file tool - use artifact service directly
+            if tool_name == "generate_file" and self.overlord and hasattr(self.overlord, "artifact_service"):
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": self.agent_id,
+                        "tool_name": tool_name,
+                        "parameters": parameters,
+                        "using_artifact_service": True,
+                    },
+                    description=f"Agent {self.agent_id} using artifact service for file generation",
+                )
+
+                # Call artifact service directly
+                code = parameters.get("code", "")
+                filename = parameters.get("filename")
+
+                try:
+                    artifact = await self.overlord.artifact_service.generate_file(code, filename)
+
+                    # Convert MuxiArtifact to a simplified tool response
+                    # Don't include full artifact details in the tool response to avoid
+                    # the agent mentioning file paths or download links
+                    result = {
+                        "success": True,
+                        "message": (
+                            f"Successfully created {artifact.filename}. "
+                            "The file has been automatically attached to this response."
+                        ),
+                        "filename": artifact.filename,
+                        "type": artifact.type,
+                        "format": artifact.format,
+                        "size_bytes": artifact.metadata.size_bytes if artifact.metadata else None,
+                        # Store the actual artifact for the extractor
+                        "_artifact": artifact,
+                    }
+
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "success": True,
+                            "artifact_type": artifact.type,
+                            "artifact_format": artifact.format,
+                        },
+                        description=f"Agent {self.agent_id} successfully generated file using artifact service",
+                    )
+
+                    return result
+
+                except Exception as e:
+                    # Return error in expected format
+                    return {
+                        "error": str(e),
+                        "status": "error"
+                    }
+
+            # Regular MCP tool invocation
+            observability.observe(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_STARTED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "parameters": parameters,
+                },
+                description=f"Agent {self.agent_id} invoking tool {tool_name}",
+            )
+
+            # Get credential resolver from overlord if available
+            credential_resolver = None
+            if self.overlord and hasattr(self.overlord, "credential_resolver"):
+                credential_resolver = self.overlord.credential_resolver
+
+            # Get recent conversation context for credential selection
+            conversation_context = []
+            if user_id:
+                try:
+                    # Always include the most recent user messages for context
+                    for msg in self._messages[-5:]:  # Last 5 messages
+                        if msg.get("role") == "user" and msg.get("content"):
+                            conversation_context.append(f"User: {msg['content']}")
+                        elif msg.get("role") == "assistant" and msg.get("content"):
+                            # Include assistant messages that mention credentials/accounts
+                            content_lower = msg["content"].lower()
+                            if any(
+                                word in content_lower
+                                for word in [
+                                    "account",
+                                    "credential",
+                                    "github",
+                                    "lily",
+                                    "ranaroussi",
+                                ]
+                            ):
+                                conversation_context.append(f"Assistant: {msg['content'][:200]}")
+
+                except Exception:
+                    # Failed to get conversation context, continue without it
+                    conversation_context = []
+
+            if server_id:
+                result = await self._mcp_service.invoke_tool(
+                    server_id,
+                    tool_name,
+                    parameters,
+                    request_timeout=self.request_timeout,
+                    user_id=user_id,
+                    credential_resolver=credential_resolver,
+                    conversation_context=conversation_context,
+                )
+            else:
+                # Try to find the tool in any available server
+                servers = self._mcp_service.get_servers()
+                result = None
+                for server_name in servers:
+                    try:
+                        result = await self._mcp_service.invoke_tool(
+                            server_name,
+                            tool_name,
+                            parameters,
+                            request_timeout=self.request_timeout,
+                            user_id=user_id,
+                            credential_resolver=credential_resolver,
+                            conversation_context=conversation_context,
+                        )
+                        break
+                    except Exception:
+                        continue
+
+                if result is None:
+                    raise Exception(f"Tool '{tool_name}' not found in any connected server")
+
+            observability.observe(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_COMPLETED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "success": True,
+                },
+                description=f"Agent {self.agent_id} completed tool call {tool_name}",
+            )
+
+            return result
+
+        except Exception as e:
+            # Check if this is a credential error
+            from ..memory.credential_resolver import AmbiguousCredentialError
+            from ...services.mcp.service import CredentialSelectionNeededError
+
+            if isinstance(e, CredentialSelectionNeededError):
+                # Convert to AmbiguousCredentialError and raise to overlord
+                raise AmbiguousCredentialError(
+                    service=e.service,
+                    user_id=e.user_id,
+                    available_credentials=e.available_credentials,
+                    ordered_credentials=e.ordered_credentials,
+                ) from e
+            elif isinstance(e, AmbiguousCredentialError):
+                # Re-raise to let overlord handle it
+                raise
+
+            # Original MissingCredentialError handling
+            elif isinstance(e, MissingCredentialError):
+                if self.overlord and hasattr(self.overlord, "handle_missing_credential"):
+                    await self.overlord.handle_missing_credential(
+                        service=e.service,
+                        user_id=e.user_id,
+                        context={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "server_id": server_id,
+                        },
+                    )
+                    # Re-raise to let overlord handle the clarification
+                    raise
+            observability.observe(
+                event_type=observability.ConversationEvents.MCP_TOOL_CALL_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "tool_name": tool_name,
+                    "server_id": server_id,
+                    "error": str(e),
+                },
+                description=f"Agent {self.agent_id} tool call failed: {str(e)}",
+            )
+            raise
+
+    async def send_a2a_message(
+        self,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None,
+        wait_for_response: bool = True,
+        timeout: int = 30,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Send a message to another agent via A2A protocol.
+
+        Args:
+            target_agent_id: ID of the target agent.
+            message: Message content to send.
+            message_type: Type of message (request, response, notification).
+            context: Optional context data for the message.
+            wait_for_response: Whether to wait for a response.
+            timeout: Timeout in seconds for waiting for response.
+
+        Returns:
+            The response from the target agent if wait_for_response is True.
+        """
+        # Generate unique message ID
+        message_id = f"msg_{generate_nanoid()}"
+
+        observability.observe(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
+            level=observability.EventLevel.INFO,
+            data={
+                "source_agent_id": self.agent_id,
+                "target_agent_id": target_agent_id,
+                "message_id": message_id,
+                "message_type": message_type,
+                "wait_for_response": wait_for_response,
+            },
+            description=f"Agent {self.agent_id} sending A2A message to {target_agent_id}",
+        )
+
+        try:
+            # Check if target is internal (same formation) or external
+            if self.overlord and hasattr(self.overlord, "get_agent"):
+                target_agent = self.overlord.get_agent(target_agent_id)
+                if target_agent and self.a2a_internal:
+                    # Internal A2A message
+                    return await self._send_local_a2a_message(
+                        target_agent_id,
+                        message,
+                        message_type,
+                        context,
+                        wait_for_response,
+                        timeout,
+                        message_id,
+                    )
+
+            # External A2A message (if enabled)
+            if self.a2a_external:
+                return await self._send_external_a2a_message(
+                    target_agent_id,
+                    message,
+                    message_type,
+                    context,
+                    wait_for_response,
+                    timeout,
+                    message_id,
+                )
+
+            raise Exception(f"Agent {target_agent_id} not found and external A2A disabled")
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                },
+                description=f"A2A message failed: {str(e)}",
+            )
+            raise
+
+    async def _send_local_a2a_message(
+        self,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]],
+        wait_for_response: bool,
+        timeout: int,
+        message_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Send message to agent in same formation."""
+        try:
+            target_agent = self.overlord.get_agent(target_agent_id)
+            if not target_agent:
+                raise Exception(f"Target agent {target_agent_id} not found in formation")
+
+            # Send message to target agent
+            response = await target_agent.handle_a2a_message(
+                source_agent_id=self.agent_id,
+                message=message,
+                message_type=message_type,
+                context=context or {},
+                message_id=message_id,
+            )
+
+            if wait_for_response:
+                return response
+            return None
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                    "location": "local_a2a",
+                },
+                description=f"Local A2A message failed: {str(e)}",
+            )
+            raise
+
+    async def _send_external_a2a_message(
+        self,
+        target_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]],
+        wait_for_response: bool,
+        timeout: int,
+        message_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Send message to external agent via registry."""
+        try:
+            # Get external agent information from registry
+            if (
+                not hasattr(self.overlord, "external_registry")
+                or not self.overlord.external_registry
+            ):
+                raise Exception("External registry not configured")
+
+            registry = self.overlord.external_registry
+
+            # Discover the target agent
+            agents = await registry.discover_agents()
+            target_agent_info = None
+
+            for agent_info in agents:
+                if agent_info.get("id") == target_agent_id:
+                    target_agent_info = agent_info
+                    break
+
+            if not target_agent_info:
+                raise Exception(f"External agent {target_agent_id} not found in registry")
+
+            # Extract endpoint from agent info
+            endpoint = target_agent_info.get("endpoint")
+            if not endpoint:
+                raise Exception(f"No endpoint found for agent {target_agent_id}")
+
+            # Prepare message payload
+            payload = {
+                "source_agent_id": self.agent_id,
+                "target_agent_id": target_agent_id,
+                "message": message,
+                "message_type": message_type,
+                "context": context or {},
+                "message_id": message_id,
+                "timestamp": datetime.datetime.now().isoformat(),
+            }
+
+            # Send HTTP request to external agent
+            import aiohttp
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{endpoint}/a2a/message",
+                    json=payload,
+                    timeout=aiohttp.ClientTimeout(total=timeout),
+                ) as response:
+                    if response.status == 200:
+                        if wait_for_response:
+                            return await response.json()
+                        return None
+                    else:
+                        error_text = await response.text()
+                        raise Exception(
+                            f"External A2A request failed: {response.status} - {error_text}"
+                        )
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": self.agent_id,
+                    "target_agent_id": target_agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                    "location": "external_a2a",
+                },
+                description=f"External A2A message failed: {str(e)}",
+            )
+            raise
+
+    async def handle_a2a_message(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]] = None,
+        message_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Handle incoming A2A message from another agent.
+
+        Args:
+            source_agent_id: ID of the agent sending the message.
+            message: The message content.
+            message_type: Type of message (request, response, notification).
+            context: Optional context data.
+            message_id: Optional message ID for tracking.
+
+        Returns:
+            Response data if this is a request, None for notifications.
+        """
+        observability.observe(
+            event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+            level=observability.EventLevel.INFO,
+            data={
+                "source_agent_id": source_agent_id,
+                "target_agent_id": self.agent_id,
+                "message_id": message_id,
+                "message_type": message_type,
+            },
+            description=f"Agent {self.agent_id} received A2A message from {source_agent_id}",
+        )
+
+        try:
+            # Handle different message types
+            if message_type == "consultation":
+                return await self._handle_consultation_request(
+                    source_agent_id, message, context or {}, message_id
+                )
+            elif message_type == "information_sharing":
+                await self._handle_information_sharing(
+                    source_agent_id, message, context or {}, message_id
+                )
+                return None
+            elif message_type == "peer_coordination":
+                return await self._handle_peer_coordination(
+                    source_agent_id, message, context or {}, message_id
+                )
+            else:
+                # Generic message handling
+                return await self._handle_generic_a2a_message(
+                    source_agent_id, message, message_type, context, message_id
+                )
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                },
+                description=f"A2A message handling failed: {str(e)}",
+            )
+            raise
+
+    async def _handle_consultation_request(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        context: Dict[str, Any],
+        message_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Handle consultation request from another agent."""
+        try:
+            # Extract consultation details
+            if isinstance(message, dict):
+                topic = message.get("topic", "")
+                question = message.get("question", "")
+                details = message.get("details", {})
+            else:
+                topic = context.get("topic", "consultation")
+                question = str(message)
+                details = {}
+
+            # Process the consultation using the agent's model
+            consultation_prompt = f"""
+            Agent {source_agent_id} is requesting consultation on: {topic}
+
+            Question: {question}
+
+            Additional context: {details}
+
+            Please provide expert advice based on your knowledge and capabilities.
+            """
+
+            # Use the agent's model to generate consultation response
+            consultation_messages = [
+                {"role": "system", "content": self.system_message},
+                {"role": "user", "content": consultation_prompt},
+            ]
+
+            response = await self.model.chat(consultation_messages)
+
+            # Extract content from response
+            if isinstance(response, str):
+                advice = response
+            elif hasattr(response, "choices") and response.choices:
+                advice = response.choices[0].message.content
+            else:
+                advice = str(response)
+
+            return {
+                "status": "success",
+                "advice": advice,
+                "topic": topic,
+                "consultant_id": self.agent_id,
+                "message_id": message_id,
+                "timestamp": datetime.datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "consultant_id": self.agent_id,
+                "message_id": message_id,
+                "timestamp": datetime.datetime.now().isoformat(),
+            }
+
+    async def _handle_information_sharing(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        context: Dict[str, Any],
+        message_id: Optional[str] = None,
+    ) -> None:
+        """Handle information sharing from another agent."""
+        try:
+            # Extract shared information
+            if isinstance(message, dict):
+                information = message.get("information", "")
+                topic = message.get("topic", "general")
+                relevance = message.get("relevance_reason", "")
+            else:
+                information = str(message)
+                topic = context.get("topic", "general")
+                relevance = context.get("relevance_reason", "")
+
+            # Store the shared information in memory via overlord
+            if self.overlord and hasattr(self.overlord, "add_message_to_memory"):
+                shared_content = (
+                    f"Information shared by {source_agent_id} on {topic}: {information}"
+                )
+                if relevance:
+                    shared_content += f" (Relevance: {relevance})"
+
+                await self.overlord.add_message_to_memory(
+                    content=shared_content,
+                    role="system",
+                    timestamp=datetime.datetime.now().timestamp(),
+                    agent_id=self.agent_id,
+                    metadata={
+                        "source": "a2a_information_sharing",
+                        "source_agent_id": source_agent_id,
+                        "topic": topic,
+                        "message_id": message_id,
+                    },
+                )
+
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_PROCESSED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_id": message_id,
+                    "topic": topic,
+                    "action": "information_stored",
+                },
+                description=f"Stored shared information from {source_agent_id}",
+            )
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                    "action": "information_sharing",
+                },
+                description=f"Failed to handle information sharing: {str(e)}",
+            )
+
+    async def _handle_peer_coordination(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        context: Dict[str, Any],
+        message_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Handle peer coordination request."""
+        try:
+            # Extract coordination details
+            if isinstance(message, dict):
+                coordination_type = message.get("coordination_type", "general")
+                details = message.get("details", {})
+            else:
+                coordination_type = context.get("coordination_type", "general")
+                details = {"message": str(message)}
+
+            # Handle different coordination types
+            if coordination_type == "task_handoff":
+                result = await self._handle_task_handoff(source_agent_id, details)
+            elif coordination_type == "synchronization":
+                result = await self._handle_synchronization(source_agent_id, details)
+            elif coordination_type == "parallel_coordination":
+                result = await self._handle_parallel_coordination(source_agent_id, details)
+            else:
+                result = f"Acknowledged {coordination_type} coordination from {source_agent_id}"
+
+            return {
+                "status": "success",
+                "result": result,
+                "coordination_type": coordination_type,
+                "coordinator_id": self.agent_id,
+                "message_id": message_id,
+                "timestamp": datetime.datetime.now().isoformat(),
+            }
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "coordination_type": coordination_type,
+                "coordinator_id": self.agent_id,
+                "message_id": message_id,
+                "timestamp": datetime.datetime.now().isoformat(),
+            }
+
+    async def _handle_task_handoff(self, source_agent_id: str, details: Dict[str, Any]) -> str:
+        """Handle task handoff coordination."""
+        task = details.get("task", "unknown task")
+        status = details.get("status", "unknown")
+
+        # Log the handoff
+        observability.observe(
+            event_type=observability.ConversationEvents.A2A_TASK_HANDOFF,
+            level=observability.EventLevel.INFO,
+            data={
+                "source_agent_id": source_agent_id,
+                "target_agent_id": self.agent_id,
+                "task": task,
+                "status": status,
+            },
+            description=f"Task handoff: {task} from {source_agent_id}",
+        )
+
+        return f"Received task handoff: {task} (status: {status})"
+
+    async def _handle_synchronization(self, source_agent_id: str, details: Dict[str, Any]) -> str:
+        """Handle synchronization coordination."""
+        sync_point = details.get("sync_point", "unknown")
+        return f"Synchronized at {sync_point} with {source_agent_id}"
+
+    async def _handle_parallel_coordination(
+        self, source_agent_id: str, details: Dict[str, Any]
+    ) -> str:
+        """Handle parallel coordination."""
+        task_part = details.get("task_part", "unknown")
+        return f"Coordinating parallel task: {task_part} with {source_agent_id}"
+
+    async def _handle_generic_a2a_message(
+        self,
+        source_agent_id: str,
+        message: Union[str, Dict[str, Any]],
+        message_type: str,
+        context: Optional[Dict[str, Any]],
+        message_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Handle generic A2A message."""
+        try:
+            # Convert message to string for processing
+            if isinstance(message, dict):
+                message_content = json.dumps(message, indent=2)
+            else:
+                message_content = str(message)
+
+            # Create a prompt for the agent to handle the message
+            prompt = f"""
+            You received a {message_type} message from agent {source_agent_id}.
+
+            Message content:
+            {message_content}
+
+            Context: {context or {}}
+
+            Please provide an appropriate response or acknowledgment.
+            """
+
+            # Process with the agent's model
+            response_messages = [
+                {"role": "system", "content": self.system_message},
+                {"role": "user", "content": prompt},
+            ]
+
+            model_response = await self.model.chat(response_messages)
+
+            # Extract content
+            if isinstance(model_response, str):
+                response_content = model_response
+            elif hasattr(model_response, "choices") and model_response.choices:
+                response_content = model_response.choices[0].message.content
+            else:
+                response_content = str(model_response)
+
+            # Return response for request-type messages
+            if message_type in ["request", "query", "consultation"]:
+                return {
+                    "status": "success",
+                    "response": response_content,
+                    "responder_id": self.agent_id,
+                    "message_id": message_id,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                }
+
+            # For notifications, just log and return None
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_PROCESSED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_id": message_id,
+                    "message_type": message_type,
+                    "action": "acknowledged",
+                },
+                description=f"Processed {message_type} from {source_agent_id}",
+            )
+
+            return None
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_id": self.agent_id,
+                    "message_id": message_id,
+                    "error": str(e),
+                    "message_type": message_type,
+                },
+                description=f"Failed to process {message_type}: {str(e)}",
+            )
+            raise
+
+    # A2A Convenience Methods
+
+    async def request_consultation(
+        self,
+        target_agent_id: str,
+        topic: str,
+        context: Optional[Dict[str, Any]] = None,
+        timeout: int = 30,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Request consultation from another agent.
+
+        Args:
+            target_agent_id: ID of the agent to consult.
+            topic: Topic for consultation.
+            context: Optional additional context.
+            timeout: Timeout for the request.
+
+        Returns:
+            Consultation response from the target agent.
+        """
+        message = {
+            "topic": topic,
+            "question": f"I need consultation on: {topic}",
+            "details": context or {},
+        }
+
+        return await self.send_a2a_message(
+            target_agent_id=target_agent_id,
+            message=message,
+            message_type="consultation",
+            context=context,
+            wait_for_response=True,
+            timeout=timeout,
+        )
+
+    async def share_information(
+        self,
+        target_agent_id: str,
+        information: Union[str, Dict[str, Any]],
+        topic: str,
+        relevance_reason: Optional[str] = None,
+    ) -> bool:
+        """
+        Share information with another agent.
+
+        Args:
+            target_agent_id: ID of the target agent.
+            information: Information to share.
+            topic: Topic of the information.
+            relevance_reason: Optional reason why this information is relevant.
+
+        Returns:
+            True if information was shared successfully.
+        """
+        message = {"information": information, "topic": topic, "relevance_reason": relevance_reason}
+
+        try:
+            await self.send_a2a_message(
+                target_agent_id=target_agent_id,
+                message=message,
+                message_type="information_sharing",
+                context={"topic": topic},
+                wait_for_response=False,
+            )
+            return True
+        except Exception:
+            return False
+
+    async def register_expertise(
+        self, expertise_areas: List[str], proficiency_levels: Optional[Dict[str, str]] = None
+    ) -> bool:
+        """
+        Register expertise areas with the overlord for capability discovery.
+
+        Args:
+            expertise_areas: List of expertise areas.
+            proficiency_levels: Optional proficiency levels for each area.
+
+        Returns:
+            True if registration was successful.
+        """
+        try:
+            if self.overlord and hasattr(self.overlord, "register_agent_expertise"):
+                await self.overlord.register_agent_expertise(
+                    agent_id=self.agent_id,
+                    expertise_areas=expertise_areas,
+                    proficiency_levels=proficiency_levels or {},
+                )
+                return True
+        except Exception as e:
+            observability.observe(
+                event_type=observability.SystemEvents.AGENT_REGISTRATION_FAILED,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "expertise_areas": expertise_areas,
+                    "error": str(e),
+                },
+                description=f"Failed to register expertise: {str(e)}",
+            )
+        return False
+
+    async def find_expert(
+        self, topic: str, min_proficiency: str = "intermediate"
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Find agents with expertise in a specific topic.
+
+        Args:
+            topic: Topic to find experts for.
+            min_proficiency: Minimum proficiency level required.
+
+        Returns:
+            Dictionary of agent_id -> expertise_info for matching experts.
+        """
+        if self.overlord and hasattr(self.overlord, "find_experts"):
+            return await self.overlord.find_experts(topic, min_proficiency)
+        return {}
+
+    async def coordinate_with_peer(
+        self, peer_agent_id: str, coordination_type: str, details: Dict[str, Any], timeout: int = 30
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Coordinate with a peer agent.
+
+        Args:
+            peer_agent_id: ID of the peer agent.
+            coordination_type: Type of coordination (task_handoff, synchronization, etc.).
+            details: Coordination details.
+            timeout: Timeout for the coordination.
+
+        Returns:
+            Coordination response from the peer agent.
+        """
+        message = {"coordination_type": coordination_type, "details": details}
+
+        return await self.send_a2a_message(
+            target_agent_id=peer_agent_id,
+            message=message,
+            message_type="peer_coordination",
+            context={"coordination_type": coordination_type},
+            wait_for_response=True,
+            timeout=timeout,
+        )
