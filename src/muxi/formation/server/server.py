@@ -371,10 +371,8 @@ class FormationServer:
                 error_code="INVALID_PARAMS",
                 message=error_message,
                 request_id=request_id,
+                data={"validation_errors": validation_errors},
             )
-
-            # Add validation details to the response data
-            error_response.data = {"validation_errors": validation_errors}
 
             return JSONResponse(
                 status_code=422,

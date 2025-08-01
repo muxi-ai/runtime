@@ -9,6 +9,7 @@ import time
 from copy import deepcopy
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+import psutil
 
 from ...responses import (
     APIResponse,
@@ -16,15 +17,6 @@ from ...responses import (
 )
 from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
-
-# Try to import psutil for system metrics
-PSUTIL_AVAILABLE = False
-psutil = None
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    pass
 
 router = APIRouter(tags=["Configuration"])
 
@@ -144,13 +136,19 @@ async def get_formation_status(request: Request) -> JSONResponse:
     # Get CPU and memory usage
     cpu_percent = None
     memory_usage_mb = None
-    if PSUTIL_AVAILABLE:
+    try:
         # Get CPU usage without blocking (uses last call's value)
         # Note: First call returns 0.0, subsequent calls return actual usage
         cpu_percent = psutil.cpu_percent(interval=None)
         # Get memory usage for this process
         process = psutil.Process()
         memory_usage_mb = process.memory_info().rss / 1024 / 1024
+    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+        # Process-related errors - process may have terminated or access denied
+        pass
+    except Exception:
+        # Catch any other unexpected psutil errors
+        pass
 
     # Structure matching OpenAPI spec
     status = {

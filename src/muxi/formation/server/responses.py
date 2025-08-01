@@ -100,6 +100,7 @@ def create_error_response(
     trace: Optional[str] = None,
     request_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
+    data: Optional[Dict[str, Any]] = None,
 ) -> APIResponse:
     """
     Create a standardized error response.
@@ -110,6 +111,7 @@ def create_error_response(
         trace: Stack trace for debugging
         request_id: Request ID
         idempotency_key: Idempotency key if provided
+        data: Additional data to include in the error response
 
     Returns:
         APIResponse object with error
@@ -140,7 +142,7 @@ def create_error_response(
     return create_api_response(
         object_type=APIObjectType.ERROR,
         event_type=event_type,
-        data={},
+        data=data or {},
         request_id=request_id,
         idempotency_key=idempotency_key,
         success=False,

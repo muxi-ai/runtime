@@ -169,8 +169,10 @@ def _parse_path(path: str) -> List[PathSegment]:
                 if index < 0:
                     raise ValueError(f"Invalid path: negative array index {index} at position {i}")
                 segments.append(PathSegment("index", index))
-            except ValueError:
-                raise ValueError(f"Invalid path: non-integer array index '{index_str}' at position {i}")
+            except ValueError as e:
+                if "negative array index" in str(e):
+                    raise
+                raise ValueError(f"Invalid path: non-integer array index '{index_str}' at position {i}") from e
 
             i = j + 1
             consecutive_dots = 0
@@ -310,13 +312,43 @@ def load_custom_patterns():
         try:
             with open(CUSTOM_PATTERNS_FILE, 'r') as f:
                 custom_patterns = json.load(f)
-                for pattern in custom_patterns:
-                    # Compile the regex pattern
-                    pattern["pattern"] = re.compile(pattern["pattern"])
-                    API_KEY_PATTERNS.append(pattern)
-        except (json.JSONDecodeError, KeyError, re.error) as e:
-            # Log error but don't fail - use default patterns
-            print(f"Warning: Failed to load custom API patterns from {CUSTOM_PATTERNS_FILE}: {e}")
+
+                # Handle the case where custom_patterns might be a dict with a "patterns" key
+                if isinstance(custom_patterns, dict) and "patterns" in custom_patterns:
+                    custom_patterns = custom_patterns["patterns"]
+
+                # Process each pattern individually
+                for i, pattern in enumerate(custom_patterns):
+                    try:
+                        # Validate required fields
+                        if "pattern" not in pattern:
+                            print(f"Warning: Pattern at index {i} missing 'pattern' field, skipping")
+                            continue
+
+                        # Compile the regex pattern
+                        pattern_str = pattern["pattern"]
+                        compiled_pattern = re.compile(pattern_str)
+
+                        # Replace string pattern with compiled regex
+                        pattern["pattern"] = compiled_pattern
+                        API_KEY_PATTERNS.append(pattern)
+
+                    except re.error as e:
+                        # Log regex compilation error for this specific pattern
+                        pattern_name = pattern.get("name", f"index {i}")
+                        print(f"Warning: Failed to compile regex for pattern '{pattern_name}': {e}")
+                        print(f"  Pattern string: {pattern.get('pattern', 'N/A')}")
+                    except Exception as e:
+                        # Catch any other errors for this specific pattern
+                        pattern_name = pattern.get("name", f"index {i}")
+                        print(f"Warning: Error processing pattern '{pattern_name}': {e}")
+
+        except json.JSONDecodeError as e:
+            # JSON parsing failed - can't process any patterns
+            print(f"Warning: Failed to parse JSON from {CUSTOM_PATTERNS_FILE}: {e}")
+        except Exception as e:
+            # Catch any other file-related errors
+            print(f"Warning: Error loading custom patterns from {CUSTOM_PATTERNS_FILE}: {e}")
 
 
 # Load custom patterns on module import
