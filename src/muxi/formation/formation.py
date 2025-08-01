@@ -283,6 +283,9 @@ class Formation:
 
                     self.secrets_manager = SecretsManager(secrets_dir)
 
+                    # Initialize encryption immediately so secrets can be used during config loading
+                    await self.secrets_manager.initialize_encryption()
+
                     # Emit observability event for successful SecretsManager initialization
                     observability.observe(
                         event_type=observability.SystemEvents.OVERLORD_INITIALIZING,
@@ -1559,6 +1562,10 @@ class Formation:
         """
         if not self.secrets_manager:
             return False
+
+        # Check if already initialized
+        if hasattr(self.secrets_manager, '_encryption_initialized') and self.secrets_manager._encryption_initialized:
+            return True
 
         async def _initialize_operation():
             """Initialize secrets manager with timeout support."""
@@ -3297,6 +3304,69 @@ class Formation:
             agent_config = agent_config.copy()
             agent_config["source"] = "api"
             self.config["agents"].append(agent_config)
+
+    async def save_agent_to_file(
+        self,
+        agent_config: Dict[str, Any],
+        auto_load: bool = False
+    ) -> str:
+        """
+        Save an agent configuration to a YAML file in the agents/ directory.
+
+        Args:
+            agent_config: Agent configuration dictionary
+            auto_load: If True, automatically load the agent into formation config and overlord
+
+        Returns:
+            str: Path to the created file
+
+        Raises:
+            ValueError: If formation path is not set
+            AgentPersistenceError: If the save operation fails
+        """
+        if not self._formation_path:
+            raise ValueError("Formation path not set - cannot save agent file")
+
+        from .utils.agent_persistence import save_agent_to_file
+        return await save_agent_to_file(
+            agent_config,
+            self._formation_path,
+            formation=self if auto_load else None,
+            auto_load=auto_load
+        )
+
+    async def update_agent_file(
+        self,
+        agent_id: str,
+        updates: Dict[str, Any],
+        auto_reload: bool = False
+    ) -> str:
+        """
+        Update an agent's YAML file with partial data and optionally reload it.
+
+        Args:
+            agent_id: ID of the agent to update
+            updates: Dictionary of fields to update
+            auto_reload: If True, automatically reload the agent in formation and overlord
+
+        Returns:
+            str: Path to the updated file
+
+        Raises:
+            ValueError: If formation path is not set or agent file doesn't exist
+            AgentPersistenceError: If the update operation fails
+        """
+        if not self._formation_path:
+            raise ValueError("Formation path not set - cannot update agent file")
+
+        from .utils.agent_persistence import update_agent_file
+        return await update_agent_file(
+            agent_id,
+            updates,
+            self._formation_path,
+            formation=self if auto_reload else None,
+            auto_reload=auto_reload
+        )
 
     def update_agent_in_config(self, agent_id: str, updates: Dict[str, Any]) -> Dict[str, Any]:
         """

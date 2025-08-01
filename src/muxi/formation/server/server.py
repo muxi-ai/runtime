@@ -353,13 +353,63 @@ class FormationServer:
             # Extract detailed validation errors
             validation_errors = []
             for error in exc.errors():
+                # Convert location array to dot notation
+                loc_parts = list(error["loc"])
+                # Remove "body" prefix if present (it's redundant for API users)
+                if loc_parts and loc_parts[0] == "body":
+                    loc_parts = loc_parts[1:]
+                loc_string = ".".join(str(part) for part in loc_parts)
+
+                # Parse error type into type and error fields
+                error_type = error["type"]
+                error_kind = "invalid"  # default
+
+                # Determine the expected field type based on the error
+                field_type = "string"  # default for most fields
+                if loc_string.endswith(".active"):
+                    field_type = "boolean"
+                elif loc_string.endswith((".llm_models", ".mcp_servers", ".knowledge")):
+                    field_type = "array"
+                elif loc_string.endswith((".a2a", ".settings")):
+                    field_type = "object"
+                elif any(loc_string.endswith(x) for x in (".max_tokens", ".timeout_seconds", ".max_retries")):
+                    field_type = "integer"
+                elif loc_string.endswith((".temperature",)):
+                    field_type = "number"
+
+                # Parse specific error kind
+                if error_type == "missing":
+                    error_kind = "missing"
+                elif error_type == "string_type":
+                    error_kind = "wrong_type"
+                    field_type = "string"
+                elif error_type == "int_type":
+                    error_kind = "wrong_type"
+                    field_type = "integer"
+                elif error_type == "bool_type":
+                    error_kind = "wrong_type"
+                    field_type = "boolean"
+                elif error_type == "list_type":
+                    error_kind = "wrong_type"
+                    field_type = "array"
+                elif error_type == "dict_type":
+                    error_kind = "wrong_type"
+                    field_type = "object"
+                elif "json_invalid" in error_type:
+                    error_kind = "invalid_json"
+                elif "too_short" in error_type:
+                    error_kind = "too_short"
+                elif "too_long" in error_type:
+                    error_kind = "too_long"
+                elif "regex" in error_type:
+                    error_kind = "invalid_format"
+
                 validation_errors.append(
                     {
-                        "loc": list(
-                            error["loc"]
-                        ),  # Location of the error (e.g., ["body", "field_name"])
+                        "field": loc_string,  # Dot notation location
                         "msg": error["msg"],  # Error message
-                        "type": error["type"],  # Error type (e.g., "value_error.missing")
+                        "type": field_type,  # Expected data type
+                        "error": error_kind,  # Specific error
                     }
                 )
 
@@ -371,7 +421,7 @@ class FormationServer:
                 error_code="INVALID_PARAMS",
                 message=error_message,
                 request_id=request_id,
-                data={"validation_errors": validation_errors},
+                error_data={"validation_errors": validation_errors},
             )
 
             return JSONResponse(

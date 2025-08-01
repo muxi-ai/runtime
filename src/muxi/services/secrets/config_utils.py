@@ -13,10 +13,7 @@ if TYPE_CHECKING:
 
 
 def get_config_item_with_secrets_restored(
-    formation: "Formation",
-    config_path: List[str],
-    item_id: str,
-    id_field: str = "id"
+    formation: "Formation", config_path: List[str], item_id: str, id_field: str = "id"
 ) -> Tuple[Optional[Dict[str, Any]], Optional[int]]:
     """
     Get configuration item with secrets restored.
@@ -46,7 +43,9 @@ def get_config_item_with_secrets_restored(
         return None, None
 
     # Find item
-    item_index = next((i for i, item in enumerate(config_section) if item.get(id_field) == item_id), None)
+    item_index = next(
+        (i for i, item in enumerate(config_section) if item.get(id_field) == item_id), None
+    )
 
     if item_index is None:
         return None, None
@@ -82,7 +81,9 @@ def get_config_item_with_secrets_restored(
     return restored_item, item_index
 
 
-def get_agent_with_secrets_restored(formation: "Formation", agent_id: str) -> Optional[Dict[str, Any]]:
+def get_agent_with_secrets_restored(
+    formation: "Formation", agent_id: str
+) -> Optional[Dict[str, Any]]:
     """
     Get agent configuration with secrets restored.
 
@@ -94,4 +95,5 @@ def get_agent_with_secrets_restored(formation: "Formation", agent_id: str) -> Op
         Agent configuration with secrets restored, or None if not found
     """
     item, _ = get_config_item_with_secrets_restored(formation, ["agents"], agent_id)
+
     return item

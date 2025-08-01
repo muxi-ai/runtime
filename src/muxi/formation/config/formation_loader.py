@@ -269,6 +269,15 @@ class FormationLoader:
                 #  Agent config loading - TODO: add observability
                 #  AGENT_MESSAGE_PROCESSING
                 agent_config = self.config_loader.load(str(agent_file))
+
+                # Validate that agent config is a dictionary
+                if not isinstance(agent_config, dict):
+                    print(
+                        f"⚠️  Warning: Agent file '{agent_file.name}' contains "
+                        f"{type(agent_config).__name__} instead of dict - skipping"
+                    )
+                    continue
+
                 agent_config, agent_secrets, agent_placeholders = (
                     await self.config_loader.process_secrets(agent_config, secrets_manager)
                 )
@@ -307,7 +316,9 @@ class FormationLoader:
             except Exception as e:
                 #  Agent config error - TODO: add observability
                 #  AGENT_MESSAGE_FAILED
-                _ = e  # remove this after implementing observability
+                print(
+                    f"⚠️  Warning: Failed to load agent file '{agent_file.name}': {type(e).__name__}: {str(e)}"
+                )
                 continue
         #  Agent discovery complete - TODO: add observability
         #  AGENT_MESSAGE_PROCESSING
@@ -424,6 +435,15 @@ class FormationLoader:
                 #  MCP config loading - TODO: add observability
                 #  MCP_SERVER_CONNECTING
                 mcp_config = self.config_loader.load(str(mcp_file))
+
+                # Validate that MCP config is a dictionary
+                if not isinstance(mcp_config, dict):
+                    print(
+                        f"⚠️  Warning: MCP file '{mcp_file.name}' contains "
+                        f"{type(mcp_config).__name__} instead of dict - skipping"
+                    )
+                    continue
+
                 mcp_config, mcp_secrets, mcp_placeholders = (
                     await self.config_loader.process_secrets(mcp_config, secrets_manager)
                 )
@@ -464,7 +484,9 @@ class FormationLoader:
             except Exception as e:
                 #  MCP config error - TODO: add observability
                 #  MCP_SERVER_CONNECTING
-                _ = e  # remove this after implementing observability
+                print(
+                    f"⚠️  Warning: Failed to load MCP file '{mcp_file.name}': {type(e).__name__}: {str(e)}"
+                )
                 continue
 
         #  Info - TODO: add observability
@@ -520,6 +542,15 @@ class FormationLoader:
                 #  A2A config loading - TODO: add observability
                 #  A2A_MESSAGE_SENT
                 a2a_config = self.config_loader.load(str(a2a_file))
+
+                # Validate that A2A config is a dictionary
+                if not isinstance(a2a_config, dict):
+                    print(
+                        f"⚠️  Warning: A2A file '{a2a_file.name}' contains "
+                        f"{type(a2a_config).__name__} instead of dict - skipping"
+                    )
+                    continue
+
                 a2a_config, a2a_secrets, a2a_placeholders = (
                     await self.config_loader.process_secrets(a2a_config, secrets_manager)
                 )
@@ -551,7 +582,9 @@ class FormationLoader:
             except Exception as e:
                 #  A2A config error - TODO: add observability
                 #  A2A_MESSAGE_SENT
-                _ = e  # remove this after implementing observability
+                print(
+                    f"⚠️  Warning: Failed to load A2A file '{a2a_file.name}': {type(e).__name__}: {str(e)}"
+                )
                 continue
 
         #  Info - TODO: add observability

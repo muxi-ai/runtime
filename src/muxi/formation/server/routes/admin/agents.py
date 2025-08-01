@@ -5,7 +5,7 @@ These endpoints provide agent CRUD operations,
 requiring admin API key authentication.
 """
 
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from copy import deepcopy
 
 from fastapi import APIRouter, Request
@@ -19,6 +19,7 @@ from ...responses import (
     create_error_response,
 )
 from ...secrets import restore_secret_placeholders
+from ...utils import validate_secret_references
 from .....datatypes.api import APIEventType, APIObjectType
 from .....services.secrets.config_utils import get_agent_with_secrets_restored
 
@@ -26,22 +27,226 @@ from .....services.secrets.config_utils import get_agent_with_secrets_restored
 router = APIRouter(tags=["Agents"])
 
 
+# Constants
+API_SOURCE = "api"
+AGENT_NOT_FOUND_ERROR = "AGENT_NOT_FOUND"
+INVALID_REQUEST_ERROR = "INVALID_REQUEST"
+INTERNAL_ERROR = "INTERNAL_ERROR"
+FORBIDDEN_ERROR = "FORBIDDEN"
+AGENT_EXISTS_ERROR = "AGENT_EXISTS"
+
+
+def _restore_agents_with_secrets(formation: Any) -> List[Dict[str, Any]]:
+    """
+    Helper function to get agents with secret placeholders restored.
+
+    Args:
+        formation: The formation instance
+
+    Returns:
+        List of agent configurations with secrets restored
+    """
+    agents = deepcopy(formation.config.get("agents", []))
+    temp_config = {"agents": agents}
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
+    return temp_config.get("agents", [])
+
+
+async def _validate_agent_secrets(
+    agent_data: Dict[str, Any], formation: Any, request_id: Optional[str]
+) -> Optional[JSONResponse]:
+    """
+    Helper function to validate secret references in agent data.
+
+    Args:
+        agent_data: Agent configuration data to validate
+        formation: The formation instance
+        request_id: Request ID for error responses
+
+    Returns:
+        JSONResponse with error if validation fails, None if valid
+    """
+    is_valid, validation_errors = await validate_secret_references(agent_data, formation)
+
+    if not is_valid:
+        response = create_error_response(
+            INVALID_REQUEST_ERROR,
+            "Invalid secret references in agent configuration",
+            None,
+            request_id,
+            error_data={"validation_errors": validation_errors},
+        )
+        return JSONResponse(content=response.model_dump(), status_code=400)
+
+    return None
+
+
+def _build_agent_config(agent: "AgentCreate") -> Dict[str, Any]:
+    """
+    Helper function to build agent configuration from AgentCreate model.
+
+    Args:
+        agent: AgentCreate model instance
+
+    Returns:
+        Complete agent configuration dictionary
+    """
+    agent_config = {
+        "schema": agent.schema,
+        "id": agent.id,
+        "name": agent.name,
+        "description": agent.description,
+        "active": agent.active,
+        "source": API_SOURCE,  # Mark as created via API
+    }
+
+    # Add optional fields if provided
+    optional_fields = [
+        "author",
+        "url",
+        "license",
+        "version",
+        "system_message",
+        "llm_models",
+        "mcp_servers",
+        "knowledge",
+        "a2a",
+    ]
+
+    for field in optional_fields:
+        value = getattr(agent, field, None)
+        if value is not None:
+            agent_config[field] = value
+
+    return agent_config
+
+
+def _find_agent_by_id(agents: List[Dict[str, Any]], agent_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Helper function to find an agent by ID in a list of agents.
+
+    Args:
+        agents: List of agent configurations
+        agent_id: ID of agent to find
+
+    Returns:
+        Agent configuration if found, None otherwise
+    """
+    return next((a for a in agents if a.get("id") == agent_id), None)
+
+
+def _can_delete_agent(agent: Dict[str, Any]) -> bool:
+    """
+    Helper function to check if an agent can be deleted.
+    Only agents created via API (source="api") can be removed.
+
+    Args:
+        agent: Agent configuration
+
+    Returns:
+        True if agent can be deleted, False otherwise
+    """
+    return agent.get("source") == API_SOURCE
+
+
+def _cleanup_agent_from_overlord(formation: Any, agent_id: str) -> None:
+    """
+    Helper function to remove agent from overlord if running.
+
+    Args:
+        formation: The formation instance
+        agent_id: ID of agent to remove
+    """
+    if formation._is_running and formation._overlord:
+        if agent_id in formation._overlord.agents:
+            # Remove agent from overlord
+            del formation._overlord.agents[agent_id]
+
+            # Also remove from active agents tracker if present
+            if hasattr(formation._overlord, "active_agents_tracker"):
+                formation._overlord.active_agents_tracker.remove_agent(agent_id)
+
+
+def _cleanup_secret_placeholders(formation: Any, agent_index: int) -> None:
+    """
+    Helper function to clean up secret placeholders for an agent.
+
+    Args:
+        formation: The formation instance
+        agent_index: Index of agent in agents list
+    """
+    if (
+        hasattr(formation, "_secret_placeholders")
+        and formation._secret_placeholders is not None
+        and agent_index >= 0
+    ):
+        # Remove all placeholders for this agent
+        prefix = f"agents[{agent_index}]"
+        keys_to_remove = [k for k in formation._secret_placeholders if k.startswith(prefix)]
+        for k in keys_to_remove:
+            del formation._secret_placeholders[k]
+
+
+def _delete_agent_file_safe(formation: Any, agent_id: str) -> None:
+    """
+    Helper function to safely delete agent YAML file.
+
+    Args:
+        formation: The formation instance
+        agent_id: ID of agent to delete file for
+    """
+    if formation._formation_path:
+        from ...utils.agent_persistence import delete_agent_file
+
+        try:
+            deleted = delete_agent_file(agent_id, formation._formation_path)
+            if not deleted:
+                # File didn't exist, but that's okay - agent was still removed from config
+                pass
+        except Exception as e:
+            # Log the error but don't fail the deletion
+            # The agent is already removed from config/overlord
+            print(f"Warning: Failed to delete agent file for '{agent_id}': {str(e)}")
+
+
 class AgentCreate(BaseModel):
     """Model for creating a new agent."""
 
-    id: str
-    name: str
-    description: str
-    model: str
-    active: bool = True
+    schema: str = Field(..., description="Agent schema version")
+    id: str = Field(..., description="Unique agent identifier")
+    name: str = Field(..., description="Human-readable agent name")
+    description: str = Field(..., description="Agent purpose and capabilities")
+    active: bool = Field(default=True, description="Agent activation state")
+    author: Optional[str] = Field(default=None, description="Author information")
+    url: Optional[str] = Field(default=None, description="Documentation URL")
+    license: Optional[str] = Field(default="Unlicense", description="License type")
+    version: Optional[str] = Field(default=None, description="Agent version")
+    system_message: Optional[str] = Field(default=None, description="Agent behavior instructions")
+    llm_models: Optional[List[Dict[str, Any]]] = Field(default=None, description="Model overrides")
+    mcp_servers: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="MCP server access"
+    )
+    knowledge: Optional[List[Dict[str, Any]]] = Field(default=None, description="Knowledge sources")
+    a2a: Optional[Dict[str, Any]] = Field(default=None, description="A2A settings")
 
 
 class AgentUpdate(BaseModel):
     """Model for updating an agent."""
 
-    active: Optional[bool] = Field(default=None)
-    description: Optional[str] = Field(default=None)
-    model: Optional[str] = Field(default=None)
+    name: Optional[str] = Field(default=None, description="Human-readable agent name")
+    description: Optional[str] = Field(default=None, description="Agent purpose and capabilities")
+    active: Optional[bool] = Field(default=None, description="Agent activation state")
+    author: Optional[str] = Field(default=None, description="Author information")
+    url: Optional[str] = Field(default=None, description="Documentation URL")
+    license: Optional[str] = Field(default=None, description="License type")
+    version: Optional[str] = Field(default=None, description="Agent version")
+    system_message: Optional[str] = Field(default=None, description="Agent behavior instructions")
+    llm_models: Optional[List[Dict[str, Any]]] = Field(default=None, description="Model overrides")
+    mcp_servers: Optional[List[Dict[str, Any]]] = Field(
+        default=None, description="MCP server access"
+    )
+    knowledge: Optional[List[Dict[str, Any]]] = Field(default=None, description="Knowledge sources")
+    a2a: Optional[Dict[str, Any]] = Field(default=None, description="A2A settings")
 
 
 @router.get("/agents", response_model=APIResponse)
@@ -53,15 +258,10 @@ async def list_agents(request: Request) -> JSONResponse:
         Structured response with list of agent configurations
     """
     formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
+    request_id: Optional[str] = getattr(request.state, "request_id", None)
 
-    # Get agents from formation config
-    agents = deepcopy(formation.config.get("agents", []))
-
-    # Create a temporary config structure to apply placeholders
-    temp_config = {"agents": agents}
-    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
-    agents = temp_config.get("agents", [])
+    # Get agents with secret placeholders restored
+    agents = _restore_agents_with_secrets(formation)
 
     # Create structured response using spec-compliant format
     response = agent_list_response(agents, request_id, use_generic_type=True)
@@ -80,26 +280,34 @@ async def create_agent(request: Request, agent: AgentCreate) -> JSONResponse:
         Created agent configuration
     """
     formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
+    request_id: Optional[str] = getattr(request.state, "request_id", None)
 
-    # Create agent config
-    agent_config = {
-        "id": agent.id,
-        "name": agent.name,
-        "description": agent.description,
-        "model": agent.model,
-        "active": agent.active,
-        "source": "api",
-    }
+    # Validate all secret references in the agent configuration
+    agent_dict = agent.model_dump(exclude_unset=True)
+    validation_error = await _validate_agent_secrets(agent_dict, formation, request_id)
+    if validation_error:
+        return validation_error
 
-    # Add to formation config using thread-safe method
+    # Build the complete agent configuration
+    agent_config = _build_agent_config(agent)
+
+    # Save agent to file and auto-load into formation and overlord
     try:
-        formation.add_agent_to_config(agent_config)
+        await formation.save_agent_to_file(agent_config, auto_load=True)
     except ValueError as e:
-        response = create_error_response("AGENT_EXISTS", str(e), None, request_id)
-        return JSONResponse(content=response.model_dump(), status_code=409)
+        error_msg = str(e)
+        if "already exists" in error_msg:
+            response = create_error_response(AGENT_EXISTS_ERROR, error_msg, None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=409)
+        else:
+            response = create_error_response(INVALID_REQUEST_ERROR, error_msg, None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=400)
+    except Exception as e:
+        response = create_error_response(
+            INTERNAL_ERROR, f"Failed to create agent: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
 
-    # TODO: Notify overlord of agent addition
     # TODO: Add observability event for agent added
 
     response = create_success_response(
@@ -120,14 +328,14 @@ async def get_agent(request: Request, agent_id: str) -> JSONResponse:
         Agent configuration
     """
     formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
+    request_id: Optional[str] = getattr(request.state, "request_id", None)
 
     # Get agent with secrets restored
     agent = get_agent_with_secrets_restored(formation, agent_id)
 
     if agent is None:
         response = create_error_response(
-            "AGENT_NOT_FOUND", f"Agent '{agent_id}' not found", None, request_id
+            AGENT_NOT_FOUND_ERROR, f"Agent '{agent_id}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
 
@@ -150,17 +358,41 @@ async def update_agent(request: Request, agent_id: str, updates: AgentUpdate) ->
         Updated agent configuration
     """
     formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
+    request_id: Optional[str] = getattr(request.state, "request_id", None)
 
-    # Apply updates using thread-safe method
+    # Get the update data, excluding unset fields
     update_data = updates.model_dump(exclude_unset=True)
-    try:
-        agent = formation.update_agent_in_config(agent_id, update_data)
-    except ValueError as e:
-        response = create_error_response("AGENT_NOT_FOUND", str(e), None, request_id)
-        return JSONResponse(content=response.model_dump(), status_code=404)
 
-    # TODO: Notify overlord of agent update
+    # If there are any secret references in the update, validate them
+    if update_data:
+        validation_error = await _validate_agent_secrets(update_data, formation, request_id)
+        if validation_error:
+            return validation_error
+
+    # Update agent file and auto-reload into formation and overlord
+    try:
+        await formation.update_agent_file(agent_id, update_data, auto_reload=True)
+
+        # Get updated agent using same logic as LIST endpoint
+        agents = _restore_agents_with_secrets(formation)
+        agent = next((a for a in agents if a.get("id") == agent_id), None)
+
+        if not agent:
+            raise ValueError(f"Agent '{agent_id}' not found after update")
+    except ValueError as e:
+        error_msg = str(e)
+        if "not found" in error_msg or "does not exist" in error_msg:
+            response = create_error_response(AGENT_NOT_FOUND_ERROR, error_msg, None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=404)
+        else:
+            response = create_error_response(INVALID_REQUEST_ERROR, error_msg, None, request_id)
+            return JSONResponse(content=response.model_dump(), status_code=400)
+    except Exception as e:
+        response = create_error_response(
+            INTERNAL_ERROR, f"Failed to update agent: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
+
     # TODO: Add observability event for agent updated
 
     response = create_success_response(
@@ -183,21 +415,60 @@ async def delete_agent(request: Request, agent_id: str) -> JSONResponse:
         Success response
     """
     formation = request.app.state.formation
-    request_id = getattr(request.state, "request_id", None)
+    request_id: Optional[str] = getattr(request.state, "request_id", None)
 
-    # Remove agent using thread-safe method
+    # Check if agent exists and can be deleted
+    agents = formation.config.get("agents", [])
+    agent = _find_agent_by_id(agents, agent_id)
+
+    if not agent:
+        response = create_error_response(
+            AGENT_NOT_FOUND_ERROR, f"Agent '{agent_id}' not found", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=404)
+
+    # Check if agent can be deleted (source="api")
+    if not _can_delete_agent(agent):
+        response = create_error_response(
+            FORBIDDEN_ERROR,
+            f"Agent '{agent_id}' was not created via API and cannot be removed",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=403)
+
     try:
+        # Get agent index before removal (for secret placeholder cleanup)
+        agent_index = next((i for i, a in enumerate(agents) if a.get("id") == agent_id), -1)
+
+        # Remove from formation config
         formation.remove_agent_from_config(agent_id)
+
+        # Remove from overlord if running
+        _cleanup_agent_from_overlord(formation, agent_id)
+
+        # Clean up secret placeholders
+        _cleanup_secret_placeholders(formation, agent_index)
+
+        # Delete the YAML file
+        _delete_agent_file_safe(formation, agent_id)
+
+        # TODO: Add observability event for agent removed
+
     except ValueError as e:
-        if "not found" in str(e):
-            response = create_error_response("AGENT_NOT_FOUND", str(e), None, request_id)
+        # This shouldn't happen since we already checked, but handle it
+        error_msg = str(e)
+        if "not found" in error_msg:
+            response = create_error_response(AGENT_NOT_FOUND_ERROR, error_msg, None, request_id)
             return JSONResponse(content=response.model_dump(), status_code=404)
         else:
-            response = create_error_response("FORBIDDEN", str(e), None, request_id)
+            response = create_error_response(FORBIDDEN_ERROR, error_msg, None, request_id)
             return JSONResponse(content=response.model_dump(), status_code=403)
-
-    # TODO: Notify overlord of agent removal
-    # TODO: Add observability event for agent removed
+    except Exception as e:
+        response = create_error_response(
+            INTERNAL_ERROR, f"Failed to delete agent: {str(e)}", None, request_id
+        )
+        return JSONResponse(content=response.model_dump(), status_code=500)
 
     response = create_success_response(
         APIObjectType.AGENT,

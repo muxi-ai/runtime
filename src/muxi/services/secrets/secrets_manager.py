@@ -9,7 +9,7 @@ import re
 import os
 import asyncio
 import threading
-from typing import Dict, Any, Optional, Union, List
+from typing import Dict, Any, Optional, Union, List, Set
 from pathlib import Path
 from cryptography.fernet import Fernet
 from .. import observability
@@ -41,8 +41,10 @@ class SecretsManager:
         self.secrets_file_path = self.formation_dir / "secrets.enc"
         self._fernet: Optional[Fernet] = None
         self._secrets_cache: Optional[Dict[str, Any]] = None
+        self._used_secrets: Set[str] = set()  # Track which secrets are actually used
         self._lock = asyncio.Lock()
         self._sync_lock = threading.Lock()  # Thread lock for sync operations
+        self._encryption_initialized = False  # Track if async init has been called
 
         # Regex pattern for secrets interpolation (whitespace tolerant)
         # Matches: ${{ secrets.SECRET_NAME }} with flexible whitespace
@@ -53,6 +55,15 @@ class SecretsManager:
         try:
             await self._ensure_formation_dir()
             await self._load_or_create_master_key()
+
+            # Load all secrets into cache immediately
+            if self.secrets_file_path.exists():
+                self._secrets_cache = await self._load_secrets_from_file()
+            else:
+                self._secrets_cache = {}
+
+            # Mark as initialized
+            self._encryption_initialized = True
 
         except Exception as e:
             # Observability: Encryption initialization failed
@@ -162,6 +173,11 @@ class SecretsManager:
                     self._secrets_cache = json.loads(decrypted_data.decode("utf-8"))
 
                 secret_value = self._secrets_cache.get(normalized_name)
+
+                # Track that this secret was used (sync version)
+                if secret_value is not None and hasattr(self, '_used_secrets'):
+                    self._used_secrets.add(normalized_name)
+
                 return secret_value
 
             except Exception as e:
@@ -180,10 +196,21 @@ class SecretsManager:
                 return None
 
     async def _get_secrets_cache(self) -> Dict[str, Any]:
-        """Get secrets cache, loading from file if needed."""
+        """Get secrets cache, which should already be loaded during initialization."""
         if self._secrets_cache is None:
-            self._secrets_cache = await self._load_secrets_from_file()
+            # This shouldn't happen if initialize_encryption was called
+            self._secrets_cache = await self._load_secrets_from_file() if self.secrets_file_path.exists() else {}
         return self._secrets_cache
+
+    def get_used_secrets(self) -> Set[str]:
+        """Get the set of secrets that have been accessed/used."""
+        return self._used_secrets.copy()
+
+    def get_all_secret_names(self) -> Set[str]:
+        """Get all available secret names from cache."""
+        if self._secrets_cache is None:
+            return set()
+        return set(self._secrets_cache.keys())
 
     async def store_secret(self, name: str, value: Any, overwrite: bool = False) -> None:
         """
@@ -241,14 +268,16 @@ class SecretsManager:
             Secret value or None if not found
         """
         try:
-            if not self._fernet:
-                await self.initialize_encryption()
-
             normalized_name = self._normalize_secret_name(name)
 
             async with self._lock:
                 secrets = await self._get_secrets_cache()
                 secret_value = secrets.get(normalized_name)
+
+                # Track that this secret was used
+                if secret_value is not None:
+                    self._used_secrets.add(normalized_name)
+
                 return secret_value
 
         except Exception as e:
@@ -317,13 +346,8 @@ class SecretsManager:
             List of all stored secret names
         """
         try:
-            if not self._fernet:
-                await self.initialize_encryption()
-
-            async with self._lock:
-                secrets = await self._get_secrets_cache()
-                secret_names = list(secrets.keys())
-                return secret_names
+            # Secrets should already be loaded in cache
+            return sorted(list(self.get_all_secret_names()))
 
         except Exception as e:
             # Observability: Secret listing failed
@@ -338,8 +362,7 @@ class SecretsManager:
     async def secret_exists(self, name: str) -> bool:
         """Check if secret exists."""
         normalized_name = self._normalize_secret_name(name)
-        secrets = await self._get_secrets_cache()
-        return normalized_name in secrets
+        return normalized_name in self.get_all_secret_names()
 
     async def interpolate_secrets(self, value: Any) -> Any:
         """
