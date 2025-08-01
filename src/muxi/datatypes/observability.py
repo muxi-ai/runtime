@@ -552,6 +552,9 @@ class ConversationEvents(Enum):
     AGENT_RESPONSE_GENERATED = "agent.response.generated"
     # When agent generates response
 
+    AGENT_PLANNING = "agent.planning"
+    # When agent creates execution plan
+
     # Tool chaining events
     AGENT_TOOL_CHAIN_ITERATION_STARTED = "agent.tool_chain.iteration_started"
     # When agent begins a tool chaining iteration
