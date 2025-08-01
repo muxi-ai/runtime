@@ -11,8 +11,6 @@ This script:
 
 import asyncio
 import httpx
-import json
-import sys
 from datetime import datetime
 
 
@@ -50,7 +48,7 @@ async def create_agent(agent_id: str):
             }
         ]
     }
-    
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
             f"{API_BASE}/agents",
@@ -63,24 +61,24 @@ async def create_agent(agent_id: str):
 async def main():
     """Run the test sequence."""
     test_agent_id = f"test-persistence-agent-{int(datetime.now().timestamp())}"
-    
+
     print("=== Agent Persistence Test ===\n")
-    
+
     # Step 1: Get initial list of agents
     print("1. Getting initial list of agents...")
     initial_agents = await get_agents()
     initial_agent_ids = [agent["id"] for agent in initial_agents["data"]["agents"]]
     print(f"   Found {len(initial_agent_ids)} agents: {initial_agent_ids}")
-    
+
     # Check if our test agent already exists
     if test_agent_id in initial_agent_ids:
         print(f"\n✓ Test agent '{test_agent_id}' already exists from a previous run!")
         print("  This confirms that agents persist across server restarts.")
-        
+
         # Show the agent details
         for agent in initial_agents["data"]["agents"]:
             if agent["id"] == test_agent_id:
-                print(f"\n  Agent details:")
+                print("\n  Agent details:")
                 print(f"    Name: {agent['name']}")
                 print(f"    Description: {agent['description']}")
                 print(f"    Active: {agent.get('active', True)}")
@@ -90,7 +88,7 @@ async def main():
         # Step 2: Create a new agent
         print(f"\n2. Creating new agent '{test_agent_id}'...")
         create_response = await create_agent(test_agent_id)
-        
+
         if create_response.status_code == 201:
             print("   ✓ Agent created successfully!")
             created_data = create_response.json()
@@ -99,21 +97,21 @@ async def main():
             print(f"   ✗ Failed to create agent: {create_response.status_code}")
             print(f"   Error: {create_response.text}")
             return
-        
+
         # Step 3: Get updated list of agents
         print("\n3. Getting updated list of agents...")
         updated_agents = await get_agents()
         updated_agent_ids = [agent["id"] for agent in updated_agents["data"]["agents"]]
         print(f"   Found {len(updated_agent_ids)} agents: {updated_agent_ids}")
-        
+
         # Verify the new agent is in the list
         if test_agent_id in updated_agent_ids:
             print(f"\n   ✓ Test agent '{test_agent_id}' successfully added to the list!")
-            
+
             # Show the created agent details
             for agent in updated_agents["data"]["agents"]:
                 if agent["id"] == test_agent_id:
-                    print(f"\n   Agent details:")
+                    print("\n   Agent details:")
                     print(f"     Name: {agent['name']}")
                     print(f"     Description: {agent['description']}")
                     print(f"     Active: {agent.get('active', True)}")
@@ -121,7 +119,7 @@ async def main():
                     break
         else:
             print(f"\n   ✗ Test agent '{test_agent_id}' not found in updated list!")
-    
+
     print("\n" + "="*50)
     print("To test persistence:")
     print("1. Stop the server (Ctrl+C)")
