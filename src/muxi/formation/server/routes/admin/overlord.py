@@ -35,7 +35,7 @@ async def get_overlord_config(request: Request) -> JSONResponse:
 
     # Create a temporary config structure to apply placeholders
     temp_config = {"overlord": overlord_config}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     overlord_config = temp_config.get("overlord", {})
 
     response = create_success_response(

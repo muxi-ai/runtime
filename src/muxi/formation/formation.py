@@ -2935,6 +2935,11 @@ class Formation:
         """Check if overlord is currently running."""
         return self._is_running
 
+    @property
+    def secret_placeholders(self) -> Dict[str, str]:
+        """Get the secret placeholder mappings."""
+        return self._secret_placeholders
+
     def get_formation_id(self) -> str:
         """Get the formation ID."""
         return self.formation_id

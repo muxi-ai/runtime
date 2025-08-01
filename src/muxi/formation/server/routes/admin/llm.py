@@ -44,7 +44,7 @@ async def get_llm_config(request: Request) -> JSONResponse:
 
     # Create a temporary config structure to apply placeholders
     temp_config = {"llm": llm_config}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     llm_config = temp_config.get("llm", {})
 
     response = create_success_response(

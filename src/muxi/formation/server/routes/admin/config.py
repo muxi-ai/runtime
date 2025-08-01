@@ -95,7 +95,7 @@ async def get_formation_config_detailed(request: Request) -> JSONResponse:
 
     # Get full config with defaults
     config = deepcopy(formation.config)
-    config = restore_secret_placeholders(config, formation._secret_placeholders)
+    config = restore_secret_placeholders(config, formation.secret_placeholders)
 
     response = create_success_response(
         APIObjectType.FORMATION_CONFIG, APIEventType.CONFIG_RETRIEVED, config, request_id

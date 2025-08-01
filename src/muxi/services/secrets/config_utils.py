@@ -5,12 +5,15 @@ This module provides reusable functions for retrieving configuration items
 with secrets properly restored from placeholders.
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from copy import deepcopy
+
+if TYPE_CHECKING:
+    from ...formation.formation import Formation
 
 
 def get_config_item_with_secrets_restored(
-    formation,
+    formation: "Formation",
     config_path: List[str],
     item_id: str,
     id_field: str = "id"
@@ -33,11 +36,10 @@ def get_config_item_with_secrets_restored(
     # Navigate to the config array
     config_section = formation.config
     for path_part in config_path:
-        config_section = config_section.get(path_part, {})
-
-    # Handle case where config_section is a list (final path element)
-    if isinstance(config_section, dict) and len(config_path) > 0:
-        config_section = config_section.get(config_path[-1], [])
+        if isinstance(config_section, dict):
+            config_section = config_section.get(path_part, [])
+        else:
+            return None, None
 
     # Ensure we have a list
     if not isinstance(config_section, list):
@@ -56,7 +58,7 @@ def get_config_item_with_secrets_restored(
     # Build the nested structure based on config_path
     temp_config = {}
     current_level = temp_config
-    for i, path_part in enumerate(config_path[:-1]):
+    for path_part in config_path[:-1]:
         current_level[path_part] = {}
         current_level = current_level[path_part]
 
@@ -67,7 +69,7 @@ def get_config_item_with_secrets_restored(
         temp_config = [item]
 
     # Restore secrets
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
 
     # Extract the restored item
     restored_item = temp_config
@@ -80,7 +82,7 @@ def get_config_item_with_secrets_restored(
     return restored_item, item_index
 
 
-def get_agent_with_secrets_restored(formation, agent_id: str) -> Optional[Dict[str, Any]]:
+def get_agent_with_secrets_restored(formation: "Formation", agent_id: str) -> Optional[Dict[str, Any]]:
     """
     Get agent configuration with secrets restored.
 

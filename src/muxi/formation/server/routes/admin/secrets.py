@@ -205,7 +205,7 @@ async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSO
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
-@router.delete("/secrets/{key}")
+@router.delete("/secrets/{key}", response_model=APIResponse)
 async def delete_secret(request: Request, key: str) -> JSONResponse:
     """
     Delete a secret.
@@ -247,8 +247,11 @@ async def delete_secret(request: Request, key: str) -> JSONResponse:
 
     # TODO: Add observability event for secret deleted
 
-    # Return simple response format as per spec
-    return JSONResponse(
-        content={"message": f"Secret '{key}' deleted successfully"},
-        status_code=200
+    # Return standardized response format
+    response = create_success_response(
+        APIObjectType.SECRET,
+        APIEventType.SECRET_DELETED,
+        {"message": f"Secret '{key}' deleted successfully"},
+        request_id
     )
+    return JSONResponse(content=response.model_dump(), status_code=200)

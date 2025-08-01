@@ -158,7 +158,7 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
 
     # Create a temporary config structure to apply placeholders
     temp_config = {"mcp": {"servers": servers}}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     servers = temp_config.get("mcp", {}).get("servers", [])
 
     response = create_success_response(

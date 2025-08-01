@@ -47,7 +47,7 @@ async def get_async_config(request: Request) -> JSONResponse:
 
     # Create a temporary config structure to apply placeholders
     temp_config = {"async": deepcopy(async_config)}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     async_config = temp_config.get("async", {})
 
     response = create_success_response(

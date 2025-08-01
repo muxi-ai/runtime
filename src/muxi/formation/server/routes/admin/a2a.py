@@ -46,7 +46,7 @@ async def get_a2a_config(request: Request) -> JSONResponse:
 
     # Create a temporary config structure to apply placeholders
     temp_config = {"a2a": deepcopy(a2a_config)}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     a2a_config = temp_config.get("a2a", {})
 
     response = create_success_response(

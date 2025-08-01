@@ -60,7 +60,7 @@ async def list_agents(request: Request) -> JSONResponse:
 
     # Create a temporary config structure to apply placeholders
     temp_config = {"agents": agents}
-    temp_config = restore_secret_placeholders(temp_config, formation._secret_placeholders)
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
     agents = temp_config.get("agents", [])
 
     # Create structured response
