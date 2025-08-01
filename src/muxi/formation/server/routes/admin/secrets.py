@@ -162,7 +162,7 @@ async def create_secret(request: Request, secret: SecretCreate) -> JSONResponse:
     return JSONResponse(content=response.model_dump(), status_code=201)
 
 
-@router.put("/secrets/{key}")
+@router.put("/secrets/{key}", response_model=APIResponse)
 async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSONResponse:
     """
     Update an existing secret.
@@ -195,11 +195,14 @@ async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSO
 
     # TODO: Add observability event for secret updated
 
-    # Return simple response format as per spec
-    return JSONResponse(
-        content={"message": f"Secret '{key}' updated successfully"},
-        status_code=200
+    # Return standardized response format
+    response = create_success_response(
+        APIObjectType.SECRET,
+        APIEventType.SECRET_UPDATED,
+        {"message": f"Secret '{key}' updated successfully"},
+        request_id
     )
+    return JSONResponse(content=response.model_dump(), status_code=200)
 
 
 @router.delete("/secrets/{key}")

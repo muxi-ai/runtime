@@ -21,7 +21,7 @@ from ...responses import (
 from .....datatypes.api import APIEventType, APIObjectType
 from ...secrets import restore_secret_placeholders
 from ...utils import get_header_case_insensitive
-from .agents import get_config_item_with_secrets_restored
+from .....services.secrets.config_utils import get_config_item_with_secrets_restored
 
 router = APIRouter(tags=["MCP"])
 

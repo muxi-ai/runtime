@@ -11,11 +11,23 @@ For auto-reload with nodemon:
 
 import asyncio
 import sys
+import traceback
 from pathlib import Path
 
 # Import using relative imports to avoid sys.path manipulation
 try:
     from ...formation import Formation
+    from ...services import observability
+    from ...datatypes.exceptions import (
+        ConfigurationLoadError,
+        ConfigurationNotFoundError,
+        ConfigurationValidationError,
+        DependencyValidationError,
+        ServiceStartupError,
+        OverlordError,
+        OverlordStartupError,
+        MCPConnectionError,
+    )
 except ImportError:
     # Fallback for development environments where package isn't installed
     # Find project root by looking for pyproject.toml or setup.py
@@ -30,6 +42,17 @@ except ImportError:
         sys.path.insert(0, str(project_root))
 
     from src.muxi.formation import Formation
+    from src.muxi.services import observability
+    from src.muxi.datatypes.exceptions import (
+        ConfigurationLoadError,
+        ConfigurationNotFoundError,
+        ConfigurationValidationError,
+        DependencyValidationError,
+        ServiceStartupError,
+        OverlordError,
+        OverlordStartupError,
+        MCPConnectionError,
+    )
 
 
 async def run_formation(formation_path: str):
@@ -37,24 +60,175 @@ async def run_formation(formation_path: str):
     formation = Formation()
 
     try:
-        print(f"Loading formation from: {formation_path}")
+        observability.observe(
+            event_type=observability.SystemEvents.INITIALIZING,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "run_formation",
+                "formation_path": formation_path,
+            },
+            description=f"Loading formation from: {formation_path}",
+        )
+
         await formation.load(formation_path)
 
-        print("Starting formation server...")
+        observability.observe(
+            event_type=observability.ServerEvents.SERVER_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "run_formation",
+                "formation_id": formation.config.get("id", "unknown"),
+            },
+            description="Starting formation server...",
+        )
+
         # This will block until the server is stopped
         await formation.start_server(block=True)
 
     except KeyboardInterrupt:
-        print("\nShutting down formation...")
+        observability.observe(
+            event_type=observability.SystemEvents.CLEANUP,
+            level=observability.EventLevel.INFO,
+            data={
+                "service": "run_formation",
+                "reason": "keyboard_interrupt",
+            },
+            description="Shutting down formation due to keyboard interrupt...",
+        )
         await formation.stop()
+
+    except ConfigurationNotFoundError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.RESOURCE_NOT_FOUND,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "ConfigurationNotFoundError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Formation configuration not found: {e}",
+        )
+        sys.exit(1)
+
+    except ConfigurationValidationError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.VALIDATION_FAILED,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "ConfigurationValidationError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Formation configuration validation failed: {e}",
+        )
+        sys.exit(1)
+
+    except DependencyValidationError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.DEPENDENCY_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "DependencyValidationError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Formation dependency validation failed: {e}",
+        )
+        sys.exit(1)
+
+    except MCPConnectionError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.NETWORK_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "MCPConnectionError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"MCP connection error while loading formation: {e}",
+        )
+        sys.exit(1)
+
+    except ServiceStartupError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "ServiceStartupError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Service startup error: {e}",
+        )
+        sys.exit(1)
+
+    except OverlordStartupError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.SERVICE_UNAVAILABLE,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "OverlordStartupError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Overlord startup error: {e}",
+        )
+        sys.exit(1)
+
+    except OverlordError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "OverlordError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Overlord error: {e}",
+        )
+        sys.exit(1)
+
+    except ConfigurationLoadError as e:
+        observability.observe(
+            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": "ConfigurationLoadError",
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Failed to load formation configuration: {e}",
+        )
+        sys.exit(1)
+
     except Exception as e:
-        print(f"Error: {e}")
+        # Catch any unexpected errors
+        observability.observe(
+            event_type=observability.ErrorEvents.INTERNAL_ERROR,
+            level=observability.EventLevel.ERROR,
+            data={
+                "service": "run_formation",
+                "error_type": type(e).__name__,
+                "formation_path": formation_path,
+                "traceback": traceback.format_exc(),
+            },
+            description=f"Unexpected error: {e}",
+        )
         sys.exit(1)
 
 
 def main():
     """Main entry point for the module."""
     if len(sys.argv) < 2:
+        # For usage messages, we still use print since this is user-facing CLI output
         print("Usage: python -m src.muxi.utils.run_formation <formation.yaml>")
         print("\nFor auto-reload with nodemon:")
         print(
@@ -63,6 +237,17 @@ def main():
         sys.exit(1)
 
     formation_path = sys.argv[1]
+
+    # Initialize observability system
+    observability.observe(
+        event_type=observability.SystemEvents.INITIALIZING,
+        level=observability.EventLevel.INFO,
+        data={
+            "service": "run_formation",
+            "formation_path": formation_path,
+        },
+        description=f"Starting formation runner with path: {formation_path}",
+    )
 
     # Run the formation - file existence will be checked during loading
     asyncio.run(run_formation(formation_path))

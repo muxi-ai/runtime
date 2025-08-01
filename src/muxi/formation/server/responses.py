@@ -246,6 +246,6 @@ def job_list_response_spec(
     return create_success_response(
         APIObjectType.LIST,
         APIEventType.JOB_LIST,
-        jobs,
+        {"jobs": jobs, "count": len(jobs)},
         request_id,
     )

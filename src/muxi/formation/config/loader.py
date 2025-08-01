@@ -160,7 +160,7 @@ class ConfigLoader:
                             result = re.sub(pattern, secret_value, result)
 
                         except Exception as e:
-                            raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}")
+                            raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}") from e
 
                 return result
             elif isinstance(obj, dict):
