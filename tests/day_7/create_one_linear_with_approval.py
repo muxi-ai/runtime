@@ -151,6 +151,6 @@ async def main():
 
 if __name__ == "__main__":
     print("\n⚠️  INTERACTIVE TEST - Requires manual approval")
-    print("Press Enter to start...")
-    input()
+    # print("Press Enter to start...")
+    # input()
     asyncio.run(main())
