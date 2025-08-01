@@ -1149,7 +1149,96 @@ class Overlord:
         agent.role = agent_config.get("role", "general")
         agent.specialties = agent_config.get("specialties", [])
 
+        # Register agent-specific MCP servers if configured
+        await self._register_agent_mcp_servers(agent_config.get("id"), agent_config.get("mcp_servers", []))
+
         return agent
+
+    async def _register_agent_mcp_servers(self, agent_id: str, mcp_servers: List[Dict[str, Any]]) -> None:
+        """
+        Register MCP servers for a specific agent.
+
+        Args:
+            agent_id: The ID of the agent
+            mcp_servers: List of MCP server configurations
+        """
+        if not mcp_servers or not self.mcp_service:
+            return
+
+        observability.observe(
+            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+            level=observability.EventLevel.INFO,
+            data={
+                "agent_id": agent_id,
+                "server_count": len(mcp_servers)
+            },
+            description=f"Registering {len(mcp_servers)} MCP servers for agent {agent_id}"
+        )
+
+        for server_config in mcp_servers:
+            try:
+                server_id = server_config.get("id", "unknown")
+
+                # Skip inactive servers
+                if not server_config.get("active", True):
+                    continue
+
+                # Prepare registration parameters
+                registration_params = {
+                    "server_id": f"{agent_id}-{server_id}",  # Prefix with agent ID to ensure uniqueness
+                    "agent_id": agent_id,  # Pass agent ID for proper registration
+                }
+
+                # Determine server type and set appropriate parameter
+                if "command" in server_config:
+                    # Command-based server
+                    registration_params["command"] = server_config["command"]
+                    if "args" in server_config:
+                        registration_params["args"] = server_config["args"]
+                elif "url" in server_config:
+                    # HTTP/SSE server
+                    registration_params["url"] = server_config["url"]
+                elif "endpoint" in server_config:
+                    # HTTP server with endpoint notation
+                    registration_params["url"] = server_config["endpoint"]
+                else:
+                    continue
+
+                # Add optional parameters
+                if "auth" in server_config:
+                    registration_params["credentials"] = server_config["auth"]
+
+                if "timeout_seconds" in server_config:
+                    registration_params["request_timeout"] = server_config["timeout_seconds"]
+
+                if "type" in server_config:
+                    registration_params["transport_type"] = server_config["type"]
+
+                # Register the MCP server
+                await self.mcp_service.register_mcp_server(**registration_params)
+
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "agent_id": agent_id,
+                        "server_id": server_id,
+                        "full_server_id": registration_params["server_id"]
+                    },
+                    description=f"MCP server {server_id} registered for agent {agent_id}"
+                )
+
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "agent_id": agent_id,
+                        "server_id": server_config.get("id", "unknown"),
+                        "error": str(e)
+                    },
+                    description=f"Failed to register MCP server for agent {agent_id}: {str(e)}"
+                )
 
     def _load_default_persona(self) -> None:
         """Load the default persona from the system_persona.md file."""
