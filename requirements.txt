@@ -15,7 +15,7 @@ psutil>=5.9.0  # System and process utilities
 onellm>=0.1.0
 
 # A2A (Agent-to-Agent) Communication
-a2a-sdk>=0.2  # Google's Agent-to-Agent SDK for inter-agent communication
+a2a-sdk>=0.3  # Google's Agent-to-Agent SDK for inter-agent communication
 
 # MCP Package
 mcp>=1.9.0

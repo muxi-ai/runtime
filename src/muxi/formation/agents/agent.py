@@ -735,6 +735,7 @@ class Agent:
         user_id: Any = None,
         session_id: Optional[str] = None,
         request_id: Optional[str] = None,
+        is_a2a_task: bool = False,
     ) -> MuxiResponse:
         """
         Process a message from the overlord and generate a response.
@@ -924,7 +925,7 @@ class Agent:
                     description=f"Failed to get MCP tools for agent {self.agent_id}: {str(e)}",
                 )
 
-        # Check if this is a workflow task
+        # Check if this is a workflow task or A2A task
         user_message = message_obj.content if hasattr(message_obj, 'content') else str(message_obj)
         is_workflow_task = (
             # Check for workflow context indicators
@@ -934,18 +935,20 @@ class Agent:
             ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
         )
 
-        if is_workflow_task:
-            # Log that we're bypassing planning for workflow task
+        # Skip planning for workflow tasks or A2A tasks (to prevent loops)
+        if is_workflow_task or is_a2a_task:
+            # Log that we're bypassing planning
+            reason = "a2a_task_detected" if is_a2a_task else "workflow_task_detected"
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                 level=observability.EventLevel.INFO,
                 data={
                     "agent_id": self.agent_id,
                     "phase": "planning_bypassed",
-                    "reason": "workflow_task_detected",
+                    "reason": reason,
                     "message_preview": user_message[:100] + "..." if len(user_message) > 100 else user_message,
                 },
-                description=f"Agent {self.agent_id} bypassing planning phase for workflow task",
+                description=f"Agent {self.agent_id} bypassing planning phase: {reason}",
             )
 
         # Variables to store planning results
@@ -2418,7 +2421,7 @@ class Agent:
                 )
             else:
                 # Try to find the tool in any available server
-                servers = self._mcp_service.get_servers()
+                servers = await self._mcp_service.list_servers()
                 result = None
                 for server_name in servers:
                     try:
@@ -2640,6 +2643,14 @@ class Agent:
                 result_content = response.get("response", response.get("advice", ""))
                 execution_completed = response.get("execution_completed", False)
 
+                # Handle MuxiResponse objects
+                if hasattr(result_content, 'content'):
+                    content_length = len(result_content.content) if result_content.content else 0
+                elif isinstance(result_content, str):
+                    content_length = len(result_content)
+                else:
+                    content_length = len(str(result_content)) if result_content else 0
+
                 # Log the A2A response
                 observability.observe(
                     event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
@@ -2648,7 +2659,7 @@ class Agent:
                         "agent_id": self.agent_id,
                         "source_agent_id": best_agent_id,
                         "execution_completed": execution_completed,
-                        "response_length": len(result_content) if result_content else 0,
+                        "response_length": content_length,
                     },
                     description=f"A2A response received: execution={execution_completed}",
                 )
@@ -3387,6 +3398,76 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
     ) -> Optional[Dict[str, Any]]:
         """Handle generic A2A message."""
         try:
+            # Check if this is a task execution request
+            execution_required = False
+            task_text = None
+
+            # Parse A2A protocol message structure
+            if isinstance(message, dict):
+                # Check for A2A protocol format with parts
+                if "parts" in message and isinstance(message["parts"], list):
+                    # Extract task from TextPart
+                    for part in message["parts"]:
+                        if isinstance(part, dict):
+                            if part.get("type") == "TextPart" and "text" in part:
+                                task_text = part["text"]
+                            elif part.get("type") == "DataPart" and "data" in part:
+                                data = part["data"]
+                                if isinstance(data, dict):
+                                    execution_required = data.get("execution_required", False)
+                                    # If no task_text yet, try to get it from data
+                                    if not task_text:
+                                        task_text = data.get("original_request", "")
+
+                # Fallback to direct message content
+                if not task_text and "message" in message:
+                    task_text = message["message"]
+                elif not task_text and "text" in message:
+                    task_text = message["text"]
+            else:
+                # Simple string message
+                task_text = str(message)
+
+            # If execution is required and we have a task, execute it
+            if execution_required and task_text:
+                observability.observe(
+                    event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "source_agent_id": source_agent_id,
+                        "target_agent_id": self.agent_id,
+                        "message_id": message_id,
+                        "action": "executing_task",
+                        "task": task_text[:100],  # First 100 chars
+                    },
+                    description=f"Executing task from {source_agent_id}: {task_text[:50]}...",
+                )
+
+                # Execute the task using the agent's normal message processing
+                # This will use the agent's tools and capabilities
+                response = await self.process_message(
+                    message=task_text,
+                    user_id=f"a2a_{source_agent_id}",
+                    session_id=message_id or f"a2a_session_{generate_nanoid()}",
+                    request_id=message_id,
+                    is_a2a_task=True,  # Mark as A2A task to prevent loops
+                )
+
+                # Extract the response content
+                response_content = response
+                if isinstance(response, dict):
+                    response_content = response.get("content", response.get("response", str(response)))
+
+                return {
+                    "status": "success",
+                    "response": response_content,
+                    "execution_completed": True,
+                    "responder_id": self.agent_id,
+                    "message_id": message_id,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                }
+
+            # Otherwise, fall back to consultation/acknowledgment mode
             # Convert message to string for processing
             if isinstance(message, dict):
                 message_content = json.dumps(message, indent=2)
@@ -3426,6 +3507,7 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
                 return {
                     "status": "success",
                     "response": response_content,
+                    "execution_completed": False,  # Not a task execution
                     "responder_id": self.agent_id,
                     "message_id": message_id,
                     "timestamp": datetime.datetime.now().isoformat(),
@@ -3433,7 +3515,7 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
 
             # For notifications, just log and return None
             observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_PROCESSED,
+                event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
                 level=observability.EventLevel.INFO,
                 data={
                     "source_agent_id": source_agent_id,
