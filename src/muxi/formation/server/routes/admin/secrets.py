@@ -11,10 +11,10 @@ from pydantic import BaseModel
 
 from ...responses import (
     APIResponse,
-    secret_list_response,
     create_success_response,
     create_error_response,
 )
+from ...utils import mask_secret_value
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Secrets"])
@@ -45,14 +45,33 @@ async def list_secrets(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     if not hasattr(formation, "secrets_manager") or not formation.secrets_manager:
-        masked_secrets = {}
+        secret_list = {
+            "secrets": {},
+            "count": 0
+        }
     else:
         try:
             # Get all secret names (async call)
             secret_names = await formation.secrets_manager.list_secrets()
 
-            # Mask values with consistent pattern (no length disclosure)
-            masked_secrets = {name: "••••••••" for name in secret_names}
+            # Create secrets object with partially masked values
+            secrets_dict = {}
+            for name in secret_names:
+                # Get the actual secret value to partially mask it
+                try:
+                    secret_value = await formation.secrets_manager.get_secret(name)
+                    masked_value = mask_secret_value(secret_value)
+                except Exception:
+                    # If we can't get the secret, just use a generic mask
+                    masked_value = mask_secret_value(None)
+
+                secrets_dict[name] = masked_value
+
+            # Return in spec-compliant format
+            secret_list = {
+                "secrets": secrets_dict,
+                "count": len(secret_names)
+            }
         except Exception as e:
             # Handle secrets manager errors gracefully
             response = create_error_response(
@@ -60,8 +79,10 @@ async def list_secrets(request: Request) -> JSONResponse:
             )
             return JSONResponse(content=response.model_dump(), status_code=500)
 
-    # Create structured response
-    response = secret_list_response({"secrets": masked_secrets}, request_id)
+    # Create structured response with spec-compliant format
+    response = create_success_response(
+        APIObjectType.SECRET_LIST, APIEventType.SECRET_LIST, secret_list, request_id
+    )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
@@ -86,14 +107,14 @@ async def create_secret(request: Request, secret: SecretCreate) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Check if secret already exists
-    if formation.secrets_manager.has_secret(secret.key):
+    if await formation.secrets_manager.secret_exists(secret.key):
         response = create_error_response(
             "SECRET_EXISTS", f"Secret '{secret.key}' already exists", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=409)
 
     # Create secret
-    formation.secrets_manager.set_secret(secret.key, secret.value)
+    await formation.secrets_manager.store_secret(secret.key, secret.value)
 
     # TODO: Add observability event for secret created
 
@@ -128,22 +149,23 @@ async def update_secret(request: Request, key: str, secret: SecretUpdate) -> JSO
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Check if secret exists
-    if not formation.secrets_manager.has_secret(key):
+    if not await formation.secrets_manager.secret_exists(key):
         response = create_error_response(
             "SECRET_NOT_FOUND", f"Secret '{key}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
 
     # Update secret
-    formation.secrets_manager.set_secret(key, secret.value)
+    await formation.secrets_manager.store_secret(key, secret.value, overwrite=True)
 
     # TODO: Add observability event for secret updated
 
+    # Return standardized response format
     response = create_success_response(
         APIObjectType.SECRET,
         APIEventType.SECRET_UPDATED,
-        {"key": key, "value": "••••••••"},
-        request_id,
+        {"message": f"Secret '{key}' updated successfully"},
+        request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
 
@@ -169,21 +191,32 @@ async def delete_secret(request: Request, key: str) -> JSONResponse:
         return JSONResponse(content=response.model_dump(), status_code=503)
 
     # Check if secret exists
-    if not formation.secrets_manager.has_secret(key):
+    if not await formation.secrets_manager.secret_exists(key):
         response = create_error_response(
             "SECRET_NOT_FOUND", f"Secret '{key}' not found", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=404)
 
+    # Check if secret is in use
+    if formation.is_secret_in_use(key):
+        response = create_error_response(
+            "SECRET_IN_USE",
+            f"Cannot delete secret '{key}' because it is currently in use by the formation configuration",
+            None,
+            request_id,
+        )
+        return JSONResponse(content=response.model_dump(), status_code=409)
+
     # Delete secret
-    formation.secrets_manager.delete_secret(key)
+    await formation.secrets_manager.delete_secret(key)
 
     # TODO: Add observability event for secret deleted
 
+    # Return standardized response format
     response = create_success_response(
         APIObjectType.SECRET,
         APIEventType.SECRET_DELETED,
         {"message": f"Secret '{key}' deleted successfully"},
-        request_id,
+        request_id
     )
     return JSONResponse(content=response.model_dump(), status_code=200)

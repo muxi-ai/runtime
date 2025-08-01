@@ -7,6 +7,7 @@ websockets>=11.0.3
 httpx-sse>=0.4.0
 rich>=13.6.0
 colorama>=0.4.6
+psutil>=5.9.0
 mcp>=1.9.0
 aiofiles>=23.2.0
 python-magic>=0.4.27

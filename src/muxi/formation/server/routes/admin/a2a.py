@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Dict, Any
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,7 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["A2A"])
@@ -41,6 +43,11 @@ async def get_a2a_config(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     a2a_config = formation.config.get("a2a", {})
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"a2a": deepcopy(a2a_config)}
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
+    a2a_config = temp_config.get("a2a", {})
 
     response = create_success_response(
         APIObjectType.A2A, APIEventType.A2A_RETRIEVED, a2a_config, request_id

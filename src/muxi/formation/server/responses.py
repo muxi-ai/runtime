@@ -3,6 +3,15 @@ Standardized response format utilities for the Formation API.
 
 This module provides utilities to create consistent API responses
 following the envelope format defined in the API specification.
+
+Response Function Naming Convention:
+- Regular functions (e.g., agent_list_response): Use specific APIObjectType values
+  (e.g., AGENT_LIST, JOB_LIST) for backward compatibility
+- Spec-compliant functions (e.g., agent_list_response_spec): Use generic APIObjectType.LIST
+  to comply with OpenAPI specifications
+
+Note: The spec-compliant versions (_spec suffix) are now DEPRECATED. Instead, use the
+regular functions with use_generic_type=True parameter for OpenAPI compliance.
 """
 
 import time
@@ -91,6 +100,7 @@ def create_error_response(
     trace: Optional[str] = None,
     request_id: Optional[str] = None,
     idempotency_key: Optional[str] = None,
+    data: Optional[Dict[str, Any]] = None,
 ) -> APIResponse:
     """
     Create a standardized error response.
@@ -101,6 +111,7 @@ def create_error_response(
         trace: Stack trace for debugging
         request_id: Request ID
         idempotency_key: Idempotency key if provided
+        data: Additional data to include in the error response
 
     Returns:
         APIResponse object with error
@@ -131,7 +142,7 @@ def create_error_response(
     return create_api_response(
         object_type=APIObjectType.ERROR,
         event_type=event_type,
-        data={},
+        data=data or {},
         request_id=request_id,
         idempotency_key=idempotency_key,
         success=False,
@@ -183,14 +194,46 @@ def agent_response(agent: Dict[str, Any], request_id: Optional[str] = None) -> A
     )
 
 
-def agent_list_response(agents: List[Dict[str, Any]], request_id: Optional[str] = None) -> APIResponse:
-    """Create a response for a list of agents."""
+def agent_list_response(
+    agents: List[Dict[str, Any]], request_id: Optional[str] = None, use_generic_type: bool = False
+) -> APIResponse:
+    """
+    Create a response for a list of agents.
+
+    Args:
+        agents: List of agent configurations
+        request_id: Optional request ID for tracking
+        use_generic_type: If True, uses APIObjectType.LIST for OpenAPI spec compliance.
+                         If False (default), uses APIObjectType.AGENT_LIST for legacy compatibility.
+
+    Note:
+        - use_generic_type=False: Uses specific type (APIObjectType.AGENT_LIST) - legacy behavior
+        - use_generic_type=True: Uses generic type (APIObjectType.LIST) - OpenAPI spec compliant
+
+    TODO: Consider deprecating the specific type in favor of the generic LIST type
+          to maintain consistency with OpenAPI specifications.
+    """
+    object_type = APIObjectType.LIST if use_generic_type else APIObjectType.AGENT_LIST
     return create_success_response(
-        APIObjectType.AGENT_LIST,
+        object_type,
         APIEventType.AGENT_LIST,
         {"agents": agents, "count": len(agents)},
         request_id,
     )
+
+
+def agent_list_response_spec(
+    agents: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
+    """
+    Create a spec-compliant response for a list of agents.
+
+    DEPRECATED: Use agent_list_response(agents, request_id, use_generic_type=True) instead.
+
+    This function exists for backward compatibility but should be replaced with
+    the parameterized version to reduce code duplication.
+    """
+    return agent_list_response(agents, request_id, use_generic_type=True)
 
 
 def secret_list_response(secrets: Dict[str, Any], request_id: Optional[str] = None) -> APIResponse:
@@ -203,7 +246,9 @@ def secret_list_response(secrets: Dict[str, Any], request_id: Optional[str] = No
     )
 
 
-def memory_list_response(memories: List[Dict[str, Any]], request_id: Optional[str] = None) -> APIResponse:
+def memory_list_response(
+    memories: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
     """Create a response for a list of memories."""
     return create_success_response(
         APIObjectType.MEMORY_LIST,
@@ -213,11 +258,43 @@ def memory_list_response(memories: List[Dict[str, Any]], request_id: Optional[st
     )
 
 
-def job_list_response(jobs: List[Dict[str, Any]], request_id: Optional[str] = None) -> APIResponse:
-    """Create a response for a list of jobs."""
+def job_list_response(
+    jobs: List[Dict[str, Any]], request_id: Optional[str] = None, use_generic_type: bool = False
+) -> APIResponse:
+    """
+    Create a response for a list of jobs.
+
+    Args:
+        jobs: List of job objects
+        request_id: Optional request ID for tracking
+        use_generic_type: If True, uses APIObjectType.LIST for OpenAPI spec compliance.
+                         If False (default), uses APIObjectType.JOB_LIST for legacy compatibility.
+
+    Note:
+        - use_generic_type=False: Uses specific type (APIObjectType.JOB_LIST) - legacy behavior
+        - use_generic_type=True: Uses generic type (APIObjectType.LIST) - OpenAPI spec compliant
+
+    TODO: Consider deprecating the specific type in favor of the generic LIST type
+          to maintain consistency with OpenAPI specifications.
+    """
+    object_type = APIObjectType.LIST if use_generic_type else APIObjectType.JOB_LIST
     return create_success_response(
-        APIObjectType.JOB_LIST,
+        object_type,
         APIEventType.JOB_LIST,
         {"jobs": jobs, "count": len(jobs)},
         request_id,
     )
+
+
+def job_list_response_spec(
+    jobs: List[Dict[str, Any]], request_id: Optional[str] = None
+) -> APIResponse:
+    """
+    Create a spec-compliant response for a list of jobs.
+
+    DEPRECATED: Use job_list_response(jobs, request_id, use_generic_type=True) instead.
+
+    This function exists for backward compatibility but should be replaced with
+    the parameterized version to reduce code duplication.
+    """
+    return job_list_response(jobs, request_id, use_generic_type=True)

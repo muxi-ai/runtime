@@ -94,6 +94,9 @@ class APIObjectType(str, Enum):
     ERROR = "error"
     EVENT_STREAM = "event_stream"
 
+    # Generic list type for spec compliance
+    LIST = "list"
+
     # Configuration objects
     OVERLORD = "overlord"
     PERSONA = "persona"
@@ -109,3 +112,5 @@ class APIObjectType(str, Enum):
     A2A = "a2a"
     STATUS = "status"
     CONFIG = "config"
+    FORMATION_STATUS = "formation_status"
+    FORMATION_CONFIG = "formation_config"

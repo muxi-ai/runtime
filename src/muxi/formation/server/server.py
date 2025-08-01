@@ -8,18 +8,64 @@ It handles both admin operations (formation management) and client operations
 
 import asyncio
 import signal
+import time
+import threading
 from contextlib import asynccontextmanager
 from typing import Optional, TYPE_CHECKING
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from ...services import observability
 from ...utils.version import get_version
 
 if TYPE_CHECKING:
     from ..formation import Formation
+
+
+# HTTP status code to error code mapping
+STATUS_CODE_TO_ERROR_CODE = {
+    400: "INVALID_REQUEST",
+    401: "UNAUTHORIZED",
+    403: "FORBIDDEN",
+    404: "RESOURCE_NOT_FOUND",
+    422: "INVALID_PARAMS",
+    429: "RATE_LIMITED",
+    501: "METHOD_NOT_FOUND",
+    503: "SYSTEM_OVERLOAD",
+}
+
+
+def create_http_exception_handler():
+    """Create a reusable HTTP exception handler."""
+    from .responses import create_error_response
+
+    async def handler(request, exc):
+        # Get request ID if available
+        request_id = getattr(request.state, "request_id", None)
+
+        # Get status code and detail from exception
+        status_code = getattr(exc, "status_code", 500)
+        detail = getattr(exc, "detail", str(exc))
+
+        # Map status codes to error codes using dictionary lookup
+        error_code = STATUS_CODE_TO_ERROR_CODE.get(status_code, "INTERNAL_ERROR")
+
+        # Create structured error response
+        error_response = create_error_response(
+            error_code=error_code,
+            message=str(detail),
+            request_id=request_id,
+        )
+
+        return JSONResponse(
+            status_code=status_code,
+            content=error_response.model_dump(),
+        )
+
+    return handler
 
 
 class FormationServer:
@@ -48,13 +94,22 @@ class FormationServer:
         self.port = port
         self.config = kwargs
 
+        # Extract access_log setting
+        self.access_log = kwargs.get("access_log", False)
+
         # Server state
         self._app: Optional[FastAPI] = None
         self._server: Optional[uvicorn.Server] = None
         self._server_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
         self._active_connections: set = set()
+        self._active_connections_lock = threading.Lock()
         self._shutdown_timeout = 30.0
+
+        # Server metrics
+        self._start_time = time.time()
+        self._request_count = 0
+        self._request_count_lock = threading.Lock()
 
         # Extract API keys from formation
         self.admin_key = formation._api_keys.get("admin", "")
@@ -71,6 +126,7 @@ class FormationServer:
                 "has_admin_key": bool(self.admin_key),
                 "has_client_key": bool(self.client_key),
                 "formation_id": formation.formation_id,
+                "access_log": self.access_log,
             },
             description=f"Initializing Formation server on {self.host}:{self.port}",
         )
@@ -282,47 +338,51 @@ class FormationServer:
         # 5. API logging (log requests)
         app.add_middleware(APILoggingMiddleware)
 
-        # Add exception handler for HTTPException to ensure proper envelope format
-        from fastapi import HTTPException
-        from fastapi.responses import JSONResponse
+        # Add exception handlers to ensure proper envelope format
+        from fastapi.exceptions import RequestValidationError
+        from starlette.exceptions import HTTPException as StarletteHTTPException
         from .responses import create_error_response
 
-        @app.exception_handler(HTTPException)
-        async def http_exception_handler(request, exc: HTTPException):
-            """Convert HTTPException to proper API envelope format."""
+        # Create specialized handler for validation errors
+        @app.exception_handler(RequestValidationError)
+        async def validation_exception_handler(request, exc: RequestValidationError):
+            """Handle FastAPI validation errors with detailed error information."""
             # Get request ID if available
             request_id = getattr(request.state, "request_id", None)
 
-            # Map status codes to error codes
-            error_code = "INTERNAL_ERROR"
-            if exc.status_code == 400:
-                error_code = "INVALID_REQUEST"
-            elif exc.status_code == 401:
-                error_code = "UNAUTHORIZED"
-            elif exc.status_code == 403:
-                error_code = "FORBIDDEN"
-            elif exc.status_code == 404:
-                error_code = "RESOURCE_NOT_FOUND"
-            elif exc.status_code == 422:
-                error_code = "INVALID_PARAMS"
-            elif exc.status_code == 429:
-                error_code = "RATE_LIMITED"
-            elif exc.status_code == 501:
-                error_code = "METHOD_NOT_FOUND"
-            elif exc.status_code == 503:
-                error_code = "SYSTEM_OVERLOAD"
+            # Extract detailed validation errors
+            validation_errors = []
+            for error in exc.errors():
+                validation_errors.append(
+                    {
+                        "loc": list(
+                            error["loc"]
+                        ),  # Location of the error (e.g., ["body", "field_name"])
+                        "msg": error["msg"],  # Error message
+                        "type": error["type"],  # Error type (e.g., "value_error.missing")
+                    }
+                )
 
-            # Create structured error response
+            # Create detailed error message
+            error_message = f"Validation failed: {len(validation_errors)} error(s)"
+
+            # Create structured error response with validation details
             error_response = create_error_response(
-                error_code=error_code,
-                message=str(exc.detail),
+                error_code="INVALID_PARAMS",
+                message=error_message,
                 request_id=request_id,
+                data={"validation_errors": validation_errors},
             )
 
             return JSONResponse(
-                status_code=exc.status_code,
+                status_code=422,
                 content=error_response.model_dump(),
             )
+
+        # Register the same handler for both FastAPI and Starlette HTTP exceptions
+        http_handler = create_http_exception_handler()
+        app.add_exception_handler(HTTPException, http_handler)
+        app.add_exception_handler(StarletteHTTPException, http_handler)
 
         # Register routers
         self._register_health_routes(app)
@@ -338,8 +398,10 @@ class FormationServer:
         # Register root status endpoint at / without prefix
         app.add_api_route("/", endpoint=root_status, methods=["GET"], include_in_schema=False)
 
+        # Register /v1 status endpoint (same as root)
+        app.add_api_route("/v1", endpoint=root_status, methods=["GET"], include_in_schema=False)
+
         # Health routes are mounted under /v1 to match OpenAPI spec
-        # This will make the root_status available at /v1/ as well
         app.include_router(router, prefix="/v1", tags=["health"])
 
     def _register_admin_routes(self, app: FastAPI) -> None:
@@ -421,7 +483,7 @@ class FormationServer:
             host=self.host,
             port=self.port,
             log_level="info",
-            access_log=True,
+            access_log=self.access_log,
         )
 
         self._server = uvicorn.Server(config)

@@ -195,6 +195,12 @@ class Formation:
         self._runtime_config: Dict[str, Any] = {}
         self._agents_config: list = []
 
+        # Track secrets in use
+        self._secrets_in_use: set[str] = set()
+
+        # Track secret placeholder mappings
+        self._secret_placeholders: Dict[str, str] = {}
+
     def set_secrets_manager(self, secrets_manager: SecretsManager) -> None:
         """
         Inject a pre-configured SecretsManager instance.
@@ -739,8 +745,14 @@ class Formation:
 
             async def _timeout_operation():
                 formation_loader = FormationLoader()
-                result = await formation_loader.load(loader_path, self.secrets_manager)
-                return result
+                config, secrets_in_use, placeholder_registry = await formation_loader.load(
+                    loader_path, self.secrets_manager
+                )
+                # Store the secrets in use set
+                self._secrets_in_use = secrets_in_use
+                # Store the placeholder registry
+                self._secret_placeholders = placeholder_registry
+                return config
 
             result = await execute_with_timeout(
                 _timeout_operation,
@@ -1076,7 +1088,8 @@ class Formation:
         # Store server configuration for later use
         self._server_config = {
             "host": server_config.get("host", "0.0.0.0"),
-            "port": server_config.get("port", 3000),
+            "port": server_config.get("port", 8271),
+            "access_log": server_config.get("access_log", False),
             "api_keys": self._api_keys,
         }
 
@@ -1674,10 +1687,35 @@ class Formation:
             print(f"❌ Permission denied accessing secret '{name}': {e}")
             print("💡 Suggestion: Check file permissions for secrets storage")
             return None
-        except Exception as e:
-            print(f"❌ Unexpected error retrieving secret '{name}': {e}")
-            print("💡 Suggestion: Verify secrets manager is properly initialized")
-            return None
+
+    def get_secrets_count(self) -> int:
+        """
+        Get the count of secrets currently in use by the formation.
+
+        Returns:
+            int: Number of secrets in use
+        """
+        return len(self._secrets_in_use) if hasattr(self, '_secrets_in_use') else 0
+
+    def is_secret_in_use(self, secret_name: str) -> bool:
+        """
+        Check if a secret is being used in the current formation configuration.
+
+        Args:
+            secret_name: Name of the secret to check
+
+        Returns:
+            bool: True if the secret is in use, False otherwise
+        """
+        # Normalize the secret name the same way SecretsManager does
+        import re
+
+        normalized_name = re.sub(r"[^A-Z0-9_]", "_", secret_name.upper())
+        normalized_name = re.sub(r"_+", "_", normalized_name)
+        normalized_name = normalized_name.strip("_")
+
+        # Check if the secret is in our tracked set
+        return normalized_name in self._secrets_in_use
 
     async def list_secrets(self) -> List[str]:
         """
@@ -2630,8 +2668,14 @@ class Formation:
         actual_host = host or config_host
         actual_port = port or config_port
 
-        # Create server instance
-        self._formation_server = FormationServer(formation=self, host=actual_host, port=actual_port)
+        # Create server instance with debug and access_log settings
+        self._formation_server = FormationServer(
+            formation=self,
+            host=actual_host,
+            port=actual_port,
+            debug=self._server_config.get("debug", False),
+            access_log=self._server_config.get("access_log", False),
+        )
 
         observability.observe(
             event_type=observability.SystemEvents.INITIALIZING,
@@ -2859,6 +2903,11 @@ class Formation:
         """Check if overlord is currently running."""
         return self._is_running
 
+    @property
+    def secret_placeholders(self) -> Dict[str, str]:
+        """Get the secret placeholder mappings (returns a copy to prevent external modification)."""
+        return self._secret_placeholders.copy()
+
     def get_formation_id(self) -> str:
         """Get the formation ID."""
         return self.formation_id
@@ -2949,7 +2998,7 @@ class Formation:
             # File path - use FormationLoader to load and process
             try:
                 formation_loader = FormationLoader()
-                loaded_config = await formation_loader.load(schema, self.secrets_manager)
+                loaded_config, _, _ = await formation_loader.load(schema, self.secrets_manager)
 
                 # For individual components, extract the relevant section
                 if schema_type == "agent":

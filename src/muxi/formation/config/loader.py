@@ -97,9 +97,9 @@ class ConfigLoader:
     @staticmethod
     async def process_secrets(
         config: Dict[str, Any], secrets_manager: Optional[Any] = None
-    ) -> Dict[str, Any]:
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
-        Process secrets variables in the configuration.
+        Process secrets variables in the configuration and track secrets in use.
 
         Replaces ${{ secrets.SECRET_NAME }} patterns in string values with the
         corresponding secret values from the SecretsManager. This allows for
@@ -110,55 +110,76 @@ class ConfigLoader:
             secrets_manager: SecretsManager instance for retrieving secrets
 
         Returns:
-            Dict[str, Any]: The processed configuration with secrets
-            variables replaced with their values
+            Tuple of:
+            - Dict[str, Any]: The processed configuration with secrets replaced
+            - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
 
         Raises:
             ValueError: If a required secret is not found
         """
+        secrets_in_use = set()
+        placeholder_registry = {}
 
-        async def replace_secrets(obj: Any) -> Any:
+        async def replace_secrets(obj: Any, path: str = "") -> Any:
             if isinstance(obj, str):
                 # Find all ${{ secrets.SECRET_NAME }} patterns (whitespace tolerant)
                 secret_pattern = r"\$\{\{\s*secrets\.([A-Z0-9_]+)\s*\}\}"
                 matches = re.findall(secret_pattern, obj)
                 result = obj
 
-                # Replace each pattern with the secret value
+                # Track all secrets in use
                 for secret_name in matches:
-                    if secrets_manager is None:
-                        raise ValueError(
-                            f"Secret '${{{{ secrets.{secret_name} }}}}' found "
-                            f"but no SecretsManager provided"
-                        )
+                    secrets_in_use.add(secret_name)
 
-                    try:
-                        secret_value = await secrets_manager.get_secret(secret_name)
-                        if secret_value is None:
-                            raise ValueError(f"Secret '{secret_name}' not found in SecretsManager")
+                # Also find user.credentials patterns and track them as USER_CREDENTIALS_X
+                user_cred_pattern = r"\$\{\{\s*user\.credentials\.([a-zA-Z0-9_-]+)\s*\}\}"
+                user_cred_matches = re.findall(user_cred_pattern, obj)
+                for cred_name in user_cred_matches:
+                    # Track USER_CREDENTIALS_X secret as being in use
+                    secrets_in_use.add(f"USER_CREDENTIALS_{cred_name.upper().replace('-', '_')}")
 
-                        # Replace the pattern with the secret value
-                        pattern = rf"\$\{{\{{\s*secrets\.{secret_name}\s*\}}\}}"
-                        result = re.sub(pattern, secret_value, result)
+                # Check if this string contains any secret patterns
+                has_secrets = bool(matches) or bool(user_cred_matches)
 
-                    except Exception as e:
-                        raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}")
+                # If this string contains secrets, store the original placeholder in registry
+                if has_secrets and path:
+                    placeholder_registry[path] = obj
+
+                # Only process secrets if a secrets manager is provided
+                if secrets_manager is not None:
+                    # Replace each pattern with the secret value
+                    for secret_name in matches:
+                        try:
+                            secret_value = await secrets_manager.get_secret(secret_name)
+                            if secret_value is None:
+                                raise ValueError(f"Secret '{secret_name}' not found in SecretsManager")
+
+                            # Replace the pattern with the secret value
+                            pattern = rf"\$\{{\{{\s*secrets\.{secret_name}\s*\}}\}}"
+                            result = re.sub(pattern, secret_value, result)
+
+                        except Exception as e:
+                            raise ValueError(f"Failed to retrieve secret '{secret_name}': {str(e)}") from e
 
                 return result
             elif isinstance(obj, dict):
                 result = {}
                 for k, v in obj.items():
-                    result[k] = await replace_secrets(v)
+                    new_path = f"{path}.{k}" if path else k
+                    result[k] = await replace_secrets(v, new_path)
                 return result
             elif isinstance(obj, list):
                 result = []
-                for item in obj:
-                    result.append(await replace_secrets(item))
+                for i, item in enumerate(obj):
+                    new_path = f"{path}[{i}]"
+                    result.append(await replace_secrets(item, new_path))
                 return result
             else:
                 return obj
 
-        return await replace_secrets(config)
+        processed_config = await replace_secrets(config)
+        return processed_config, secrets_in_use, placeholder_registry
 
     @staticmethod
     def validate_config(config: Dict[str, Any]) -> None:
@@ -226,7 +247,7 @@ class ConfigLoader:
 
     async def load_and_process(
         self, path: str, secrets_manager: Optional[Any] = None
-    ) -> Dict[str, Any]:
+    ) -> tuple[Dict[str, Any], set[str], Dict[str, str]]:
         """
         Load, validate, and process a configuration file.
 
@@ -242,13 +263,16 @@ class ConfigLoader:
             secrets_manager: SecretsManager instance for secret interpolation
 
         Returns:
-            Dict[str, Any]: The processed configuration
+            Tuple of:
+            - Dict[str, Any]: The processed configuration
+            - set[str]: Set of secret names that are in use
+            - Dict[str, str]: Registry mapping paths to original placeholder values
 
         Raises:
             ValueError: If the configuration is invalid
             FileNotFoundError: If the file does not exist
         """
         config = self.load(path)
-        config = await self.process_secrets(config, secrets_manager)
+        config, secrets_in_use, placeholder_registry = await self.process_secrets(config, secrets_manager)
         self.validate_config(config)
-        return config
+        return config, secrets_in_use, placeholder_registry

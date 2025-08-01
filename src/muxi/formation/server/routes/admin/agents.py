@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Optional
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -17,7 +18,10 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
+from .....services.secrets.config_utils import get_agent_with_secrets_restored
+
 
 router = APIRouter(tags=["Agents"])
 
@@ -52,10 +56,15 @@ async def list_agents(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     # Get agents from formation config
-    agents = formation.config.get("agents", [])
+    agents = deepcopy(formation.config.get("agents", []))
 
-    # Create structured response
-    response = agent_list_response(agents, request_id)
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"agents": agents}
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
+    agents = temp_config.get("agents", [])
+
+    # Create structured response using spec-compliant format
+    response = agent_list_response(agents, request_id, use_generic_type=True)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 
@@ -113,11 +122,10 @@ async def get_agent(request: Request, agent_id: str) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # Find agent
-    agents = formation.config.get("agents", [])
-    agent = next((a for a in agents if a.get("id") == agent_id), None)
+    # Get agent with secrets restored
+    agent = get_agent_with_secrets_restored(formation, agent_id)
 
-    if not agent:
+    if agent is None:
         response = create_error_response(
             "AGENT_NOT_FOUND", f"Agent '{agent_id}' not found", None, request_id
         )

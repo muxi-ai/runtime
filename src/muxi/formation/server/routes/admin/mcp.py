@@ -7,6 +7,7 @@ requiring admin API key authentication.
 
 from typing import Dict, Any, Optional, List
 import uuid
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -18,7 +19,9 @@ from ...responses import (
     create_error_response,
 )
 from .....datatypes.api import APIEventType, APIObjectType
+from ...secrets import restore_secret_placeholders
 from ...utils import get_header_case_insensitive
+from .....services.secrets.config_utils import get_config_item_with_secrets_restored
 
 router = APIRouter(tags=["MCP"])
 
@@ -151,12 +154,16 @@ async def list_mcp_servers(request: Request) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    servers = formation.config.get("mcp", {}).get("servers", [])
+    servers = deepcopy(formation.config.get("mcp", {}).get("servers", []))
+
+    # Apply secret placeholder restoration directly to servers list
+    if servers:
+        servers = restore_secret_placeholders(servers, formation.secret_placeholders)
 
     response = create_success_response(
-        APIObjectType.MCP_SERVER_LIST,
+        APIObjectType.LIST,
         APIEventType.MCP_SERVER_LIST,
-        {"servers": servers, "count": len(servers)},
+        servers,
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -178,20 +185,20 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
 
     # Get existing servers to check for duplicates
     existing_servers = formation.config.get("mcp", {}).get("servers", [])
-    
+
     # Check if a server with the same name already exists
     if any(s.get("name") == server.name for s in existing_servers):
         response = create_error_response(
             "DUPLICATE_RESOURCE",
             f"MCP server with name '{server.name}' already exists",
             None,
-            request_id
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=409)
-    
+
     # Generate unique ID using UUID
     server_id = f"mcp-server-{uuid.uuid4().hex[:8]}"
-    
+
     # Ensure the generated ID is unique (very unlikely to collide with 8 hex chars)
     while any(s.get("id") == server_id for s in existing_servers):
         server_id = f"mcp-server-{uuid.uuid4().hex[:8]}"
@@ -204,7 +211,7 @@ async def create_mcp_server(request: Request, server: MCPServerCreate) -> JSONRe
         "env": server.env,
         "enabled": server.enabled,
     }
-    
+
     # TODO: Add server to formation configuration
     # For now, this just returns the created config without persisting
 
@@ -228,11 +235,10 @@ async def get_mcp_server(request: Request, server_id: str) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    # TODO: Find server in configuration
-    servers = formation.config.get("mcp", {}).get("servers", [])
-    server = next((s for s in servers if s.get("id") == server_id), None)
+    # Get server with secrets restored
+    server, _ = get_config_item_with_secrets_restored(formation, ["mcp", "servers"], server_id)
 
-    if not server:
+    if server is None:
         response = create_error_response(
             "MCP_SERVER_NOT_FOUND", f"MCP server '{server_id}' not found", None, request_id
         )
@@ -325,9 +331,9 @@ async def list_mcp_tools(request: Request) -> JSONResponse:
         )
 
     response = create_success_response(
-        APIObjectType.MCP_TOOL_LIST,
+        APIObjectType.LIST,
         APIEventType.MCP_TOOL_LIST,
-        {"tools": available_tools, "count": len(available_tools)},
+        available_tools,
         request_id,
     )
     return JSONResponse(content=response.model_dump(), status_code=200)
@@ -384,19 +390,20 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
     except ValueError as e:
         # Handle expected validation errors with specific messages
         # TODO: Add observability event for MCP tool validation error
-        response = create_error_response(
-            "INVALID_PARAMS", str(e), None, request_id
-        )
+        response = create_error_response("INVALID_PARAMS", str(e), None, request_id)
         return JSONResponse(content=response.model_dump(), status_code=400)
-    
-    except AttributeError as e:
+
+    except AttributeError:
         # Handle missing attributes/methods (e.g., formation components not available)
         # TODO: Add observability event for MCP tool configuration error
         response = create_error_response(
-            "TOOL_EXECUTION_ERROR", "Tool configuration error: required component not available", None, request_id
+            "TOOL_EXECUTION_ERROR",
+            "Tool configuration error: required component not available",
+            None,
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
-    
+
     except KeyError as e:
         # Handle missing required arguments
         # TODO: Add observability event for MCP tool argument error
@@ -404,16 +411,16 @@ async def call_mcp_tool(request: Request, tool_call: MCPToolCall) -> JSONRespons
             "INVALID_PARAMS", f"Missing required argument: {str(e)}", None, request_id
         )
         return JSONResponse(content=response.model_dump(), status_code=400)
-    
-    except Exception as e:
+
+    except Exception:
         # Handle unexpected errors without exposing internal details
         # TODO: Add observability event for MCP tool unexpected error with full details
         # Log the actual error internally but return generic message to client
-        import traceback
-        error_details = traceback.format_exc()  # This would be logged internally
-        
         response = create_error_response(
-            "TOOL_EXECUTION_ERROR", "An unexpected error occurred during tool execution", None, request_id
+            "TOOL_EXECUTION_ERROR",
+            "An unexpected error occurred during tool execution",
+            None,
+            request_id,
         )
         return JSONResponse(content=response.model_dump(), status_code=500)
 

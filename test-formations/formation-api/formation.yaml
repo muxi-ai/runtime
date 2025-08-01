@@ -5,8 +5,9 @@ description: "Multiple agents for testing routing and collaboration"
 # Server Configuration
 server:
   # Server binding configuration
-  host: "0.0.0.0"  # Default: 0.0.0.0 (bind to all interfaces)
-  port: 8271       # Default: 8271
+  host: "0.0.0.0"   # Default: 0.0.0.0 (bind to all interfaces)
+  port: 8271        # Default: 8271
+  access_log: true  # Enable access log for development
 
   # API Keys (auto-generated if not provided)
   api_keys:
