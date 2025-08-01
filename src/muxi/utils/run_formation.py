@@ -58,6 +58,7 @@ except ImportError:
 async def run_formation(formation_path: str):
     """Load and run a formation with its API server."""
     formation = Formation()
+    formation_loaded = False
 
     try:
         observability.observe(
@@ -71,6 +72,7 @@ async def run_formation(formation_path: str):
         )
 
         await formation.load(formation_path)
+        formation_loaded = True
 
         observability.observe(
             event_type=observability.ServerEvents.SERVER_STARTED,
@@ -95,7 +97,6 @@ async def run_formation(formation_path: str):
             },
             description="Shutting down formation due to keyboard interrupt...",
         )
-        await formation.stop()
 
     except ConfigurationNotFoundError as e:
         observability.observe(
@@ -223,6 +224,34 @@ async def run_formation(formation_path: str):
             description=f"Unexpected error: {e}",
         )
         sys.exit(1)
+
+    finally:
+        # Ensure formation is properly stopped to prevent resource leaks
+        if formation_loaded:
+            try:
+                await formation.stop()
+                observability.observe(
+                    event_type=observability.SystemEvents.CLEANUP,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "run_formation",
+                        "formation_path": formation_path,
+                    },
+                    description="Formation stopped successfully",
+                )
+            except Exception as e:
+                # Log but don't raise - we're already in cleanup
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.ERROR,
+                    data={
+                        "service": "run_formation",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "formation_path": formation_path,
+                    },
+                    description=f"Error stopping formation during cleanup: {e}",
+                )
 
 
 def main():

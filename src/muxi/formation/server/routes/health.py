@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 
 from ..responses import APIResponse, create_success_response
 from ....datatypes.api import APIEventType, APIObjectType
+from ....services import observability
 
 router = APIRouter(tags=["Health"])
 
@@ -29,7 +30,18 @@ def _check_formation_health(formation) -> bool:
         if not hasattr(formation, "config") or formation.config is None:
             return False
         return True
-    except Exception:
+    except Exception as e:
+        # Log the exception for debugging
+        observability.observe(
+            event_type=observability.SystemEvents.ERROR,
+            level=observability.EventLevel.ERROR,
+            data={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "function": "_check_formation_health",
+                "description": "Error checking formation health"
+            }
+        )
         return False
 
 
