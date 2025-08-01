@@ -6,6 +6,7 @@ requiring admin API key authentication.
 """
 
 from typing import Dict, Any
+from copy import deepcopy
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,7 @@ from ...responses import (
     create_success_response,
     create_error_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Async"])
@@ -42,6 +44,11 @@ async def get_async_config(request: Request) -> JSONResponse:
     request_id = getattr(request.state, "request_id", None)
 
     async_config = formation.config.get("async", {})
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"async": deepcopy(async_config)}
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
+    async_config = temp_config.get("async", {})
 
     response = create_success_response(
         APIObjectType.ASYNC, APIEventType.ASYNC_RETRIEVED, async_config, request_id
@@ -88,9 +95,7 @@ async def list_async_jobs(request: Request) -> JSONResponse:
     # TODO: Implement async job tracking
     request_id = getattr(request.state, "request_id", None)
 
-    response = create_success_response(
-        APIObjectType.JOB_LIST, APIEventType.JOB_LIST, {"jobs": [], "count": 0}, request_id
-    )
+    response = create_success_response(APIObjectType.LIST, APIEventType.JOB_LIST, [], request_id)
     return JSONResponse(content=response.model_dump(), status_code=200)
 
 

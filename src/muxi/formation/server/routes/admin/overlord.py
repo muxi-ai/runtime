@@ -5,6 +5,8 @@ These endpoints provide overlord configuration access,
 requiring admin API key authentication.
 """
 
+from copy import deepcopy
+
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
@@ -12,6 +14,7 @@ from ...responses import (
     APIResponse,
     create_success_response,
 )
+from ...secrets import restore_secret_placeholders
 from .....datatypes.api import APIEventType, APIObjectType
 
 router = APIRouter(tags=["Overlord"])
@@ -28,7 +31,12 @@ async def get_overlord_config(request: Request) -> JSONResponse:
     formation = request.app.state.formation
     request_id = getattr(request.state, "request_id", None)
 
-    overlord_config = formation.config.get("overlord", {})
+    overlord_config = deepcopy(formation.config.get("overlord", {}))
+
+    # Create a temporary config structure to apply placeholders
+    temp_config = {"overlord": overlord_config}
+    temp_config = restore_secret_placeholders(temp_config, formation.secret_placeholders)
+    overlord_config = temp_config.get("overlord", {})
 
     response = create_success_response(
         APIObjectType.OVERLORD, APIEventType.OVERLORD_RETRIEVED, overlord_config, request_id

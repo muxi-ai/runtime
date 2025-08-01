@@ -1,0 +1,1218 @@
+openapi: 3.0.0
+info:
+  title: MUXI Formation API (Implemented)
+  description: |
+    This OpenAPI specification documents the CURRENTLY IMPLEMENTED endpoints of the MUXI Formation API.
+    
+    ## Authentication
+    The API uses two types of API keys:
+    - **Admin Key**: Required for formation management endpoints (`X-Muxi-Admin-Key` header)
+    - **Client Key**: Required for user interaction endpoints (`X-Muxi-Client-Key` header)
+    
+    ## Response Format
+    All API responses use a consistent envelope format. See the components section for details.
+    
+    ## Implementation Status
+    This spec only includes endpoints that are fully or partially implemented. For the complete
+    planned API, see the full specification at `/schemas/api/formation-api-v1.yaml`.
+  version: 1.0.0-implemented
+  contact:
+    name: MUXI Team
+    url: https://muxi.ai
+    email: support@muxi.ai
+
+servers:
+  - url: http://localhost:8271/v1
+    description: Local development server
+
+security:
+  - AdminKey: []
+  - ClientKey: []
+
+paths:
+  # Public endpoints (no auth)
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+
+  # Configuration & Status
+  /config:
+    get:
+      tags: [Configuration]
+      summary: Get formation configuration summary
+      description: Returns formation metadata with resource links instead of full configuration
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Formation configuration summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                config:
+                  value:
+                    object: "formation_config"
+                    timestamp: 1706616000000
+                    type: "config.retrieved"
+                    request:
+                      id: "req_config123"
+                      idempotency_key: null
+                    success: true
+                    error: null
+                    data:
+                      formation_id: "my-formation"
+                      version: "1.0.0"
+                      description: "Production formation"
+                      schema_version: "1.0.0"
+                      agents:
+                        total: 3
+                        resource: "/v1/agents"
+                      secrets:
+                        total: 5
+                        resource: "/v1/secrets"
+                      mcp:
+                        default_retry_attempts: 3
+                        default_timeout_seconds: 30
+                        servers:
+                          total: 2
+                          resource: "/v1/mcp/servers"
+                      overlord:
+                        resource: "/v1/overlord"
+                      llm:
+                        resource: "/v1/llm/settings"
+                      memory:
+                        resource: "/v1/memory"
+                      async:
+                        resource: "/v1/async"
+                      scheduler:
+                        resource: "/v1/scheduler"
+                      a2a:
+                        resource: "/v1/a2a"
+                      logging:
+                        resource: "/v1/logging"
+
+  /status:
+    get:
+      tags: [Configuration]
+      summary: Get formation runtime status with stats
+      description: |-
+        Returns real-time formation status including:
+        - Formation details (uses ID as name if name not configured)
+        - Agent and MCP server counts
+        - Runtime statistics (uptime, memory, CPU, requests)
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Formation status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              examples:
+                status:
+                  value:
+                    object: "formation_status"
+                    timestamp: 1706616000000
+                    type: "formation.status.retrieved"
+                    request:
+                      id: "req_status123"
+                      idempotency_key: null
+                    success: true
+                    error: null
+                    data:
+                      formation:
+                        id: "my-formation"
+                        name: "my-formation"
+                        description: "Production formation"
+                        version: "1.0.0"
+                      agents:
+                        count: 3
+                        active: 2
+                      mcp_servers:
+                        count: 2
+                        active: 2
+                      stats:
+                        running:
+                          seconds: 3600
+                          since: 1706612400
+                        memory:
+                          working_memory_mb: 512
+                          memory_usage_mb: 256.7
+                        requests:
+                          total: 100
+                          active: 10
+                        buffer_size: 1000
+                        cpu_percent: 12.5
+
+  # Overlord
+  /overlord:
+    get:
+      tags: [Overlord]
+      summary: Get overlord configuration
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Overlord configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /overlord/persona:
+    get:
+      tags: [Overlord]
+      summary: Get overlord persona
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Overlord persona text
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Secrets
+  #
+  # Note: Secret names are case-insensitive and normalized. All names are converted to uppercase
+  # with non-alphanumeric characters replaced by underscores. For example:
+  # - "api-key", "API_KEY", "Api-Key" all refer to the same secret: "API_KEY"
+  # - "my-secret-123" becomes "MY_SECRET_123"
+  # - Special characters are replaced: "user@email" becomes "USER_EMAIL"
+  /secrets:
+    get:
+      tags: [Secrets]
+      summary: List all secrets (masked values)
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: List of secret keys with masked values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecretListResponse'
+    
+    post:
+      tags: [Secrets]
+      summary: Create a new secret
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, value]
+              properties:
+                key:
+                  type: string
+                value:
+                  type: string
+      responses:
+        '201':
+          description: Secret created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Secret already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /secrets/{key}:
+    put:
+      tags: [Secrets]
+      summary: Update an existing secret
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/SecretKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+      responses:
+        '200':
+          description: Secret updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Secret not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      tags: [Secrets]
+      summary: Delete a secret
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/SecretKey'
+      responses:
+        '200':
+          description: Secret deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Secret not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Secret is in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # Agents
+  /agents:
+    get:
+      tags: [Agents]
+      summary: List all agents
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: List of agents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentListResponse'
+    
+    post:
+      tags: [Agents]
+      summary: Create a new agent
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentCreate'
+      responses:
+        '201':
+          description: Agent created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: Agent already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /agents/{agent_id}:
+    get:
+      tags: [Agents]
+      summary: Get a specific agent
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    patch:
+      tags: [Agents]
+      summary: Update an agent
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentUpdate'
+      responses:
+        '200':
+          description: Agent updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      tags: [Agents]
+      summary: Delete an agent
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/AgentId'
+      responses:
+        '200':
+          description: Agent deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          description: Cannot delete non-API agent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Agent not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # MCP Configuration
+  /mcp:
+    get:
+      tags: [MCP]
+      summary: Get MCP defaults
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: MCP default configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    
+    patch:
+      tags: [MCP]
+      summary: Update MCP defaults
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_retry_attempts:
+                  type: integer
+                default_timeout_seconds:
+                  type: integer
+      responses:
+        '200':
+          description: MCP defaults updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /mcp/servers:
+    get:
+      tags: [MCP]
+      summary: List MCP servers
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: List of MCP servers
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    
+    post:
+      tags: [MCP]
+      summary: Create MCP server
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MCPServerCreate'
+      responses:
+        '201':
+          description: MCP server created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '409':
+          description: MCP server already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mcp/servers/{server_id}:
+    get:
+      tags: [MCP]
+      summary: Get MCP server
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: MCP server details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: MCP server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    patch:
+      tags: [MCP]
+      summary: Update MCP server
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                active:
+                  type: boolean
+      responses:
+        '200':
+          description: MCP server updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '404':
+          description: MCP server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    
+    delete:
+      tags: [MCP]
+      summary: Delete MCP server
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/ServerId'
+      responses:
+        '200':
+          description: MCP server deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+        '403':
+          description: Cannot delete non-API MCP server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: MCP server not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /mcp/tools:
+    get:
+      tags: [MCP]
+      summary: List available MCP tools
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: List of available tools
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /mcp/tools/call:
+    post:
+      tags: [MCP]
+      summary: Execute MCP tool
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_id, tool_name]
+              properties:
+                server_id:
+                  type: string
+                tool_name:
+                  type: string
+                arguments:
+                  type: object
+      responses:
+        '200':
+          description: Tool execution result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # LLM Settings
+  /llm/settings:
+    get:
+      tags: [LLM]
+      summary: Get LLM settings
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: LLM configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    
+    patch:
+      tags: [LLM]
+      summary: Update LLM settings
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                temperature:
+                  type: number
+                max_tokens:
+                  type: integer
+                timeout_seconds:
+                  type: integer
+      responses:
+        '200':
+          description: LLM settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /llm/settings/{item}:
+    delete:
+      tags: [LLM]
+      summary: Reset LLM setting to default
+      security:
+        - AdminKey: []
+      parameters:
+        - name: item
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [temperature, max_tokens, timeout_seconds]
+      responses:
+        '200':
+          description: Setting reset to default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Logging
+  /logging:
+    get:
+      tags: [Logging]
+      summary: Get logging configuration
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Logging streams configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /logging/streams/{name}:
+    patch:
+      tags: [Logging]
+      summary: Update logging stream
+      security:
+        - AdminKey: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                level:
+                  type: string
+                  enum: [debug, info, warning, error]
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Logging stream updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Memory
+  /memory:
+    get:
+      tags: [Memory]
+      summary: Get memory configuration
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Memory configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    
+    patch:
+      tags: [Memory]
+      summary: Update memory configuration
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                buffer:
+                  type: object
+                  properties:
+                    size:
+                      type: integer
+                    multiplier:
+                      type: integer
+                    vector_search:
+                      type: boolean
+                working:
+                  type: object
+                  properties:
+                    max_memory_mb:
+                      type: integer
+                    fifo_interval_min:
+                      type: integer
+      responses:
+        '200':
+          description: Memory configuration updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /memory/{item}:
+    delete:
+      tags: [Memory]
+      summary: Reset memory setting to default
+      security:
+        - AdminKey: []
+      parameters:
+        - name: item
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Setting reset to default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /memory/buffers:
+    delete:
+      tags: [Memory]
+      summary: Clear all memory buffers
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Memory buffers cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Async
+  /async:
+    get:
+      tags: [Async]
+      summary: Get async settings
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Async configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    
+    patch:
+      tags: [Async]
+      summary: Update async settings
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                threshold_seconds:
+                  type: integer
+                webhook_url:
+                  type: string
+                webhook_retries:
+                  type: integer
+                webhook_timeout:
+                  type: integer
+      responses:
+        '200':
+          description: Async settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Scheduler
+  /scheduler:
+    get:
+      tags: [Scheduler]
+      summary: Get scheduler configuration
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: Scheduler configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+    
+    patch:
+      tags: [Scheduler]
+      summary: Update scheduler settings
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                timezone:
+                  type: string
+                check_interval_minutes:
+                  type: integer
+                max_concurrent_jobs:
+                  type: integer
+                max_failures_before_pause:
+                  type: integer
+      responses:
+        '200':
+          description: Scheduler settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /scheduler/jobs/{job_id}:
+    delete:
+      tags: [Scheduler]
+      summary: Delete scheduled job
+      security:
+        - AdminKey: []
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # A2A
+  /a2a:
+    get:
+      tags: [A2A]
+      summary: Get A2A configuration
+      security:
+        - AdminKey: []
+      responses:
+        '200':
+          description: A2A configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /a2a/outbound:
+    patch:
+      tags: [A2A]
+      summary: Update A2A outbound settings
+      security:
+        - AdminKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                default_retry_attempts:
+                  type: integer
+                default_timeout_seconds:
+                  type: integer
+      responses:
+        '200':
+          description: A2A settings updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  /a2a/outbound/{item}:
+    delete:
+      tags: [A2A]
+      summary: Reset A2A setting to default
+      security:
+        - AdminKey: []
+      parameters:
+        - name: item
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Setting reset to default
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+
+  # Client Endpoints
+  /chat:
+    post:
+      tags: [Chat]
+      summary: Send message to formation
+      security:
+        - ClientKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatRequest'
+      responses:
+        '200':
+          description: Streaming response
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: Server-sent events stream
+        '202':
+          description: Async job accepted (not yet implemented)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  request_id:
+                    type: string
+                  mode:
+                    type: string
+                  estimated_seconds:
+                    type: integer
+
+components:
+  securitySchemes:
+    AdminKey:
+      type: apiKey
+      in: header
+      name: X-Muxi-Admin-Key
+    
+    ClientKey:
+      type: apiKey
+      in: header
+      name: X-Muxi-Client-Key
+
+  parameters:
+    SecretKey:
+      name: key
+      in: path
+      required: true
+      description: Name of the secret key (case-insensitive, will be normalized to uppercase)
+      schema:
+        type: string
+    
+    AgentId:
+      name: agent_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Agent identifier
+    
+    ServerId:
+      name: server_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: MCP server identifier
+    
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Job identifier
+
+  schemas:
+    # Request bodies
+    AgentCreate:
+      type: object
+      required: [id, name, description, model]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        model:
+          type: string
+        active:
+          type: boolean
+          default: true
+    
+    AgentUpdate:
+      type: object
+      properties:
+        active:
+          type: boolean
+        description:
+          type: string
+        model:
+          type: string
+    
+    MCPServerCreate:
+      type: object
+      required: [id, type, endpoint]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [http, command]
+        endpoint:
+          type: string
+        description:
+          type: string
+        active:
+          type: boolean
+          default: true
+    
+    ChatRequest:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        user_id:
+          type: string
+          default: "0"
+        agent_id:
+          type: string
+        session_id:
+          type: string
+        group_id:
+          type: string
+        request_id:
+          type: string
+        mode:
+          type: string
+          default: sync
+          enum: [sync, async]
+        files:
+          type: array
+          items:
+            type: object
+
+    # Response envelope
+    APIRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        idempotency_key:
+          type: string
+          nullable: true
+    
+    APIError:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        trace:
+          type: string
+          nullable: true
+    
+    SuccessResponse:
+      type: object
+      properties:
+        object:
+          type: string
+        timestamp:
+          type: integer
+        type:
+          type: string
+        request:
+          $ref: '#/components/schemas/APIRequest'
+        success:
+          type: boolean
+          example: true
+        error:
+          type: null
+        data:
+          type: object
+    
+    ErrorResponse:
+      type: object
+      properties:
+        object:
+          type: string
+          example: error
+        timestamp:
+          type: integer
+        type:
+          type: string
+        request:
+          $ref: '#/components/schemas/APIRequest'
+        success:
+          type: boolean
+          example: false
+        error:
+          $ref: '#/components/schemas/APIError'
+        data:
+          type: object
+          example: {}
+    
+    # Specific response types
+    AgentListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                agents:
+                  type: array
+                  items:
+                    type: object
+                count:
+                  type: integer
+    
+    SecretListResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessResponse'
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                secrets:
+                  type: object
+                  additionalProperties:
+                    type: string
+                    example: "••••••••"
