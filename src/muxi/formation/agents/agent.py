@@ -182,6 +182,27 @@ class Agent:
             description=f"Agent initialized: {self.agent_id}",
         )
 
+        # Register with A2A service for internal routing
+        if self.a2a_internal:
+            try:
+                from ...services.a2a.client import A2AService
+                a2a_service = A2AService()
+                a2a_service.register_internal_handler(
+                    self.agent_id,
+                    self._handle_generic_a2a_message
+                )
+            except Exception as e:
+                # Log but don't fail agent initialization
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "agent_id": self.agent_id,
+                        "error": str(e),
+                    },
+                    description=f"Failed to register agent with A2A service: {str(e)}",
+                )
+
     def get_mcp_service(self) -> MCPService:
         """
         Get the centralized MCP service for tool integrations.
@@ -2910,79 +2931,18 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
         wait_for_response: bool = True,
         timeout: int = 30,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Send a message to another agent via A2A protocol.
+        """Send A2A message via service layer."""
+        from ...services.a2a import send_message
 
-        Args:
-            target_agent_id: ID of the target agent.
-            message: Message content to send.
-            message_type: Type of message (request, response, notification).
-            context: Optional context data for the message.
-            wait_for_response: Whether to wait for a response.
-            timeout: Timeout in seconds for waiting for response.
-
-        Returns:
-            The response from the target agent if wait_for_response is True.
-        """
-        # Generate unique message ID
-        message_id = f"msg_{generate_nanoid()}"
-
-        observability.observe(
-            event_type=observability.ConversationEvents.A2A_MESSAGE_SENT,
-            level=observability.EventLevel.INFO,
-            data={
-                "source_agent_id": self.agent_id,
-                "target_agent_id": target_agent_id,
-                "message_id": message_id,
-                "message_type": message_type,
-                "wait_for_response": wait_for_response,
-            },
-            description=f"Agent {self.agent_id} sending A2A message to {target_agent_id}",
+        return await send_message(
+            source_agent_id=self.agent_id,
+            target_agent_id=target_agent_id,
+            message=message,
+            message_type=message_type,
+            context=context,
+            wait_for_response=wait_for_response,
+            timeout=timeout,
         )
-
-        try:
-            # Check if target is internal (same formation) or external
-            if self.overlord and hasattr(self.overlord, "get_agent"):
-                target_agent = self.overlord.get_agent(target_agent_id)
-                if target_agent and self.a2a_internal:
-                    # Internal A2A message
-                    return await self._send_local_a2a_message(
-                        target_agent_id,
-                        message,
-                        message_type,
-                        context,
-                        wait_for_response,
-                        timeout,
-                        message_id,
-                    )
-
-            # External A2A message (if enabled)
-            if self.a2a_external:
-                return await self._send_external_a2a_message(
-                    target_agent_id,
-                    message,
-                    message_type,
-                    context,
-                    wait_for_response,
-                    timeout,
-                    message_id,
-                )
-
-            raise Exception(f"Agent {target_agent_id} not found and external A2A disabled")
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "source_agent_id": self.agent_id,
-                    "target_agent_id": target_agent_id,
-                    "message_id": message_id,
-                    "error": str(e),
-                },
-                description=f"A2A message failed: {str(e)}",
-            )
-            raise
 
     async def _send_local_a2a_message(
         self,
@@ -3119,65 +3079,17 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
         context: Optional[Dict[str, Any]] = None,
         message_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Handle incoming A2A message from another agent.
+        """Handle A2A message via service layer."""
+        from ...services.a2a import handle_message
 
-        Args:
-            source_agent_id: ID of the agent sending the message.
-            message: The message content.
-            message_type: Type of message (request, response, notification).
-            context: Optional context data.
-            message_id: Optional message ID for tracking.
-
-        Returns:
-            Response data if this is a request, None for notifications.
-        """
-        observability.observe(
-            event_type=observability.ConversationEvents.A2A_MESSAGE_RECEIVED,
-            level=observability.EventLevel.INFO,
-            data={
-                "source_agent_id": source_agent_id,
-                "target_agent_id": self.agent_id,
-                "message_id": message_id,
-                "message_type": message_type,
-            },
-            description=f"Agent {self.agent_id} received A2A message from {source_agent_id}",
+        return await handle_message(
+            agent=self,
+            source_agent_id=source_agent_id,
+            message=message,
+            message_type=message_type,
+            context=context,
+            message_id=message_id,
         )
-
-        try:
-            # Handle different message types
-            if message_type == "consultation":
-                return await self._handle_consultation_request(
-                    source_agent_id, message, context or {}, message_id
-                )
-            elif message_type == "information_sharing":
-                await self._handle_information_sharing(
-                    source_agent_id, message, context or {}, message_id
-                )
-                return None
-            elif message_type == "peer_coordination":
-                return await self._handle_peer_coordination(
-                    source_agent_id, message, context or {}, message_id
-                )
-            else:
-                # Generic message handling
-                return await self._handle_generic_a2a_message(
-                    source_agent_id, message, message_type, context, message_id
-                )
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "source_agent_id": source_agent_id,
-                    "target_agent_id": self.agent_id,
-                    "message_id": message_id,
-                    "error": str(e),
-                },
-                description=f"A2A message handling failed: {str(e)}",
-            )
-            raise
 
     async def _handle_consultation_request(
         self,
