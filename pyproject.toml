@@ -30,7 +30,7 @@ dependencies = [
     "psutil>=5.9.0",  # System and process utilities
 
     # MCP Package
-    "mcp>=1.9.0",  # Required for Streamable HTTP transport support
+    "mcp>=1.12.3",  # Required for Streamable HTTP transport support
 
     # File processing and utilities
     "aiofiles>=23.2.0",

@@ -43,6 +43,7 @@ src/muxi/formation/__init__.py
 src/muxi/formation/formation.py
 src/muxi/formation/initialization.py
 src/muxi/formation/agents/__init__.py
+src/muxi/formation/agents/a2a_sdk_adapter.py
 src/muxi/formation/agents/agent.py
 src/muxi/formation/agents/knowledge/__init__.py
 src/muxi/formation/agents/knowledge/base.py
@@ -158,6 +159,7 @@ src/muxi/formation/server/routes/client/chat.py
 src/muxi/formation/server/routes/client/events.py
 src/muxi/formation/server/routes/client/jobs.py
 src/muxi/formation/server/routes/client/memory.py
+src/muxi/formation/services/a2a/__init__.py
 src/muxi/formation/utils/__init__.py
 src/muxi/formation/utils/api_keys.py
 src/muxi/formation/utils/format_utils.py
@@ -180,6 +182,7 @@ src/muxi/services/a2a/__init__.py
 src/muxi/services/a2a/auth.py
 src/muxi/services/a2a/cache_manager.py
 src/muxi/services/a2a/card_generator.py
+src/muxi/services/a2a/client.py
 src/muxi/services/a2a/discovery.py
 src/muxi/services/a2a/inbound_auth.py
 src/muxi/services/a2a/models.py
@@ -300,6 +303,9 @@ src/muxi/utils/run_formation.py
 src/muxi/utils/user_dirs.py
 src/muxi/utils/version.py
 src/muxi/utils/zmq_decrypt.py
+tests/test_a2a_sdk_migration_integration.py
+tests/test_a2a_sdk_migration_phase1.py
+tests/test_a2a_sdk_migration_phase2.py
 tests/test_async_database.py
 tests/test_async_formation_fix.py
 tests/test_auto_suppress.py

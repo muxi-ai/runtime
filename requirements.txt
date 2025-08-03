@@ -18,7 +18,7 @@ onellm>=0.1.0
 a2a-sdk>=0.3  # Google's Agent-to-Agent SDK for inter-agent communication
 
 # MCP Package
-mcp>=1.9.0
+mcp>=1.12.3
 
 # File processing and utilities
 aiofiles>=23.2.0
