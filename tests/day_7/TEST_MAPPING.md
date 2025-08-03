@@ -8,7 +8,7 @@ This document maps the test requirements from the comprehensive test plan to the
 ### Test 7B1: Internal A2A Communication (within formation)
 **Requirement**: Test agents communicating within the same formation to collaborate on multi-specialty tasks.
 
-**Implementation File**: `test_internal_a2a_communication.py`
+**Implementation File**: `test_internal_a2a_communication.py` (formerly test_a2a_overlord_chat.py)
 
 **Test Scenarios**:
 1. **Multi-Specialty Request**: User asks for help with both Python programming and database design
