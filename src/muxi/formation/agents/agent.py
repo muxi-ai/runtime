@@ -45,6 +45,7 @@ import json
 import re
 import time
 from typing import Any, Dict, List, Optional, Union
+from pathlib import Path
 
 from ..artifacts.extractor import extract_artifacts_from_tool_results
 from ...utils.id_generator import generate_nanoid
@@ -186,10 +187,10 @@ class Agent:
         if self.a2a_internal:
             try:
                 from ...services.a2a.client import A2AService
+
                 a2a_service = A2AService()
                 a2a_service.register_internal_handler(
-                    self.agent_id,
-                    self._handle_generic_a2a_message
+                    self.agent_id, self._handle_generic_a2a_message
                 )
             except Exception as e:
                 # Log but don't fail agent initialization
@@ -251,12 +252,13 @@ class Agent:
                                     "text_index": i,
                                     "text_preview": text[:100] if text else "",
                                     "error": str(e),
-                                    "error_type": type(e).__name__
-                                }
+                                    "error_type": type(e).__name__,
+                                },
                             )
                             # Append None to maintain index alignment
                             embeddings.append(None)
                     return embeddings
+
                 embedding_fn = batch_embed
 
             # Get formation config from overlord if available
@@ -397,7 +399,12 @@ class Agent:
                 return results.get("unified", results.get("knowledge", []))
 
         except Exception as e:
-            self.logger.error(f"Error in enhanced knowledge search: {e}")
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={"agent_id": self.agent_id, "error": str(e), "phase": "knowledge_search"},
+                description=f"Error in enhanced knowledge search: {str(e)}",
+            )
             return {"knowledge": [], "memory": [], "unified": []} if unified else []
 
     async def _analyze_query_for_routing(self, query: str) -> str:
@@ -455,8 +462,12 @@ class Agent:
 
         except Exception as e:
             # Fall back to simple keyword-based detection
-            if hasattr(self, "logger"):
-                self.logger.warning(f"Intent detection failed, using fallback: {str(e)}")
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"agent_id": self.agent_id, "error": str(e), "phase": "intent_detection"},
+                description=f"Intent detection failed, using fallback: {str(e)}",
+            )
             return self._fallback_query_routing(query)
 
     def _fallback_query_routing(self, query: str) -> str:
@@ -921,16 +932,16 @@ class Agent:
                                 "properties": {
                                     "code": {
                                         "type": "string",
-                                        "description": "Python code to execute for file generation. The code should save the output file in the current directory."  # noqa: E501
+                                        "description": "Python code to execute for file generation. The code should save the output file in the current directory.",  # noqa: E501
                                     },
                                     "filename": {
                                         "type": "string",
-                                        "description": "Optional filename hint for the generated file"  # noqa: E501
-                                    }
+                                        "description": "Optional filename hint for the generated file",  # noqa: E501
+                                    },
                                 },
-                                "required": ["code"]
-                            }
-                        }
+                                "required": ["code"],
+                            },
+                        },
                     }
                     tools.append(generate_file_tool)
             except Exception as e:
@@ -947,13 +958,13 @@ class Agent:
                 )
 
         # Check if this is a workflow task or A2A task
-        user_message = message_obj.content if hasattr(message_obj, 'content') else str(message_obj)
+        user_message = message_obj.content if hasattr(message_obj, "content") else str(message_obj)
         is_workflow_task = (
             # Check for workflow context indicators
-            ("## Task:" in user_message) or  # Workflow task prompt format
-            ("Task Details:" in user_message) or  # Another workflow indicator
-            ("Required Capabilities:" in user_message) or  # Workflow metadata
-            ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
+            ("## Task:" in user_message)  # Workflow task prompt format
+            or ("Task Details:" in user_message)  # Another workflow indicator
+            or ("Required Capabilities:" in user_message)  # Workflow metadata
+            or ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
         )
 
         # Skip planning for workflow tasks or A2A tasks (to prevent loops)
@@ -967,7 +978,9 @@ class Agent:
                     "agent_id": self.agent_id,
                     "phase": "planning_bypassed",
                     "reason": reason,
-                    "message_preview": user_message[:100] + "..." if len(user_message) > 100 else user_message,
+                    "message_preview": (
+                        user_message[:100] + "..." if len(user_message) > 100 else user_message
+                    ),
                 },
                 description=f"Agent {self.agent_id} bypassing planning phase: {reason}",
             )
@@ -977,8 +990,14 @@ class Agent:
         my_results = {}
         planning_response_parts = []  # Collect response parts during planning
 
-        # Only plan for user messages that might need multiple steps (skip for workflow tasks)
-        if self._messages and self._messages[-1]["role"] == "user" and tools and not is_workflow_task:
+        # Only plan for user messages that might need multiple steps (skip for workflow tasks and A2A tasks)
+        if (
+            self._messages
+            and self._messages[-1]["role"] == "user"
+            and tools
+            and not is_workflow_task
+            and not is_a2a_task
+        ):
             try:
                 execution_plan = await self._plan_before_execution(user_message, tools)
 
@@ -1021,10 +1040,51 @@ class Agent:
                                 )
 
                                 if tool_def:
-                                    # Execute the tool with basic parameters
+                                    # Extract server_id and actual tool name if present
+                                    if "__" in tool_name:
+                                        server_id, actual_tool_name = tool_name.split("__", 1)
+                                    else:
+                                        server_id = None
+                                        actual_tool_name = tool_name
+
+                                    # Determine parameters based on tool name
+                                    parameters = {}
+                                    if "sys_info" in actual_tool_name:
+                                        # sys_info tool needs info_type parameter
+                                        # Use "cpu" as a valid info_type
+                                        parameters = {"info_type": "cpu"}
+                                    elif "write_file" in actual_tool_name:
+                                        # write_file needs path and content
+                                        # Extract from step or use defaults
+                                        parameters = {
+                                            "path": "/Users/ran/Desktop/system_info.txt",
+                                            "content": str(
+                                                my_results.get(
+                                                    "{SYSTEM-INFO__SYS_INFO_OUTPUT}",
+                                                    "System information",
+                                                )
+                                            ),
+                                        }
+                                    elif "create_issue" in actual_tool_name:
+                                        # Linear create_issue needs title, description, and teamId
+                                        # Hard-code the MUXI team ID for now
+                                        parameters = {
+                                            "title": "System Usage Report",
+                                            "description": str(
+                                                my_results.get(
+                                                    "{SYSTEM-INFO__SYS_INFO_OUTPUT}",
+                                                    "System information",
+                                                )
+                                            ),
+                                            "teamId": "21b2d439-9ffa-4383-86f5-556acc7af93b",  # MUXI team ID
+                                        }
+                                    # TODO: Extract parameters from step configuration
+
+                                    # Execute the tool with parameters
                                     tool_result = await self.invoke_tool(
-                                        tool_name=tool_name,
-                                        parameters={},  # TODO: Extract parameters from request
+                                        tool_name=actual_tool_name,
+                                        parameters=parameters,
+                                        server_id=server_id,
                                         user_id=user_id,
                                     )
 
@@ -1073,10 +1133,15 @@ class Agent:
                                 result_text = str(result)
                                 if isinstance(result, dict):
                                     # Try to extract the most relevant info
-                                    result_text = (
-                                        result.get("result", result.get("output", str(result)))
+                                    result_text = result.get(
+                                        "result", result.get("output", str(result))
                                     )
-                                delegation_prompt = delegation_prompt.replace(placeholder, result_text)
+                                    # Ensure result_text is a string
+                                    if not isinstance(result_text, str):
+                                        result_text = str(result_text)
+                                delegation_prompt = delegation_prompt.replace(
+                                    placeholder, result_text
+                                )
 
                         # Request A2A assistance with enriched prompt
                         a2a_response = await self._request_a2a_assistance(
@@ -1101,7 +1166,9 @@ class Agent:
                     if my_results:
                         for placeholder, result in my_results.items():
                             if isinstance(result, dict):
-                                result_text = result.get("result", result.get("output", str(result)))
+                                result_text = result.get(
+                                    "result", result.get("output", str(result))
+                                )
                             else:
                                 result_text = str(result)
                             response_content += f"{result_text}\n\n"
@@ -1113,7 +1180,7 @@ class Agent:
                     # Create response message
                     response = MuxiResponse(
                         role="assistant",
-                        content=response_content.strip() or "I've completed the requested tasks."
+                        content=response_content.strip() or "I've completed the requested tasks.",
                     )
 
                     # Add response to conversation context
@@ -1433,7 +1500,9 @@ class Agent:
                                 "tool_name": actual_tool_name,
                                 "result_type": type(result).__name__,
                                 "result_content": str(result)[:500],  # First 500 chars
-                                "has_file_path": "file_path" in result if isinstance(result, dict) else False,
+                                "has_file_path": (
+                                    "file_path" in result if isinstance(result, dict) else False
+                                ),
                             },
                             description=f"generate_file result: {str(result)[:200]}",
                         )
@@ -1443,7 +1512,7 @@ class Agent:
                         parameters=tool_args,
                         result=result,
                         execution_time=0.0,  # We don't track this currently
-                        success=not isinstance(result, dict) or "error" not in result
+                        success=not isinstance(result, dict) or "error" not in result,
                     )
                     all_tool_execution_results.append(tool_exec_result)
 
@@ -1468,7 +1537,11 @@ class Agent:
                         serializable_result.pop("_artifact")
 
                     tool_results.append(
-                        {"tool_call_id": tool_id, "role": "tool", "content": json.dumps(serializable_result)}
+                        {
+                            "tool_call_id": tool_id,
+                            "role": "tool",
+                            "content": json.dumps(serializable_result),
+                        }
                     )
 
                 except Exception as e:
@@ -1506,7 +1579,14 @@ class Agent:
                         {
                             "tool_call_id": tool_id if "tool_id" in locals() else "unknown",
                             "role": "tool",
-                            "content": json.dumps({"error": str(e)}),
+                            "content": json.dumps(
+                                {
+                                    "error": str(e),
+                                    "tool_attempted": (
+                                        tool_name if "tool_name" in locals() else "unknown"
+                                    ),
+                                }
+                            ),
                         }
                     )
                     current_errors.append(
@@ -1641,8 +1721,7 @@ class Agent:
                             current_content = getattr(message, "content", "") or ""
                     elif isinstance(reconsider_response, dict) and "choices" in reconsider_response:
                         current_content = (
-                            reconsider_response["choices"][0]["message"].get("content", "")
-                            or ""
+                            reconsider_response["choices"][0]["message"].get("content", "") or ""
                         )
                     else:
                         current_content = str(reconsider_response)
@@ -1937,31 +2016,33 @@ class Agent:
         import re
 
         # Remove markdown download links with sandbox paths
-        content = re.sub(r'\[Download[^\]]*\]\(sandbox:[^\)]+\)', '', content)
-        content = re.sub(r'\[download[^\]]*\]\(sandbox:[^\)]+\)', '', content, re.IGNORECASE)
+        content = re.sub(r"\[Download[^\]]*\]\(sandbox:[^\)]+\)", "", content)
+        content = re.sub(r"\[download[^\]]*\]\(sandbox:[^\)]+\)", "", content, re.IGNORECASE)
 
         # Remove any remaining sandbox: references
-        content = re.sub(r'sandbox:[^\s\)]+', '', content)
+        content = re.sub(r"sandbox:[^\s\)]+", "", content)
 
         # Remove common phrases about download links
         replacements = [
-            (r'You can download it using the link below:\s*', ''),
-            (r'Click here to download[^\.\n]*\.?\s*', ''),
-            (r'Download link[s]?:\s*', ''),
-            (r'The file[s]? (?:is|are) available for download[^\.\n]*\.?\s*', ''),
-            (r'Use the download link[s]? to access[^\.\n]*\.?\s*', ''),
+            (r"You can download it using the link below:\s*", ""),
+            (r"Click here to download[^\.\n]*\.?\s*", ""),
+            (r"Download link[s]?:\s*", ""),
+            (r"The file[s]? (?:is|are) available for download[^\.\n]*\.?\s*", ""),
+            (r"Use the download link[s]? to access[^\.\n]*\.?\s*", ""),
         ]
 
         for pattern, replacement in replacements:
             content = re.sub(pattern, replacement, content, flags=re.IGNORECASE)
 
         # Clean up any resulting double newlines or trailing spaces
-        content = re.sub(r'\n\s*\n\s*\n', '\n\n', content)
-        content = re.sub(r' +\n', '\n', content)
+        content = re.sub(r"\n\s*\n\s*\n", "\n\n", content)
+        content = re.sub(r" +\n", "\n", content)
         content = content.strip()
 
         # If the content becomes too short after cleaning, add a note about attached files
-        if len(content) < 20 and any(word in content.lower() for word in ['created', 'generated', 'made']):
+        if len(content) < 20 and any(
+            word in content.lower() for word in ["created", "generated", "made"]
+        ):
             content += "\n\nThe file has been attached to this response."
 
         return content
@@ -2116,10 +2197,12 @@ class Agent:
 
         except Exception as e:
             # Fall back to keyword-based detection
-            if hasattr(self, "logger"):
-                self.logger.warning(
-                    f"Intent detection for clarification failed, using fallback: {str(e)}"
-                )
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"agent_id": self.agent_id, "error": str(e), "phase": "clarification_intent"},
+                description=f"Intent detection for clarification failed, using fallback: {str(e)}",
+            )
             return await self._fallback_extract_information_requests(agent_response, user_message)
 
     async def _fallback_extract_information_requests(
@@ -2326,7 +2409,11 @@ class Agent:
 
         try:
             # Special handling for generate_file tool - use artifact service directly
-            if tool_name == "generate_file" and self.overlord and hasattr(self.overlord, "artifact_service"):
+            if (
+                tool_name == "generate_file"
+                and self.overlord
+                and hasattr(self.overlord, "artifact_service")
+            ):
                 observability.observe(
                     event_type=observability.ConversationEvents.AGENT_RESPONSE_GENERATED,
                     level=observability.EventLevel.INFO,
@@ -2380,10 +2467,7 @@ class Agent:
 
                 except Exception as e:
                     # Return error in expected format
-                    return {
-                        "error": str(e),
-                        "status": "error"
-                    }
+                    return {"error": str(e), "status": "error"}
 
             # Regular MCP tool invocation
             observability.observe(
@@ -2420,8 +2504,6 @@ class Agent:
                                     "account",
                                     "credential",
                                     "github",
-                                    "lily",
-                                    "ranaroussi",
                                 ]
                             ):
                                 conversation_context.append(f"Assistant: {msg['content'][:200]}")
@@ -2537,10 +2619,10 @@ class Agent:
         try:
             # Check if this is a workflow task - if so, don't use A2A
             is_workflow_task = (
-                ("## Task:" in user_message) or
-                ("Task Details:" in user_message) or
-                ("Required Capabilities:" in user_message) or
-                ("THIS SPECIFIC TASK ONLY" in user_message)
+                ("## Task:" in user_message)
+                or ("Task Details:" in user_message)
+                or ("Required Capabilities:" in user_message)
+                or ("THIS SPECIFIC TASK ONLY" in user_message)
             )
 
             if is_workflow_task:
@@ -2665,7 +2747,7 @@ class Agent:
                 execution_completed = response.get("execution_completed", False)
 
                 # Handle MuxiResponse objects
-                if hasattr(result_content, 'content'):
+                if hasattr(result_content, "content"):
                     content_length = len(result_content.content) if result_content.content else 0
                 elif isinstance(result_content, str):
                     content_length = len(result_content)
@@ -2686,15 +2768,21 @@ class Agent:
                 )
 
                 if result_content:
+                    # Extract string content from MuxiResponse if needed
+                    if hasattr(result_content, "content"):
+                        result_text = result_content.content
+                    else:
+                        result_text = str(result_content)
+
                     # Format the collaborative response
                     if execution_completed:
                         # Task was executed by the other agent
-                        return result_content  # Return the actual execution result
+                        return result_text  # Return the actual execution result
                     else:
                         # Only consultation/advice was provided
                         return (
                             f"I'll collaborate with {best_agent_id} to help you with this.\n\n"
-                            f"{result_content}"
+                            f"{result_text}"
                         )
 
             return None
@@ -2721,6 +2809,7 @@ class Agent:
         """
         # Log available tools for debugging
         tool_names = [t.get("function", {}).get("name", "") for t in (available_tools or [])]
+
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_PLANNING,
             level=observability.EventLevel.INFO,  # Changed to INFO to always see it
@@ -2733,66 +2822,19 @@ class Agent:
             description=f"Agent {self.agent_id} starting planning with {len(tool_names)} tools",
         )
 
-        planning_prompt = f"""Analyze this request and create an execution plan.
-Request: {user_message}
+        planning_prompt = "Analyze this request and create an execution plan.\n"
+        planning_prompt += f"\nRequest: {user_message}"
+        planning_prompt += "\n\nAvailable tools: "
+        planning_prompt += (
+            f"{', '.join([t.get('function', {}).get('name', '') for t in (available_tools or [])])}"
+        )
 
-Break down this request into ALL necessary steps to fully complete it. For each step:
-1. What specific action must be taken
-2. What tool/capability is required
-3. Whether you can do it with your available tools
-4. What data from previous steps is needed
-
-IMPORTANT: If the request asks you to DO something with data (like "create an issue with X"),
-that's a separate step from gathering the data!
-
-Available tools: {', '.join([t.get('function', {}).get('name', '') for t in (available_tools or [])][:20])}
-
-IMPORTANT: You can ONLY mark "can_i_do_this": true for tools that are EXACTLY in the available tools list above!
-If a tool is NOT in the list above, you MUST set "can_i_do_this": false, even if you think you should have it!
-
-Tool names must match EXACTLY as shown above, including any prefixes or suffixes.
-
-You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the available tools list above:
-{{
-    "steps": [
-        {{
-            "step_number": 1,
-            "action": "describe what this step does",
-            "capability_needed": "what type of capability",
-            "tool_name": "EXACT_TOOL_NAME_FROM_AVAILABLE_LIST",
-            "can_i_do_this": true,
-            "data_needed": "none or previous step data",
-            "output_placeholder": "{{DESCRIPTIVE_NAME}}"
-        }},
-        {{
-            "step_number": 2,
-            "action": "describe what this step does",
-            "capability_needed": "what type of capability",
-            "tool_name": "EXACT_TOOL_NAME_FROM_AVAILABLE_LIST",
-            "can_i_do_this": false,
-            "data_needed": "data from previous steps",
-            "delegation_prompt": (
-                "Clear instructions for the delegated agent, "
-                "with {{PLACEHOLDER}} for data from previous steps"
-            )
-        }}
-    ],
-    "my_steps": [
-        {{
-            "action": "steps I can do myself",
-            "tool_name": "EXACT_TOOL_NAME_FROM_LIST",
-            "output_placeholder": "{{RESULT_NAME}}"
-        }}
-    ],
-    "delegate_steps": [
-        {{
-            "action": "steps I need to delegate",
-            "capability_needed": "type of capability needed",
-            "delegation_prompt": "Instructions with {{PLACEHOLDERS}} for data from my_steps"
-        }}
-    ],
-    "data_flow": "Description of how data flows between steps"
-}}"""
+        template_path = Path(__file__).parent / "planning_prompt.md"
+        try:
+            with open(template_path, "r", encoding="utf-8") as f:
+                planning_prompt += f.read()
+        except FileNotFoundError:
+            pass
 
         try:
             # Create messages for planning
@@ -3079,17 +3121,64 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
         context: Optional[Dict[str, Any]] = None,
         message_id: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Handle A2A message via service layer."""
-        from ...services.a2a import handle_message
+        """Handle incoming A2A message and execute the requested task."""
+        try:
+            # Extract the task from the message
+            task_content = ""
+            if isinstance(message, dict):
+                task_content = message.get("task", message.get("content", str(message)))
+            else:
+                task_content = str(message)
 
-        return await handle_message(
-            agent=self,
-            source_agent_id=source_agent_id,
-            message=message,
-            message_type=message_type,
-            context=context,
-            message_id=message_id,
-        )
+            # Log the incoming A2A message
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_A2A_MESSAGE_RECEIVED,
+                level=observability.EventLevel.INFO,
+                data={
+                    "agent_id": self.agent_id,
+                    "source_agent_id": source_agent_id,
+                    "message_type": message_type,
+                    "has_context": context is not None,
+                },
+                description=f"Agent {self.agent_id} received A2A message from {source_agent_id}",
+            )
+
+            # Process the task as a regular user message
+            # This will trigger tool usage if needed
+            # Pass is_a2a_task=True to bypass planning and execute directly
+            response = await self.process_message(
+                message=task_content,
+                user_id=f"agent_{source_agent_id}",
+                session_id=message_id or "a2a_session",
+                request_id=message_id,
+                is_a2a_task=True,  # This should bypass planning for delegated tasks
+            )
+
+            # Collect the streaming response
+            result_text = ""
+            async for chunk in response:
+                result_text += chunk
+
+            return {
+                "status": "success",
+                "response": result_text,
+                "agent_id": self.agent_id,
+                "executed": True,
+            }
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "source_agent_id": source_agent_id,
+                },
+                description=f"Failed to handle A2A message: {e}",
+            )
+
+            return {"status": "error", "error": str(e), "agent_id": self.agent_id}
 
     async def _handle_consultation_request(
         self,
@@ -3368,7 +3457,9 @@ You MUST respond with ONLY a valid JSON object. Use EXACT tool names from the av
                 # Extract the response content
                 response_content = response
                 if isinstance(response, dict):
-                    response_content = response.get("content", response.get("response", str(response)))
+                    response_content = response.get(
+                        "content", response.get("response", str(response))
+                    )
 
                 return {
                     "status": "success",

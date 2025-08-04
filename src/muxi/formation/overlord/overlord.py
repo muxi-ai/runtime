@@ -80,6 +80,8 @@
 import asyncio
 import base64
 import json
+import signal
+import sys
 import threading
 import time
 from datetime import datetime
@@ -711,9 +713,7 @@ class Overlord:
 
         # Initialize TaskDecomposer now that MCP service is available
         self.task_decomposer = TaskDecomposer(
-            llm=None,  # Will be set later
-            agent_registry=self.agents,
-            mcp_service=self.mcp_service
+            llm=None, agent_registry=self.agents, mcp_service=self.mcp_service  # Will be set later
         )
 
         # Initialize agent tracking for delayed external registration
@@ -902,15 +902,17 @@ class Overlord:
         await self._load_agents_from_formation()
 
         # Update TaskDecomposer with loaded agents
-        if hasattr(self, 'task_decomposer') and self.task_decomposer:
+        if hasattr(self, "task_decomposer") and self.task_decomposer:
             self.task_decomposer.agent_registry = self.agents
 
         # Update workflow executor with loaded agents
-        if hasattr(self, 'workflow_executor') and self.workflow_executor:
+        if hasattr(self, "workflow_executor") and self.workflow_executor:
             self.workflow_executor.agent_registry = self.agents
             print(f"\n📋 DEBUG: Workflow executor updated with {len(self.agents)} agents:")
             for agent_id, agent in self.agents.items():
-                print(f"  - {agent_id}: {agent.name} (specialties: {getattr(agent, 'specialties', [])})")
+                print(
+                    f"  - {agent_id}: {agent.name} (specialties: {getattr(agent, 'specialties', [])})"
+                )
 
         # Document processing configuration is now initialized by Formation
         if hasattr(self, "_configured_services") and self._configured_services:
@@ -1150,29 +1152,79 @@ class Overlord:
         agent.specialties = agent_config.get("specialties", [])
 
         # Register agent-specific MCP servers if configured
-        await self._register_agent_mcp_servers(agent_config.get("id"), agent_config.get("mcp_servers", []))
+        # This will fail fast if any MCP server cannot be initialized
+        await self._register_agent_mcp_servers(
+            agent_config.get("id"), agent_config.get("mcp_servers", [])
+        )
 
         return agent
 
-    async def _register_agent_mcp_servers(self, agent_id: str, mcp_servers: List[Dict[str, Any]]) -> None:
+    def _print_mcp_initialization_error(
+        self,
+        server_id: str,
+        agent_id: str = None,
+        error_msg: str = None,
+        is_timeout: bool = False,
+        is_auth_error: bool = False,
+    ) -> None:
+        """Print a formatted MCP initialization error message.
+
+        Args:
+            server_id: The MCP server ID (required)
+            agent_id: The agent ID (optional, None for formation-level MCP)
+            error_msg: Optional error message
+            is_timeout: Whether this is a timeout error
+            is_auth_error: Whether this is an authentication error
+        """
+        print("\n❌ FORMATION INITIALIZATION FAILED\n")
+
+        if is_timeout:
+            print(f"   MCP server '{server_id}' registration timed out after 10 seconds")
+            print("   This usually indicates an authentication failure (401)")
+        else:
+            if agent_id:
+                print(f"   Agent: {agent_id}")
+            print(f"   MCP Server: {server_id}")
+            if is_auth_error:
+                print("   Error: Authentication failed (401 Unauthorized)")
+            elif error_msg:
+                print(f"   Error: {error_msg[:200]}")
+
+        print("\n   📋 TO FIX THIS:")
+        print("   1. Check that credentials are configured correctly")
+        print("   2. For Linear MCP: Ensure LINEAR_MCP_TOKEN is valid in secrets.enc")
+        print("   3. Verify the token has not expired")
+        print("   4. Regenerate token if needed")
+
+        if not is_timeout:
+            print("\n   Formation cannot start with broken MCP configurations.")
+            print("   Please fix the issue and try again.")
+
+        print()
+
+    async def _register_agent_mcp_servers(
+        self, agent_id: str, mcp_servers: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Register MCP servers for a specific agent.
 
         Args:
             agent_id: The ID of the agent
             mcp_servers: List of MCP server configurations
+
+        Returns:
+            Dict with registration results including failed servers
         """
+        results = {"successful": [], "failed": []}
+
         if not mcp_servers or not self.mcp_service:
-            return
+            return results
 
         observability.observe(
             event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
             level=observability.EventLevel.INFO,
-            data={
-                "agent_id": agent_id,
-                "server_count": len(mcp_servers)
-            },
-            description=f"Registering {len(mcp_servers)} MCP servers for agent {agent_id}"
+            data={"agent_id": agent_id, "server_count": len(mcp_servers)},
+            description=f"Registering {len(mcp_servers)} MCP servers for agent {agent_id}",
         )
 
         for server_config in mcp_servers:
@@ -1214,30 +1266,84 @@ class Overlord:
                 if "type" in server_config:
                     registration_params["transport_type"] = server_config["type"]
 
-                # Register the MCP server
-                await self.mcp_service.register_mcp_server(**registration_params)
+                # Register the MCP server with process-level timeout
+                # This may raise MCPConnectionError if connection fails
+                # Note: MCP library v1.12.3 has issues with 401 errors causing hangs
+                # So we use a process-level timeout to detect and handle hangs
+
+                # Create a timeout handler that captures the current server_id
+                current_server_id = server_id  # Capture in local scope
+                current_agent_id = agent_id  # Capture in local scope
+
+                def timeout_handler(signum, frame):
+                    self._print_mcp_initialization_error(
+                        server_id=current_server_id,
+                        agent_id=current_agent_id,
+                        is_timeout=True
+                    )
+                    sys.exit(1)
+
+                # Set alarm for 10 seconds (SIGALRM is Unix-only, but that's fine for now)
+                if hasattr(signal, "SIGALRM"):
+                    signal.signal(signal.SIGALRM, timeout_handler)
+                    signal.alarm(10)
+
+                    try:
+                        await self.mcp_service.register_mcp_server(**registration_params)
+                    finally:
+                        # Cancel the alarm if registration succeeded
+                        signal.alarm(0)
+                else:
+                    # On Windows or other platforms without SIGALRM, just try without timeout
+                    # The hang will still occur but at least it works when auth is correct
+                    await self.mcp_service.register_mcp_server(**registration_params)
 
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
                     level=observability.EventLevel.INFO,
-                    data={
-                        "agent_id": agent_id,
-                        "server_id": server_id
-                    },
-                    description=f"MCP server {server_id} registered for agent {agent_id}"
+                    data={"agent_id": agent_id, "server_id": server_id},
+                    description=f"MCP server {server_id} registered for agent {agent_id}",
                 )
 
-            except Exception as e:
+                results["successful"].append(server_id)
+
+            except (asyncio.CancelledError, Exception) as e:
+                # Fail fast - MCP server registration failed
+                server_id = server_config.get("id", "unknown")
+                error_msg = str(e)
+
+                # Determine error type for better messaging
+                is_auth_error = "401" in error_msg or "unauthorized" in error_msg.lower()
+                is_cancelled = "cancelled" in error_msg.lower() or isinstance(
+                    e, asyncio.CancelledError
+                )
+
+                # Log the error using observability
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_FAILED,
                     level=observability.EventLevel.ERROR,
                     data={
                         "agent_id": agent_id,
-                        "server_id": server_config.get("id", "unknown"),
-                        "error": str(e)
+                        "server_id": server_id,
+                        "error": error_msg,
+                        "is_auth_error": is_auth_error,
+                        "is_cancelled": is_cancelled,
                     },
-                    description=f"Failed to register MCP server for agent {agent_id}: {str(e)}"
+                    description=f"Cannot start formation: MCP server '{server_id}' failed for agent '{agent_id}'",
                 )
+
+                # Print clear error message using helper
+                self._print_mcp_initialization_error(
+                    server_id=server_id,
+                    agent_id=agent_id,
+                    error_msg=error_msg if not (is_auth_error or is_cancelled) else None,
+                    is_auth_error=is_auth_error or is_cancelled
+                )
+
+                # Exit the program forcefully (sys.exit doesn't work in async context)
+                os._exit(1)
+
+        return results
 
     def _load_default_persona(self) -> None:
         """Load the default persona from the system_persona.md file."""
@@ -1648,8 +1754,12 @@ class Overlord:
                             # Create model instance from text capability
                             decomposer_model = await self.create_model(
                                 model=text_model_config["model"],
-                                temperature=text_model_config.get("settings", {}).get("temperature", 0.7),
-                                max_tokens=text_model_config.get("settings", {}).get("max_tokens", 2000),
+                                temperature=text_model_config.get("settings", {}).get(
+                                    "temperature", 0.7
+                                ),
+                                max_tokens=text_model_config.get("settings", {}).get(
+                                    "max_tokens", 2000
+                                ),
                                 api_key=text_model_config.get("api_key"),
                             )
                             model_source = "llm.models.text"
@@ -4583,11 +4693,7 @@ class Overlord:
 
         return result
 
-    async def would_need_workflow_approval(
-        self,
-        message: str,
-        agent_name: Optional[str]
-    ) -> bool:
+    async def would_need_workflow_approval(self, message: str, agent_name: Optional[str]) -> bool:
         """
         Quick check if request would need workflow approval.
 
@@ -4604,8 +4710,8 @@ class Overlord:
 
             # Would need approval if complex enough for workflow AND approval
             return (
-                analysis.complexity_score >= self.complexity_threshold and
-                analysis.complexity_score >= self.plan_approval_threshold
+                analysis.complexity_score >= self.complexity_threshold
+                and analysis.complexity_score >= self.plan_approval_threshold
             )
         except Exception:
             # If analysis fails, assume no approval needed (safe default)
@@ -4924,9 +5030,7 @@ class Overlord:
         return response
 
     async def _should_execute_workflow_async(
-        self,
-        workflow: Workflow,
-        original_message: str
+        self, workflow: Workflow, original_message: str
     ) -> bool:
         """
         Determine if approved workflow should execute asynchronously.
@@ -4950,7 +5054,9 @@ class Overlord:
             context = {
                 "workflow_id": workflow.id,
                 "task_count": len(workflow.tasks),
-                "complexity_scores": [task.estimated_complexity for task in workflow.tasks.values()],
+                "complexity_scores": [
+                    task.estimated_complexity for task in workflow.tasks.values()
+                ],
             }
 
             estimated_time = await self.time_estimator.estimate_processing_time(
@@ -5004,7 +5110,7 @@ class Overlord:
         webhook_url = self.formation_config.get("async", {}).get("webhook_url")
 
         # Mark request as async for observability
-        if hasattr(self, 'observability_manager'):
+        if hasattr(self, "observability_manager"):
             self.observability_manager.mark_request_async(request_id)
 
         # Return immediate response
@@ -5020,14 +5126,16 @@ class Overlord:
         }
 
         # Execute workflow in background
-        asyncio.create_task(self._execute_workflow_background(
-            workflow=workflow,
-            message=message,
-            user_id=user_id,
-            session_id=session_id,
-            request_id=request_id,
-            webhook_url=webhook_url,
-        ))
+        asyncio.create_task(
+            self._execute_workflow_background(
+                workflow=workflow,
+                message=message,
+                user_id=user_id,
+                session_id=session_id,
+                request_id=request_id,
+                webhook_url=webhook_url,
+            )
+        )
 
         return response_data
 
@@ -5609,6 +5717,7 @@ class Overlord:
                 try:
                     # Create LLM instance for synthesis
                     from ...services.llm import LLM
+
                     # Extract just the model name from the config
                     model_name = (
                         synthesis_model_config.get("model")
@@ -5637,7 +5746,7 @@ class Overlord:
                         metadata={
                             "operation": "workflow_synthesis",
                             "workflow_id": workflow.id,
-                        }
+                        },
                     )
 
                     if synthesis_response:
@@ -5694,7 +5803,7 @@ class Overlord:
 
         # Add successful task results with only key outcomes
         for i, result in enumerate(successful_results, 1):
-            task_desc = result.get('description', 'Unknown task')
+            task_desc = result.get("description", "Unknown task")
             prompt_parts.append(f"Task {i}: {task_desc}")
 
             # Extract only key actionable outcomes from outputs
@@ -5753,7 +5862,8 @@ class Overlord:
 
         # Look for Linear issue patterns (MX-123 format)
         import re
-        linear_pattern = r'MX-\d+'
+
+        linear_pattern = r"MX-\d+"
         linear_matches = re.findall(linear_pattern, output_str)
         if linear_matches:
             key_items.append(f"Linear issues: {', '.join(set(linear_matches))}")
@@ -5769,24 +5879,32 @@ class Overlord:
         if isinstance(outputs, dict):
             # Common outcome fields to check
             outcome_fields = [
-                'issue_id', 'issue_url', 'document_id', 'file_path',
-                'created_id', 'updated_id', 'ticket_id', 'pr_url',
-                'issue_number', 'pull_request', 'artifact_id'
+                "issue_id",
+                "issue_url",
+                "document_id",
+                "file_path",
+                "created_id",
+                "updated_id",
+                "ticket_id",
+                "pr_url",
+                "issue_number",
+                "pull_request",
+                "artifact_id",
             ]
 
             for field in outcome_fields:
                 if field in outputs and outputs[field]:
                     # Capitalize and format the field name nicely
-                    field_name = field.replace('_', ' ').title()
+                    field_name = field.replace("_", " ").title()
                     key_items.append(f"{field_name}: {outputs[field]}")
 
             # Check for creation confirmations
-            if outputs.get('created') or outputs.get('success'):
-                if 'linear' in task_description.lower():
+            if outputs.get("created") or outputs.get("success"):
+                if "linear" in task_description.lower():
                     key_items.append("Linear issue created successfully")
-                elif 'document' in task_description.lower():
+                elif "document" in task_description.lower():
                     key_items.append("Document created successfully")
-                elif 'file' in task_description.lower():
+                elif "file" in task_description.lower():
                     key_items.append("File created successfully")
 
         # If we found key items, join them; otherwise return empty string
@@ -5804,13 +5922,15 @@ class Overlord:
         # Start with a brief summary
         task_count = len(successful_results)
         if task_count > 0:
-            response_parts.append(f"✅ Successfully completed {task_count} task{'s' if task_count != 1 else ''}")
+            response_parts.append(
+                f"✅ Successfully completed {task_count} task{'s' if task_count != 1 else ''}"
+            )
             response_parts.append("")
 
         # Extract key outcomes from successful tasks
         key_outcomes = []
         for result in successful_results:
-            task_desc = result.get('description', 'Task')
+            task_desc = result.get("description", "Task")
             outputs = result.get("outputs", {})
             outcomes = self._extract_key_outcomes(outputs, task_desc)
             if outcomes:
@@ -5824,7 +5944,9 @@ class Overlord:
         # Note any failed tasks briefly
         failed_tasks = [r for r in all_results if r.get("status") == "failed"]
         if failed_tasks:
-            response_parts.append(f"⚠️ {len(failed_tasks)} task{'s' if len(failed_tasks) != 1 else ''} failed:")
+            response_parts.append(
+                f"⚠️ {len(failed_tasks)} task{'s' if len(failed_tasks) != 1 else ''} failed:"
+            )
             for task in failed_tasks:
                 response_parts.append(
                     f"• {task.get('description', 'Task')}: {task.get('error', 'Unknown error')}"

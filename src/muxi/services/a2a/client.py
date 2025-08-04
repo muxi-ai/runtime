@@ -19,12 +19,7 @@ from a2a.types import (
     Role,
 )
 
-import logging
-
 from .. import observability
-
-
-logger = logging.getLogger(__name__)
 
 
 # Singleton instance
@@ -61,14 +56,58 @@ class A2AService:
         Args:
             config: Optional configuration for SDK client
         """
-        try:
-            # Initialize SDK client
-            client_config = config or {}
-            self.sdk_client = A2AClient(**client_config)
-            logger.info("A2A SDK client initialized")
-        except Exception as e:
-            logger.error(f"Failed to initialize A2A SDK client: {e}")
-            raise
+        # Check if we need SDK (only for external A2A)
+        if config and (config.get('outbound', {}).get('enabled') or
+                       config.get('inbound', {}).get('enabled')):
+            try:
+                # The A2A SDK requires an httpx client and either agent_card or url
+                import httpx
+
+                # Create httpx client with reasonable defaults
+                httpx_client = httpx.AsyncClient(
+                    timeout=httpx.Timeout(30.0),
+                    follow_redirects=True,
+                )
+
+                # Get URL from config if available
+                url = config.get('outbound', {}).get('registries', [None])[0]
+
+                # Initialize SDK client with httpx client and url
+                if url:
+                    self.sdk_client = A2AClient(httpx_client=httpx_client, url=url)
+                    observability.observe(
+                        event_type="a2a.sdk.initialized",
+                        level=observability.EventLevel.INFO,
+                        data={"url": url},
+                        description=f"A2A SDK client initialized with URL: {url}",
+                    )
+                else:
+                    # For now, skip SDK initialization if no URL provided
+                    observability.observe(
+                        event_type="a2a.sdk.skipped",
+                        level=observability.EventLevel.INFO,
+                        data={},
+                        description="A2A SDK initialization skipped - no external registry URL",
+                    )
+                    self.sdk_client = None
+            except Exception as e:
+                observability.observe(
+                    event_type="a2a.sdk.error",
+                    level=observability.EventLevel.ERROR,
+                    data={"error": str(e)},
+                    description=f"Failed to initialize A2A SDK client: {e}",
+                )
+                # Don't raise - internal A2A can still work
+                self.sdk_client = None
+        else:
+            # Internal-only A2A doesn't need SDK
+            observability.observe(
+                event_type="a2a.service.initialized",
+                level=observability.EventLevel.INFO,
+                data={"mode": "internal_only"},
+                description="A2A service initialized for internal-only communication (no SDK needed)",
+            )
+            self.sdk_client = None
 
     async def send_message(
         self,
@@ -104,7 +143,12 @@ class A2AService:
 
             # Check if internal or external routing
             if self._is_internal(target_agent_id):
-                logger.debug(f"Routing internally to {target_agent_id}")
+                observability.observe(
+                    event_type="a2a.routing.internal",
+                    level=observability.EventLevel.DEBUG,
+                    data={"target_agent_id": target_agent_id},
+                    description=f"Routing internally to {target_agent_id}",
+                )
                 return await self._send_internal(
                     source_agent_id,
                     target_agent_id,
@@ -115,13 +159,23 @@ class A2AService:
                 )
 
             # For external agents, check if SDK is initialized
-            logger.debug(f"External agent {target_agent_id} requested")
+            observability.observe(
+                event_type="a2a.routing.external",
+                level=observability.EventLevel.DEBUG,
+                data={"target_agent_id": target_agent_id},
+                description=f"External agent {target_agent_id} requested",
+            )
 
             if not self.sdk_client:
                 # Fall back to direct internal routing if agent can be found
                 handler = await self._try_find_handler(target_agent_id)
                 if handler:
-                    logger.debug(f"Found internal handler for {target_agent_id}")
+                    observability.observe(
+                        event_type="a2a.routing.fallback",
+                        level=observability.EventLevel.DEBUG,
+                        data={"target_agent_id": target_agent_id},
+                        description=f"Found internal handler for {target_agent_id}",
+                    )
                     return await self._send_internal(
                         source_agent_id,
                         target_agent_id,
@@ -148,6 +202,8 @@ class A2AService:
 
             # Track metrics
             duration = asyncio.get_event_loop().time() - start_time
+            # Lazy import to avoid circular dependency
+            from .. import observability
             observability.observe(
                 event_type="a2a_message_sent",
                 level=observability.EventLevel.INFO,
@@ -167,10 +223,17 @@ class A2AService:
             return None
 
         except Exception as e:
-            logger.error(f"Error sending A2A message: {e}")
+            observability.observe(
+                event_type="a2a.message.error",
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e)},
+                description=f"Error sending A2A message: {e}",
+            )
 
             # Track error metrics
             duration = asyncio.get_event_loop().time() - start_time
+            # Lazy import to avoid circular dependency
+            from .. import observability
             observability.observe(
                 event_type="a2a_message_error",
                 level=observability.EventLevel.ERROR,
@@ -217,7 +280,12 @@ class A2AService:
                 message_id,
             )
         except Exception as e:
-            logger.error(f"Error handling A2A message: {e}")
+            observability.observe(
+                event_type="a2a.handler.error",
+                level=observability.EventLevel.ERROR,
+                data={"error": str(e)},
+                description=f"Error handling A2A message: {e}",
+            )
             return {
                 "status": "error",
                 "error": str(e),
@@ -352,7 +420,12 @@ class A2AService:
             handler: Async function to handle messages
         """
         self._internal_handlers[agent_id] = handler
-        logger.debug(f"Registered internal handler for agent {agent_id}")
+        observability.observe(
+            event_type="a2a.handler.registered",
+            level=observability.EventLevel.DEBUG,
+            data={"agent_id": agent_id},
+            description=f"Registered internal handler for agent {agent_id}",
+        )
 
     async def _try_find_handler(self, agent_id: str):
         """Try to find a handler for an agent (used for fallback routing).

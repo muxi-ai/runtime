@@ -163,8 +163,6 @@ class MCPService:
         if agent_id is None:
             return self.tool_registry
 
-        # Debug logging - removed problematic observability call
-
         # Return both agent-specific tools AND shared tools
         # This allows agents to access global MCP servers while maintaining agent-specific ones
         result = {}
@@ -756,15 +754,23 @@ class MCPService:
                     # Both transports failed - create detailed error message
                     error_details = "\n".join([f"  - {t}: {errors[t]}" for t in transports_to_try])
 
-                    raise MCPConnectionError(
+                    # Check if this is an authentication error
+                    is_auth_error = any("401" in str(e) or "unauthorized" in str(e).lower() for e in errors.values())
+
+                    error_msg = (
                         f"Failed to register MCP server '{server_id}': Unable to connect to {url}\n"
                         f"Tried:\n{error_details}\n"
-                        f"Check: URL accessibility, credentials, server status",
+                        f"Check: {'Authentication credentials' if is_auth_error else 'URL accessibility, credentials, server status'}"  # noqa: E501
+                    )
+
+                    raise MCPConnectionError(
+                        error_msg,
                         {
                             "server_id": server_id,
                             "url": url,
                             "tried_transports": transports_to_try,
                             "errors": errors,
+                            "is_auth_error": is_auth_error,
                         },
                     )
 
@@ -844,7 +850,6 @@ class MCPService:
                             self.agent_tool_registry[agent_id] = {}
                         self.agent_tool_registry[agent_id][server_id] = {}
 
-                        # Debug logging for agent tool registration
                         observability.observe(
                             event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
                             level=observability.EventLevel.INFO,
@@ -1755,8 +1760,6 @@ class MCPService:
             # Use chat method with simple messages format
             messages = [{"role": "user", "content": prompt}]
             response = await llm.chat(messages, max_tokens=100)
-
-            # Debug log the response
 
             # Parse the JSON response
             import json
