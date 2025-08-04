@@ -1283,20 +1283,31 @@ class Overlord:
                     )
                     sys.exit(1)
 
-                # Set alarm for 10 seconds (SIGALRM is Unix-only, but that's fine for now)
+                # Use platform-appropriate timeout mechanism
                 if hasattr(signal, "SIGALRM"):
-                    signal.signal(signal.SIGALRM, timeout_handler)
-                    signal.alarm(10)
-
+                    # Unix/Linux/Mac: Use signal-based timeout
+                    old_handler = signal.signal(signal.SIGALRM, timeout_handler)
                     try:
+                        signal.alarm(10)  # 10-second timeout
                         await self.mcp_service.register_mcp_server(**registration_params)
                     finally:
-                        # Cancel the alarm if registration succeeded
+                        # Always cancel the alarm and restore old handler
                         signal.alarm(0)
+                        signal.signal(signal.SIGALRM, old_handler)
                 else:
-                    # On Windows or other platforms without SIGALRM, just try without timeout
-                    # The hang will still occur but at least it works when auth is correct
-                    await self.mcp_service.register_mcp_server(**registration_params)
+                    # Windows or other platforms: Use asyncio timeout
+                    try:
+                        await asyncio.wait_for(
+                            self.mcp_service.register_mcp_server(**registration_params),
+                            timeout=10.0
+                        )
+                    except asyncio.TimeoutError:
+                        self._print_mcp_initialization_error(
+                            server_id=current_server_id,
+                            agent_id=current_agent_id,
+                            is_timeout=True
+                        )
+                        sys.exit(1)
 
                 observability.observe(
                     event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_COMPLETED,
@@ -1340,8 +1351,8 @@ class Overlord:
                     is_auth_error=is_auth_error or is_cancelled
                 )
 
-                # Exit the program forcefully (sys.exit doesn't work in async context)
-                os._exit(1)
+                # Exit the program cleanly to allow proper cleanup
+                sys.exit(1)
 
         return results
 
