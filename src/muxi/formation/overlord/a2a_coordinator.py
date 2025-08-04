@@ -7,10 +7,12 @@ embedded in the main Overlord class.
 """
 
 import asyncio
+import time
 from typing import Dict, List, Optional, Any
 
 from ...datatypes.schema import A2AServiceSchema
 from ...services.a2a.models import AgentCard
+from ...services.a2a.models_sdk_adapter import ModelsAdapter
 
 
 class A2ACoordinator:
@@ -165,25 +167,29 @@ class A2ACoordinator:
     def _get_agent_url(self, agent_id: str) -> str:
         """
         Helper method to construct the agent URL consistently.
-        
+
         Args:
             agent_id: The ID of the agent
-            
+
         Returns:
             The full URL for the agent
         """
-        port = self.overlord.a2a_server.port if hasattr(self.overlord, 'a2a_server') and self.overlord.a2a_server else 8181
+        port = (
+            self.overlord.a2a_server.port
+            if hasattr(self.overlord, "a2a_server") and self.overlord.a2a_server
+            else 8181
+        )
         return f"http://localhost:{port}/agents/{agent_id}"
-    
+
     async def process_pending_registrations(self) -> None:
         """
         Public method to process pending external agent registrations.
-        
+
         This should be called after the registry client is initialized to register
         any agents that were created before the A2A system was ready.
         """
         await self._process_pending_agent_registrations()
-    
+
     async def _process_pending_agent_registrations(self) -> None:
         """
         Process pending external agent registrations.
@@ -205,14 +211,19 @@ class A2ACoordinator:
         try:
             # Skip if external registry not enabled or no pending registrations
             if not self.external_registry_enabled:
+                print(f"DEBUG: External registry not enabled, skipping registration")
                 return
 
             # Skip if no registry client or no pending registrations
-            if (
-                not self.overlord.inbound_registry_client
-                or not self.overlord.pending_external_registrations
-            ):
+            if not self.overlord.inbound_registry_client:
+                print(f"DEBUG: No inbound registry client, skipping registration")
                 return
+
+            if not self.overlord.pending_external_registrations:
+                print(f"DEBUG: No pending registrations, skipping")
+                return
+
+            print(f"DEBUG: Processing {len(self.overlord.pending_external_registrations)} pending registrations: {self.overlord.pending_external_registrations}")
 
             # Apply timeout to registration operations
             async def _register_with_timeout(agent_id: str):
@@ -272,16 +283,25 @@ class A2ACoordinator:
         try:
             # Skip if external registry not enabled
             if not self.external_registry_enabled:
+                print(f"DEBUG: External registry not enabled for agent {agent_id}")
                 return
 
             # Skip if no registry client available or agent doesn't exist
-            if not self.overlord.inbound_registry_client or agent_id not in self.overlord.agents:
+            if not self.overlord.inbound_registry_client:
+                print(f"DEBUG: No registry client for agent {agent_id}")
                 return
+
+            if agent_id not in self.overlord.agents:
+                print(f"DEBUG: Agent {agent_id} not found in agents")
+                return
+
+            print(f"DEBUG: Registering agent {agent_id} with external registry")
 
             # Get the agent instance for metadata extraction
             agent = self.overlord.agents[agent_id]
 
-            # Create agent card for registration
+            # Create agent card for registration using MUXI format
+            # The SDK client will handle conversion as needed
             agent_card = AgentCard(
                 name=agent_id,
                 description=self.overlord.agent_descriptions.get(agent_id, "No description"),
@@ -297,12 +317,15 @@ class A2ACoordinator:
             )
 
             # Send registration request to external registry
-            await self.overlord.inbound_registry_client.register_agent(agent_card)
+            print(f"DEBUG: Sending registration for {agent_id} to registry")
+            result = await self.overlord.inbound_registry_client.register_agent(agent_card)
+            print(f"DEBUG: Registration result for {agent_id}: {result}")
 
             #  Info - TODO: add observability
             # SystemEvents.A2A_AGENT_REGISTERED
 
         except Exception as e:
+            print(f"DEBUG: Registration failed for {agent_id}: {e}")
             #  Warning - TODO: add observability
             # SystemEvents.A2A_AGENT_REGISTRATION_FAILED
             _ = e  # remove this after implementing observability
@@ -324,7 +347,7 @@ class A2ACoordinator:
 
             # Use helper method to get consistent agent URL
             agent_url = self._get_agent_url(agent_id)
-            
+
             await self.overlord.inbound_registry_client.deregister_agent(agent_url)
 
             #  Info - TODO: add observability
@@ -362,3 +385,116 @@ class A2ACoordinator:
 
         # Apply new configuration
         self._apply_configuration()
+
+    async def discover_external_agents(
+        self,
+        capability_filter: Optional[List[str]] = None,
+        registry_url: Optional[str] = None
+    ) -> Dict[str, List[AgentCard]]:
+        """
+        Discover agents from external registries using SDK.
+
+        This method queries external registries to find agents with specific capabilities
+        that can be used for cross-formation collaboration.
+
+        Args:
+            capability_filter: Optional list of required capabilities
+            registry_url: Specific registry to query, or None for all registries
+
+        Returns:
+            Dictionary mapping registry URLs to lists of discovered AgentCards
+        """
+        try:
+            # Skip if external registry not enabled
+            if not self.external_registry_enabled:
+                return {}
+
+            # Skip if no registry client available
+            if not self.overlord.inbound_registry_client:
+                return {}
+
+            # Use registry client to discover agents
+            result = await self.overlord.inbound_registry_client.discover_agents(
+                capability_filter=capability_filter,
+                registry_url=registry_url
+            )
+
+            # Convert result to expected format
+            if isinstance(result, list):
+                # Single registry result
+                return {registry_url or self.registry_url: result}
+            else:
+                # Multiple registry results
+                return result
+
+        except Exception as e:
+            # Log error but don't fail
+            _ = f"Failed to discover external agents: {e}"
+            return {}
+
+    async def route_to_external_agent(
+        self,
+        source_agent_id: str,
+        target_agent_url: str,
+        message: Any,
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Route a message to an external agent via A2A protocol using SDK.
+
+        This method sends messages to agents in other formations discovered
+        through the external registry.
+
+        Args:
+            source_agent_id: ID of the sending agent
+            target_agent_url: URL of the target external agent
+            message: Message to send
+            message_type: Type of message (request/response)
+            context: Optional message context
+
+        Returns:
+            Response from the external agent, or None if routing failed
+        """
+        try:
+            # Skip if external registry not enabled
+            if not self.external_registry_enabled:
+                return None
+
+            import httpx
+            from a2a.client import A2AClient
+            from a2a.types import SendMessageRequest
+
+            # Create httpx client and SDK client for target agent
+            async with httpx.AsyncClient() as http_client:
+                client = A2AClient(
+                    httpx_client=http_client,
+                    url=target_agent_url
+                )
+
+                # Convert message to SDK format
+                sdk_message = ModelsAdapter.muxi_to_sdk_message(
+                    message,
+                    message_id=f"{source_agent_id}_{int(time.time() * 1000)}",
+                    context=context
+                )
+
+                # Send via SDK
+                request = SendMessageRequest(
+                    agent_id=source_agent_id,
+                    message=sdk_message,
+                    timeout=30
+                )
+
+                response = await client.send_message(request)
+
+                # Convert response back to MUXI format
+                if response and response.message:
+                    return ModelsAdapter.sdk_to_muxi_message(response.message)
+
+                return None
+
+        except Exception as e:
+            # Log error but don't fail
+            _ = f"Failed to route to external agent: {e}"
+            return None

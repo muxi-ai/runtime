@@ -911,19 +911,27 @@ class Overlord:
 
             if registry_urls:
                 try:
-                    from ...services.a2a.registry_client import A2ARegistryClient
-                    self.inbound_registry_client = A2ARegistryClient(registries=registry_urls)
+                    # Use SDK implementation directly (no more backward compatibility)
+                    self.inbound_registry_client = A2ARegistryClient(
+                        registries=registry_urls
+                    )
                     observability.observe(
                         event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                         level=observability.EventLevel.INFO,
-                        data={"registries": registry_urls},
-                        description=f"Initialized registry client with {len(registry_urls)} registries",
+                        data={
+                            "registries": registry_urls,
+                            "implementation": "SDK"
+                        },
+                        description=(
+                            f"Initialized SDK registry client "
+                            f"with {len(registry_urls)} registries"
+                        ),
                     )
 
                     # Process pending external agent registrations
                     if hasattr(self, "pending_external_registrations") and self.pending_external_registrations:
                         await self.a2a_coordinator.process_pending_registrations()
-                        
+
                 except Exception as e:
                     # Log error but don't fail startup - formation can work without external registry
                     observability.observe(
@@ -935,7 +943,10 @@ class Overlord:
                             "registries": registry_urls,
                             "operation": "registry_client_init"
                         },
-                        description=f"Failed to initialize external registry client: {str(e)}. Formation will continue without external A2A.",
+                        description=(
+                            f"Failed to initialize external registry client: {str(e)}. "
+                            "Formation will continue without external A2A."
+                        ),
                     )
                     # Set to None to indicate registry is not available
                     self.inbound_registry_client = None

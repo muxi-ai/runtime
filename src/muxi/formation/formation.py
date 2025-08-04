@@ -992,9 +992,10 @@ class Formation:
             try:
                 a2a_config_obj = A2AServiceSchema(
                     enabled=self._a2a_config.get("enabled", True),
-                    server_enabled=self._a2a_config.get("server", {}).get("enabled", False),
-                    server_host=self._a2a_config.get("server", {}).get("host", "0.0.0.0"),
-                    server_port=self._a2a_config.get("server", {}).get("port", 8080),
+                    # Map inbound configuration to server settings
+                    server_enabled=self._a2a_config.get("inbound", {}).get("enabled", False),
+                    server_host=self._a2a_config.get("inbound", {}).get("host", "0.0.0.0"),
+                    server_port=self._a2a_config.get("inbound", {}).get("port", 8181),
                     # Enable external registry if inbound or outbound registries are configured
                     external_registry_enabled=self._is_external_registry_enabled(self._a2a_config),
                     # Use the primary registry URL from configuration
@@ -1010,8 +1011,8 @@ class Formation:
                 print(
                     f"Warning: Invalid A2A configuration, using defaults. "
                     f"Validation error: {str(e)}. "
-                    f"Config values: server_enabled={self._a2a_config.get('server', {}).get('enabled')}, "
-                    f"server_port={self._a2a_config.get('server', {}).get('port')}, "
+                    f"Config values: inbound_enabled={self._a2a_config.get('inbound', {}).get('enabled')}, "
+                    f"inbound_port={self._a2a_config.get('inbound', {}).get('port')}, "
                     f"external_registry_enabled={self._is_external_registry_enabled(self._a2a_config)}, "
                     f"require_auth={self._a2a_config.get('security', {}).get('require_auth')}",
                     flush=True,
