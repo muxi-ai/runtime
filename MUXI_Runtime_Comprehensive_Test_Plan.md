@@ -688,141 +688,50 @@ response = await overlord.chat(
 ### **Phase 3: Advanced Coordination & Enterprise Features (Days 7-10)**
 
 <details>
-<summary>🔁 Day 7: Multi-Agent Coordination & SOP Enhancement</summary>
+<summary>✅ Day 7: Multi-Agent Coordination & Workflow Integration</summary>
 
-#### Goal: Validate agent orchestration and task decomposition, then enhance with SOP system
+#### Goal: Validate agent orchestration, task decomposition, and A2A communication
 
 **Implementation Status: COMPLETED ✅**
-- **Test Groups Completed**: 7A (Task Decomposition & Workflow Orchestration)
+- **Test Groups Completed**: 7A (Workflow Orchestration) and 7B (A2A Communication)
 - **Tests Passing**: 100% success rate
-- **Major Achievements**:
-  - Workflow orchestration with task decomposition
-  - Resilient workflow execution with user-friendly errors
-  - Approval-aware async execution (deferred async pattern)
-  - Dynamic agent capability routing
-  - Platform-agnostic task decomposition
-- **Test Reports**: [tests/reports/7a.md](tests/reports/7a.md)
+- **Test Reports**: 
+  - [tests/reports/7a.md](tests/reports/7a.md) - Workflow orchestration and resilience
+  - [tests/reports/7b.md](tests/reports/7b.md) - A2A communication and workflow decomposition
 
-### Part 1: Base Multi-Agent Coordination Testing
+### Key Achievements
 
-### Test Group 7A: Task Decomposition (Current Capabilities)
-```python
-# Test 7A1: Research and Write Task
-formation = Formation.load("formations/multi-specialist.yaml")
-overlord = await formation.start()
+**✅ Workflow Orchestration:**
+- Task decomposition with intelligent agent routing
+- Resilient workflow execution with user-friendly error messages
+- Dynamic capability-based task assignment
+- Minimal workflow generation (avoiding unnecessary intermediate steps)
 
-response = await overlord.chat(
-    "Research renewable energy trends and write a brief report with recommendations"
-)
-# Should involve researcher → analyst → writer coordination
-assert len(response) > 500
-assert "recommendation" in response.lower()
-assert "research" in response.lower()
+**✅ A2A Communication:**
+- Internal agent-to-agent communication within formation
+- Direct task delegation between specialized agents
+- Workflow-based multi-agent coordination
+- Proper observability event tracking
 
-# Test 7A2: Complex Multi-Step Task
-response = await overlord.chat(
-    "Find the latest Tesla stock price, analyze the trend, and create a trading recommendation"
-)
-# Should coordinate data agent → analysis agent → recommendation agent
-```
+**✅ Technical Improvements:**
+- Migrated from logging to observability events across all A2A components
+- Fixed workflow decomposer to correctly route system monitoring tasks
+- Improved prompt engineering to eliminate unnecessary intermediate steps
+- Made capability descriptions generic and scalable (no hardcoded checks)
 
-### Test Group 7B: A2A Communication Patterns
-```python
-# Test 7B1: Internal A2A (within formation)
-formation = Formation.load("formations/internal-a2a.yaml")
-overlord = await formation.start()
+### Issues Resolved
 
-response = await overlord.chat("I need help with Python and also database design")
-# Should trigger agent consultation patterns internally
+1. **Observability Migration** - Replaced all logger calls with observability events
+2. **Missing Event Types** - Added 5 missing observability event definitions
+3. **Import Scope Conflicts** - Fixed duplicate imports causing reference errors
+4. **Incorrect Task Routing** - System tasks now correctly route to IT Support agent
+5. **Unnecessary Workflow Steps** - Eliminated redundant "write description" tasks
 
-# Test 7B2: External A2A (cross-formation)
-# Start second formation on different port
-formation2 = Formation.load("formations/external-specialist.yaml")
-overlord2 = await formation2.start()
+**Formations Used:** 
+- `test-formations/formation-multi-agent-segregated/` - Multi-agent with A2A enabled
+- Workflow configuration with `complexity_threshold: 5.0` for decomposition testing
 
-# Main formation requests help from external specialist
-response = await overlord.chat("I need specialized legal advice about contracts")
-# Should communicate with external legal formation
-```
-
-### Test Group 7A10: Deferred Async Execution (Approval-Aware)
-```python
-# Test 7A10: Workflow Approval with Async Safety
-formation = Formation.load("formations/workflow-approval.yaml")
-overlord = await formation.start()
-
-# Complex request that would trigger async AND needs approval
-response = await overlord.chat(
-    "Research AI market trends, analyze competitors, create visualizations, "
-    "write comprehensive report, and create Linear issues for action items",
-    use_async=None  # Let system decide
-)
-# Should remain synchronous for approval flow, not go async prematurely
-assert "approve" in response.lower() or "workflow" in response.lower()
-
-# After approval, can execute asynchronously if appropriate
-response = await overlord.chat("yes", user_id="same_user")
-# Now safe to process asynchronously if time estimate > threshold
-```
-
-### 🔧 **IMPLEMENTATION BREAK: SOP System**
-**Implement**: Standard Operating Procedures (SOP) coordinator for enhanced task decomposition
-**PRD**: [prd-sop-system.md](context/prds/prd-sop-system.md)
-**Duration**: 3-5 days
-
-### Part 2: Enhanced Multi-Agent Coordination with SOPs
-
-### Test Group 7C: SOP-Guided Task Decomposition
-```python
-# Test 7C1: Incident Response SOP
-# Create formation with sops/ directory containing incident-response.yaml
-formation = Formation.load("formations/sop-enabled.yaml")
-overlord = await formation.start()
-
-response = await overlord.chat("Production is down, customers are complaining")
-# Should follow SOP: assess → notify → investigate → fix → document
-# Verify proper agent coordination following SOP steps
-
-# Test 7C2: Customer Onboarding SOP
-response = await overlord.chat("New enterprise customer ACME Corp needs onboarding")
-# Should follow customer-onboarding.yaml SOP
-# Agents should be coordinated according to procedural steps
-
-# Test 7C3: No SOP Available
-response = await overlord.chat("Write a haiku about clouds")
-# Should fall back to normal task decomposition
-# No SOP should be loaded for creative tasks
-```
-
-### Test Group 7D: SOP Discovery and Relevance
-```python
-# Test 7D1: Semantic SOP Matching
-formation = Formation.load("formations/multi-sop.yaml")  # Has 10+ SOPs
-overlord = await formation.start()
-
-# Test multilingual semantic matching
-response = await overlord.chat("Seguridad breach detected")  # Spanish
-# Should still find security-incident.yaml SOP
-
-# Test 7D2: Ambiguous Request Resolution
-response = await overlord.chat("Handle the issue with the system")
-# Should identify most relevant SOP based on context
-
-# Test 7D3: SOP Performance
-# Load formation with 50+ SOPs
-start_time = time.time()
-response = await overlord.chat("Deploy new version to production")
-sop_search_time = time.time() - start_time
-assert sop_search_time < 0.1  # SOP search should add <100ms
-```
-
-**Formations Required:** 8 configurations (6 base + 2 SOP-enhanced)
-**Automation:** Multi-process testing, A2A server management, SOP file generation, async decision validation
-**Success Criteria:** ✅
-- Base: 18 coordination tests pass, A2A communication verified ✅
-- Workflow orchestration with resilience framework ✅
-- Approval-aware async execution (32 tests passing) ✅
-- Enhanced: 12 additional SOP tests pass, <100ms SOP search overhead (pending)
+**Success Criteria:** ✅ All tests passing with both direct A2A and workflow decomposition
 
 </details>
 

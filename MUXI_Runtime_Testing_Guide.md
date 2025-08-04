@@ -4,6 +4,8 @@
 
 This guide documents key learnings and patterns discovered while implementing the comprehensive test suite for MUXI Runtime. It covers practical solutions to common issues and best practices for writing reliable tests.
 
+**Last Updated**: August 4, 2025 (Day 7B testing)
+
 ## Key Testing Patterns
 
 ### 1. Formation Loading and Event Loop Management
@@ -245,6 +247,42 @@ response_text = await handle_response(response)
 - Clear pass/fail criteria
 
 This enables easier debugging and validation of complex multi-user systems.
+
+### 9. Workflow Decomposition Testing (Day 7B)
+
+**Key Lessons Learned**:
+
+1. **Observability Migration**: When migrating from logging to observability:
+   - Check for missing event type definitions (compile-time errors)
+   - Watch for duplicate imports at different scopes (module vs function level)
+   - Ensure all observability events are properly defined in `observability.py`
+
+2. **Workflow Decomposer Improvements**:
+   - **Avoid hardcoded capability checks** - Not scalable when adding new agents
+   - **Use agent descriptions** when available instead of inferring from capabilities
+   - **Generic fallbacks** are better than special cases for maintainability
+
+3. **Prompt Engineering for Decomposition**:
+   - Emphasize MINIMAL workflows to avoid unnecessary intermediate steps
+   - Provide clear examples of good vs bad task decomposition
+   - Specify that agents can format data themselves (no need for "write description" tasks)
+   - Be explicit: "Platform agents can format data themselves"
+
+4. **A2A Communication Testing**:
+   - Test both direct A2A (agent_name specified) and workflow-based routing
+   - Verify complexity scoring triggers decomposition at correct thresholds
+   - Ensure task routing matches agent capabilities accurately
+
+5. **Common Issues and Fixes**:
+   - **Wrong capability assignment**: "System usage info" → web_research (wrong) vs system_administration (correct)
+   - **Unnecessary steps**: Task 1: Gather data → Task 2: Write description → Task 3: Create issue (bad)
+   - **Better approach**: Task 1: Gather data → Task 2: Create issue with data (good)
+
+6. **Testing Strategy**:
+   - Use real formations with multiple specialized agents
+   - Test with various complexity thresholds to validate decomposition triggers
+   - Verify both successful routing and error cases
+   - Check that changes remain scalable (no hardcoded platform names)
 
 # Verify old messages are forgotten (FIFO)
 response = asyncio.run(overlord.chat("What was message 0?"))
