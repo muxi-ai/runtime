@@ -83,7 +83,8 @@ class A2ACoordinator:
             - description: Agent's description
             - capabilities: List of agent capabilities
             - type: "internal" (always internal for this method)
-            - url: None (internal agents don't need URLs)
+            - url: agent:// URL for direct agent communication (e.g., "agent://calendar-agent")
+            - transport: Transport hint ("agent" for internal agents)
             - formation: Formation name
             - preference_score: 0.0 (internal agents are always preferred)
             - status: 'active' (always active if in registry)
@@ -98,7 +99,7 @@ class A2ACoordinator:
                     'description': 'Manages calendar events',
                     'capabilities': ['calendar_lookup', 'schedule_meeting'],
                     'type': 'internal',
-                    'url': None,
+                    'url': 'agent://calendar-agent',
                     'formation': 'my-formation',
                     'preference_score': 0.0,
                     'status': 'active'
@@ -138,7 +139,8 @@ class A2ACoordinator:
                 "description": self.overlord.agent_descriptions.get(agent_id, ""),
                 "capabilities": capabilities,
                 "type": "internal",
-                "url": None,
+                "url": f"agent://{agent_id}",  # Agent URL for internal agents
+                "transport": "agent",  # Transport hint for internal agents
                 "formation": self.overlord.formation_id,
                 "preference_score": 0.0,  # Internal agents are always preferred
                 "status": "active",  # If it's in the registry, it's active
@@ -186,7 +188,7 @@ class A2ACoordinator:
                     overlord=self.overlord,
                     port=self.server_port,
                     host=self.server_host,
-                    auth_mode="none" if not self.require_auth else "api_key",
+                    auth_mode="none" if not self.require_auth else "apiKey",
                     formation_name=self.overlord.formation_id
                 )
                 print("DEBUG: A2A server created successfully")
@@ -223,6 +225,29 @@ class A2ACoordinator:
             else 8181
         )
         return f"http://localhost:{port}/agents/{agent_id}"
+
+    def _determine_transport_from_url(self, url: str) -> str:
+        """
+        Determine the transport type from the URL scheme.
+
+        Args:
+            url: The agent URL
+
+        Returns:
+            The transport type hint (agent, jsonrpc, rest, grpc)
+        """
+        if url.startswith("agent://"):
+            return "agent"
+        elif url.startswith("grpc://"):
+            return "grpc"
+        elif url.startswith("ws://") or url.startswith("wss://"):
+            return "websocket"
+        elif url.startswith("http://") or url.startswith("https://"):
+            # For HTTP URLs, we default to jsonrpc as it's the most common
+            # In a real implementation, this could be determined from agent metadata
+            return "jsonrpc"
+        else:
+            return "unknown"
 
     async def process_pending_registrations(self) -> None:
         """
@@ -346,8 +371,19 @@ class A2ACoordinator:
             # Get the agent instance for metadata extraction
             agent = self.overlord.agents[agent_id]
 
+            # Get agent capabilities using same logic as internal discovery
+            capabilities_list = []
+            if hasattr(agent, "get_capabilities"):
+                capabilities_list = agent.get_capabilities()
+            elif hasattr(agent, "capabilities"):
+                capabilities_list = agent.capabilities
+            elif hasattr(agent, "specialties"):
+                # Use specialties as capabilities
+                capabilities_list = agent.specialties if agent.specialties else []
+
             # Create agent card for registration using MUXI format
-            # The SDK client will handle conversion as needed
+            # For external A2A, capabilities must be in metadata since the SDK
+            # will convert them appropriately
             agent_card = AgentCard(
                 name=agent_id,
                 description=self.overlord.agent_descriptions.get(agent_id, "No description"),
@@ -355,9 +391,11 @@ class A2ACoordinator:
                 url=self._get_agent_url(agent_id),
                 muxi_agent_id=agent_id,
                 muxi_formation=self.overlord.formation_id,
+                # Don't set capabilities dict here - let SDK adapter handle it
                 metadata={
                     "formation_id": self.overlord.formation_id,
-                    "capabilities": getattr(agent, "capabilities", []),
+                    "capabilities": capabilities_list,
+                    "specialties": getattr(agent, "specialties", []),
                     "status": "active",
                 },
             )
@@ -502,8 +540,9 @@ class A2ACoordinator:
             - description: Agent's description
             - capabilities: List of agent capabilities
             - type: "internal" or "external"
-            - url: Agent URL (only for external agents)
-            - formation: Formation name (only for external agents)
+            - url: Agent URL (agent:// for internal, http:// for external)
+            - transport: Transport hint (agent, jsonrpc, rest, grpc, etc.)
+            - formation: Formation name
             - preference_score: Lower = preferred (internal: 0.0, external: 1.0)
         """
         all_agents = {}
@@ -520,7 +559,8 @@ class A2ACoordinator:
                 "description": agent_info.get("description", ""),
                 "capabilities": agent_info.get("capabilities", []),
                 "type": "internal",
-                "url": None,
+                "url": agent_info.get("url"),  # Already has agent:// URL from get_available_agents_for_a2a
+                "transport": agent_info.get("transport", "agent"),  # Get transport hint from source
                 "formation": self.overlord.formation_id,
                 "preference_score": 0.0  # Internal agents are always preferred
             }
@@ -528,28 +568,45 @@ class A2ACoordinator:
         # Step 2: Get external agents if enabled
         if include_external and self.external_registry_enabled:
             try:
+                print(f"DEBUG: Discovering external agents with filter: {capability_filter}")
+                # Don't pass capability filter to registry - filter locally instead
+                # because registry might not check metadata for capabilities
                 external_discovered = await self.discover_external_agents(
-                    capability_filter=capability_filter
+                    capability_filter=None  # Get all agents, filter locally
                 )
+                print(f"DEBUG: Discovered {len(external_discovered)} registries with agents")
 
                 # Process external agents from all registries
                 for registry_url, agent_cards in external_discovered.items():
+                    print(f"DEBUG: Processing {len(agent_cards)} agents from {registry_url}")
                     for agent_card in agent_cards:
                         # Create unique ID for external agent
                         external_id = f"{agent_card.name}@{agent_card.muxi_formation or 'external'}"
+                        print(f"DEBUG: Processing external agent: {external_id}")
 
                         # Skip if we already have this agent internally
                         if agent_card.name in all_agents:
+                            print(f"DEBUG: Skipping {agent_card.name} - already exists internally")
                             continue
 
                         # Extract capabilities from agent card
                         capabilities = []
-                        if hasattr(agent_card, 'capabilities') and agent_card.capabilities:
+
+                        # Check metadata first (where we store capabilities during registration)
+                        if hasattr(agent_card, 'metadata') and agent_card.metadata:
+                            metadata_caps = agent_card.metadata.get('capabilities', [])
+                            if metadata_caps:
+                                capabilities = metadata_caps
+                                print(f"DEBUG: Got capabilities from metadata: {capabilities}")
+
+                        # If no capabilities in metadata, check the main capabilities field
+                        if not capabilities and hasattr(agent_card, 'capabilities') and agent_card.capabilities:
                             # SDK AgentCard has capabilities as dict
-                            capabilities = list(agent_card.capabilities.keys())
-                        elif hasattr(agent_card, 'metadata') and agent_card.metadata:
-                            # Fallback to metadata
-                            capabilities = agent_card.metadata.get('capabilities', [])
+                            if isinstance(agent_card.capabilities, dict):
+                                capabilities = list(agent_card.capabilities.keys())
+                            else:
+                                capabilities = agent_card.capabilities
+                            print(f"DEBUG: Got capabilities from main field: {capabilities}")
 
                         # Apply capability filter if specified
                         if capability_filter:
@@ -562,6 +619,7 @@ class A2ACoordinator:
                             "capabilities": capabilities,
                             "type": "external",
                             "url": agent_card.url,
+                            "transport": self._determine_transport_from_url(agent_card.url),
                             "formation": agent_card.muxi_formation or "unknown",
                             "preference_score": 1.0  # External agents have higher score (lower preference)
                         }
@@ -571,6 +629,96 @@ class A2ACoordinator:
                 _ = f"Failed to include external agents: {e}"
 
         return all_agents
+
+    async def route_to_agent(
+        self,
+        source_agent_id: str,
+        target_agent_info: Dict[str, Any],
+        message: Any,
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Unified routing method that handles both internal and external agents transparently.
+
+        The agent doesn't need to know if the target is internal or external -
+        this method uses the unified A2A messaging with appropriate transport.
+
+        Args:
+            source_agent_id: ID of the sending agent
+            target_agent_info: Agent information dict with 'url' field
+            message: Message to send
+            message_type: Type of message (request/response)
+            context: Optional message context
+
+        Returns:
+            Response from the target agent, or None if routing failed
+        """
+        print("DEBUG: route_to_agent called:")
+        print(f"  source_agent_id: {source_agent_id}")
+        print(f"  target_agent_info: {target_agent_info}")
+        print(f"  message_type: {message_type}")
+
+        # Use unified A2A messaging through overlord
+        if hasattr(self.overlord, 'send_a2a_message'):
+            return await self.overlord.send_a2a_message(
+                source_agent_id=source_agent_id,
+                target_agent_info=target_agent_info,
+                message=message,
+                message_type=message_type,
+                context=context
+            )
+        else:
+            # Fallback if unified messaging not available
+            print("WARNING: Unified A2A messaging not available, using legacy routing")
+
+            # Check if this is an external agent
+            if target_agent_info.get("type") == "external":
+                print(f"DEBUG: Routing to EXTERNAL agent at URL: {target_agent_info.get('url')}")
+                # Route to external agent
+                return await self.route_to_external_agent(
+                    source_agent_id=source_agent_id,
+                    target_agent_url=target_agent_info.get("url"),
+                    message=message,
+                    message_type=message_type,
+                    context=context
+                )
+            else:
+                print(f"DEBUG: Routing to INTERNAL agent: {target_agent_info.get('agent_id')}")
+                # Route to internal agent
+                target_agent_id = target_agent_info.get("agent_id")
+                target_agent = self.overlord.agents.get(target_agent_id)
+
+                if not target_agent:
+                    print(f"DEBUG: Internal agent {target_agent_id} not found")
+                    return None
+
+                # Use the agent's process_a2a_message method for internal routing
+                if hasattr(target_agent, "process_a2a_message"):
+                    from ...utils.id_generator import generate_nanoid
+
+                    # Create A2A message format
+                    a2a_message = {
+                        "role": "user",
+                        "messageId": f"msg_{generate_nanoid()}",
+                        "parts": [
+                            {"type": "TextPart", "text": message if isinstance(message, str) else str(message)},
+                            {"type": "DataPart", "data": context or {}}
+                        ]
+                    }
+
+                    print(f"DEBUG: Calling process_a2a_message on {target_agent_id}")
+                    response = await target_agent.process_a2a_message(
+                        source_agent_id=source_agent_id,
+                        message=a2a_message,
+                        message_type=message_type
+                    )
+
+                    print(f"DEBUG: Internal routing response: {response}")
+                    return response
+
+                print(f"DEBUG: Agent {target_agent_id} doesn't have process_a2a_message method")
+                return None
 
     async def route_to_external_agent(
         self,
@@ -597,13 +745,22 @@ class A2ACoordinator:
             Response from the external agent, or None if routing failed
         """
         try:
+            print("DEBUG: route_to_external_agent called:")
+            print(f"  source_agent_id: {source_agent_id}")
+            print(f"  target_agent_url: {target_agent_url}")
+            print(f"  message_type: {message_type}")
+            print(f"  external_registry_enabled: {self.external_registry_enabled}")
+
             # Skip if external registry not enabled
             if not self.external_registry_enabled:
+                print("DEBUG: External registry not enabled, returning None")
                 return None
 
             import httpx
             from a2a.client import A2AClient
-            from a2a.types import SendMessageRequest
+            from a2a.types import SendMessageRequest, MessageSendParams
+
+            print(f"DEBUG: Creating A2A client for URL: {target_agent_url}")
 
             # Create httpx client and SDK client for target agent
             async with httpx.AsyncClient() as http_client:
@@ -613,28 +770,66 @@ class A2ACoordinator:
                 )
 
                 # Convert message to SDK format
+                print("DEBUG: Converting message to SDK format")
                 sdk_message = ModelsAdapter.muxi_to_sdk_message(
                     message,
                     message_id=f"{source_agent_id}_{int(time.time() * 1000)}",
                     context=context
                 )
 
-                # Send via SDK
-                request = SendMessageRequest(
-                    agent_id=source_agent_id,
+                # Create the params for the JSON-RPC request
+                params = MessageSendParams(
                     message=sdk_message,
-                    timeout=30
+                    metadata={"source_agent_id": source_agent_id}
                 )
 
+                # Create the JSON-RPC request
+                request = SendMessageRequest(
+                    id=f"req_{int(time.time() * 1000)}",
+                    params=params
+                )
+
+                print(f"DEBUG: Sending message via SDK to {target_agent_url}")
                 response = await client.send_message(request)
+                print(f"DEBUG: Response received: {type(response).__name__}")
 
-                # Convert response back to MUXI format
-                if response and response.message:
-                    return ModelsAdapter.sdk_to_muxi_message(response.message)
+                # Handle the response - it's a RootModel that contains either success or error
+                if response:
+                    # The response.root contains the actual response
+                    response_data = response.root if hasattr(response, 'root') else response
+                    print(f"DEBUG: Response data type: {type(response_data).__name__}")
 
+                    # Check if it's a success response
+                    if hasattr(response_data, 'result'):
+                        result_data = response_data.result
+                        print(f"DEBUG: Result data type: {type(result_data).__name__}")
+
+                        # Check if result is a Message
+                        if hasattr(result_data, 'message_id'):
+                            # It's a Message
+                            muxi_message = ModelsAdapter.sdk_to_muxi_message(result_data)
+                            print("DEBUG: Converted response to MUXI format")
+                            return muxi_message
+                        else:
+                            # It might be a Task or other type
+                            print(f"DEBUG: Result is not a Message, it's a {type(result_data).__name__}")
+                            # For now, return a simple response
+                            return {
+                                "success": True,
+                                "type": "task",
+                                "data": str(result_data)
+                            }
+                    elif hasattr(response_data, 'error'):
+                        # It's an error response
+                        print(f"ERROR: A2A request failed: {response_data.error}")
+                        return None
+
+                print("DEBUG: No valid response received")
                 return None
 
         except Exception as e:
-            # Log error but don't fail
-            _ = f"Failed to route to external agent: {e}"
+            # Log error properly
+            print(f"ERROR: Failed to route to external agent: {e}")
+            import traceback
+            traceback.print_exc()
             return None

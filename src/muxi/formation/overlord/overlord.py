@@ -384,6 +384,13 @@ class Overlord:
         a2a_config = configured_services.get("a2a_config") if configured_services else None
         self.a2a_coordinator = A2ACoordinator(self, config=a2a_config)
 
+        # Initialize A2A ClientFactory for transport management
+        self._initialize_a2a_client_factory()
+
+        # Initialize unified A2A messaging
+        from .unified_a2a_messaging import UnifiedA2AMessaging
+        self.unified_a2a = UnifiedA2AMessaging(self)
+
         # Set up callbacks for actual deletion
         self.active_agent_tracker._delete_agent = self._actually_delete_agent
         self.active_agent_tracker._shutdown_overlord = self._actually_shutdown_overlord
@@ -1918,6 +1925,83 @@ class Overlord:
                         data={"collection_name": collection_name, "error": str(e)},
                         description=f"Failed to register collection '{collection_name}': {str(e)}",
                     )
+
+    def _initialize_a2a_client_factory(self):
+        """Initialize the A2A ClientFactory with AgentTransport registered."""
+        try:
+            from a2a.client import ClientFactory, ClientConfig
+            from ...services.a2a.agent_transport import AgentTransport
+
+            # Create client factory with default configuration
+            config = ClientConfig()
+            self.client_factory = ClientFactory(config)
+
+            # Register agent transport for direct agent communication
+            agent_transport = AgentTransport(overlord=self)
+            self.client_factory.register('agent', agent_transport)
+
+            # Log successful initialization
+            observability.observe(
+                event_type=observability.SystemEvents.INITIALIZING,
+                level=observability.EventLevel.INFO,
+                data={
+                    "factory": "ClientFactory",
+                    "transports": ["agent", "jsonrpc", "rest", "grpc"]
+                },
+                description="A2A ClientFactory initialized with AgentTransport"
+            )
+
+        except Exception as e:
+            # Log error but don't fail - A2A is optional
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={"error": str(e)},
+                description=f"Failed to initialize A2A ClientFactory: {str(e)}"
+            )
+            self.client_factory = None
+
+    async def send_a2a_message(
+        self,
+        source_agent_id: str,
+        target_agent_info: Dict[str, Any],
+        message: Union[str, Dict[str, Any]],
+        message_type: str = "request",
+        context: Optional[Dict[str, Any]] = None,
+        wait_for_response: bool = True,
+        timeout: int = 30,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Send A2A message using unified protocol with appropriate transport.
+
+        This method provides the interface for agents to send messages to other agents
+        (internal or external) using the same A2A protocol. The transport is determined
+        by the target agent's URL.
+
+        Args:
+            source_agent_id: ID of the sending agent
+            target_agent_info: Agent info dict with 'url' field (agent:// or http://)
+            message: Message content (string or dict)
+            message_type: Type of message (request, response, etc.)
+            context: Optional context data
+            wait_for_response: Whether to wait for a response
+            timeout: Timeout in seconds
+
+        Returns:
+            Response from target agent if wait_for_response is True
+        """
+        if not target_agent_info.get("url"):
+            raise ValueError("Target agent info must include 'url' field")
+
+        return await self.unified_a2a.send_a2a_message(
+            source_agent_id=source_agent_id,
+            target_agent_url=target_agent_info["url"],
+            message=message,
+            message_type=message_type,
+            context=context,
+            wait_for_response=wait_for_response,
+            timeout=timeout
+        )
 
     async def create_model(
         self,

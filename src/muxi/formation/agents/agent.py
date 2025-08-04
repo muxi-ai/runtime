@@ -144,6 +144,7 @@ class Agent:
         # Initialize A2A history for loop detection and attempt limiting
         # Using collections.deque for efficient bounded history
         from collections import deque
+
         self._max_a2a_history_size = 20  # Keep last 20 delegation attempts
         self._a2a_history = deque(maxlen=self._max_a2a_history_size)
         self._a2a_attempt_count = 0
@@ -1082,8 +1083,12 @@ class Agent:
                                     if not parameters:
                                         # Get tool schema to understand required parameters
                                         tool_schema = tool_def.get("function", {})
-                                        required_params = tool_schema.get("parameters", {}).get("required", [])
-                                        param_properties = tool_schema.get("parameters", {}).get("properties", {})
+                                        required_params = tool_schema.get("parameters", {}).get(
+                                            "required", []
+                                        )
+                                        param_properties = tool_schema.get("parameters", {}).get(
+                                            "properties", {}
+                                        )
 
                                         if required_params:
                                             # Try to infer parameters based on tool name, request context, and schema
@@ -1092,7 +1097,7 @@ class Agent:
                                                 required_params=required_params,
                                                 param_properties=param_properties,
                                                 action_description=step.get("action", ""),
-                                                user_request=user_message
+                                                user_request=user_message,
                                             )
 
                                             if parameters:
@@ -1129,7 +1134,7 @@ class Agent:
                                     is_valid, validation_error = self._validate_tool_parameters(
                                         parameters=parameters,
                                         tool_schema=tool_schema,
-                                        tool_name=tool_name
+                                        tool_name=tool_name,
                                     )
 
                                     if not is_valid:
@@ -1196,7 +1201,7 @@ class Agent:
                                 "status": "error",
                                 "error": str(e),
                                 "step_action": step.get("action", ""),
-                                "tool_name": tool_name
+                                "tool_name": tool_name,
                             }
                             my_results[placeholder] = error_result
 
@@ -2772,7 +2777,9 @@ class Agent:
                         "agent_id": self.agent_id,
                         "error": "A2A loop detected",
                         "capability": needed_capability,
-                        "history": list(self._a2a_history),  # Convert deque to list for serialization
+                        "history": list(
+                            self._a2a_history
+                        ),  # Convert deque to list for serialization
                     },
                     description="Detected A2A loop - stopping delegation",
                 )
@@ -2785,8 +2792,7 @@ class Agent:
                 # Try to use unified discovery if available
                 if hasattr(self.overlord.a2a_coordinator, "get_all_available_agents"):
                     available_agents = await self.overlord.a2a_coordinator.get_all_available_agents(
-                        self.agent_id,
-                        include_external=True
+                        self.agent_id, include_external=True
                     )
                 else:
                     available_agents = self.overlord.a2a_coordinator.get_available_agents_for_a2a(
@@ -2859,38 +2865,27 @@ class Agent:
                 description=f"A2A execution request: {self.agent_id} -> {best_agent_id}",
             )
 
-            # Check if this is an external agent and route accordingly
-            if best_agent_info and isinstance(best_agent_info, dict) and best_agent_info.get("type") == "external":
-                # External agent - use the coordinator's route_to_external_agent method
-                if self.overlord and hasattr(self.overlord, "a2a_coordinator"):
-                    # Enrich context for external delegation
-                    external_context = {
-                        "source_formation": self.overlord.formation_id,
-                        "source_agent": self.agent_id,
-                        "needed_capability": needed_capability,
-                        "execution_required": True,
-                        "original_request": user_message,
-                    }
+            # Use unified send_a2a_message for both internal and external agents
+            # Add enriched context for external agents
+            enriched_context = None
+            if best_agent_info and best_agent_info.get("type") == "external":
+                enriched_context = {
+                    "source_formation": self.overlord.formation_id,
+                    "source_agent": self.agent_id,
+                    "needed_capability": needed_capability,
+                    "execution_required": True,
+                    "original_request": user_message,
+                }
 
-                    response = await self.overlord.a2a_coordinator.route_to_external_agent(
-                        source_agent_id=self.agent_id,
-                        target_agent_url=best_agent_info.get("url"),
-                        message=user_message,  # Send the actual message content
-                        message_type="request",
-                        context=external_context
-                    )
-                else:
-                    # No coordinator available for external routing
-                    return None
-            else:
-                # Internal agent - use existing mechanism
-                response = await self.send_a2a_message(
-                    target_agent_id=best_agent_id,
-                    message=a2a_message,
-                    message_type="request",  # Standard A2A request type
-                    wait_for_response=True,
-                    timeout=60,  # Give more time for complex requests
-                )
+            # Send message using unified transport
+            response = await self.send_a2a_message(
+                target_agent_id=best_agent_id,
+                message=a2a_message,
+                message_type="request",
+                context=enriched_context,
+                wait_for_response=True,
+                timeout=60,  # Give more time for complex requests
+            )
 
             if response and response.get("status") == "success":
                 # Get response content (could be in 'response' or 'advice' field)
@@ -3138,145 +3133,32 @@ class Agent:
         wait_for_response: bool = True,
         timeout: int = 30,
     ) -> Optional[Dict[str, Any]]:
-        """Send A2A message via service layer."""
-        from ...services.a2a import send_message
+        """Send A2A message using unified transport."""
+        # Discover the target agent to get its URL
+        available_agents = self.overlord.a2a_coordinator.get_available_agents_for_a2a(self.agent_id)
 
-        return await send_message(
+        if target_agent_id not in available_agents:
+            # Try external agents as well
+            all_agents = await self.overlord.a2a_coordinator.get_all_available_agents(
+                self.agent_id, include_external=True
+            )
+            if target_agent_id in all_agents:
+                available_agents[target_agent_id] = all_agents[target_agent_id]
+            else:
+                raise ValueError(
+                    f"Agent {target_agent_id} not found in formation or external registry"
+                )
+
+        # Use unified messaging with URL
+        return await self.overlord.send_a2a_message(
             source_agent_id=self.agent_id,
-            target_agent_id=target_agent_id,
+            target_agent_info=available_agents[target_agent_id],
             message=message,
             message_type=message_type,
             context=context,
             wait_for_response=wait_for_response,
             timeout=timeout,
         )
-
-    async def _send_local_a2a_message(
-        self,
-        target_agent_id: str,
-        message: Union[str, Dict[str, Any]],
-        message_type: str,
-        context: Optional[Dict[str, Any]],
-        wait_for_response: bool,
-        timeout: int,
-        message_id: str,
-    ) -> Optional[Dict[str, Any]]:
-        """Send message to agent in same formation."""
-        try:
-            target_agent = self.overlord.get_agent(target_agent_id)
-            if not target_agent:
-                raise Exception(f"Target agent {target_agent_id} not found in formation")
-
-            # Send message to target agent
-            response = await target_agent.handle_a2a_message(
-                source_agent_id=self.agent_id,
-                message=message,
-                message_type=message_type,
-                context=context or {},
-                message_id=message_id,
-            )
-
-            if wait_for_response:
-                return response
-            return None
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "source_agent_id": self.agent_id,
-                    "target_agent_id": target_agent_id,
-                    "message_id": message_id,
-                    "error": str(e),
-                    "location": "local_a2a",
-                },
-                description=f"Local A2A message failed: {str(e)}",
-            )
-            raise
-
-    async def _send_external_a2a_message(
-        self,
-        target_agent_id: str,
-        message: Union[str, Dict[str, Any]],
-        message_type: str,
-        context: Optional[Dict[str, Any]],
-        wait_for_response: bool,
-        timeout: int,
-        message_id: str,
-    ) -> Optional[Dict[str, Any]]:
-        """Send message to external agent via registry."""
-        try:
-            # Get external agent information from registry
-            if (
-                not hasattr(self.overlord, "external_registry")
-                or not self.overlord.external_registry
-            ):
-                raise Exception("External registry not configured")
-
-            registry = self.overlord.external_registry
-
-            # Discover the target agent
-            agents = await registry.discover_agents()
-            target_agent_info = None
-
-            for agent_info in agents:
-                if agent_info.get("id") == target_agent_id:
-                    target_agent_info = agent_info
-                    break
-
-            if not target_agent_info:
-                raise Exception(f"External agent {target_agent_id} not found in registry")
-
-            # Extract endpoint from agent info
-            endpoint = target_agent_info.get("endpoint")
-            if not endpoint:
-                raise Exception(f"No endpoint found for agent {target_agent_id}")
-
-            # Prepare message payload
-            payload = {
-                "source_agent_id": self.agent_id,
-                "target_agent_id": target_agent_id,
-                "message": message,
-                "message_type": message_type,
-                "context": context or {},
-                "message_id": message_id,
-                "timestamp": datetime.datetime.now().isoformat(),
-            }
-
-            # Send HTTP request to external agent
-            import aiohttp
-
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    f"{endpoint}/a2a/message",
-                    json=payload,
-                    timeout=aiohttp.ClientTimeout(total=timeout),
-                ) as response:
-                    if response.status == 200:
-                        if wait_for_response:
-                            return await response.json()
-                        return None
-                    else:
-                        error_text = await response.text()
-                        raise Exception(
-                            f"External A2A request failed: {response.status} - {error_text}"
-                        )
-
-        except Exception as e:
-            observability.observe(
-                event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
-                level=observability.EventLevel.ERROR,
-                data={
-                    "source_agent_id": self.agent_id,
-                    "target_agent_id": target_agent_id,
-                    "message_id": message_id,
-                    "error": str(e),
-                    "location": "external_a2a",
-                },
-                description=f"External A2A message failed: {str(e)}",
-            )
-            raise
 
     async def handle_a2a_message(
         self,
@@ -3859,10 +3741,7 @@ class Agent:
         )
 
     def _validate_tool_parameters(
-        self,
-        parameters: Dict[str, Any],
-        tool_schema: Dict[str, Any],
-        tool_name: str
+        self, parameters: Dict[str, Any], tool_schema: Dict[str, Any], tool_name: str
     ) -> tuple[bool, Optional[str]]:
         """
         Validate inferred or provided parameters against the tool schema.
@@ -3908,31 +3787,58 @@ class Agent:
                 # Type validation
                 if param_type:
                     if param_type == "string" and not isinstance(param_value, str):
-                        return False, f"Parameter '{param_name}' should be string, got {type(param_value).__name__}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' should be string, got {type(param_value).__name__}",
+                        )
                     elif param_type == "number" and not isinstance(param_value, (int, float)):
-                        return False, f"Parameter '{param_name}' should be number, got {type(param_value).__name__}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' should be number, got {type(param_value).__name__}",
+                        )
                     elif param_type == "integer" and not isinstance(param_value, int):
-                        return False, f"Parameter '{param_name}' should be integer, got {type(param_value).__name__}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' should be integer, got {type(param_value).__name__}",
+                        )
                     elif param_type == "boolean" and not isinstance(param_value, bool):
-                        return False, f"Parameter '{param_name}' should be boolean, got {type(param_value).__name__}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' should be boolean, got {type(param_value).__name__}",
+                        )
                     elif param_type == "array" and not isinstance(param_value, list):
-                        return False, f"Parameter '{param_name}' should be array, got {type(param_value).__name__}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' should be array, got {type(param_value).__name__}",
+                        )
                     elif param_type == "object" and not isinstance(param_value, dict):
-                        return False, f"Parameter '{param_name}' should be object, got {type(param_value).__name__}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' should be object, got {type(param_value).__name__}",
+                        )
 
                 # Enum validation
                 param_enum = param_def.get("enum")
                 if param_enum and param_value not in param_enum:
-                    return False, f"Parameter '{param_name}' value '{param_value}' not in allowed values: {param_enum}"
+                    return (
+                        False,
+                        f"Parameter '{param_name}' value '{param_value}' not in allowed values: {param_enum}",
+                    )
 
                 # Min/Max validation for numbers
                 if param_type in ["number", "integer"]:
                     min_val = param_def.get("minimum")
                     max_val = param_def.get("maximum")
                     if min_val is not None and param_value < min_val:
-                        return False, f"Parameter '{param_name}' value {param_value} is below minimum {min_val}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' value {param_value} is below minimum {min_val}",
+                        )
                     if max_val is not None and param_value > max_val:
-                        return False, f"Parameter '{param_name}' value {param_value} is above maximum {max_val}"
+                        return (
+                            False,
+                            f"Parameter '{param_name}' value {param_value} is above maximum {max_val}",
+                        )
 
             return True, None
 
@@ -3959,7 +3865,7 @@ class Agent:
         required_params: List[str],
         param_properties: Dict[str, Any],
         action_description: str,
-        user_request: str
+        user_request: str,
     ) -> Dict[str, Any]:
         """
         Use LLM to intelligently infer tool parameters based on context and schema.
@@ -4023,11 +3929,12 @@ JSON Response:"""
             response = await self.model.chat(
                 messages=messages,
                 temperature=0.1,  # Low temperature for deterministic parameter generation
-                max_tokens=500
+                max_tokens=500,
             )
 
             # Parse the JSON response
             import json
+
             response_text = response.strip()
             # Clean up response if it has markdown code blocks
             if "```json" in response_text:
@@ -4058,9 +3965,9 @@ JSON Response:"""
                     data={
                         "tool_name": tool_name,
                         "missing_params": missing,
-                        "inferred": parameters
+                        "inferred": parameters,
                     },
-                    description=f"LLM inference missing required params: {missing}"
+                    description=f"LLM inference missing required params: {missing}",
                 )
                 return {}
 
@@ -4071,19 +3978,16 @@ JSON Response:"""
                 data={
                     "tool_name": tool_name,
                     "error": str(e),
-                    "response": response_text if 'response_text' in locals() else None
+                    "response": response_text if "response_text" in locals() else None,
                 },
-                description="Failed to parse LLM parameter inference as JSON"
+                description="Failed to parse LLM parameter inference as JSON",
             )
             return {}
         except Exception as e:
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
                 level=observability.EventLevel.ERROR,
-                data={
-                    "tool_name": tool_name,
-                    "error": str(e)
-                },
-                description="Exception in LLM parameter inference"
+                data={"tool_name": tool_name, "error": str(e)},
+                description="Exception in LLM parameter inference",
             )
             return {}

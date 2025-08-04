@@ -1003,7 +1003,10 @@ class Formation:
                     registration_timeout=self._a2a_config.get("external_registry", {}).get(
                         "timeout", 30.0
                     ),
-                    require_auth=self._a2a_config.get("security", {}).get("require_auth", False),
+                    # Map authentication from inbound.mode configuration
+                    require_auth=(
+                        self._a2a_config.get("inbound", {}).get("mode", "none") != "none"
+                    ),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
                 )
                 a2a_config_obj.validate()
