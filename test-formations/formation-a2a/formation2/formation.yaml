@@ -77,14 +77,14 @@ mcp:
 
 # A2A Configuration
 a2a:
-  enabled: true                   # Enable Agent-to-Agent communication
+  enabled: true                  # Enable Agent-to-Agent communication
 
-  outbound:
-    enabled: true                 # Enable outbound A2A communication
-    registries:                   # External A2A registries to connect to
+  outbound:                      # Outbound A2A communication
+    enabled: true                # Enable outbound A2A communication
+    registries:                  # External A2A registries to connect to
       - "http://0.0.0.0:9090"
-    default_retry_attempts: 3     # Default number of retry attempts
-    default_timeout_seconds: 30   # Default timeout for A2A requests
+    default_retry_attempts: 3
+    default_timeout_seconds: 30
 
     # Outbound services with secrets-based authentication
     # services:
@@ -94,10 +94,10 @@ a2a:
     #       token: "${{ secrets.A2A_SHARED_KEY }}"
 
   inbound:
-    enabled: true                 # Enable inbound A2A communication
-    registries:                   # External A2A registries for server registration
+    enabled: true
+    registries:
       - "http://0.0.0.0:9090"
-    port: 8181                    # Port for A2A server to listen on
-    trusted_endpoints: []         # List of trusted external endpoints
-    # mode: "bearer"                # Authentication mode for inbound requests
+    port: 8181
+    trusted_endpoints: []
+    # mode: "bearer"
     # shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
