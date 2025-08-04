@@ -332,23 +332,14 @@ Analysis Results:
                 else:
                     info_parts.append("  Capabilities: general-purpose")
 
-                # Add a note about what this agent is best suited for based on capabilities
-                specialties_str = str(specialties).lower()
-
-                if "research" in specialties_str:
-                    info_parts.append("  Best for: Information gathering, analysis, web searches")
-                elif "writing" in specialties_str:
-                    info_parts.append("  Best for: Creating documents, reports, content generation")
-                elif "coding" in specialties_str or "development" in specialties_str:
-                    info_parts.append("  Best for: Writing code, software development tasks")
-                elif "analysis" in specialties_str or "data_analysis" in specialties_str:
-                    info_parts.append("  Best for: Data analysis, pattern recognition, insights")
-                elif specialties and len(specialties) > 0:
-                    # For any other specific capabilities (platforms, tools, etc.)
-                    # Describe them generically without hardcoding names
+                # Add agent description if available
+                if agent_description:
+                    info_parts.append(f"  Best for: {agent_description}")
+                elif specialties:
+                    # Generic description based on capabilities
                     capability_str = ", ".join(specialties)
                     info_parts.append(
-                        f"  Best for: Operations requiring {capability_str} capability"
+                        f"  Best for: Tasks requiring {capability_str} capabilities"
                     )
 
             info_parts.append("")

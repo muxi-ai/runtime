@@ -7,10 +7,10 @@ import asyncio
 import sys
 import os
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "src")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "src")))
 
-from muxi.formation.formation import Formation
-from tests.utils.env_setup import load_api_keys
+from muxi.formation.formation import Formation  # noqa: E402
+from tests.utils.env_setup import load_api_keys  # noqa: E402
 
 
 async def main():
@@ -28,7 +28,7 @@ async def main():
     # Load formation
     print("\n1. Loading formation...")
     formation = Formation()
-    await formation.load("test-formations/formation-multi-agent-segregated/formation.yaml")
+    await formation.load("test-formations/formation-multi-agent-segregated/formation.yaml")  # noqa: E501
     overlord = await formation.start_overlord()
     print("   ✓ Formation loaded")
 

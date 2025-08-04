@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
-from muxi.formation.formation import Formation
+from muxi.formation.formation import Formation  # noqa: E402
 
 
 async def main():
@@ -30,7 +30,7 @@ async def main():
 
         # Complex request WITHOUT agent_name to trigger workflow
         response = await overlord.chat(
-            message="Research the latest developments in quantum computing, analyze the key players and breakthroughs, then create a comprehensive Linear issue with findings, timeline, and future predictions",
+            message="Research the latest developments in quantum computing, analyze the key players and breakthroughs, then create a comprehensive Linear issue with findings, timeline, and future predictions",  # noqa: E501
             user_id="test_user",
             session_id="workflow_test",
             # NO agent_name - let workflow decide
@@ -80,7 +80,8 @@ async def main():
         else:
             print("\n⚠️  No approval requested - complexity might be below threshold")
 
-        await formation.stop()
+        await formation.stop_overlord()
+        formation.shutdown()
 
     except Exception as e:
         print(f"\n❌ Error: {e}")

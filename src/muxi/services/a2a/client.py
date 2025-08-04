@@ -202,8 +202,6 @@ class A2AService:
 
             # Track metrics
             duration = asyncio.get_event_loop().time() - start_time
-            # Lazy import to avoid circular dependency
-            from .. import observability
             observability.observe(
                 event_type="a2a_message_sent",
                 level=observability.EventLevel.INFO,
@@ -232,8 +230,6 @@ class A2AService:
 
             # Track error metrics
             duration = asyncio.get_event_loop().time() - start_time
-            # Lazy import to avoid circular dependency
-            from .. import observability
             observability.observe(
                 event_type="a2a_message_error",
                 level=observability.EventLevel.ERROR,
