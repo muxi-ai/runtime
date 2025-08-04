@@ -167,7 +167,10 @@ class A2ACoordinator:
             - Makes local agents discoverable to external formations
         """
         try:
-            print(f"DEBUG: A2A server start called. server_enabled={self.server_enabled}, host={self.server_host}, port={self.server_port}")
+            print(
+                f"DEBUG: A2A server start called. server_enabled={self.server_enabled}, "
+                f"host={self.server_host}, port={self.server_port}"
+            )
 
             # Only start if server is enabled in config
             if not self.server_enabled:
@@ -251,19 +254,22 @@ class A2ACoordinator:
         try:
             # Skip if external registry not enabled or no pending registrations
             if not self.external_registry_enabled:
-                print(f"DEBUG: External registry not enabled, skipping registration")
+                print("DEBUG: External registry not enabled, skipping registration")
                 return
 
             # Skip if no registry client or no pending registrations
             if not self.overlord.inbound_registry_client:
-                print(f"DEBUG: No inbound registry client, skipping registration")
+                print("DEBUG: No inbound registry client, skipping registration")
                 return
 
             if not self.overlord.pending_external_registrations:
-                print(f"DEBUG: No pending registrations, skipping")
+                print("DEBUG: No pending registrations, skipping")
                 return
 
-            print(f"DEBUG: Processing {len(self.overlord.pending_external_registrations)} pending registrations: {self.overlord.pending_external_registrations}")
+            print(
+                f"DEBUG: Processing {len(self.overlord.pending_external_registrations)} "
+                f"pending registrations: {self.overlord.pending_external_registrations}"
+            )
 
             # Apply timeout to registration operations
             async def _register_with_timeout(agent_id: str):
