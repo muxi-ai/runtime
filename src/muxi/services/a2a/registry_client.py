@@ -3,11 +3,10 @@ A2A External Registry Client
 
 This module provides client functionality for communicating with external
 A2A registries. It handles agent registration, discovery, and health
-monitoring across multiple external registries.
+monitoring across multiple external registries using the A2A protocol.
 """
 
 import asyncio
-
 from typing import Dict, List, Optional, Any, Union
 from dataclasses import dataclass
 import httpx
@@ -380,7 +379,7 @@ class A2ARegistryClient:
         try:
             # Emit agent registration start event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
                 level=observability.EventLevel.INFO,
                 description=f"Starting agent registration for {agent_card.name}",
                 data={
@@ -429,7 +428,7 @@ class A2ARegistryClient:
 
                 # Emit successful registration event
                 observability.observe(
-                    event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
+                    event_type=observability.SystemEvents.A2A_REGISTERED,
                     level=observability.EventLevel.INFO,
                     description=f"Agent {agent_card.name} registered successfully with {registry_url}",  # noqa: E501
                     data={
@@ -518,7 +517,7 @@ class A2ARegistryClient:
 
             # Emit register all start event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
                 level=observability.EventLevel.INFO,
                 description=f"Registering agent {agent_card.name} with all {len(self.registries)} registries",  # noqa: E501
                 data={
@@ -614,7 +613,7 @@ class A2ARegistryClient:
 
             # Emit deregistration start event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_REGISTRATION_STARTED,
+                event_type=observability.SystemEvents.A2A_AGENT_REGISTERED,
                 level=observability.EventLevel.INFO,
                 description=f"Starting deregistration for agent: {agent_url}",
                 data={
@@ -629,9 +628,9 @@ class A2ARegistryClient:
 
             for registry_url in target_registries:
                 try:
-                    response = await self.http_client.delete(
+                    response = await self.http_client.post(
                         f"{registry_url}/deregister",
-                        params={"agent_url": agent_url}
+                        json={"agent_url": agent_url}
                     )
 
                     if response.status_code in [200, 204, 404]:  # OK, No Content, or Not Found
@@ -641,7 +640,7 @@ class A2ARegistryClient:
 
                         # Emit successful deregistration event
                         observability.observe(
-                            event_type=observability.SystemEvents.A2A_REGISTRATION_COMPLETED,
+                            event_type=observability.SystemEvents.A2A_REGISTERED,
                             level=observability.EventLevel.INFO,
                             description=f"Agent deregistered successfully from {registry_url}",
                             data={

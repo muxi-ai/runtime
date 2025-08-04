@@ -900,6 +900,45 @@ class Overlord:
         # Load agents from formation configuration
         # Load agents from formation's pre-processed configuration
         await self._load_agents_from_formation()
+        # Initialize registry client if external registry is configured
+        if self.a2a_coordinator.external_registry_enabled:
+            # Get registry URLs from configuration
+            inbound_registries = self.formation_config.get("a2a", {}).get("inbound", {}).get("registries", [])
+            outbound_registries = self.formation_config.get("a2a", {}).get("outbound", {}).get("registries", [])
+
+            # Use inbound registries for agent registration, fall back to outbound if not specified
+            registry_urls = inbound_registries or outbound_registries
+
+            if registry_urls:
+                try:
+                    from ...services.a2a.registry_client import A2ARegistryClient
+                    self.inbound_registry_client = A2ARegistryClient(registries=registry_urls)
+                    observability.observe(
+                        event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
+                        level=observability.EventLevel.INFO,
+                        data={"registries": registry_urls},
+                        description=f"Initialized registry client with {len(registry_urls)} registries",
+                    )
+
+                    # Process pending external agent registrations
+                    if hasattr(self, "pending_external_registrations") and self.pending_external_registrations:
+                        await self.a2a_coordinator.process_pending_registrations()
+                        
+                except Exception as e:
+                    # Log error but don't fail startup - formation can work without external registry
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "registries": registry_urls,
+                            "operation": "registry_client_init"
+                        },
+                        description=f"Failed to initialize external registry client: {str(e)}. Formation will continue without external A2A.",
+                    )
+                    # Set to None to indicate registry is not available
+                    self.inbound_registry_client = None
 
         # Update TaskDecomposer with loaded agents
         if hasattr(self, "task_decomposer") and self.task_decomposer:
@@ -932,7 +971,7 @@ class Overlord:
             and self.inbound_registry_client
             and hasattr(self, "pending_external_registrations")
         ):
-            await self.a2a_coordinator._process_pending_agent_registrations()
+            await self.a2a_coordinator.process_pending_registrations()
 
         # MCP servers are now registered by Formation in its event loop
         # Just get the MCP service from configured services
@@ -1064,6 +1103,10 @@ class Overlord:
 
                 # Add to agents dictionary
                 self.agents[agent_id] = agent
+
+                # Add to pending external registrations if external A2A is enabled
+                if self.a2a_coordinator.external_registry_enabled:
+                    self.pending_external_registrations.add(agent_id)
 
                 # Store agent metadata for routing
                 self.agent_descriptions[agent_id] = agent_config.get("description", "")
@@ -2164,40 +2207,61 @@ class Overlord:
 
         return True
 
+    async def _deregister_agent_from_external_registry(self, agent_id: str):
+        """Helper to deregister a single agent from external registry."""
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator.external_registry_enabled:
+            if hasattr(self, "inbound_registry_client") and self.inbound_registry_client:
+                try:
+                    await self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
+                    observability.observe(
+                        event_type=observability.SystemEvents.AGENT_DEREGISTRATION_COMPLETED,
+                        level=observability.EventLevel.DEBUG,
+                        data={"agent_id": agent_id, "registry": "external"},
+                        description=f"Successfully deregistered agent {agent_id} from external registry",
+                    )
+                except Exception as e:
+                    # Log error but don't fail the removal
+                    observability.observe(
+                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": agent_id,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "operation": "external_deregistration",
+                        },
+                        description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}",
+                    )
+
+    async def _deregister_all_agents_from_external_registry(self):
+        """Helper to deregister all agents from external registry."""
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator.external_registry_enabled:
+            if hasattr(self, "inbound_registry_client") and self.inbound_registry_client:
+                # Deregister all agents concurrently
+                # Create a static copy of keys to avoid RuntimeError if dict changes during iteration
+                deregistration_tasks = []
+                for agent_id in list(self.agents.keys()):
+                    task = self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
+                    deregistration_tasks.append(task)
+
+                if deregistration_tasks:
+                    # Wait for all deregistrations with timeout
+                    try:
+                        await asyncio.wait_for(
+                            asyncio.gather(*deregistration_tasks, return_exceptions=True),
+                            timeout=5.0
+                        )
+                    except asyncio.TimeoutError:
+                        pass  # Continue even if deregistration times out
+
     async def _actually_delete_agent(self, agent_id: str):
         """Actually delete the agent (called by active_agent_tracker)."""
         if agent_id in self.agents:
             # Deregister from external registries if configured
-            if hasattr(self, "external_registry_client") and self.external_registry_client:
-
-                async def _deregister_with_error_handling():
-                    """Wrapper to handle errors in background deregistration."""
-                    try:
-                        await self.a2a_coordinator.deregister_agent_from_external_registry(agent_id)
-                        observability.observe(
-                            event_type=observability.SystemEvents.AGENT_DEREGISTRATION_COMPLETED,
-                            level=observability.EventLevel.DEBUG,
-                            data={"agent_id": agent_id, "registry": "external"},
-                            description=f"Successfully deregistered agent {agent_id} from external registry",
-                        )
-                    except Exception as e:
-                        # Log error but don't fail the removal
-                        observability.observe(
-                            event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                            level=observability.EventLevel.WARNING,
-                            data={
-                                "agent_id": agent_id,
-                                "error_type": type(e).__name__,
-                                "error_message": str(e),
-                                "operation": "external_deregistration",
-                            },
-                            description=f"Failed to deregister agent {agent_id} from external registry: {str(e)}",
-                        )
-
-                # Create tracked task with error handling
-                self._create_tracked_task(
-                    _deregister_with_error_handling(), name=f"deregister_agent_{agent_id}"
-                )
+            self._create_tracked_task(
+                self._deregister_agent_from_external_registry(agent_id),
+                name=f"deregister_agent_{agent_id}"
+            )
 
             # Invalidate all cached responses for this agent
             try:
@@ -2239,6 +2303,9 @@ class Overlord:
 
     async def _actually_shutdown_overlord(self):
         """Actually shutdown overlord (called by active_agent_tracker)."""
+
+        # Deregister all agents from external registry before shutdown
+        await self._deregister_all_agents_from_external_registry()
 
         # Wait for background tasks to complete
         if hasattr(self, "_background_tasks") and self._background_tasks:

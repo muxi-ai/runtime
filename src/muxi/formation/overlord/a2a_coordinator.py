@@ -10,6 +10,7 @@ import asyncio
 from typing import Dict, List, Optional, Any
 
 from ...datatypes.schema import A2AServiceSchema
+from ...services.a2a.models import AgentCard
 
 
 class A2ACoordinator:
@@ -161,6 +162,28 @@ class A2ACoordinator:
             # SystemEvents.A2A_SERVER_START_FAILED
             _ = e  # remove this after implementing observability
 
+    def _get_agent_url(self, agent_id: str) -> str:
+        """
+        Helper method to construct the agent URL consistently.
+        
+        Args:
+            agent_id: The ID of the agent
+            
+        Returns:
+            The full URL for the agent
+        """
+        port = self.overlord.a2a_server.port if hasattr(self.overlord, 'a2a_server') and self.overlord.a2a_server else 8181
+        return f"http://localhost:{port}/agents/{agent_id}"
+    
+    async def process_pending_registrations(self) -> None:
+        """
+        Public method to process pending external agent registrations.
+        
+        This should be called after the registry client is initialized to register
+        any agents that were created before the A2A system was ready.
+        """
+        await self._process_pending_agent_registrations()
+    
     async def _process_pending_agent_registrations(self) -> None:
         """
         Process pending external agent registrations.
@@ -258,17 +281,23 @@ class A2ACoordinator:
             # Get the agent instance for metadata extraction
             agent = self.overlord.agents[agent_id]
 
-            # Create agent registration payload with all relevant metadata
-            agent_info = {
-                "agent_id": agent_id,
-                "formation_id": self.overlord.formation_id,
-                "description": self.overlord.agent_descriptions.get(agent_id, ""),
-                "capabilities": getattr(agent, "capabilities", []),
-                "status": "active",  # All registered agents are considered active
-            }
+            # Create agent card for registration
+            agent_card = AgentCard(
+                name=agent_id,
+                description=self.overlord.agent_descriptions.get(agent_id, "No description"),
+                version="1.0.0",
+                url=self._get_agent_url(agent_id),
+                muxi_agent_id=agent_id,
+                muxi_formation=self.overlord.formation_id,
+                metadata={
+                    "formation_id": self.overlord.formation_id,
+                    "capabilities": getattr(agent, "capabilities", []),
+                    "status": "active",
+                },
+            )
 
             # Send registration request to external registry
-            await self.overlord.inbound_registry_client.register_agent(agent_info)
+            await self.overlord.inbound_registry_client.register_agent(agent_card)
 
             #  Info - TODO: add observability
             # SystemEvents.A2A_AGENT_REGISTERED
@@ -293,9 +322,10 @@ class A2ACoordinator:
             if not self.overlord.inbound_registry_client:
                 return
 
-            await self.overlord.inbound_registry_client.deregister_agent(
-                agent_id, self.overlord.formation_id
-            )
+            # Use helper method to get consistent agent URL
+            agent_url = self._get_agent_url(agent_id)
+            
+            await self.overlord.inbound_registry_client.deregister_agent(agent_url)
 
             #  Info - TODO: add observability
             # SystemEvents.A2A_AGENT_DEREGISTERED
