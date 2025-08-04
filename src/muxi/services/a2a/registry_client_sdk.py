@@ -883,50 +883,45 @@ class A2ARegistryClientSDK:
         registry_url: str,
         capability_filter: Optional[List[str]] = None
     ) -> List[AgentCard]:
-        """Discover agents from a single registry using SDK"""
+        """Discover agents from a single registry using HTTP (registries are not A2A agents)"""
         try:
-            client = self.sdk_clients.get(registry_url)
-            if not client:
+            # Get the httpx client for this registry (NOT the SDK client)
+            http_client = self.httpx_clients.get(registry_url)
+            if not http_client:
                 return []
 
-            # Create discovery message using SDK
-            discovery_data = {"operation": "discover"}
+            # Build query parameters
+            params = {}
             if capability_filter:
-                discovery_data["capabilities"] = capability_filter
+                params["capabilities"] = ",".join(capability_filter)
 
-            discovery_message = Message(
-                message_id="discover_agents",
-                role=Role.agent,
-                parts=[
-                    TextPart(text="discover", kind="text"),
-                    DataPart(data=discovery_data, kind="data")
-                ],
-                metadata={"operation": "discover"},
-                kind="message"
+            # Send HTTP GET to registry's /discover endpoint
+            response = await http_client.get(
+                f"{registry_url}/discover",
+                params=params
             )
-
-            # Send discovery request via SDK
-            request = SendMessageRequest(
-                agent_id="registry",
-                message=discovery_message,
-                timeout=self.config.timeout_seconds
-            )
-
-            response = await client.send_message(request)
 
             # Extract agents from response
             agent_cards = []
-            if response and response.message:
-                for part in response.message.parts:
-                    if isinstance(part, DataPart) and "agents" in part.data:
-                        for agent_data in part.data["agents"]:
-                            try:
-                                # Convert SDK agent card data to MUXI AgentCard
-                                agent_card = AgentCard.from_dict(agent_data)
-                                agent_cards.append(agent_card)
-                            except Exception as e:
-                                # Log conversion error but continue
-                                _ = e
+            if response.status_code == 200:
+                data = response.json()
+                if "agents" in data:
+                    for agent_data in data["agents"]:
+                        try:
+                            # Registry returns MUXI format AgentCards
+                            # Create AgentCard from the data
+                            agent_card = AgentCard(
+                                name=agent_data.get("name"),
+                                description=agent_data.get("description"),
+                                version=agent_data.get("version"),
+                                url=agent_data.get("url"),
+                                capabilities=agent_data.get("capabilities", {}),
+                                metadata=agent_data.get("metadata", {})
+                            )
+                            agent_cards.append(agent_card)
+                        except Exception as e:
+                            # Log conversion error but continue
+                            _ = e
 
             # Emit successful discovery event
             observability.observe(

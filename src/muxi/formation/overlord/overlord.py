@@ -972,8 +972,8 @@ class Overlord:
             self.document_chunker = self._configured_services.get("document_chunker")
 
         # A2A services are now initialized by Formation
-        # Start A2A formation server if initialized by Formation
-        if hasattr(self, "a2a_server") and self.a2a_server:
+        # Start A2A formation server if coordinator exists
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator:
             await self.a2a_coordinator._start_a2a_server()
 
         # Process pending external agent registrations if available

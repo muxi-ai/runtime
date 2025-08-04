@@ -78,9 +78,14 @@ class A2ACoordinator:
             capability_filter: Optional list of required capabilities to filter by
 
         Returns:
-            Dict mapping agent_id to agent information including:
+            Dict mapping agent_id to normalized agent information:
+            - agent_id: Unique identifier for the agent
             - description: Agent's description
-            - capabilities: Agent's available capabilities (if any)
+            - capabilities: List of agent capabilities
+            - type: "internal" (always internal for this method)
+            - url: None (internal agents don't need URLs)
+            - formation: Formation name
+            - preference_score: 0.0 (internal agents are always preferred)
             - status: 'active' (always active if in registry)
 
         Example:
@@ -89,8 +94,13 @@ class A2ACoordinator:
             >>> print(available)
             {
                 'calendar-agent': {
+                    'agent_id': 'calendar-agent',
                     'description': 'Manages calendar events',
                     'capabilities': ['calendar_lookup', 'schedule_meeting'],
+                    'type': 'internal',
+                    'url': None,
+                    'formation': 'my-formation',
+                    'preference_score': 0.0,
                     'status': 'active'
                 }
             }
@@ -113,16 +123,24 @@ class A2ACoordinator:
                 capabilities = agent.get_capabilities()
             elif hasattr(agent, "capabilities"):
                 capabilities = agent.capabilities
+            elif hasattr(agent, "specialties"):
+                # Use specialties as capabilities
+                capabilities = agent.specialties if agent.specialties else []
 
             # Apply capability filter if specified
             if capability_filter:
                 if not capabilities or not any(cap in capabilities for cap in capability_filter):
                     continue
 
-            # Add agent to available list
+            # Add agent to available list with normalized format
             available_agents[agent_id] = {
+                "agent_id": agent_id,
                 "description": self.overlord.agent_descriptions.get(agent_id, ""),
                 "capabilities": capabilities,
+                "type": "internal",
+                "url": None,
+                "formation": self.overlord.formation_id,
+                "preference_score": 0.0,  # Internal agents are always preferred
                 "status": "active",  # If it's in the registry, it's active
             }
 
@@ -149,19 +167,41 @@ class A2ACoordinator:
             - Makes local agents discoverable to external formations
         """
         try:
+            print(f"DEBUG: A2A server start called. server_enabled={self.server_enabled}, host={self.server_host}, port={self.server_port}")
+
             # Only start if server is enabled in config
             if not self.server_enabled:
+                print("DEBUG: A2A server not enabled in config, skipping")
                 return
 
-            if self.overlord.a2a_server:
-                await self.overlord.a2a_server.start()
+            # Create the A2A server if it doesn't exist
+            if not self.overlord.a2a_server:
+                print(f"DEBUG: Creating A2A server on {self.server_host}:{self.server_port}")
+                from ...services.a2a.server import A2AServer
 
-                #  Info - TODO: add observability
-                # SystemEvents.A2A_SERVER_STARTED
+                self.overlord.a2a_server = A2AServer(
+                    overlord=self.overlord,
+                    port=self.server_port,
+                    host=self.server_host,
+                    auth_mode="none" if not self.require_auth else "api_key",
+                    formation_name=self.overlord.formation_id
+                )
+                print("DEBUG: A2A server created successfully")
+
+            # Start the server
+            print("DEBUG: Starting A2A server...")
+            await self.overlord.a2a_server.start()
+            print(f"DEBUG: A2A server started on {self.server_host}:{self.server_port}")
+
+            #  Info - TODO: add observability
+            # SystemEvents.A2A_SERVER_STARTED
 
         except Exception as e:
             #  Error - TODO: add observability
             # SystemEvents.A2A_SERVER_START_FAILED
+            print(f"ERROR: Failed to start A2A server: {e}")
+            import traceback
+            traceback.print_exc()
             _ = e  # remove this after implementing observability
 
     def _get_agent_url(self, agent_id: str) -> str:
@@ -431,6 +471,100 @@ class A2ACoordinator:
             # Log error but don't fail
             _ = f"Failed to discover external agents: {e}"
             return {}
+
+    async def get_all_available_agents(
+        self,
+        requesting_agent_id: str,
+        capability_filter: Optional[List[str]] = None,
+        include_external: bool = True
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all available agents (internal and external) in a unified format.
+
+        This method provides a unified view of all agents that can be used for
+        task delegation, including both internal formation agents and external
+        agents discovered through registries.
+
+        Args:
+            requesting_agent_id: ID of the agent making the discovery request
+            capability_filter: Optional list of required capabilities to filter by
+            include_external: Whether to include external agents (default: True)
+
+        Returns:
+            Dict mapping agent_id to normalized agent information:
+            - agent_id: Unique identifier for the agent
+            - description: Agent's description
+            - capabilities: List of agent capabilities
+            - type: "internal" or "external"
+            - url: Agent URL (only for external agents)
+            - formation: Formation name (only for external agents)
+            - preference_score: Lower = preferred (internal: 0.0, external: 1.0)
+        """
+        all_agents = {}
+
+        # Step 1: Get internal agents
+        internal_agents = self.get_available_agents_for_a2a(
+            requesting_agent_id, capability_filter
+        )
+
+        # Normalize internal agents
+        for agent_id, agent_info in internal_agents.items():
+            all_agents[agent_id] = {
+                "agent_id": agent_id,
+                "description": agent_info.get("description", ""),
+                "capabilities": agent_info.get("capabilities", []),
+                "type": "internal",
+                "url": None,
+                "formation": self.overlord.formation_id,
+                "preference_score": 0.0  # Internal agents are always preferred
+            }
+
+        # Step 2: Get external agents if enabled
+        if include_external and self.external_registry_enabled:
+            try:
+                external_discovered = await self.discover_external_agents(
+                    capability_filter=capability_filter
+                )
+
+                # Process external agents from all registries
+                for registry_url, agent_cards in external_discovered.items():
+                    for agent_card in agent_cards:
+                        # Create unique ID for external agent
+                        external_id = f"{agent_card.name}@{agent_card.muxi_formation or 'external'}"
+
+                        # Skip if we already have this agent internally
+                        if agent_card.name in all_agents:
+                            continue
+
+                        # Extract capabilities from agent card
+                        capabilities = []
+                        if hasattr(agent_card, 'capabilities') and agent_card.capabilities:
+                            # SDK AgentCard has capabilities as dict
+                            capabilities = list(agent_card.capabilities.keys())
+                        elif hasattr(agent_card, 'metadata') and agent_card.metadata:
+                            # Fallback to metadata
+                            capabilities = agent_card.metadata.get('capabilities', [])
+
+                        # Apply capability filter if specified
+                        if capability_filter:
+                            if not any(cap in capabilities for cap in capability_filter):
+                                continue
+
+                        all_agents[external_id] = {
+                            "agent_id": external_id,
+                            "description": agent_card.description or "",
+                            "capabilities": capabilities,
+                            "type": "external",
+                            "url": agent_card.url,
+                            "formation": agent_card.muxi_formation or "unknown",
+                            "preference_score": 1.0  # External agents have higher score (lower preference)
+                        }
+
+            except Exception as e:
+                # Log but don't fail if external discovery fails
+                _ = f"Failed to include external agents: {e}"
+
+        return all_agents
 
     async def route_to_external_agent(
         self,

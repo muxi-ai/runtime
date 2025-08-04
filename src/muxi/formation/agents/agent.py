@@ -2782,9 +2782,16 @@ class Agent:
             self._a2a_history.append(request_hash)
             # Discover available agents via A2A coordinator
             if self.overlord and hasattr(self.overlord, "a2a_coordinator"):
-                available_agents = self.overlord.a2a_coordinator.get_available_agents_for_a2a(
-                    self.agent_id
-                )
+                # Try to use unified discovery if available
+                if hasattr(self.overlord.a2a_coordinator, "get_all_available_agents"):
+                    available_agents = await self.overlord.a2a_coordinator.get_all_available_agents(
+                        self.agent_id,
+                        include_external=True
+                    )
+                else:
+                    available_agents = self.overlord.a2a_coordinator.get_available_agents_for_a2a(
+                        self.agent_id
+                    )
             else:
                 available_agents = {}
 
@@ -2793,11 +2800,13 @@ class Agent:
 
             # Find any available agent that might help
             best_agent_id = None
+            best_agent_info = None
 
-            # Just pick the first available agent for now
-            for agent_id in available_agents.keys():
+            # Just pick the first available agent for now (TODO: smarter selection)
+            for agent_id, agent_info in available_agents.items():
                 if agent_id != self.agent_id:  # Skip self
                     best_agent_id = agent_id
+                    best_agent_info = agent_info
                     break
 
             if not best_agent_id:
@@ -2850,14 +2859,38 @@ class Agent:
                 description=f"A2A execution request: {self.agent_id} -> {best_agent_id}",
             )
 
-            # Send A2A message directly using the proper protocol format
-            response = await self.send_a2a_message(
-                target_agent_id=best_agent_id,
-                message=a2a_message,
-                message_type="request",  # Standard A2A request type
-                wait_for_response=True,
-                timeout=60,  # Give more time for complex requests
-            )
+            # Check if this is an external agent and route accordingly
+            if best_agent_info and isinstance(best_agent_info, dict) and best_agent_info.get("type") == "external":
+                # External agent - use the coordinator's route_to_external_agent method
+                if self.overlord and hasattr(self.overlord, "a2a_coordinator"):
+                    # Enrich context for external delegation
+                    external_context = {
+                        "source_formation": self.overlord.formation_id,
+                        "source_agent": self.agent_id,
+                        "needed_capability": needed_capability,
+                        "execution_required": True,
+                        "original_request": user_message,
+                    }
+
+                    response = await self.overlord.a2a_coordinator.route_to_external_agent(
+                        source_agent_id=self.agent_id,
+                        target_agent_url=best_agent_info.get("url"),
+                        message=user_message,  # Send the actual message content
+                        message_type="request",
+                        context=external_context
+                    )
+                else:
+                    # No coordinator available for external routing
+                    return None
+            else:
+                # Internal agent - use existing mechanism
+                response = await self.send_a2a_message(
+                    target_agent_id=best_agent_id,
+                    message=a2a_message,
+                    message_type="request",  # Standard A2A request type
+                    wait_for_response=True,
+                    timeout=60,  # Give more time for complex requests
+                )
 
             if response and response.get("status") == "success":
                 # Get response content (could be in 'response' or 'advice' field)

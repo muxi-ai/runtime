@@ -15,6 +15,12 @@ KEY INSIGHT: Look at the semantic meaning of both the request and your tools:
 For each step, ask: "Does my tool name indicate it can reach the target mentioned in the request?"
 If no, mark can_i_do_this as false for delegation.
 
+DELEGATION PREFERENCES: When you need to delegate tasks to other agents:
+- Always prefer internal agents (in your formation) when they have the required capabilities
+- Only delegate to external agents when the capability is not available internally
+- When delegating to external agents, provide complete context and all gathered data
+- External agents don't share your memory, so include all relevant information
+
 IMPORTANT: For each step you can do yourself, you MUST include appropriate parameters:
 - Look at the tool name and the user's request to determine what parameters are needed
 - For system info tools: use parameters like {"info_type": "cpu"} or {"info_type": "memory"}
