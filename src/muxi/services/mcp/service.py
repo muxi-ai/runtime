@@ -851,7 +851,7 @@ class MCPService:
                         self.agent_tool_registry[agent_id][server_id] = {}
 
                         observability.observe(
-                            event_type=observability.SystemEvents.MCP_SERVER_REGISTRATION_STARTED,
+                            event_type=observability.SystemEvents.MCP_TOOL_DISCOVERY_COMPLETED,
                             level=observability.EventLevel.INFO,
                             data={
                                 "agent_id": agent_id,

@@ -142,7 +142,10 @@ class Agent:
         self._messages = []
 
         # Initialize A2A history for loop detection and attempt limiting
-        self._a2a_history = []
+        # Using collections.deque for efficient bounded history
+        from collections import deque
+        self._max_a2a_history_size = 20  # Keep last 20 delegation attempts
+        self._a2a_history = deque(maxlen=self._max_a2a_history_size)
         self._a2a_attempt_count = 0
         self._max_a2a_attempts = 3  # Prevent cascading failures
 
@@ -1115,11 +1118,50 @@ class Agent:
                                                     "required_params": required_params,
                                                     "reason": "cannot_infer_parameters",
                                                 },
-                                                description=f"Skipping planned step {tool_name} - cannot infer required parameters",
+                                                description=(
+                                                    f"Skipping planned step {tool_name} - "
+                                                    "cannot infer required parameters"
+                                                ),
                                             )
                                             continue
 
-                                    # Execute the tool with parameters
+                                    # Validate parameters against tool schema before execution
+                                    is_valid, validation_error = self._validate_tool_parameters(
+                                        parameters=parameters,
+                                        tool_schema=tool_schema,
+                                        tool_name=tool_name
+                                    )
+
+                                    if not is_valid:
+                                        observability.observe(
+                                            event_type=observability.ErrorEvents.VALIDATION_ERROR,
+                                            level=observability.EventLevel.ERROR,
+                                            data={
+                                                "agent_id": self.agent_id,
+                                                "tool_name": tool_name,
+                                                "parameters": parameters,
+                                                "validation_error": validation_error,
+                                                "step_action": step.get("action", ""),
+                                            },
+                                            description=(
+                                                f"Parameter validation failed for {tool_name}: "
+                                                f"{validation_error}"
+                                            ),
+                                        )
+
+                                        # Store error result instead of executing
+                                        placeholder = step.get(
+                                            "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
+                                        )
+                                        my_results[placeholder] = {
+                                            "status": "error",
+                                            "error": f"Parameter validation failed: {validation_error}",
+                                            "tool_name": tool_name,
+                                            "step_action": step.get("action", ""),
+                                        }
+                                        continue
+
+                                    # Execute the tool with validated parameters
                                     tool_result = await self.invoke_tool(
                                         tool_name=actual_tool_name,
                                         parameters=parameters,
@@ -2721,6 +2763,7 @@ class Agent:
                 return None
             # Check for A2A loops - prevent infinite delegation
             request_hash = f"{self.agent_id}:{needed_capability}:{user_message[:50]}"
+            # Note: 'in' operator works efficiently with deque for small sizes
             if request_hash in self._a2a_history:
                 observability.observe(
                     event_type=observability.ErrorEvents.INTERNAL_ERROR,
@@ -2729,18 +2772,14 @@ class Agent:
                         "agent_id": self.agent_id,
                         "error": "A2A loop detected",
                         "capability": needed_capability,
-                        "history": self._a2a_history,
+                        "history": list(self._a2a_history),  # Convert deque to list for serialization
                     },
                     description="Detected A2A loop - stopping delegation",
                 )
                 return None
 
-            # Add to history
+            # Add to history (deque automatically maintains max size)
             self._a2a_history.append(request_hash)
-
-            # Limit history size to prevent memory issues
-            if len(self._a2a_history) > 10:
-                self._a2a_history = self._a2a_history[-5:]
             # Discover available agents via A2A coordinator
             if self.overlord and hasattr(self.overlord, "a2a_coordinator"):
                 available_agents = self.overlord.a2a_coordinator.get_available_agents_for_a2a(
@@ -2912,8 +2951,22 @@ class Agent:
         try:
             with open(template_path, "r", encoding="utf-8") as f:
                 planning_prompt += f.read()
-        except FileNotFoundError:
-            pass
+        except FileNotFoundError as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "template_path": str(template_path),
+                    "error": str(e),
+                },
+                description=f"Planning template file not found: {template_path}",
+            )
+            # Raise exception to prevent silent failure
+            raise FileNotFoundError(
+                f"Required planning template file is missing: {template_path}. "
+                "This file is essential for the planning system to function properly."
+            ) from e
 
         try:
             # Create messages for planning
@@ -3772,6 +3825,101 @@ class Agent:
             timeout=timeout,
         )
 
+    def _validate_tool_parameters(
+        self,
+        parameters: Dict[str, Any],
+        tool_schema: Dict[str, Any],
+        tool_name: str
+    ) -> tuple[bool, Optional[str]]:
+        """
+        Validate inferred or provided parameters against the tool schema.
+
+        Args:
+            parameters: Parameters to validate
+            tool_schema: Tool schema containing parameter definitions
+            tool_name: Name of the tool for error reporting
+
+        Returns:
+            Tuple of (is_valid, error_message)
+        """
+        try:
+            param_schema = tool_schema.get("parameters", {})
+            required_params = param_schema.get("required", [])
+            param_properties = param_schema.get("properties", {})
+
+            # Check all required parameters are present
+            for req_param in required_params:
+                if req_param not in parameters:
+                    return False, f"Missing required parameter: {req_param}"
+
+            # Validate each provided parameter
+            for param_name, param_value in parameters.items():
+                if param_name not in param_properties:
+                    # Parameter not in schema - could be extra, log warning but allow
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_PLANNING,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": self.agent_id,
+                            "tool_name": tool_name,
+                            "parameter": param_name,
+                            "value": param_value,
+                        },
+                        description=f"Parameter '{param_name}' not in tool schema for {tool_name}",
+                    )
+                    continue
+
+                param_def = param_properties[param_name]
+                param_type = param_def.get("type")
+
+                # Type validation
+                if param_type:
+                    if param_type == "string" and not isinstance(param_value, str):
+                        return False, f"Parameter '{param_name}' should be string, got {type(param_value).__name__}"
+                    elif param_type == "number" and not isinstance(param_value, (int, float)):
+                        return False, f"Parameter '{param_name}' should be number, got {type(param_value).__name__}"
+                    elif param_type == "integer" and not isinstance(param_value, int):
+                        return False, f"Parameter '{param_name}' should be integer, got {type(param_value).__name__}"
+                    elif param_type == "boolean" and not isinstance(param_value, bool):
+                        return False, f"Parameter '{param_name}' should be boolean, got {type(param_value).__name__}"
+                    elif param_type == "array" and not isinstance(param_value, list):
+                        return False, f"Parameter '{param_name}' should be array, got {type(param_value).__name__}"
+                    elif param_type == "object" and not isinstance(param_value, dict):
+                        return False, f"Parameter '{param_name}' should be object, got {type(param_value).__name__}"
+
+                # Enum validation
+                param_enum = param_def.get("enum")
+                if param_enum and param_value not in param_enum:
+                    return False, f"Parameter '{param_name}' value '{param_value}' not in allowed values: {param_enum}"
+
+                # Min/Max validation for numbers
+                if param_type in ["number", "integer"]:
+                    min_val = param_def.get("minimum")
+                    max_val = param_def.get("maximum")
+                    if min_val is not None and param_value < min_val:
+                        return False, f"Parameter '{param_name}' value {param_value} is below minimum {min_val}"
+                    if max_val is not None and param_value > max_val:
+                        return False, f"Parameter '{param_name}' value {param_value} is above maximum {max_val}"
+
+            return True, None
+
+        except Exception as e:
+            # Log validation error but don't crash
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "agent_id": self.agent_id,
+                    "tool_name": tool_name,
+                    "error": str(e),
+                    "parameters": parameters,
+                },
+                description=f"Error validating parameters for {tool_name}: {e}",
+            )
+            # Return true to allow execution to proceed despite validation error
+            # This prevents blocking legitimate use cases with incomplete schemas
+            return True, None
+
     async def _infer_tool_parameters(
         self,
         tool_name: str,
@@ -3781,8 +3929,8 @@ class Agent:
         user_request: str
     ) -> Dict[str, Any]:
         """
-        Infer tool parameters based on context, tool name, and schema.
-        This is a lightweight alternative to LLM-based generation.
+        Use LLM to intelligently infer tool parameters based on context and schema.
+        No hardcoded tool-specific logic.
 
         Args:
             tool_name: Name of the tool
@@ -3794,68 +3942,107 @@ class Agent:
         Returns:
             Dict of inferred parameters, or empty dict if inference failed
         """
-        try:
-            parameters = {}
+        if not required_params:
+            return {}
 
-            # Process each required parameter
+        try:
+            # Build a prompt for the LLM to infer parameters
+            prompt = f"""Based on the user's request and tool requirements, determine the appropriate parameter values.
+
+User Request: {user_request}
+Tool Name: {tool_name}
+Action Description: {action_description}
+
+Required Parameters:
+"""
+
+            # Add details about each parameter
             for param in required_params:
                 param_def = param_properties.get(param, {})
                 param_type = param_def.get("type", "string")
+                param_desc = param_def.get("description", "No description available")
                 param_enum = param_def.get("enum", [])
-                param_desc = param_def.get("description", "").lower()
 
-                # Context-aware parameter inference
-                value = None
+                prompt += f"\n- {param}:"
+                prompt += f"\n  Type: {param_type}"
+                prompt += f"\n  Description: {param_desc}"
+                if param_enum:
+                    prompt += f"\n  Allowed values: {param_enum}"
+                if param_def.get("minimum") is not None:
+                    prompt += f"\n  Minimum: {param_def['minimum']}"
+                if param_def.get("maximum") is not None:
+                    prompt += f"\n  Maximum: {param_def['maximum']}"
 
-                # Handle common parameter patterns
-                if param == "info_type" and "sys_info" in tool_name.lower():
-                    # For sys_info tools, infer info_type from user request
-                    if any(word in user_request.lower() for word in ["cpu", "processor"]):
-                        value = "cpu"
-                    elif any(word in user_request.lower() for word in ["memory", "ram"]):
-                        value = "memory"
-                    elif any(word in user_request.lower() for word in ["disk", "storage", "drive"]):
-                        value = "disk"
-                    elif any(word in user_request.lower() for word in ["system", "usage", "info"]):
-                        # Default to cpu for system usage requests
-                        value = "cpu"
-                    elif param_enum and len(param_enum) > 0:
-                        # Use first available option from enum
-                        value = param_enum[0]
+            prompt += """\n\nAnalyze the user's request and provide appropriate parameter values.
+Respond with ONLY a valid JSON object containing the parameter values.
+Example: {"param1": "value1", "param2": 123}
 
-                # Handle file path parameters
-                elif "path" in param.lower() or "file" in param.lower():
-                    if "path" in action_description.lower():
-                        # Extract path hints from action description
-                        value = "/tmp/temp_file.txt"  # Safe default
+If you cannot determine a value from context:
+- For enums: use the first available option
+- For booleans: use false (safer default)
+- For strings: use an empty string
+- For numbers: use 0
 
-                # Handle enum parameters
-                elif param_enum and len(param_enum) > 0:
-                    # For enum parameters, pick the first valid option
-                    value = param_enum[0]
+JSON Response:"""
 
-                # Handle boolean parameters
-                elif param_type == "boolean":
-                    value = True  # Default to true for most boolean parameters
+            # Use LLM to infer parameters
+            messages = [{"role": "user", "content": prompt}]
+            response = await self.model.chat(
+                messages=messages,
+                temperature=0.1,  # Low temperature for deterministic parameter generation
+                max_tokens=500
+            )
 
-                # Handle string parameters with context hints
-                elif param_type == "string":
-                    if "query" in param.lower() or "search" in param.lower():
-                        # Extract search terms from user request
-                        value = user_request
-                    elif "name" in param.lower() or "title" in param.lower():
-                        value = "Generated from planning system"
+            # Parse the JSON response
+            import json
+            response_text = response.strip()
+            # Clean up response if it has markdown code blocks
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0]
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].split("```")[0]
 
-                # Add parameter if we found a value
-                if value is not None:
-                    parameters[param] = value
+            parameters = json.loads(response_text)
 
-            # Only return parameters if we have all required ones
+            # Validate we have all required parameters
             if all(param in parameters for param in required_params):
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "agent_id": self.agent_id,
+                        "tool_name": tool_name,
+                        "inferred_params": parameters,
+                    },
+                    description=f"LLM inferred parameters for {tool_name}",
+                )
                 return parameters
             else:
+                missing = [p for p in required_params if p not in parameters]
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "tool_name": tool_name,
+                        "missing_params": missing,
+                        "inferred": parameters
+                    },
+                    description=f"LLM inference missing required params: {missing}"
+                )
                 return {}
 
+        except json.JSONDecodeError as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "tool_name": tool_name,
+                    "error": str(e),
+                    "response": response_text if 'response_text' in locals() else None
+                },
+                description="Failed to parse LLM parameter inference as JSON"
+            )
+            return {}
         except Exception as e:
             observability.observe(
                 event_type=observability.ConversationEvents.AGENT_PLANNING,
@@ -3864,6 +4051,6 @@ class Agent:
                     "tool_name": tool_name,
                     "error": str(e)
                 },
-                description="Exception in parameter inference"
+                description="Exception in LLM parameter inference"
             )
             return {}

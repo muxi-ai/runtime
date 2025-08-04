@@ -1018,7 +1018,10 @@ class LLM:
                     retry_attempt = kwargs.get("retry_attempt", 0)
 
                     # Use a simple adaptive timeout based on operation type and retry attempt
-                    # We can't easily access messages/files here without major refactoring
+                    # NOTE: Known limitation - We can't easily access messages/files here without
+                    # major refactoring. This means timeout calculations are less accurate for
+                    # large message contexts or file processing operations. This is acceptable
+                    # as the operation type modifier provides reasonable defaults.
                     timeout = calculate_adaptive_timeout(
                         base_timeout=self.timeout,
                         messages=None,  # Would need refactoring to pass these properly

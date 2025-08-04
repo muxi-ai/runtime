@@ -167,24 +167,14 @@ class A2AService:
             )
 
             if not self.sdk_client:
-                # Fall back to direct internal routing if agent can be found
-                handler = await self._try_find_handler(target_agent_id)
-                if handler:
-                    observability.observe(
-                        event_type="a2a.routing.fallback",
-                        level=observability.EventLevel.DEBUG,
-                        data={"target_agent_id": target_agent_id},
-                        description=f"Found internal handler for {target_agent_id}",
-                    )
-                    return await self._send_internal(
-                        source_agent_id,
-                        target_agent_id,
-                        sdk_message,
-                        message_type,
-                        wait_for_response,
-                        timeout,
-                    )
-                raise RuntimeError("A2A SDK client not initialized for external routing")
+                # External agents require the SDK client for proper routing
+                # There's no effective fallback since _try_find_handler only checks
+                # already registered handlers, which by definition won't include
+                # external agents
+                raise RuntimeError(
+                    f"Cannot route to external agent '{target_agent_id}': "
+                    "A2A SDK client not initialized"
+                )
 
             from a2a.types import MessageSendParams
 
@@ -422,19 +412,3 @@ class A2AService:
             data={"agent_id": agent_id},
             description=f"Registered internal handler for agent {agent_id}",
         )
-
-    async def _try_find_handler(self, agent_id: str):
-        """Try to find a handler for an agent (used for fallback routing).
-
-        Args:
-            agent_id: ID of the agent
-
-        Returns:
-            Handler function if found, None otherwise
-        """
-        # First check if already registered
-        if agent_id in self._internal_handlers:
-            return self._internal_handlers[agent_id]
-
-        # Could add more discovery logic here if needed
-        return None

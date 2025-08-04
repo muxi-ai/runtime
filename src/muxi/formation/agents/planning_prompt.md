@@ -17,7 +17,7 @@ If no, mark can_i_do_this as false for delegation.
 
 IMPORTANT: For each step you can do yourself, you MUST include appropriate parameters:
 - Look at the tool name and the user's request to determine what parameters are needed
-- For system info tools: use parameters like {"info_type": "cpu"} or {"info_type": "memory"} 
+- For system info tools: use parameters like {"info_type": "cpu"} or {"info_type": "memory"}
 - For file operations: include file paths and content as needed
 - For API calls: include required fields like title, description, etc.
 - If you're unsure about parameters, use common sense based on the tool name and request
