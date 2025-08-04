@@ -141,8 +141,10 @@ class Agent:
         # Initialize the context with system message
         self._messages = []
 
-        # Initialize A2A history for loop detection
+        # Initialize A2A history for loop detection and attempt limiting
         self._a2a_history = []
+        self._a2a_attempt_count = 0
+        self._max_a2a_attempts = 3  # Prevent cascading failures
 
         if self.system_message:
             # Check if any MCP servers use user credentials
@@ -800,6 +802,9 @@ class Agent:
             content = message.content
             message_obj = message
 
+        # Reset A2A attempt counter for each new request to prevent cascading failures
+        self._a2a_attempt_count = 0
+
         # Emit agent message processing event
         observability.observe(
             event_type=observability.ConversationEvents.AGENT_MESSAGE_PROCESSING,
@@ -1024,7 +1029,27 @@ class Agent:
 
                 # EXECUTION PHASE: Execute my_steps first
                 if execution_plan and execution_plan.get("my_steps"):
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_PLANNING,
+                        level=observability.EventLevel.DEBUG,
+                        data={
+                            "agent_id": self.agent_id,
+                            "my_steps_count": len(execution_plan.get("my_steps", [])),
+                            "phase": "my_steps_execution_start",
+                        },
+                        description=f"Starting execution of {len(execution_plan.get('my_steps', []))} my_steps",
+                    )
                     for step in execution_plan.get("my_steps", []):
+                        observability.observe(
+                            event_type=observability.ConversationEvents.AGENT_PLANNING,
+                            level=observability.EventLevel.DEBUG,
+                            data={
+                                "agent_id": self.agent_id,
+                                "step": step,
+                                "phase": "processing_step",
+                            },
+                            description=f"Processing step: {step.get('action', 'unknown')}",
+                        )
                         try:
                             # Execute the tool
                             tool_name = step.get("tool_name")
@@ -1047,38 +1072,52 @@ class Agent:
                                         server_id = None
                                         actual_tool_name = tool_name
 
-                                    # Determine parameters based on tool name
-                                    parameters = {}
-                                    if "sys_info" in actual_tool_name:
-                                        # sys_info tool needs info_type parameter
-                                        # Use "cpu" as a valid info_type
-                                        parameters = {"info_type": "cpu"}
-                                    elif "write_file" in actual_tool_name:
-                                        # write_file needs path and content
-                                        # Extract from step or use defaults
-                                        parameters = {
-                                            "path": "/Users/ran/Desktop/system_info.txt",
-                                            "content": str(
-                                                my_results.get(
-                                                    "{SYSTEM-INFO__SYS_INFO_OUTPUT}",
-                                                    "System information",
+                                    # Extract parameters from step configuration or use LLM to generate them
+                                    parameters = step.get("parameters", {})
+
+                                    # If no parameters provided, try to infer them from context
+                                    if not parameters:
+                                        # Get tool schema to understand required parameters
+                                        tool_schema = tool_def.get("function", {})
+                                        required_params = tool_schema.get("parameters", {}).get("required", [])
+                                        param_properties = tool_schema.get("parameters", {}).get("properties", {})
+
+                                        if required_params:
+                                            # Try to infer parameters based on tool name, request context, and schema
+                                            parameters = await self._infer_tool_parameters(
+                                                tool_name=actual_tool_name,
+                                                required_params=required_params,
+                                                param_properties=param_properties,
+                                                action_description=step.get("action", ""),
+                                                user_request=user_message
+                                            )
+
+                                            if parameters:
+                                                observability.observe(
+                                                    event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                                    level=observability.EventLevel.DEBUG,
+                                                    data={
+                                                        "agent_id": self.agent_id,
+                                                        "tool_name": tool_name,
+                                                        "inferred_params": parameters,
+                                                    },
+                                                    description=f"Inferred parameters for {tool_name}",
                                                 )
-                                            ),
-                                        }
-                                    elif "create_issue" in actual_tool_name:
-                                        # Linear create_issue needs title, description, and teamId
-                                        # Hard-code the MUXI team ID for now
-                                        parameters = {
-                                            "title": "System Usage Report",
-                                            "description": str(
-                                                my_results.get(
-                                                    "{SYSTEM-INFO__SYS_INFO_OUTPUT}",
-                                                    "System information",
-                                                )
-                                            ),
-                                            "teamId": "21b2d439-9ffa-4383-86f5-556acc7af93b",  # MUXI team ID
-                                        }
-                                    # TODO: Extract parameters from step configuration
+
+                                        # If still no parameters and required params exist, skip
+                                        if not parameters and required_params:
+                                            observability.observe(
+                                                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                                                level=observability.EventLevel.DEBUG,
+                                                data={
+                                                    "agent_id": self.agent_id,
+                                                    "tool_name": tool_name,
+                                                    "required_params": required_params,
+                                                    "reason": "cannot_infer_parameters",
+                                                },
+                                                description=f"Skipping planned step {tool_name} - cannot infer required parameters",
+                                            )
+                                            continue
 
                                     # Execute the tool with parameters
                                     tool_result = await self.invoke_tool(
@@ -1107,6 +1146,18 @@ class Agent:
                                         description=f"Executed planned step: {step.get('action')}",
                                     )
                         except Exception as e:
+                            # Store error result for placeholder replacement
+                            placeholder = step.get(
+                                "output_placeholder", f"{{{tool_name.upper()}_OUTPUT}}"
+                            )
+                            error_result = {
+                                "status": "error",
+                                "error": str(e),
+                                "step_action": step.get("action", ""),
+                                "tool_name": tool_name
+                            }
+                            my_results[placeholder] = error_result
+
                             observability.observe(
                                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                                 level=observability.EventLevel.WARNING,
@@ -1301,7 +1352,24 @@ class Agent:
                 raw_response = await self.model.chat(self._messages)
         else:
             # No tools available - try A2A for non-workflow tasks
-            if not is_workflow_task:
+            if not is_workflow_task and self._a2a_attempt_count < self._max_a2a_attempts:
+                # Increment attempt counter before making the call
+                self._a2a_attempt_count += 1
+
+                observability.observe(
+                    event_type=observability.ConversationEvents.AGENT_A2A,
+                    level=observability.EventLevel.DEBUG,
+                    data={
+                        "agent_id": self.agent_id,
+                        "attempt_count": self._a2a_attempt_count,
+                        "max_attempts": self._max_a2a_attempts,
+                    },
+                    description=(
+                        f"Agent {self.agent_id} attempting A2A (attempt "
+                        f"{self._a2a_attempt_count}/{self._max_a2a_attempts})"
+                    ),
+                )
+
                 a2a_response = await self._request_a2a_assistance(user_message)
 
                 if a2a_response:
@@ -1311,7 +1379,18 @@ class Agent:
                     # Normal chat without tools
                     raw_response = await self.model.chat(self._messages)
             else:
-                # Workflow task without tools - just respond normally
+                # Either workflow task or A2A attempts exhausted - respond normally
+                if not is_workflow_task and self._a2a_attempt_count >= self._max_a2a_attempts:
+                    observability.observe(
+                        event_type=observability.ConversationEvents.AGENT_A2A,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": self.agent_id,
+                            "attempt_count": self._a2a_attempt_count,
+                            "reason": "max_attempts_reached",
+                        },
+                        description=f"Agent {self.agent_id} reached max A2A attempts limit",
+                    )
                 raw_response = await self.model.chat(self._messages)
 
         # Extract the actual content string from the response
@@ -3692,3 +3771,99 @@ class Agent:
             wait_for_response=True,
             timeout=timeout,
         )
+
+    async def _infer_tool_parameters(
+        self,
+        tool_name: str,
+        required_params: List[str],
+        param_properties: Dict[str, Any],
+        action_description: str,
+        user_request: str
+    ) -> Dict[str, Any]:
+        """
+        Infer tool parameters based on context, tool name, and schema.
+        This is a lightweight alternative to LLM-based generation.
+
+        Args:
+            tool_name: Name of the tool
+            required_params: List of required parameter names
+            param_properties: Parameter definitions from schema
+            action_description: Description of what the step is trying to do
+            user_request: Original user request
+
+        Returns:
+            Dict of inferred parameters, or empty dict if inference failed
+        """
+        try:
+            parameters = {}
+
+            # Process each required parameter
+            for param in required_params:
+                param_def = param_properties.get(param, {})
+                param_type = param_def.get("type", "string")
+                param_enum = param_def.get("enum", [])
+                param_desc = param_def.get("description", "").lower()
+
+                # Context-aware parameter inference
+                value = None
+
+                # Handle common parameter patterns
+                if param == "info_type" and "sys_info" in tool_name.lower():
+                    # For sys_info tools, infer info_type from user request
+                    if any(word in user_request.lower() for word in ["cpu", "processor"]):
+                        value = "cpu"
+                    elif any(word in user_request.lower() for word in ["memory", "ram"]):
+                        value = "memory"
+                    elif any(word in user_request.lower() for word in ["disk", "storage", "drive"]):
+                        value = "disk"
+                    elif any(word in user_request.lower() for word in ["system", "usage", "info"]):
+                        # Default to cpu for system usage requests
+                        value = "cpu"
+                    elif param_enum and len(param_enum) > 0:
+                        # Use first available option from enum
+                        value = param_enum[0]
+
+                # Handle file path parameters
+                elif "path" in param.lower() or "file" in param.lower():
+                    if "path" in action_description.lower():
+                        # Extract path hints from action description
+                        value = "/tmp/temp_file.txt"  # Safe default
+
+                # Handle enum parameters
+                elif param_enum and len(param_enum) > 0:
+                    # For enum parameters, pick the first valid option
+                    value = param_enum[0]
+
+                # Handle boolean parameters
+                elif param_type == "boolean":
+                    value = True  # Default to true for most boolean parameters
+
+                # Handle string parameters with context hints
+                elif param_type == "string":
+                    if "query" in param.lower() or "search" in param.lower():
+                        # Extract search terms from user request
+                        value = user_request
+                    elif "name" in param.lower() or "title" in param.lower():
+                        value = "Generated from planning system"
+
+                # Add parameter if we found a value
+                if value is not None:
+                    parameters[param] = value
+
+            # Only return parameters if we have all required ones
+            if all(param in parameters for param in required_params):
+                return parameters
+            else:
+                return {}
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ConversationEvents.AGENT_PLANNING,
+                level=observability.EventLevel.ERROR,
+                data={
+                    "tool_name": tool_name,
+                    "error": str(e)
+                },
+                description="Exception in parameter inference"
+            )
+            return {}
