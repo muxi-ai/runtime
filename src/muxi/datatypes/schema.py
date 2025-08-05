@@ -196,6 +196,14 @@ class A2AServiceSchema(BaseServiceSchema):
         default=None, description="Allowed origins for CORS"
     )
 
+    # Outbound configuration
+    default_timeout_seconds: int = Field(
+        default=30, ge=1, le=300, description="Default timeout for outbound A2A requests in seconds"
+    )
+    default_retry_attempts: int = Field(
+        default=3, ge=0, le=10, description="Default number of retry attempts for outbound A2A requests"
+    )
+
     def validate_service_specific(self) -> None:
         """Validate A2A-specific configuration."""
         if self.external_registry_enabled and not self.registry_url:

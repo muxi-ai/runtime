@@ -667,15 +667,6 @@ class WorkflowExecutor:
             # Select agent using the specification for cleaner logic
             agent = self._select_agent_for_spec(spec, state)
 
-            # # DEBUG: Log capability routing for ALL tasks to find the issue
-            # print(f"\n🔍 DEBUG CAPABILITY ROUTING:")
-            # print(f"  Task: {task.description[:150]}...")
-            # print(f"  Required capabilities: {spec.required_capabilities}")
-            # print(f"  Selected agent: {agent.name if agent else 'None'} (id: {agent.agent_id if agent else 'None'})")
-            # print(f"  Agent specialties: {getattr(agent, 'specialties', []) if agent else 'N/A'}")
-            # print(f"  Routing strategy: {self.config.routing_strategy}")
-            # print("  " + "="*80)
-
             if not agent:
                 raise ValueError(f"No suitable agent found for task {task.id}")
 
@@ -875,9 +866,7 @@ class WorkflowExecutor:
         for agent_id, agent in self.agent_registry.items():
             # Check if agent has any required capability - try both specialties and specialization
             agent_caps = (
-                getattr(agent, "specialties", None) or
-                getattr(agent, "specialization", None) or
-                []
+                getattr(agent, "specialties", None) or getattr(agent, "specialization", None) or []
             )
 
             # Check if any required capability matches agent capabilities OR agent ID
@@ -907,9 +896,9 @@ class WorkflowExecutor:
             max_matches = 0
             for agent_id, agent in capable_agents:
                 agent_caps = (
-                    getattr(agent, "specialties", None) or
-                    getattr(agent, "specialization", None) or
-                    []
+                    getattr(agent, "specialties", None)
+                    or getattr(agent, "specialization", None)
+                    or []
                 )
                 matches = sum(1 for cap in spec.required_capabilities if cap in agent_caps)
                 if matches > max_matches:
@@ -1005,13 +994,13 @@ class WorkflowExecutor:
 
             # Check if agent has required capabilities
             agent_caps = (
-                getattr(agent, "specialties", None) or
-                getattr(agent, "specialization", None) or
-                []
+                getattr(agent, "specialties", None) or getattr(agent, "specialization", None) or []
             )
 
             # Calculate matching score - include agent ID as a capability
-            matching_caps = [cap for cap in task.required_capabilities if cap in agent_caps or cap == agent_id]
+            matching_caps = [
+                cap for cap in task.required_capabilities if cap in agent_caps or cap == agent_id
+            ]
             if not matching_caps:
                 continue  # Agent doesn't match any required capabilities
 
@@ -1034,9 +1023,7 @@ class WorkflowExecutor:
         # Look for agents with "general" or broad capabilities
         for agent_id, agent in self.agent_registry.items():
             agent_caps = (
-                getattr(agent, "specialties", None) or
-                getattr(agent, "specialization", None) or
-                []
+                getattr(agent, "specialties", None) or getattr(agent, "specialization", None) or []
             )
             if "general" in agent_caps or len(agent_caps) == 0:
                 return agent
@@ -1044,7 +1031,9 @@ class WorkflowExecutor:
         # Last resort fallback - return first available agent with logging
         fallback_agent = next(iter(self.agent_registry.values()), None)
         if fallback_agent:
-            print(f"⚠️  WARNING: No suitable agent found for capabilities {task.required_capabilities}")
+            print(
+                f"⚠️  WARNING: No suitable agent found for capabilities {task.required_capabilities}"
+            )
             print(f"   Falling back to: {fallback_agent.name} (id: {fallback_agent.agent_id})")
         return fallback_agent
 
@@ -1156,13 +1145,6 @@ class WorkflowExecutor:
             Task execution result
         """
         # # DEBUG: Log all task executions to find the Linear task
-        # if "linear" in task.description.lower() or "issue" in task.description.lower():
-        #     print(f"\n🚀 DEBUG TASK EXECUTION:")
-        #     print(f"  Task: {task.description[:100]}...")
-        #     print(f"  Executing with agent: {agent.name} (id: {agent.agent_id})")
-        #     print(f"  Agent specialties: {getattr(agent, 'specialties', [])}")
-        #     print(f"  Task capabilities: {task.required_capabilities}")
-        #     print("  " + "="*60)
 
         # Create task prompt
         task_prompt = self._create_task_prompt(task, context)
@@ -1564,7 +1546,7 @@ class WorkflowExecutor:
                     "cancelled_tasks": cancelled_tasks,
                     "total_tasks": len(workflow.tasks),
                 },
-                description=f"Workflow {workflow_id} cancelled with {len(cancelled_tasks)} in-progress tasks"
+                description=f"Workflow {workflow_id} cancelled with {len(cancelled_tasks)} in-progress tasks",
             )
 
             return True

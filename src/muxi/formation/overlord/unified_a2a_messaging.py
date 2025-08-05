@@ -5,6 +5,7 @@ This module provides unified A2A messaging that uses the same protocol
 for both internal and external agents, only differing in transport.
 """
 
+import asyncio
 from typing import Optional, Dict, Any, Union
 from a2a.types import Message, TextPart, DataPart, Role, MessageSendParams
 from a2a.client.middleware import ClientCallContext
@@ -26,7 +27,7 @@ class UnifiedA2AMessaging:
         message_type: str = "request",
         context: Optional[Dict[str, Any]] = None,
         wait_for_response: bool = True,
-        timeout: int = 30,
+        timeout: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
         """
         Send A2A message using unified protocol with appropriate transport.
@@ -38,7 +39,7 @@ class UnifiedA2AMessaging:
             message_type: Type of message (request, response, etc.)
             context: Optional context data
             wait_for_response: Whether to wait for a response
-            timeout: Timeout in seconds
+            timeout: Timeout in seconds (uses A2A config default if not specified)
 
         Returns:
             Response from target agent if wait_for_response is True
@@ -46,9 +47,19 @@ class UnifiedA2AMessaging:
         if not self.overlord.client_factory:
             raise RuntimeError("A2A ClientFactory not initialized")
 
+        # Get timeout from A2A configuration if not specified
+        if timeout is None:
+            if hasattr(self.overlord, "a2a_coordinator") and self.overlord.a2a_coordinator:
+                a2a_config = self.overlord.a2a_coordinator.config
+                timeout = a2a_config.default_timeout_seconds if a2a_config else 30
+            else:
+                timeout = 30
+
         # Convert message to A2A protocol format
-        a2a_message = self._convert_to_a2a_message(
-            message, source_agent_id, context
+        a2a_message = self._convert_to_a2a_message(message, source_agent_id, context)
+        print(
+            f"DEBUG UnifiedA2AMessaging: Converted to A2A message with parts: "
+            f"{[p.model_dump() for p in a2a_message.parts]}"
         )
 
         # Create message send params
@@ -57,15 +68,16 @@ class UnifiedA2AMessaging:
             metadata={
                 "source_agent_id": source_agent_id,
                 "message_type": message_type,
-                **(context or {})
-            }
+                **(context or {}),
+            },
         )
 
         # Determine transport based on URL scheme
         if target_agent_url.startswith("agent://"):
             # Internal agent - use AgentTransport directly
-            if hasattr(self.overlord.client_factory, '_registry'):
-                agent_transport = self.overlord.client_factory._registry.get('agent')
+            self._last_was_external = False
+            if hasattr(self.overlord.client_factory, "_registry"):
+                agent_transport = self.overlord.client_factory._registry.get("agent")
                 if agent_transport:
                     # Create context for the call
                     call_context = ClientCallContext()
@@ -79,32 +91,89 @@ class UnifiedA2AMessaging:
             else:
                 raise RuntimeError("ClientFactory registry not available")
         else:
-            # External agent - create client using AgentCard
-            # For now, we'll need the full agent card info
-            # This will be handled in Phase 4 planning integration
-            from a2a.types import AgentCard
+            # External agent - create client using URL directly
+            self._last_was_external = True
+            # The ClientFactory should handle HTTP URLs directly
+            import httpx
+            from a2a.client import A2AClient
 
-            # Create minimal agent card for external agent
-            agent_card = AgentCard(
-                agent_id=target_agent_url.split('/')[-1],  # Extract ID from URL
-                name=target_agent_url.split('/')[-1],
-                description="External agent",
-                version="1.0.0",
-                protocol_version="1.0",
-                capabilities={},
-                endpoints=[{"url": target_agent_url}],
-                preferred_transport="jsonrpc"
-            )
+            # Get retry configuration from A2A config
+            retry_attempts = 3  # default
+            if hasattr(self.overlord, "a2a_coordinator") and self.overlord.a2a_coordinator:
+                a2a_config = self.overlord.a2a_coordinator.config
+                retry_attempts = a2a_config.default_retry_attempts if a2a_config else 3
 
-            # Create client using agent card
-            client = self.overlord.client_factory.create(agent_card)
+            # Create HTTP client for external agent with appropriate timeout
+            # Use the timeout parameter passed to this method
+            timeout_value = float(timeout) if timeout else 60.0
 
-            # Send message through client
-            result = await client.send_message(params)
+            # Retry logic for external requests
+            for attempt in range(retry_attempts):
+                try:
+                    async with httpx.AsyncClient(
+                        timeout=httpx.Timeout(timeout_value)
+                    ) as http_client:
+                        client = A2AClient(httpx_client=http_client, url=target_agent_url)
 
-        if wait_for_response and isinstance(result, Message):
-            # Convert A2A message back to dict format
-            return self._convert_from_a2a_message(result)
+                        # Create request with params
+                        from a2a.types import SendMessageRequest
+                        import time
+
+                        # The A2A SDK expects params to be a dict with 'message' key
+                        # Convert MessageSendParams to dict format
+                        params_dict = {"message": params.message.model_dump()}
+
+                        request = SendMessageRequest(
+                            id=f"req_{int(time.time() * 1000)}", params=params_dict
+                        )
+
+                        if attempt == 0:
+                            pass  # First attempt, no retry message
+                        else:
+                            # Log retry attempt (could add logging here if needed)
+                            pass
+
+                        # Send message through client
+                        result = await client.send_message(request)
+
+                        # Extract the Message from SendMessageResponse
+
+                        # Try to extract the message from the response
+                        if hasattr(result, "result"):
+                            # This is a SendMessageResponse, extract the actual message
+                            result = result.result
+                        elif hasattr(result, "model_dump"):
+                            # If it's a pydantic model, get the dict and extract result
+                            result_dict = result.model_dump()
+                            if "result" in result_dict:
+                                # Import Message type to reconstruct it
+                                from a2a.types import Message
+
+                                result = Message(**result_dict["result"])
+
+                        # Success - break out of retry loop
+                        break
+
+                except Exception:
+                    if attempt < retry_attempts - 1:
+                        # Wait before retry with exponential backoff
+                        wait_time = (2**attempt) * 0.5  # 0.5s, 1s, 2s
+                        await asyncio.sleep(wait_time)
+                    else:
+                        # Last attempt failed, re-raise the error
+                        raise
+
+        if wait_for_response:
+            if isinstance(result, Message):
+                # Convert A2A message back to dict format
+                print(
+                    f"DEBUG UnifiedA2AMessaging: Converting response from "
+                    f"{'external' if self._last_was_external else 'internal'} agent"
+                )
+                converted = self._convert_from_a2a_message(result)
+                return converted
+            else:
+                return result
 
         return None
 
@@ -136,11 +205,51 @@ class UnifiedA2AMessaging:
             role=Role.user,
             parts=parts,
             metadata=context or {},
-            kind="message"
+            kind="message",
         )
 
     def _convert_from_a2a_message(self, message: Message) -> Dict[str, Any]:
         """Convert from A2A Message to dict format."""
+        # Check if this is an external response that needs special handling
+        # External responses should be converted to the format expected by agents
+        is_external_response = hasattr(self, "_last_was_external") and self._last_was_external
+
+        if is_external_response:
+            # Convert to agent-expected format with status and response fields
+            response_text = ""
+            response_data = None
+
+            for part in message.parts:
+                part_data = part.model_dump()
+                if part_data.get("kind") == "text":
+                    response_text += part_data.get("text", "")
+                elif part_data.get("kind") == "data":
+                    response_data = part_data.get("data")
+
+            # If we have data, check if it already has the expected format
+            if response_data and isinstance(response_data, dict):
+                if "status" in response_data and "response" in response_data:
+                    # Already in the expected format
+                    return response_data
+                else:
+                    # Wrap in expected format
+                    return {
+                        "status": "success",
+                        "response": response_data,
+                        "execution_completed": True,  # External agents complete execution
+                    }
+            elif response_text:
+                # Text response - wrap in expected format
+                return {
+                    "status": "success",
+                    "response": response_text,
+                    "execution_completed": True,  # External agents complete execution
+                }
+            else:
+                # Empty response
+                return {"status": "error", "response": "Empty response received"}
+
+        # For internal messages, use the standard format
         parts = []
 
         for part in message.parts:

@@ -16,7 +16,7 @@ Key features:
 import asyncio
 import socket
 from contextlib import closing
-from typing import Dict, Any, Optional, List, Union
+from typing import Dict, Any, Optional, List
 from ...utils.id_generator import generate_nanoid
 
 from fastapi import FastAPI, Path, Request, Body, HTTPException
@@ -26,9 +26,7 @@ from pydantic import BaseModel
 # A2A SDK imports
 from a2a.types import (
     Message as SDKMessage,
-    SendMessageRequest as SDKSendMessageRequest,
-    SendMessageResponse as SDKSendMessageResponse,
-    Role as SDKRole
+    Role as SDKRole,
 )
 
 from .. import observability
@@ -38,6 +36,7 @@ from .models_sdk_adapter import ModelsAdapter
 # Legacy request/response models for backward compatibility
 class LegacyA2AMessageRequest(BaseModel):
     """Legacy A2A message request format"""
+
     message: str
     message_type: str = "request"
     context: Optional[Dict[str, Any]] = None
@@ -46,6 +45,7 @@ class LegacyA2AMessageRequest(BaseModel):
 
 class LegacyA2AMessageResponse(BaseModel):
     """Legacy A2A message response format"""
+
     status: str
     response: Optional[str] = None
     message_id: Optional[str] = None
@@ -113,7 +113,7 @@ class A2AServer:
                     "port": port,
                     "host": self.host,
                     "auth_mode": self.auth_mode,
-                    "sdk_enabled": True
+                    "sdk_enabled": True,
                 },
                 description=f"Initialized SDK-compatible A2A Formation Server for '{formation_name}' on port {port}",
             )
@@ -150,7 +150,7 @@ class A2AServer:
                         "formation": self.formation_name,
                         "agents": (list(self.overlord.agents.keys()) if self.overlord else []),
                         "sdk_version": "0.3.0",
-                        "protocol": "a2a-sdk"
+                        "protocol": "a2a-sdk",
                     }
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
@@ -179,7 +179,7 @@ class A2AServer:
                         "agents": agents_info,
                         "total_agents": len(agents_info),
                         "sdk_enabled": True,
-                        "protocol_version": "a2a-sdk-0.3.0"
+                        "protocol_version": "a2a-sdk-0.3.0",
                     }
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=str(e))
@@ -205,15 +205,27 @@ class A2AServer:
             async def handle_agent_message(
                 http_request: Request,
                 agent_id: str = Path(..., description="ID of the target agent"),
-                body: Dict = Body(...)  # Accept any JSON body
+                body: Dict = Body(...),  # Accept any JSON body
             ):
                 """
                 Handle A2A message for a specific agent.
 
                 Accepts both SDK SendMessageRequest format and legacy format.
                 """
+
                 # Try to detect the message format
-                if "message" in body and isinstance(body.get("message"), dict):
+                # Check for A2A SDK format: {"id": "...", "params": {"message": {...}}}
+                if "params" in body and isinstance(body.get("params"), dict):
+                    params = body["params"]
+                    if "message" in params and isinstance(params.get("message"), dict):
+                        # Check for SDK message structure
+                        message = params["message"]
+                        if "role" in message and "parts" in message:
+                            # SDK format confirmed
+                            return await self._handle_sdk_message(agent_id, body, http_request)
+
+                # Legacy detection: direct message field
+                elif "message" in body and isinstance(body.get("message"), dict):
                     # Looks like SDK format with nested message object
                     if "role" in body["message"] and "parts" in body["message"]:
                         # SDK format confirmed
@@ -232,7 +244,7 @@ class A2AServer:
             async def handle_sdk_agent_message(
                 http_request: Request,
                 agent_id: str = Path(..., description="ID of the target agent"),
-                request: Dict = Body(...)
+                request: Dict = Body(...),
             ):
                 """
                 Handle SDK-formatted A2A message for a specific agent.
@@ -246,7 +258,7 @@ class A2AServer:
                     "formation": self.formation_name,
                     "endpoints_created": 6,
                     "auth_mode": self.auth_mode,
-                    "sdk_enabled": True
+                    "sdk_enabled": True,
                 },
                 description="SDK A2A Formation Server FastAPI app created",
             )
@@ -274,15 +286,42 @@ class A2AServer:
 
         try:
             # Parse SDK message from request
-            sdk_message = None
-            if "message" in request_data and isinstance(request_data["message"], dict):
-                # Extract the SDK message
+            sdk_message_data = None
+
+            # Check for A2A SDK format: {"id": "...", "params": {"message": {...}}}
+            if "params" in request_data and isinstance(request_data["params"], dict):
+                params = request_data["params"]
+                if "message" in params and isinstance(params["message"], dict):
+                    sdk_message_data = params["message"]
+            # Legacy format: direct message field
+            elif "message" in request_data and isinstance(request_data["message"], dict):
                 sdk_message_data = request_data["message"]
+
+            if sdk_message_data:
 
                 # The SDK message should have role and parts
                 if "role" in sdk_message_data and "parts" in sdk_message_data:
-                    # Convert to MUXI format for agent processing
-                    muxi_message = ModelsAdapter.sdk_to_muxi_message(sdk_message_data)
+                    # Create SDK Message object from dict
+                    try:
+
+                        sdk_message_obj = SDKMessage(**sdk_message_data)
+                        # Convert to MUXI format for agent processing
+                        muxi_message = ModelsAdapter.sdk_to_muxi_message(sdk_message_obj)
+                    except Exception:
+                        # Fallback: work directly with the dict
+                        muxi_message = {
+                            "parts": [],
+                            "metadata": sdk_message_data.get("metadata", {}),
+                        }
+                        for part in sdk_message_data.get("parts", []):
+                            if part.get("kind") == "text":
+                                muxi_message["parts"].append(
+                                    {"type": "TextPart", "text": part.get("text", "")}
+                                )
+                            elif part.get("kind") == "data":
+                                muxi_message["parts"].append(
+                                    {"type": "DataPart", "data": part.get("data", {})}
+                                )
 
                     # Extract the actual message content
                     message_content = ""
@@ -291,13 +330,19 @@ class A2AServer:
                     if "parts" in muxi_message:
                         for part in muxi_message["parts"]:
                             if part.get("type") == "TextPart":
-                                message_content += part.get("text", "")
+                                text = part.get("text", "")
+                                message_content += text
                             elif part.get("type") == "DataPart":
-                                context.update(part.get("data", {}))
+                                data = part.get("data", {})
+                                context.update(data)
 
                     # Add metadata as context
-                    if "metadata" in muxi_message:
+                    if "metadata" in muxi_message and muxi_message["metadata"]:
                         context.update(muxi_message["metadata"])
+
+                    # If no message content but we have context with original_request, use that
+                    if not message_content and context.get("original_request"):
+                        message_content = context["original_request"]
                 else:
                     # Not a valid SDK message structure
                     raise ValueError("Invalid SDK message structure")
@@ -305,6 +350,17 @@ class A2AServer:
                 # Try to extract message directly
                 message_content = request_data.get("message", "")
                 context = request_data.get("context", {})
+
+                # If no message content, check if it's in the context or metadata
+                if not message_content:
+                    # Check params.metadata for original_request
+                    if "params" in request_data and isinstance(request_data["params"], dict):
+                        params_metadata = request_data["params"].get("metadata", {})
+                        if params_metadata.get("original_request"):
+                            message_content = params_metadata["original_request"]
+                            context.update(params_metadata)
+                    elif context.get("original_request"):
+                        message_content = context["original_request"]
 
             # Authenticate if needed
             if http_request and self.auth_mode != "none":
@@ -348,32 +404,47 @@ class A2AServer:
 
             # Convert response to SDK format
             if response:
-                response_content = (
-                    response.get("response") if isinstance(response, dict) else str(response)
-                )
+                # Extract response content properly
+                if isinstance(response, dict):
+                    if "response" in response:
+                        response_content = response["response"]
+                    else:
+                        # The entire dict is the response
+                        response_content = response
+                else:
+                    response_content = str(response)
 
                 # Create SDK response message
                 response_message = ModelsAdapter.muxi_to_sdk_message(
                     response_content,
                     message_id=f"resp_{message_id}",
                     role=SDKRole.agent,
-                    context={"agent_id": agent_id}
+                    context={"agent_id": agent_id},
                 )
 
                 # Return SDK-formatted response
-                return {
-                    "status": "success",
-                    "message": response_message.model_dump() if hasattr(response_message, 'model_dump') else response_message,
-                    "agent_id": agent_id,
-                    "message_id": message_id,
-                }
+                from a2a.types import SendMessageSuccessResponse
+
+                sdk_response = SendMessageSuccessResponse(
+                    id=request_data.get("id", message_id), result=response_message
+                )
+                result = sdk_response.model_dump(mode="json")
+                return result
             else:
-                return {
-                    "status": "success",
-                    "message": "Message delivered successfully",
-                    "agent_id": agent_id,
-                    "message_id": message_id,
-                }
+                # No response content - create a simple success message
+                success_message = ModelsAdapter.muxi_to_sdk_message(
+                    "Message delivered successfully",
+                    message_id=f"resp_{message_id}",
+                    role=SDKRole.agent,
+                    context={"agent_id": agent_id},
+                )
+
+                from a2a.types import SendMessageSuccessResponse
+
+                sdk_response = SendMessageSuccessResponse(
+                    id=request_data.get("id", message_id), result=success_message
+                )
+                return sdk_response.model_dump(mode="json")
 
         except Exception as e:
             observability.observe(
@@ -383,18 +454,25 @@ class A2AServer:
                     "agent_id": agent_id,
                     "message_id": message_id,
                     "error": str(e),
-                    "sdk_format": True
+                    "sdk_format": True,
                 },
                 description=f"SDK A2A message handling failed: {str(e)}",
             )
-            return {
-                "status": "error",
-                "error": f"Message handling failed: {str(e)}",
-                "message_id": message_id,
-            }
+            from a2a.types import JSONRPCErrorResponse, JSONRPCError
+
+            error_response = JSONRPCErrorResponse(
+                id=request_data.get("id", message_id),
+                error=JSONRPCError(
+                    code=-32603, message=f"Message handling failed: {str(e)}"  # Internal error
+                ),
+            )
+            return error_response.model_dump(mode="json")
 
     async def _handle_legacy_message(
-        self, agent_id: str, request: LegacyA2AMessageRequest, http_request: Optional[Request] = None
+        self,
+        agent_id: str,
+        request: LegacyA2AMessageRequest,
+        http_request: Optional[Request] = None,
     ) -> LegacyA2AMessageResponse:
         """
         Handle incoming legacy-formatted A2A message for backward compatibility.
@@ -413,7 +491,7 @@ class A2AServer:
                         status="error",
                         error=f"Authentication failed: {auth_error}",
                         message_id=message_id,
-                        agent_id=agent_id
+                        agent_id=agent_id,
                     )
 
             # Check if agent exists
@@ -422,7 +500,7 @@ class A2AServer:
                     status="error",
                     error=f"Agent {agent_id} not found",
                     message_id=message_id,
-                    agent_id=agent_id
+                    agent_id=agent_id,
                 )
 
             # Get the target agent
@@ -434,7 +512,7 @@ class A2AServer:
                     status="error",
                     error=f"Agent {agent_id} not configured for external A2A",
                     message_id=message_id,
-                    agent_id=agent_id
+                    agent_id=agent_id,
                 )
 
             # Route message to the agent
@@ -455,14 +533,14 @@ class A2AServer:
                     status="success",
                     response=response_content,
                     agent_id=agent_id,
-                    message_id=message_id
+                    message_id=message_id,
                 )
             else:
                 return LegacyA2AMessageResponse(
                     status="success",
                     response="Message delivered successfully",
                     agent_id=agent_id,
-                    message_id=message_id
+                    message_id=message_id,
                 )
 
         except Exception as e:
@@ -470,7 +548,7 @@ class A2AServer:
                 status="error",
                 error=f"Message handling failed: {str(e)}",
                 message_id=message_id,
-                agent_id=agent_id
+                agent_id=agent_id,
             )
 
     def _create_agent_card(self, agent_id: str, agent: Any) -> Dict[str, Any]:
@@ -482,7 +560,7 @@ class A2AServer:
             "capabilities": getattr(agent, "capabilities", []),
             "endpoint": f"/agents/{agent_id}/message",
             "protocol": "a2a-sdk",
-            "accepts": ["sdk", "legacy"]
+            "accepts": ["sdk", "legacy"],
         }
 
     async def start(self) -> None:
@@ -519,7 +597,7 @@ class A2AServer:
                     "host": self.host,
                     "port": self.port,
                     "auth_mode": self.auth_mode,
-                    "sdk_enabled": True
+                    "sdk_enabled": True,
                 },
                 description=f"SDK A2A Formation Server started on {self.host}:{self.port}",
             )
@@ -555,10 +633,7 @@ class A2AServer:
             observability.observe(
                 event_type=observability.SystemEvents.A2A_SERVER_STOPPED,
                 level=observability.EventLevel.INFO,
-                data={
-                    "formation": self.formation_name,
-                    "sdk_enabled": True
-                },
+                data={"formation": self.formation_name, "sdk_enabled": True},
                 description="SDK A2A Formation Server stopped",
             )
 

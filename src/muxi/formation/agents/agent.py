@@ -1252,6 +1252,19 @@ class Agent:
                         if a2a_response:
                             # Collect A2A response
                             planning_response_parts.append(a2a_response)
+                        else:
+                            # A2A request failed (likely timeout)
+                            # If this was the only delegation, we should indicate the failure
+                            if (
+                                not my_results
+                                and len(execution_plan.get("delegate_steps", [])) == 1
+                            ):
+                                planning_response_parts.append(
+                                    "I've delegated the task to an external agent, "
+                                    "but there was a delay in receiving the response. "
+                                    "The task may still be processing. "
+                                    "Please check back in a moment."
+                                )
 
                 # If we handled everything through planning, skip the regular flow
                 if execution_plan and (
@@ -1260,20 +1273,52 @@ class Agent:
                     # Compile response from planning execution
                     response_content = ""
 
-                    # Add results from my_steps
-                    if my_results:
-                        for placeholder, result in my_results.items():
-                            if isinstance(result, dict):
-                                result_text = result.get(
-                                    "result", result.get("output", str(result))
-                                )
-                            else:
-                                result_text = str(result)
-                            response_content += f"{result_text}\n\n"
+                    # Check if we have any delegation responses (successful or not)
+                    has_delegation_responses = bool(planning_response_parts)
 
-                    # Add A2A responses
-                    if planning_response_parts:
-                        response_content += "\n\n".join(planning_response_parts)
+                    # Check if delegation responses contain actual results (not just error messages)
+                    has_successful_delegation = any(
+                        part
+                        for part in planning_response_parts
+                        if part
+                        and "delay in receiving" not in part
+                        and "task may still be processing" not in part
+                    )
+
+                    # If we have successful delegation responses, prioritize those
+                    if has_successful_delegation:
+                        # Show the delegation responses as the primary result
+                        response_content = "\n\n".join(planning_response_parts)
+
+                        # Optionally append local results if they add value
+                        # (but not if they're just intermediate data gathering)
+                        if my_results and not any(
+                            "linear" in part.lower() for part in planning_response_parts
+                        ):
+                            response_content += "\n\n---\n\nAdditional information gathered:\n"
+                            for placeholder, result in my_results.items():
+                                if isinstance(result, dict):
+                                    result_text = result.get(
+                                        "result", result.get("output", str(result))
+                                    )
+                                else:
+                                    result_text = str(result)
+                                response_content += f"{result_text}\n\n"
+                    else:
+                        # No successful delegations, show local results first
+                        if my_results:
+                            for placeholder, result in my_results.items():
+                                if isinstance(result, dict):
+                                    result_text = result.get(
+                                        "result", result.get("output", str(result))
+                                    )
+                                else:
+                                    result_text = str(result)
+                                response_content += f"{result_text}\n\n"
+
+                        # Add any delegation messages (errors/timeouts)
+                        if planning_response_parts:
+                            response_content += "\n\n".join(planning_response_parts)
 
                     # Create response message
                     response = MuxiResponse(
@@ -2804,16 +2849,62 @@ class Agent:
             if not available_agents:
                 return None
 
-            # Find any available agent that might help
+            # Find the best agent based on capabilities and preference score
             best_agent_id = None
             best_agent_info = None
+            best_score = float("inf")  # Lower is better
 
-            # Just pick the first available agent for now (TODO: smarter selection)
+            # Select agent based on capability match and preference score
             for agent_id, agent_info in available_agents.items():
-                if agent_id != self.agent_id:  # Skip self
-                    best_agent_id = agent_id
-                    best_agent_info = agent_info
-                    break
+                if agent_id == self.agent_id:  # Skip self
+                    continue
+
+                # Check if agent has the needed capability
+                agent_capabilities = agent_info.get("capabilities", [])
+                preference_score = agent_info.get("preference_score", 1.0)
+
+                # If we have a specific capability need, check for it
+                if needed_capability:
+                    capability_match = False
+                    # Check for exact or partial match
+                    for cap in agent_capabilities:
+                        cap_lower = cap.lower()
+                        needed_lower = needed_capability.lower()
+                        # Check for exact match or if capability contains the needed term
+                        if (
+                            cap_lower == needed_lower
+                            or needed_lower in cap_lower
+                            or cap_lower in needed_lower
+                        ):
+                            capability_match = True
+                            break
+
+                    # Special cases for specific services mentioned in the needed capability
+                    # Check if any key terms from the needed capability match agent capabilities
+                    key_terms = ["linear", "github", "jira", "slack", "discord", "email"]
+                    for term in key_terms:
+                        if term in needed_lower and term in [c.lower() for c in agent_capabilities]:
+                            capability_match = True
+                            break
+
+                    if capability_match and preference_score < best_score:
+                        best_agent_id = agent_id
+                        best_agent_info = agent_info
+                        best_score = preference_score
+                else:
+                    # No specific capability needed, just pick based on preference
+                    if preference_score < best_score:
+                        best_agent_id = agent_id
+                        best_agent_info = agent_info
+                        best_score = preference_score
+
+            # If no capability match found, fall back to any agent
+            if not best_agent_id and available_agents:
+                for agent_id, agent_info in available_agents.items():
+                    if agent_id != self.agent_id:
+                        best_agent_id = agent_id
+                        best_agent_info = agent_info
+                        break
 
             if not best_agent_id:
                 return None
@@ -2970,10 +3061,76 @@ class Agent:
 
         planning_prompt = "Analyze this request and create an execution plan.\n"
         planning_prompt += f"\nRequest: {user_message}"
-        planning_prompt += "\n\nAvailable tools: "
+
+        # Section 1: Available tools (agent's own MCP tools)
+        planning_prompt += "\n\n## Available tools:\n"
         planning_prompt += (
             f"{', '.join([t.get('function', {}).get('name', '') for t in (available_tools or [])])}"
         )
+
+        # Get all available agents (internal and external)
+        try:
+            available_agents = await self.overlord.a2a_coordinator.get_all_available_agents(
+                self.agent_id, include_external=True
+            )
+        except Exception as e:
+            # Log but don't fail planning
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "agent_id": self.agent_id,
+                    "error": str(e),
+                    "phase": "planning_agent_discovery",
+                },
+                description=f"Failed to get available agents for planning: {str(e)}",
+            )
+            available_agents = {}
+
+        # Section 2: Built-in agents (internal agents in same formation)
+        internal_agents = []
+        external_agents = []
+
+        for agent_id, agent_info in available_agents.items():
+            if agent_info.get("type", "internal") == "internal":
+                internal_agents.append((agent_id, agent_info))
+            else:
+                external_agents.append((agent_id, agent_info))
+
+        if internal_agents:
+            planning_prompt += "\n\n---\n\n## Built-in agents:\n"
+            for agent_id, agent_info in internal_agents:
+                planning_prompt += f"\n### {agent_id}\n"
+                planning_prompt += f"{agent_info.get('description', 'No description')}\n\n"
+
+                capabilities = agent_info.get("capabilities", [])
+                if capabilities:
+                    planning_prompt += "Capabilities:\n"
+                    for cap in capabilities:
+                        planning_prompt += f"- {cap}\n"
+                else:
+                    planning_prompt += "Capabilities: None specified\n"
+                planning_prompt += "\n"
+
+        # Section 3: Remote agents (only if external agents exist)
+        if external_agents:
+            planning_prompt += "---\n\n## Remote agents:\n"
+
+            for agent_id, agent_info in external_agents:
+                planning_prompt += f"\n### {agent_id}\n"
+                planning_prompt += f"{agent_info.get('description', 'No description')}\n"
+                planning_prompt += f"Formation: {agent_info.get('formation', 'unknown')}\n\n"
+
+                capabilities = agent_info.get("capabilities", [])
+                if capabilities:
+                    planning_prompt += "Capabilities:\n"
+                    for cap in capabilities:
+                        planning_prompt += f"- {cap}\n"
+                else:
+                    planning_prompt += "Capabilities: None specified\n"
+                planning_prompt += "\n"
+
+            planning_prompt += "---\n"
 
         template_path = Path(__file__).parent / "planning_prompt.md"
         try:
@@ -3201,10 +3358,11 @@ class Agent:
                 is_a2a_task=True,  # This should bypass planning for delegated tasks
             )
 
-            # Collect the streaming response
-            result_text = ""
-            async for chunk in response:
-                result_text += chunk
+            # Get the response content
+            if hasattr(response, "content"):
+                result_text = response.content
+            else:
+                result_text = str(response)
 
             return {
                 "status": "success",

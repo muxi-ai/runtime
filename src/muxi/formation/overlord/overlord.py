@@ -389,6 +389,7 @@ class Overlord:
 
         # Initialize unified A2A messaging
         from .unified_a2a_messaging import UnifiedA2AMessaging
+
         self.unified_a2a = UnifiedA2AMessaging(self)
 
         # Set up callbacks for actual deletion
@@ -910,8 +911,12 @@ class Overlord:
         # Initialize registry client if external registry is configured
         if self.a2a_coordinator.external_registry_enabled:
             # Get registry URLs from configuration
-            inbound_registries = self.formation_config.get("a2a", {}).get("inbound", {}).get("registries", [])
-            outbound_registries = self.formation_config.get("a2a", {}).get("outbound", {}).get("registries", [])
+            inbound_registries = (
+                self.formation_config.get("a2a", {}).get("inbound", {}).get("registries", [])
+            )
+            outbound_registries = (
+                self.formation_config.get("a2a", {}).get("outbound", {}).get("registries", [])
+            )
 
             # Use inbound registries for agent registration, fall back to outbound if not specified
             registry_urls = inbound_registries or outbound_registries
@@ -919,16 +924,11 @@ class Overlord:
             if registry_urls:
                 try:
                     # Use SDK implementation directly (no more backward compatibility)
-                    self.inbound_registry_client = A2ARegistryClient(
-                        registries=registry_urls
-                    )
+                    self.inbound_registry_client = A2ARegistryClient(registries=registry_urls)
                     observability.observe(
                         event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
                         level=observability.EventLevel.INFO,
-                        data={
-                            "registries": registry_urls,
-                            "implementation": "SDK"
-                        },
+                        data={"registries": registry_urls, "implementation": "SDK"},
                         description=(
                             f"Initialized SDK registry client "
                             f"with {len(registry_urls)} registries"
@@ -936,7 +936,10 @@ class Overlord:
                     )
 
                     # Process pending external agent registrations
-                    if hasattr(self, "pending_external_registrations") and self.pending_external_registrations:
+                    if (
+                        hasattr(self, "pending_external_registrations")
+                        and self.pending_external_registrations
+                    ):
                         await self.a2a_coordinator.process_pending_registrations()
 
                 except Exception as e:
@@ -948,7 +951,7 @@ class Overlord:
                             "error": str(e),
                             "error_type": type(e).__name__,
                             "registries": registry_urls,
-                            "operation": "registry_client_init"
+                            "operation": "registry_client_init",
                         },
                         description=(
                             f"Failed to initialize external registry client: {str(e)}. "
@@ -965,11 +968,6 @@ class Overlord:
         # Update workflow executor with loaded agents
         if hasattr(self, "workflow_executor") and self.workflow_executor:
             self.workflow_executor.agent_registry = self.agents
-            print(f"\n📋 DEBUG: Workflow executor updated with {len(self.agents)} agents:")
-            for agent_id, agent in self.agents.items():
-                print(
-                    f"  - {agent_id}: {agent.name} (specialties: {getattr(agent, 'specialties', [])})"
-                )
 
         # Document processing configuration is now initialized by Formation
         if hasattr(self, "_configured_services") and self._configured_services:
@@ -1338,9 +1336,7 @@ class Overlord:
 
                 def timeout_handler(signum, frame):
                     self._print_mcp_initialization_error(
-                        server_id=current_server_id,
-                        agent_id=current_agent_id,
-                        is_timeout=True
+                        server_id=current_server_id, agent_id=current_agent_id, is_timeout=True
                     )
                     sys.exit(1)
 
@@ -1360,13 +1356,11 @@ class Overlord:
                     try:
                         await asyncio.wait_for(
                             self.mcp_service.register_mcp_server(**registration_params),
-                            timeout=10.0
+                            timeout=10.0,
                         )
                     except asyncio.TimeoutError:
                         self._print_mcp_initialization_error(
-                            server_id=current_server_id,
-                            agent_id=current_agent_id,
-                            is_timeout=True
+                            server_id=current_server_id, agent_id=current_agent_id, is_timeout=True
                         )
                         sys.exit(1)
 
@@ -1409,7 +1403,7 @@ class Overlord:
                     server_id=server_id,
                     agent_id=agent_id,
                     error_msg=error_msg if not (is_auth_error or is_cancelled) else None,
-                    is_auth_error=is_auth_error or is_cancelled
+                    is_auth_error=is_auth_error or is_cancelled,
                 )
 
                 # Exit the program cleanly to allow proper cleanup
@@ -1938,7 +1932,7 @@ class Overlord:
 
             # Register agent transport for direct agent communication
             agent_transport = AgentTransport(overlord=self)
-            self.client_factory.register('agent', agent_transport)
+            self.client_factory.register("agent", agent_transport)
 
             # Log successful initialization
             observability.observe(
@@ -1946,9 +1940,9 @@ class Overlord:
                 level=observability.EventLevel.INFO,
                 data={
                     "factory": "ClientFactory",
-                    "transports": ["agent", "jsonrpc", "rest", "grpc"]
+                    "transports": ["agent", "jsonrpc", "rest", "grpc"],
                 },
-                description="A2A ClientFactory initialized with AgentTransport"
+                description="A2A ClientFactory initialized with AgentTransport",
             )
 
         except Exception as e:
@@ -1957,7 +1951,7 @@ class Overlord:
                 event_type=observability.ErrorEvents.INTERNAL_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e)},
-                description=f"Failed to initialize A2A ClientFactory: {str(e)}"
+                description=f"Failed to initialize A2A ClientFactory: {str(e)}",
             )
             self.client_factory = None
 
@@ -2000,7 +1994,7 @@ class Overlord:
             message_type=message_type,
             context=context,
             wait_for_response=wait_for_response,
-            timeout=timeout
+            timeout=timeout,
         )
 
     async def create_model(
@@ -2344,7 +2338,7 @@ class Overlord:
                     try:
                         await asyncio.wait_for(
                             asyncio.gather(*deregistration_tasks, return_exceptions=True),
-                            timeout=5.0
+                            timeout=5.0,
                         )
                     except asyncio.TimeoutError:
                         pass  # Continue even if deregistration times out
@@ -2355,7 +2349,7 @@ class Overlord:
             # Deregister from external registries if configured
             self._create_tracked_task(
                 self._deregister_agent_from_external_registry(agent_id),
-                name=f"deregister_agent_{agent_id}"
+                name=f"deregister_agent_{agent_id}",
             )
 
             # Invalidate all cached responses for this agent
@@ -4223,15 +4217,12 @@ class Overlord:
                                     )
                                     # Re-initialize MCP connection with new credentials
                                     # and discover the account name
-                                    result = await self.credential_resolver.update_credential_name_with_discovery(
+                                    await self.credential_resolver.update_credential_name_with_discovery(
                                         user_id=user_id,
                                         service=service,
                                         mcp_service=self.mcp_service,
                                     )
-                                    print(f"[DEBUG] Credential name update result: {result}")
-                                except Exception as e:
-                                    # Log the error for debugging
-                                    print(f"[DEBUG] Credential name update failed: {e}")
+                                except Exception:
                                     # Silent failure - credential still works with generic name
                                     pass
 

@@ -297,13 +297,6 @@ Analysis Results:
 
         # Get agent capabilities
         if self.agent_registry:
-            # # DEBUG: Log agent registry for troubleshooting
-            # print(f"\n🏗️  DEBUG TASKDECOMPOSER AGENT REGISTRY:")
-            # print(f"  Registry size: {len(self.agent_registry)}")
-            # for agent_id, agent in self.agent_registry.items():
-            #     specialties = getattr(agent, 'specialties', [])
-            #     print(f"  - {agent_id}: {specialties}")
-            # print("  " + "="*60)
 
             info_parts.append("**Available Agents and Their Capabilities:**")
             for agent_id, agent in self.agent_registry.items():
@@ -338,9 +331,7 @@ Analysis Results:
                 elif specialties:
                     # Generic description based on capabilities
                     capability_str = ", ".join(specialties)
-                    info_parts.append(
-                        f"  Best for: Tasks requiring {capability_str} capabilities"
-                    )
+                    info_parts.append(f"  Best for: Tasks requiring {capability_str} capabilities")
 
             info_parts.append("")
         else:
@@ -394,20 +385,20 @@ Analysis Results:
 
         # Add specific guidance for known capability patterns
         # Find actual research-related capabilities
-        research_caps = [cap for cap in all_capabilities if 'research' in cap.lower()]
+        research_caps = [cap for cap in all_capabilities if "research" in cap.lower()]
         if research_caps:
             caps_str = "' or '".join(research_caps)
-            info_parts.append(
-                f"- Research/info gathering → use capability: '{caps_str}'"
-            )
+            info_parts.append(f"- Research/info gathering → use capability: '{caps_str}'")
 
         # Find actual writing-related capabilities
-        writing_caps = [cap for cap in all_capabilities if 'writing' in cap.lower() or 'documentation' in cap.lower()]
+        writing_caps = [
+            cap
+            for cap in all_capabilities
+            if "writing" in cap.lower() or "documentation" in cap.lower()
+        ]
         if writing_caps:
             caps_str = "' or '".join(writing_caps)
-            info_parts.append(
-                f"- Content creation/docs → use capability: '{caps_str}'"
-            )
+            info_parts.append(f"- Content creation/docs → use capability: '{caps_str}'")
 
         if "analysis" in all_capabilities or "data_analysis" in all_capabilities:
             info_parts.append(
@@ -570,15 +561,6 @@ Analysis Results:
                 capabilities_text = capabilities_text[1:-1]
             required_capabilities = [cap.strip() for cap in capabilities_text.split(",")]
 
-            # DEBUG: Log capability assignment for troubleshooting platform tasks
-            # if any(platform in str(required_capabilities) for platform in ['linear', 'github', 'jira', 'slack']):
-            #     print(f"\n🎯 DEBUG PLATFORM TASK DECOMPOSITION:")
-            #     print(f"  Task ID: {task_id}")
-            #     print(f"  Task description: {description}")
-            #     print(f"  Raw capabilities text: '{capabilities_text}'")
-            #     print(f"  Parsed capabilities: {required_capabilities}")
-            #     print("  " + "="*60)
-
             # Parse dependencies
             dependencies_text = task_data.get("dependencies", "none")
             dependencies = []
@@ -721,13 +703,13 @@ Analysis Results:
                 f"Technical Workflow:\n"
                 f"{self._workflow_to_text(workflow)}\n\n"
                 "Instructions:\n"
-                "1. Start with \"Here's my proposed approach for your request:\"\n"
+                '1. Start with "Here\'s my proposed approach for your request:"\n'
                 "2. Explain the workflow steps in logical order\n"
                 "3. Mention which specialists will be involved for each phase\n"
                 "4. IMPORTANT: Preserve the exact task descriptions from the workflow - do NOT reinterpret or rename them\n"  # noqa: E501
-                "5. If a task involves creating issues/tickets on any platform, keep that description - do NOT call it \"Implement Solution\" or \"Development\"\n"  # noqa: E501
+                '5. If a task involves creating issues/tickets on any platform, keep that description - do NOT call it "Implement Solution" or "Development"\n'  # noqa: E501
                 "6. Explain why this approach makes sense\n"
-                "7. End with \"Does this approach work for you? Should I proceed with this plan?\"\n\n"
+                '7. End with "Does this approach work for you? Should I proceed with this plan?"\n\n'
                 "Use a direct, professional tone. Accurately represent what each task will do based on its description.\n"  # noqa: E501
                 "Keep it concise but comprehensive.\n\n"
                 "IMPORTANT: Always reply in the same language as the user's original request\n"

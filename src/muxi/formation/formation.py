@@ -243,7 +243,9 @@ class Formation:
             url = inbound_registries[0]
             # Validate URL format
             if not (url.startswith("http://") or url.startswith("https://")):
-                raise ValueError(f"Invalid registry URL format: {url}. Must start with http:// or https://")
+                raise ValueError(
+                    f"Invalid registry URL format: {url}. Must start with http:// or https://"
+                )
             return url
 
         # Fall back to outbound registries
@@ -252,7 +254,9 @@ class Formation:
             url = outbound_registries[0]
             # Validate URL format
             if not (url.startswith("http://") or url.startswith("https://")):
-                raise ValueError(f"Invalid registry URL format: {url}. Must start with http:// or https://")
+                raise ValueError(
+                    f"Invalid registry URL format: {url}. Must start with http:// or https://"
+                )
             return url
 
         return None
@@ -270,9 +274,8 @@ class Formation:
         Returns:
             True if external registry should be enabled
         """
-        return (
-            bool(a2a_config.get("inbound", {}).get("registries")) or
-            bool(a2a_config.get("outbound", {}).get("registries"))
+        return bool(a2a_config.get("inbound", {}).get("registries")) or bool(
+            a2a_config.get("outbound", {}).get("registries")
         )
 
     async def load(self, config_path: str) -> None:
@@ -1008,6 +1011,13 @@ class Formation:
                         self._a2a_config.get("inbound", {}).get("mode", "none") != "none"
                     ),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
+                    # Map outbound configuration
+                    default_timeout_seconds=self._a2a_config.get("outbound", {}).get(
+                        "default_timeout_seconds", 30
+                    ),
+                    default_retry_attempts=self._a2a_config.get("outbound", {}).get(
+                        "default_retry_attempts", 3
+                    ),
                 )
                 a2a_config_obj.validate()
             except Exception as e:
@@ -2451,7 +2461,9 @@ class Formation:
         Args:
             timeout: Maximum time to wait for deregistration (default: 2.0 seconds)
         """
-        if not self._overlord or not hasattr(self._overlord, "_deregister_all_agents_from_external_registry"):
+        if not self._overlord or not hasattr(
+            self._overlord, "_deregister_all_agents_from_external_registry"
+        ):
             return
 
         try:
@@ -2459,19 +2471,18 @@ class Formation:
                 event_type=observability.SystemEvents.A2A_AGENT_DEREGISTERED,
                 level=observability.EventLevel.INFO,
                 data={"timeout": timeout, "action": "deregistration_started"},
-                description="Starting agent deregistration from external registry"
+                description="Starting agent deregistration from external registry",
             )
 
             await asyncio.wait_for(
-                self._overlord._deregister_all_agents_from_external_registry(),
-                timeout=timeout
+                self._overlord._deregister_all_agents_from_external_registry(), timeout=timeout
             )
 
             observability.observe(
                 event_type=observability.SystemEvents.A2A_DEREGISTERED,
                 level=observability.EventLevel.INFO,
                 data={},
-                description="Successfully deregistered all agents from external registry"
+                description="Successfully deregistered all agents from external registry",
             )
 
         except asyncio.TimeoutError:
@@ -2479,14 +2490,14 @@ class Formation:
                 event_type=observability.ErrorEvents.TIMEOUT_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"timeout": timeout, "operation": "agent_deregistration"},
-                description=f"Agent deregistration timed out after {timeout} seconds"
+                description=f"Agent deregistration timed out after {timeout} seconds",
             )
         except Exception as e:
             observability.observe(
                 event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
                 level=observability.EventLevel.WARNING,
                 data={"error": str(e), "operation": "agent_deregistration"},
-                description=f"Failed to deregister agents: {e}"
+                description=f"Failed to deregister agents: {e}",
             )
 
     def _run_async_with_timeout(self, coro, timeout: float = 2.0) -> None:
@@ -2510,7 +2521,7 @@ class Formation:
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={"task": str(task), "timeout": timeout, "operation": "async_task_created"},
-                description="Created async task in existing event loop"
+                description="Created async task in existing event loop",
             )
 
         except RuntimeError:
@@ -2519,28 +2530,26 @@ class Formation:
                 event_type=observability.SystemEvents.SERVICE_STARTED,
                 level=observability.EventLevel.DEBUG,
                 data={"timeout": timeout, "operation": "event_loop_created"},
-                description="Creating new event loop for async operation"
+                description="Creating new event loop for async operation",
             )
 
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(
-                    asyncio.wait_for(coro, timeout=timeout)
-                )
+                loop.run_until_complete(asyncio.wait_for(coro, timeout=timeout))
             except asyncio.TimeoutError:
                 observability.observe(
                     event_type=observability.ErrorEvents.TIMEOUT_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"timeout": timeout, "operation": "async_with_timeout"},
-                    description=f"Operation timed out after {timeout} seconds"
+                    description=f"Operation timed out after {timeout} seconds",
                 )
             except Exception as e:
                 observability.observe(
                     event_type=observability.ErrorEvents.UNEXPECTED_ERROR,
                     level=observability.EventLevel.WARNING,
                     data={"error": str(e)},
-                    description=f"Operation failed: {e}"
+                    description=f"Operation failed: {e}",
                 )
             finally:
                 loop.close()
@@ -2560,16 +2569,12 @@ class Formation:
             # Deregister agents from external registry if configured
             # Using helper method for cleaner structure and better observability
             self._run_async_with_timeout(
-                self._deregister_agents_with_timeout(timeout=2.0),
-                timeout=2.0
+                self._deregister_agents_with_timeout(timeout=2.0), timeout=2.0
             )
 
             # Disconnect MCP servers immediately if present
             if hasattr(self, "_mcp_service") and self._mcp_service:
-                self._run_async_with_timeout(
-                    self._mcp_service.disconnect_all(),
-                    timeout=2.0
-                )
+                self._run_async_with_timeout(self._mcp_service.disconnect_all(), timeout=2.0)
 
             # Force immediate cleanup without waiting
             self._overlord = None
