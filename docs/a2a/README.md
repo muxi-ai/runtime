@@ -11,9 +11,10 @@ The Agent-to-Agent (A2A) communication system in MUXI Runtime enables agents to 
 3. [Message Flow](message-flow.md) - How messages travel between agents
 4. [Authentication](authentication.md) - Security and authentication mechanisms
 5. [Configuration Guide](configuration.md) - How to configure A2A
-6. [SDK Integration](sdk-integration.md) - A2A SDK usage and migration
-7. [Registry System](registry.md) - External registry integration
-8. [Troubleshooting](troubleshooting.md) - Common issues and solutions
+6. [Intelligent Filtering](intelligent-filtering.md) - Smart agent selection for large pools
+7. [SDK Integration](sdk-integration.md) - A2A SDK usage and migration
+8. [Registry System](registry.md) - External registry integration
+9. [Troubleshooting](troubleshooting.md) - Common issues and solutions
 
 ## Quick Start
 
