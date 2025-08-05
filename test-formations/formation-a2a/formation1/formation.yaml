@@ -86,11 +86,11 @@ a2a:
     default_timeout_seconds: 30
 
     # Outbound services with secrets-based authentication
-    # services:
-    #   - service_id: "project-management"
-    #     auth:
-    #       type: "bearer"
-    #       token: "${{ secrets.A2A_SHARED_KEY }}"
+    services:
+      - service_id: "localhost:8181"  # Formation 2's server address
+        auth:
+          type: "bearer"
+          token: "${{ secrets.A2A_SHARED_KEY }}"
 
   inbound:
     enabled: true

@@ -99,5 +99,6 @@ a2a:
       - "http://0.0.0.0:9090"
     port: 8181
     trusted_endpoints: []
-    # mode: "bearer"
-    # shared_key: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key
+    auth:
+      type: "bearer"
+      token: "${{ secrets.A2A_SHARED_KEY }}"  # Inbound authentication key for testing
