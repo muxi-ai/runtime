@@ -12,7 +12,7 @@ from typing import Dict, List, Optional, Any
 
 from ...datatypes.schema import A2AServiceSchema
 from ...services.a2a.models import AgentCard
-from ...services.a2a.models_sdk_adapter import ModelsAdapter
+from ...services.a2a.models_adapter import ModelsAdapter
 
 
 class A2ACoordinator:

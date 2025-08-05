@@ -278,6 +278,33 @@ class Formation:
             a2a_config.get("outbound", {}).get("registries")
         )
 
+    def _get_inbound_auth_key(self, inbound_config: Dict[str, Any]) -> Optional[str]:
+        """
+        Extract the authentication key from inbound configuration.
+
+        Args:
+            inbound_config: The inbound configuration dictionary
+
+        Returns:
+            The authentication key based on auth type, or None if not configured
+        """
+        auth_config = inbound_config.get("auth", {})
+        auth_type = auth_config.get("type", "none")
+
+        if auth_type == "bearer":
+            return auth_config.get("token")
+        elif auth_type == "api_key":
+            return auth_config.get("key")
+        elif auth_type == "basic":
+            # For basic auth, the server handles username/password separately
+            return None
+        elif auth_type == "custom":
+            # Custom auth uses headers dict
+            return None
+        else:
+            # For "none" or unknown types
+            return None
+
     async def load(self, config_path: str) -> None:
         """
         Load and validate formation configuration (async).
@@ -1006,12 +1033,12 @@ class Formation:
                     registration_timeout=self._a2a_config.get("external_registry", {}).get(
                         "timeout", 30.0
                     ),
-                    # Map authentication from inbound.mode configuration
+                    # Map authentication from inbound.auth configuration
                     require_auth=(
-                        self._a2a_config.get("inbound", {}).get("mode", "none") != "none"
+                        self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none") != "none"
                     ),
-                    auth_mode=self._a2a_config.get("inbound", {}).get("mode", "none"),
-                    shared_key=self._a2a_config.get("inbound", {}).get("shared_key"),
+                    auth_mode=self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none"),
+                    shared_key=self._get_inbound_auth_key(self._a2a_config.get("inbound", {})),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
                     # Map outbound configuration
                     default_timeout_seconds=self._a2a_config.get("outbound", {}).get(

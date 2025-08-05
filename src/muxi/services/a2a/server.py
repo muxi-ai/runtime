@@ -30,7 +30,7 @@ from a2a.types import (
 )
 
 from .. import observability
-from .models_sdk_adapter import ModelsAdapter
+from .models_adapter import ModelsAdapter
 
 
 # Legacy request/response models for backward compatibility
@@ -98,7 +98,7 @@ class A2AServer:
             self.is_running = False
 
             # Initialize authentication
-            from .inbound_auth import A2AInboundAuthenticator
+            from .auth.inbound import A2AInboundAuthenticator
 
             # Pass SecretsManager from overlord if available
             secrets_manager = getattr(overlord, "secrets_manager", None)
@@ -295,6 +295,34 @@ class A2AServer:
         message_id = f"msg_{generate_nanoid()}"
 
         try:
+            # Perform authentication if auth mode is set
+            if self.auth_mode != "none" and http_request:
+                # Extract auth headers
+                authorization = http_request.headers.get("authorization")
+                x_api_key = http_request.headers.get("x-api-key")
+                x_signature = http_request.headers.get("x-signature")
+                x_timestamp = http_request.headers.get("x-timestamp")
+
+                authenticated, client_id, auth_error = (
+                    await self.authenticator.authenticate_request(
+                        http_request, authorization, x_api_key, x_signature, x_timestamp
+                    )
+                )
+                if not authenticated:
+                    # Check if it's a type mismatch (403) vs missing/invalid credentials (401)
+                    if auth_error and "requires" in auth_error.lower():
+                        # Auth type mismatch - return 403 Forbidden
+                        raise HTTPException(
+                            status_code=403,
+                            detail=auth_error
+                        )
+                    else:
+                        # Missing or invalid credentials - return 401 Unauthorized
+                        raise HTTPException(
+                            status_code=401,
+                            detail=f"Authentication failed: {auth_error or 'Invalid credentials'}"
+                        )
+
             # Validate trusted endpoints if configured
             if self.trusted_endpoints and http_request:
                 client_host = self._get_client_host(http_request)
@@ -412,11 +440,20 @@ class A2AServer:
                     )
                 )
                 if not authenticated:
-                    return {
-                        "status": "error",
-                        "error": f"Authentication failed: {auth_error}",
-                        "message_id": message_id,
-                    }
+                    # Check if it's a type mismatch (403) vs missing/invalid credentials (401)
+                    if auth_error and "requires" in auth_error.lower():
+                        # Auth type mismatch - return 403 Forbidden
+                        raise HTTPException(
+                            status_code=403,
+                            detail=auth_error
+                        )
+                    else:
+                        # Missing or invalid credentials - return 401 Unauthorized
+                        raise HTTPException(
+                            status_code=401,
+                            detail=f"Authentication failed: {auth_error}",
+                            headers={"WWW-Authenticate": f"{self.auth_mode.title()}"} if self.auth_mode != "none" else {}  # noqa: E501
+                        )
 
             # Check if agent exists
             if not self.overlord or agent_id not in self.overlord.agents:
@@ -490,6 +527,9 @@ class A2AServer:
                 )
                 return sdk_response.model_dump(mode="json")
 
+        except HTTPException:
+            # Re-raise HTTP exceptions to be handled by FastAPI
+            raise
         except Exception as e:
             observability.observe(
                 event_type=observability.ConversationEvents.A2A_MESSAGE_FAILED,
@@ -562,12 +602,20 @@ class A2AServer:
                     )
                 )
                 if not authenticated:
-                    return LegacyA2AMessageResponse(
-                        status="error",
-                        error=f"Authentication failed: {auth_error}",
-                        message_id=message_id,
-                        agent_id=agent_id,
-                    )
+                    # Check if it's a type mismatch (403) vs missing/invalid credentials (401)
+                    if auth_error and "requires" in auth_error.lower():
+                        # Auth type mismatch - return 403 Forbidden
+                        raise HTTPException(
+                            status_code=403,
+                            detail=auth_error
+                        )
+                    else:
+                        # Missing or invalid credentials - return 401 Unauthorized
+                        raise HTTPException(
+                            status_code=401,
+                            detail=f"Authentication failed: {auth_error}",
+                            headers={"WWW-Authenticate": f"{self.auth_mode.title()}"} if self.auth_mode != "none" else {}  # noqa: E501
+                        )
 
             # Check if agent exists
             if not self.overlord or agent_id not in self.overlord.agents:
@@ -618,6 +666,9 @@ class A2AServer:
                     message_id=message_id,
                 )
 
+        except HTTPException:
+            # Re-raise HTTP exceptions to be handled by FastAPI
+            raise
         except Exception as e:
             return LegacyA2AMessageResponse(
                 status="error",

@@ -388,7 +388,7 @@ class Overlord:
         self._initialize_a2a_client_factory()
 
         # Initialize unified A2A messaging
-        from .unified_a2a_messaging import UnifiedA2AMessaging
+        from .a2a_messaging import UnifiedA2AMessaging
 
         self.unified_a2a = UnifiedA2AMessaging(self)
 

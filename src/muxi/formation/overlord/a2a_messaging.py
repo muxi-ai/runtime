@@ -108,8 +108,11 @@ class UnifiedA2AMessaging:
             if hasattr(self.overlord, "secrets_manager") and self.overlord.secrets_manager:
                 # Get or create auth manager for this overlord
                 if not hasattr(self.overlord, "_a2a_auth_manager"):
-                    from ...services.a2a.auth import get_auth_manager
-                    self.overlord._a2a_auth_manager = get_auth_manager(self.overlord.secrets_manager)
+                    from ...services.a2a.auth.outbound import get_auth_manager
+
+                    self.overlord._a2a_auth_manager = get_auth_manager(
+                        self.overlord.secrets_manager
+                    )
                     # Load credentials from formation config
                     if hasattr(self.overlord, "formation_config"):
                         await self.overlord._a2a_auth_manager.load_credentials_from_formation_config(
@@ -119,37 +122,89 @@ class UnifiedA2AMessaging:
                 auth_manager = self.overlord._a2a_auth_manager
 
                 # Look for matching outbound service configuration
-                outbound_services = self.overlord.formation_config.get("a2a", {}).get(
-                    "outbound", {}
-                ).get("services", [])
+                outbound_services = (
+                    self.overlord.formation_config.get("a2a", {})
+                    .get("outbound", {})
+                    .get("services", [])
+                )
+
+                # Parse target URL to extract components for matching
+                from urllib.parse import urlparse
+
+                parsed_url = urlparse(target_agent_url)
+                target_host = parsed_url.hostname
+                target_port = parsed_url.port
+
+                # Extract agent ID from path if present
+                # URL format: http://hostname:port/agents/{agent-id}/message
+                target_agent_id = None
+                if parsed_url.path:
+                    path_parts = parsed_url.path.strip("/").split("/")
+                    if (
+                        len(path_parts) >= 3
+                        and path_parts[0] == "agents"
+                        and path_parts[2] == "message"
+                    ):
+                        target_agent_id = path_parts[1]
+
+                # Try to find matching service configuration with precedence
+                target_service_id = None
+
+                # Collect all matches with their precedence
+                matches = []
 
                 for service in outbound_services:
                     service_id = service.get("service_id", "")
-                    auth_config = service.get("auth", {})
-                    if auth_config and service_id:
-                        # Try to apply authentication using service_id
-                        auth_type_str = auth_config.get("type", "none")
-                        if auth_type_str != "none":
-                            from ...services.a2a.auth import AuthType
-                            try:
-                                if auth_type_str == "bearer":
-                                    service_auth_type = AuthType.BEARER
-                                elif auth_type_str == "api_key":
-                                    service_auth_type = AuthType.API_KEY
-                                elif auth_type_str == "basic":
-                                    service_auth_type = AuthType.BASIC
-                                else:
-                                    continue
-                                # Try to apply authentication using service_id
-                                success, updated_headers = await auth_manager.apply_authentication(
-                                    service_id, service_auth_type, auth_headers, required=False
-                                )
-                                if success:
-                                    auth_headers = updated_headers
-                                    break  # Use first successful auth config
-                            except Exception:
-                                # Continue to next service if auth fails
-                                continue
+                    if not service_id:
+                        continue
+
+                    # Priority 1: agent-id@hostname:port (most specific)
+                    if target_agent_id and target_host and target_port:
+                        if service_id == f"{target_agent_id}@{target_host}:{target_port}":
+                            matches.append((1, service_id))
+                            continue
+
+                    # Priority 2: hostname:port
+                    if target_host and target_port:
+                        if service_id == f"{target_host}:{target_port}":
+                            matches.append((2, service_id))
+                            continue
+
+                    # Priority 3: hostname
+                    if target_host:
+                        if service_id == target_host:
+                            matches.append((3, service_id))
+                            continue
+
+                    # Priority 4: port (also check localhost:port for localhost targets)
+                    if target_port:
+                        if service_id == str(target_port):
+                            matches.append((4, service_id))
+                            continue
+                        # Special case for localhost
+                        if (
+                            target_host in ["localhost", "127.0.0.1", "0.0.0.0"]
+                            and service_id == f"localhost:{target_port}"
+                        ):
+                            matches.append((2, service_id))  # Same priority as hostname:port
+                            continue
+
+                # Select the match with highest priority (lowest number)
+                if matches:
+                    matches.sort(key=lambda x: x[0])
+                    target_service_id = matches[0][1]
+
+                # If no matching service_id found, don't use any (no default)
+                # This ensures we only apply auth when explicitly configured
+
+                # Apply SDK authentication if we have a service_id
+                if target_service_id:
+                    # Try SDK authentication first
+                    success, updated_headers = await auth_manager.apply_sdk_authentication(
+                        target_service_id, auth_headers, required=False
+                    )
+                    if success:
+                        auth_headers = updated_headers
 
             # Retry logic for external requests
             for attempt in range(retry_attempts):
@@ -158,8 +213,7 @@ class UnifiedA2AMessaging:
                     client_headers = auth_headers.copy() if auth_headers else {}
 
                     async with httpx.AsyncClient(
-                        timeout=httpx.Timeout(timeout_value),
-                        headers=client_headers
+                        timeout=httpx.Timeout(timeout_value), headers=client_headers
                     ) as http_client:
                         client = A2AClient(httpx_client=http_client, url=target_agent_url)
 
