@@ -27,3 +27,5 @@ This command updates the project context documentation in `/Users/ran/Projects/m
 - Current git status: !`git status --short`
 - Recent commits: !`git log --oneline -10`
 - Project README: @README.md
+
+$ARGUMENTS
