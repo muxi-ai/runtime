@@ -1037,8 +1037,11 @@ class LLM:
                     # Use cleaned kwargs for the actual call
                     return await asyncio.wait_for(func(*args, **clean_kwargs), timeout=timeout)
                 else:
-                    # Use fixed timeout
-                    return await asyncio.wait_for(func(*args, **kwargs), timeout=timeout)
+                    # Remove internal kwargs before passing to function (same as adaptive case)
+                    clean_kwargs = {k: v for k, v in kwargs.items() if k not in ["retry_attempt"]}
+
+                    # Use fixed timeout with cleaned kwargs
+                    return await asyncio.wait_for(func(*args, **clean_kwargs), timeout=timeout)
             except asyncio.TimeoutError as e:
                 # Provide specific timeout error with timeout value
                 raise LLMError(

@@ -6,6 +6,7 @@ using the official A2A SDK v0.3.0.
 """
 
 import asyncio
+import threading
 from typing import Optional, Dict, Any, Union
 from nanoid import generate as generate_nanoid
 
@@ -22,8 +23,9 @@ from a2a.types import (
 from .. import observability
 
 
-# Singleton instance
+# Singleton instance and lock for thread safety
 _a2a_service_instance = None
+_singleton_lock = threading.Lock()
 
 
 class A2AService:
@@ -34,11 +36,14 @@ class A2AService:
     """
 
     def __new__(cls):
-        """Ensure singleton instance."""
+        """Ensure singleton instance with thread safety."""
         global _a2a_service_instance
         if _a2a_service_instance is None:
-            _a2a_service_instance = super(A2AService, cls).__new__(cls)
-            _a2a_service_instance._initialized = False
+            with _singleton_lock:
+                # Double-check pattern for thread safety
+                if _a2a_service_instance is None:
+                    _a2a_service_instance = super(A2AService, cls).__new__(cls)
+                    _a2a_service_instance._initialized = False
         return _a2a_service_instance
 
     def __init__(self):
@@ -47,6 +52,7 @@ class A2AService:
             return
 
         self.sdk_client = None
+        self.httpx_client = None  # Store httpx client for proper cleanup
         self._internal_handlers = {}
         self._initialized = True
 
@@ -63,18 +69,19 @@ class A2AService:
                 # The A2A SDK requires an httpx client and either agent_card or url
                 import httpx
 
-                # Create httpx client with reasonable defaults
-                httpx_client = httpx.AsyncClient(
+                # Create httpx client with reasonable defaults and store it
+                self.httpx_client = httpx.AsyncClient(
                     timeout=httpx.Timeout(30.0),
                     follow_redirects=True,
                 )
 
-                # Get URL from config if available
-                url = config.get('outbound', {}).get('registries', [None])[0]
+                # Get URL from config if available, safely checking for non-empty registries
+                registries = config.get('outbound', {}).get('registries', [])
+                url = registries[0] if registries else None
 
                 # Initialize SDK client with httpx client and url
                 if url:
-                    self.sdk_client = A2AClient(httpx_client=httpx_client, url=url)
+                    self.sdk_client = A2AClient(httpx_client=self.httpx_client, url=url)
                     observability.observe(
                         event_type="a2a.sdk.initialized",
                         level=observability.EventLevel.INFO,
@@ -204,9 +211,15 @@ class A2AService:
                 },
             )
 
-            if wait_for_response and hasattr(response.root, 'result'):
-                # Convert SDK response back to MUXI format
-                return self._convert_from_sdk_message(response.root.result)
+            if wait_for_response:
+                try:
+                    # Attempt to access result attribute safely
+                    if response.root and response.root.result:
+                        # Convert SDK response back to MUXI format
+                        return self._convert_from_sdk_message(response.root.result)
+                except AttributeError:
+                    # No result attribute present, return None
+                    pass
 
             return None
 
@@ -412,3 +425,35 @@ class A2AService:
             data={"agent_id": agent_id},
             description=f"Registered internal handler for agent {agent_id}",
         )
+
+    async def cleanup(self):
+        """Clean up resources, particularly the httpx client.
+
+        This method should be called when shutting down the A2A service
+        to properly close the httpx client and release resources.
+        """
+        if hasattr(self, 'httpx_client') and self.httpx_client:
+            try:
+                await self.httpx_client.aclose()
+                self.httpx_client = None
+                observability.observe(
+                    event_type="a2a.cleanup.success",
+                    level=observability.EventLevel.INFO,
+                    description="A2A service httpx client closed successfully",
+                )
+            except Exception as e:
+                observability.observe(
+                    event_type="a2a.cleanup.error",
+                    level=observability.EventLevel.ERROR,
+                    data={"error": str(e)},
+                    description=f"Error closing httpx client: {e}",
+                )
+
+        # Clear SDK client reference
+        if self.sdk_client:
+            self.sdk_client = None
+            observability.observe(
+                event_type="a2a.cleanup.complete",
+                level=observability.EventLevel.DEBUG,
+                description="A2A SDK client reference cleared",
+            )

@@ -116,8 +116,8 @@ class ModelsAdapter:
                         enabled=True
                     )
 
-        # Extract MUXI-specific fields from metadata
-        metadata = sdk_card.metadata or {}
+        # Extract MUXI-specific fields from metadata (using copy to avoid mutation)
+        metadata = (sdk_card.metadata or {}).copy()
         muxi_agent_id = metadata.pop("muxi_agent_id", None)
         muxi_formation = metadata.pop("muxi_formation", None)
         created_at = metadata.pop("created_at", None)
@@ -393,12 +393,10 @@ def convert_agent_card(
     Returns:
         Converted AgentCard
     """
-    adapter = ModelsAdapter()
-
     if to_sdk and isinstance(card, MUXIAgentCard):
-        return adapter.muxi_to_sdk_agent_card(card)
+        return ModelsAdapter.muxi_to_sdk_agent_card(card)
     elif not to_sdk and isinstance(card, SDKAgentCard):
-        return adapter.sdk_to_muxi_agent_card(card)
+        return ModelsAdapter.sdk_to_muxi_agent_card(card)
     else:
         # Already in desired format
         return card

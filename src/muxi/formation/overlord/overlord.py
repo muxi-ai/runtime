@@ -725,7 +725,7 @@ class Overlord:
         self.external_registry_client: Optional[A2ARegistryClient] = None
         self.inbound_registry_client: Optional[A2ARegistryClient] = None
         self.a2a_server: Optional[A2AServer] = None
-        self.a2a_cache_manager = None  # Initialize A2A cache manager for filtering
+        # a2a_cache_manager will be initialized earlier in __init__ at line 385
         self.mcp_service = MCPService.get_instance()  # Get existing instance
         self.scheduler_service: Optional[SchedulerService] = None
 

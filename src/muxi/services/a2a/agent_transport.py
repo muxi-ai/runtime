@@ -91,10 +91,15 @@ class AgentTransport(ClientTransport):
 
         # Convert response to Message if it's a dict
         if isinstance(response, dict):
+            # Extract message_id suffix for better readability
+            message_suffix = 'unknown'
+            if context and hasattr(context, 'state'):
+                message_suffix = context.state.get('message_id', 'unknown')
+
             # Create a Message from the response
             from a2a.types import TextPart, Role
             return Message(
-                message_id=f"resp_{target_agent_id}_{context.state.get('message_id', 'unknown') if context and hasattr(context, 'state') else 'unknown'}",  # noqa: E501
+                message_id=f"resp_{target_agent_id}_{message_suffix}",
                 role=Role.agent,
                 parts=[TextPart(text=str(response), kind="text")],
                 metadata=response if isinstance(response, dict) else {},

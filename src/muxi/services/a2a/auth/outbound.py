@@ -126,7 +126,7 @@ class A2AAuthManager:
         self.secrets_manager = secrets_manager
         self.schemes: Dict[str, SecurityScheme] = {}
         self._credentials: Dict[str, AuthCredentials] = {}
-        self._SECRETS_LOADING = False
+        self._credentials_loaded = False
 
         # Log initialization
         observability.observe(
@@ -135,11 +135,11 @@ class A2AAuthManager:
             description="A2A authentication manager initialized",
             data={
                 "secrets_manager_type": type(secrets_manager).__name__,
-                "SECRETS_LOADING": self._SECRETS_LOADING,
+                "credentials_loaded": self._credentials_loaded,
             },
         )
 
-    async def ensure_SECRETS_LOADING(self):
+    async def ensure_credentials_loaded(self):
         """Ensure credentials are loaded from secrets manager."""
         # Log credential loading check
         observability.observe(
@@ -147,14 +147,14 @@ class A2AAuthManager:
             level=observability.EventLevel.DEBUG,
             description="Checking if A2A credentials need loading",
             data={
-                "SECRETS_LOADING": self._SECRETS_LOADING,
+                "credentials_loaded": self._credentials_loaded,
                 "current_credentials_count": len(self._credentials),
             },
         )
 
-        if not self._SECRETS_LOADING:
+        if not self._credentials_loaded:
             await self._load_default_credentials()
-            self._SECRETS_LOADING = True
+            self._credentials_loaded = True
 
             # Log credentials loaded
             observability.observe(

@@ -2320,30 +2320,8 @@ class Formation:
                     description=f"Built-in MCP registration failed: {e}",
                 )
 
-            # Initialize A2A service if internal A2A is enabled
-            if self._a2a_config and self._a2a_config.get("internal", {}).get("enabled", False):
-                try:
-                    from muxi.formation.services.a2a import a2a_service
-
-                    # Initialize with the full A2A config
-                    # The service will determine if SDK is needed based on config
-                    await a2a_service.initialize(self._a2a_config)
-
-                    observability.observe(
-                        event_type=observability.SystemEvents.COMPONENT_INITIALIZED,
-                        level=observability.EventLevel.INFO,
-                        data={"component": "a2a_service", "internal_enabled": True},
-                        description="A2A service initialized for internal communication",
-                    )
-                except Exception as e:
-                    # Log error but don't fail startup for A2A issues
-                    # Internal A2A can work via direct routing even without SDK
-                    observability.observe(
-                        event_type=observability.ErrorEvents.INTERNAL_ERROR,
-                        level=observability.EventLevel.WARNING,
-                        data={"error": str(e), "component": "a2a_service"},
-                        description=f"A2A service initialization failed: {e}",
-                    )
+            # A2A initialization happens through the Overlord's A2ACoordinator
+            # No separate service initialization needed here
 
             return self._overlord
 

@@ -192,7 +192,10 @@ class A2AServiceSchema(BaseServiceSchema):
 
     # Security configuration
     require_auth: bool = Field(default=False, description="Require authentication for A2A requests")
-    auth_mode: Optional[str] = Field(default="none", description="Authentication mode (none, api_key, bearer, basic)")
+    auth_mode: Literal["none", "api_key", "bearer", "basic"] = Field(
+        default="none",
+        description="Authentication mode (none, api_key, bearer, basic)"
+    )
     shared_key: Optional[str] = Field(default=None, description="Shared key for inbound authentication")
     allowed_origins: Optional[List[str]] = Field(
         default=None, description="Allowed origins for CORS"
@@ -213,6 +216,13 @@ class A2AServiceSchema(BaseServiceSchema):
 
         if self.server_enabled and self.server_port < 1024:
             raise ValueError("Server port must be >= 1024 for non-root operation")
+
+        # Validate authentication configuration
+        if self.require_auth and self.auth_mode != "none" and not self.shared_key:
+            raise ValueError(
+                f"Shared key is required when auth is enabled with mode '{self.auth_mode}'. "
+                "Either provide a shared_key or set auth_mode to 'none'"
+            )
 
 
 class SchedulerServiceSchema(BaseServiceSchema):

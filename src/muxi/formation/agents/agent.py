@@ -806,6 +806,9 @@ class Agent:
             content = message.content
             message_obj = message
 
+        # Store message metadata for use in other methods (like A2A routing)
+        self._current_message_metadata = message_obj.metadata if hasattr(message_obj, 'metadata') else None
+
         # Reset A2A attempt counter for each new request to prevent cascading failures
         self._a2a_attempt_count = 0
 
@@ -966,15 +969,27 @@ class Agent:
                     description=f"Failed to get MCP tools for agent {self.agent_id}: {str(e)}",
                 )
 
-        # Check if this is a workflow task or A2A task
-        user_message = message_obj.content if hasattr(message_obj, "content") else str(message_obj)
-        is_workflow_task = (
-            # Check for workflow context indicators
-            ("## Task:" in user_message)  # Workflow task prompt format
-            or ("Task Details:" in user_message)  # Another workflow indicator
-            or ("Required Capabilities:" in user_message)  # Workflow metadata
-            or ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
-        )
+        # Check if this is a workflow task using metadata
+        # Workflow tasks should be marked in metadata to avoid fragile string matching
+        is_workflow_task = False
+        if hasattr(message_obj, 'metadata') and message_obj.metadata:
+            # Check for workflow task indicator in metadata
+            is_workflow_task = (
+                message_obj.metadata.get('is_workflow_task', False) or
+                message_obj.metadata.get('task_type') == 'workflow' or
+                message_obj.metadata.get('source') == 'workflow_executor'
+            )
+
+        # Fallback to string matching only if metadata not available (for backward compatibility)
+        if not is_workflow_task and not (hasattr(message_obj, 'metadata') and message_obj.metadata):
+            user_message = message_obj.content if hasattr(message_obj, "content") else str(message_obj)
+            is_workflow_task = (
+                # Check for workflow context indicators
+                ("## Task:" in user_message)  # Workflow task prompt format
+                or ("Task Details:" in user_message)  # Another workflow indicator
+                or ("Required Capabilities:" in user_message)  # Workflow metadata
+                or ("THIS SPECIFIC TASK ONLY" in user_message)  # Workflow instruction
+            )
 
         # Skip planning for workflow tasks or A2A tasks (to prevent loops)
         if is_workflow_task or is_a2a_task:
@@ -2788,13 +2803,25 @@ class Agent:
             The A2A response if successful, None otherwise
         """
         try:
-            # Check if this is a workflow task - if so, don't use A2A
-            is_workflow_task = (
-                ("## Task:" in user_message)
-                or ("Task Details:" in user_message)
-                or ("Required Capabilities:" in user_message)
-                or ("THIS SPECIFIC TASK ONLY" in user_message)
-            )
+            # Check if this is a workflow task using metadata first
+            is_workflow_task = False
+
+            # Check metadata if available (from process_message context)
+            if hasattr(self, '_current_message_metadata') and self._current_message_metadata:
+                is_workflow_task = (
+                    self._current_message_metadata.get('is_workflow_task', False) or
+                    self._current_message_metadata.get('task_type') == 'workflow' or
+                    self._current_message_metadata.get('source') == 'workflow_executor'
+                )
+
+            # Fallback to string matching only if metadata not available
+            if not is_workflow_task:
+                is_workflow_task = (
+                    ("## Task:" in user_message)
+                    or ("Task Details:" in user_message)
+                    or ("Required Capabilities:" in user_message)
+                    or ("THIS SPECIFIC TASK ONLY" in user_message)
+                )
 
             if is_workflow_task:
                 # For workflow tasks, just return None to indicate we can't help

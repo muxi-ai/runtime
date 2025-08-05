@@ -245,8 +245,20 @@ class A2AServer:
                 try:
                     legacy_request = LegacyA2AMessageRequest(**body)
                     return await self._handle_legacy_message(agent_id, legacy_request, http_request)
-                except Exception:
-                    # If legacy parsing fails, try SDK format
+                except Exception as e:
+                    # Log the legacy parsing error for debugging
+                    observability.observe(
+                        event_type=observability.SystemEvents.A2A_MESSAGE_PARSING,
+                        level=observability.EventLevel.DEBUG,
+                        description="Legacy message format parsing failed, attempting SDK format",
+                        data={
+                            "agent_id": agent_id,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "body_keys": list(body.keys()) if isinstance(body, dict) else None
+                        }
+                    )
+                    # If legacy parsing fails, try SDK format as fallback
                     return await self._handle_sdk_message(agent_id, body, http_request)
 
             # SDK-specific endpoint (explicit SDK format)
@@ -426,34 +438,7 @@ class A2AServer:
                     elif context.get("original_request"):
                         message_content = context["original_request"]
 
-            # Authenticate if needed
-            if http_request and self.auth_mode != "none":
-                # Extract headers for authentication
-                authorization = http_request.headers.get("authorization")
-                x_api_key = http_request.headers.get("x-api-key")
-                x_signature = http_request.headers.get("x-signature")
-                x_timestamp = http_request.headers.get("x-timestamp")
-
-                authenticated, client_id, auth_error = (
-                    await self.authenticator.authenticate_request(
-                        http_request, authorization, x_api_key, x_signature, x_timestamp
-                    )
-                )
-                if not authenticated:
-                    # Check if it's a type mismatch (403) vs missing/invalid credentials (401)
-                    if auth_error and "requires" in auth_error.lower():
-                        # Auth type mismatch - return 403 Forbidden
-                        raise HTTPException(
-                            status_code=403,
-                            detail=auth_error
-                        )
-                    else:
-                        # Missing or invalid credentials - return 401 Unauthorized
-                        raise HTTPException(
-                            status_code=401,
-                            detail=f"Authentication failed: {auth_error}",
-                            headers={"WWW-Authenticate": f"{self.auth_mode.title()}"} if self.auth_mode != "none" else {}  # noqa: E501
-                        )
+            # Authentication already performed at the beginning of the method (lines 298-324)
 
             # Check if agent exists
             if not self.overlord or agent_id not in self.overlord.agents:

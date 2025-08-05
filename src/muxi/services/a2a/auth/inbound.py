@@ -7,6 +7,8 @@ Uses SDK security schemes for protocol compliance.
 """
 
 import base64
+import os
+import json
 from typing import Dict, Optional, Tuple, Any
 from dataclasses import dataclass, field
 from enum import Enum
@@ -117,7 +119,7 @@ class A2AInboundAuthenticator:
                 level=observability.EventLevel.INFO,
                 description="A2A inbound credential initialization completed",
                 data={
-                    "SECRETS_LOADING": len(self.credentials),
+                    "credentials_count": len(self.credentials),
                     "api_keys_count": len(self.api_keys),
                     "bearer_tokens_count": len(self.bearer_tokens),
                     "basic_auth_count": len(self.basic_auth),
@@ -133,6 +135,152 @@ class A2AInboundAuthenticator:
                 data={"auth_mode": self.auth_mode.value, "error": str(e)},
             )
             raise
+
+    def _load_credential_configurations(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Load credential configurations from environment variables or config file.
+
+        This method checks for configurations in the following order:
+        1. Environment variable A2A_INBOUND_CREDENTIALS (JSON string)
+        2. Config file specified by A2A_INBOUND_CONFIG_PATH
+        3. Default fallback configurations
+
+        Returns:
+            Dictionary of credential configurations keyed by client ID
+        """
+        credential_configs = {}
+
+        # Try to load from environment variable (JSON string)
+        env_config = os.environ.get('A2A_INBOUND_CREDENTIALS')
+        if env_config:
+            try:
+                credential_configs = json.loads(env_config)
+                observability.observe(
+                    event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                    level=observability.EventLevel.INFO,
+                    description="Loaded A2A inbound credentials from environment",
+                    data={"client_count": len(credential_configs)}
+                )
+                return credential_configs
+            except json.JSONDecodeError as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.CONFIG_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    description=f"Failed to parse A2A_INBOUND_CREDENTIALS: {str(e)}",
+                    data={"error": str(e)}
+                )
+
+        # Try to load from config file
+        config_path = os.environ.get('A2A_INBOUND_CONFIG_PATH')
+        if config_path and os.path.exists(config_path):
+            try:
+                with open(config_path, 'r') as f:
+                    config_data = json.load(f)
+                    credential_configs = config_data.get('inbound_credentials', {})
+                    observability.observe(
+                        event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                        level=observability.EventLevel.INFO,
+                        description=f"Loaded A2A inbound credentials from file: {config_path}",
+                        data={"client_count": len(credential_configs)}
+                    )
+                    return credential_configs
+            except (json.JSONDecodeError, IOError) as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.CONFIG_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    description=f"Failed to load config from {config_path}: {str(e)}",
+                    data={"error": str(e), "config_path": config_path}
+                )
+
+        # Load individual client configs from environment variables
+        # Format: A2A_CLIENT_<ID>_TYPE, A2A_CLIENT_<ID>_SECRET, etc.
+        client_prefix = "A2A_CLIENT_"
+        client_ids = set()
+
+        # Find all unique client IDs from environment variables
+        for key in os.environ:
+            if key.startswith(client_prefix):
+                parts = key[len(client_prefix):].split('_')
+                if parts:
+                    client_ids.add(parts[0])
+
+        # Build configurations for each client
+        for client_id in client_ids:
+            auth_type = os.environ.get(f"{client_prefix}{client_id}_TYPE")
+            if not auth_type:
+                continue
+
+            config = {
+                "auth_type": InboundAuthType(auth_type.lower()),
+                "description": os.environ.get(f"{client_prefix}{client_id}_DESC", f"Client {client_id}")
+            }
+
+            # Handle different auth types
+            if auth_type.lower() in ["api_key", "bearer"]:
+                secret_name = os.environ.get(f"{client_prefix}{client_id}_SECRET")
+                if secret_name:
+                    config["secret_name"] = secret_name
+            elif auth_type.lower() == "basic":
+                username_secret = os.environ.get(f"{client_prefix}{client_id}_USERNAME_SECRET")
+                password_secret = os.environ.get(f"{client_prefix}{client_id}_PASSWORD_SECRET")
+                if username_secret and password_secret:
+                    config["secret_names"] = {
+                        "username": username_secret,
+                        "password": password_secret
+                    }
+
+            credential_configs[client_id.lower()] = config
+
+        if credential_configs:
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                level=observability.EventLevel.INFO,
+                description="Loaded A2A inbound credentials from individual environment variables",
+                data={"client_count": len(credential_configs)}
+            )
+            return credential_configs
+
+        # Default fallback configurations (for backward compatibility)
+        # These can be overridden by setting the environment variables
+        default_configs = {
+            "external-client-1": {
+                "auth_type": InboundAuthType.API_KEY,
+                "secret_name": os.environ.get("A2A_DEFAULT_API_KEY_SECRET", "ALLOWED_API_KEY_1"),
+                "description": "External client using API key",
+            },
+            "external-client-2": {
+                "auth_type": InboundAuthType.BEARER,
+                "secret_name": os.environ.get("A2A_DEFAULT_BEARER_SECRET", "ALLOWED_BEARER_TOKEN_1"),
+                "description": "External client using Bearer token",
+            },
+            "external-client-3": {
+                "auth_type": InboundAuthType.BASIC,
+                "secret_names": {
+                    "username": os.environ.get("A2A_DEFAULT_BASIC_USER_SECRET", "ALLOWED_BASIC_USER"),
+                    "password": os.environ.get("A2A_DEFAULT_BASIC_PASS_SECRET", "ALLOWED_BASIC_PASS"),
+                },
+                "description": "External client using Basic auth",
+            },
+        }
+
+        # Only use defaults if explicitly enabled
+        if os.environ.get("A2A_USE_DEFAULT_CLIENTS", "false").lower() == "true":
+            observability.observe(
+                event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+                level=observability.EventLevel.INFO,
+                description="Using default A2A inbound credential configurations",
+                data={"client_count": len(default_configs)}
+            )
+            return default_configs
+
+        # Return empty dict if no configurations found
+        observability.observe(
+            event_type=observability.ConversationEvents.A2A_CREDENTIAL_LOADED,
+            level=observability.EventLevel.WARNING,
+            description="No A2A inbound credential configurations found",
+            data={}
+        )
+        return {}
 
     async def _load_credentials_from_secrets(self):
         """Load credentials from SecretsManager only"""
@@ -150,27 +298,8 @@ class A2AInboundAuthenticator:
 
             #  A2A inbound auth debug - TODO: add observability
 
-            # Define credential mappings for expected external clients
-            credential_configs = {
-                "external-client-1": {
-                    "auth_type": InboundAuthType.API_KEY,
-                    "secret_name": "ALLOWED_API_KEY_1",
-                    "description": "External client using API key",
-                },
-                "external-client-2": {
-                    "auth_type": InboundAuthType.BEARER,
-                    "secret_name": "ALLOWED_BEARER_TOKEN_1",
-                    "description": "External client using Bearer token",
-                },
-                "external-client-3": {
-                    "auth_type": InboundAuthType.BASIC,
-                    "secret_names": {
-                        "username": "ALLOWED_BASIC_USER",
-                        "password": "ALLOWED_BASIC_PASS",
-                    },
-                    "description": "External client using Basic auth",
-                },
-            }
+            # Load credential configurations from environment or config file
+            credential_configs = self._load_credential_configurations()
 
             successful_loads = 0
             failed_loads = 0

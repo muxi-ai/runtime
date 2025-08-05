@@ -11,6 +11,7 @@ import time
 from typing import Dict, List, Optional, Any
 
 from ...datatypes.schema import A2AServiceSchema
+from ...services import observability
 from ...services.a2a.models import AgentCard
 from ...services.a2a.models_adapter import ModelsAdapter
 
@@ -46,7 +47,6 @@ class A2ACoordinator:
 
         # Planning filter will be initialized later when request_analyzer is available
         self.planning_filter = None
-        self.overlord = overlord
 
     def initialize_planning_filter(self) -> None:
         """Initialize planning filter after request_analyzer is available."""
@@ -65,11 +65,7 @@ class A2ACoordinator:
                 and self.overlord.request_analyzer
             ):
                 from ...services.a2a.planning_filter import PlanningAgentFilter
-
                 self.planning_filter = PlanningAgentFilter(self.overlord, filtering_config)
-                print(
-                    f"[A2A] Planning filter initialized with threshold: {filtering_config.get('threshold', 50)}"
-                )
             else:
                 missing = []
                 if not hasattr(self.overlord, "a2a_cache_manager"):
@@ -77,8 +73,14 @@ class A2ACoordinator:
                 if not hasattr(self.overlord, "request_analyzer"):
                     missing.append("request_analyzer")
                 if missing:
-                    print(
-                        f"[A2A] Warning: Filtering enabled but missing dependencies: {', '.join(missing)}"
+                    observability.observe(
+                        event_type=observability.SystemEvents.COMPONENT_INITIALIZATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        description="A2A filtering enabled but missing dependencies",
+                        data={
+                            "missing_dependencies": missing,
+                            "filtering_enabled": True
+                        }
                     )
 
     def _apply_configuration(self) -> None:
@@ -227,17 +229,33 @@ class A2ACoordinator:
             # Start the server
             await self.overlord.a2a_server.start()
 
-            #  Info - TODO: add observability
-            # SystemEvents.A2A_SERVER_STARTED
+            # Emit success event
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_SERVER_STARTED,
+                level=observability.EventLevel.INFO,
+                description=f"A2A server started successfully on {self.server_host}:{self.server_port}",
+                data={
+                    "host": self.server_host,
+                    "port": self.server_port,
+                    "formation": self.overlord.formation_id,
+                    "auth_mode": self.config.auth_mode if self.config.auth_mode else "none"
+                }
+            )
 
         except Exception as e:
-            #  Error - TODO: add observability
-            # SystemEvents.A2A_SERVER_START_FAILED
-            print(f"ERROR: Failed to start A2A server: {e}")
-            import traceback
-
-            traceback.print_exc()
-            _ = e  # remove this after implementing observability
+            # Emit error event with full exception details
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_SERVER_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to start A2A server: {str(e)}",
+                data={
+                    "host": self.server_host,
+                    "port": self.server_port,
+                    "formation": self.overlord.formation_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
 
     def _get_agent_url(self, agent_id: str) -> str:
         """
@@ -249,12 +267,15 @@ class A2ACoordinator:
         Returns:
             The full URL for the agent
         """
+        # Use configured host or fallback to localhost
+        host = self.server_host if self.server_host and self.server_host != "0.0.0.0" else "localhost"
+
         port = (
             self.overlord.a2a_server.port
             if hasattr(self.overlord, "a2a_server") and self.overlord.a2a_server
-            else 8181
+            else self.server_port
         )
-        return f"http://localhost:{port}/agents/{agent_id}/message"
+        return f"http://{host}:{port}/agents/{agent_id}/message"
 
     def _determine_transport_from_url(self, url: str) -> str:
         """
@@ -859,6 +880,17 @@ class A2ACoordinator:
 
                 return None
 
-        except Exception:
-            # Log error properly
+        except Exception as e:
+            # Log error properly using observability
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_MESSAGE_FAILED,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to route message to external agent: {str(e)}",
+                data={
+                    "source_agent_id": source_agent_id,
+                    "target_agent_url": target_agent_url,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             return None

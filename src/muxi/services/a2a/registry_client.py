@@ -75,8 +75,9 @@ class A2ARegistryClient:
             self.httpx_clients: Dict[str, httpx.AsyncClient] = {}
 
             for registry_url in self.registries:
-                # Create httpx client for this registry
+                # Create httpx client for this registry with base_url for consistent routing
                 self.httpx_clients[registry_url] = httpx.AsyncClient(
+                    base_url=registry_url,
                     timeout=self.config.timeout_seconds,
                     headers={"User-Agent": self.config.user_agent}
                 )
@@ -168,11 +169,17 @@ class A2ARegistryClient:
                 self.registry_status[registry_url] = {"last_check": None, "healthy": None}
                 self.registered_agents[registry_url] = []
 
-                # Create SDK client for new registry
-                self.sdk_clients[registry_url] = A2AClient(
+                # Create httpx client for new registry
+                self.httpx_clients[registry_url] = httpx.AsyncClient(
                     base_url=registry_url,
                     timeout=self.config.timeout_seconds,
                     headers={"User-Agent": self.config.user_agent}
+                )
+
+                # Create SDK client with httpx client (consistent with __init__)
+                self.sdk_clients[registry_url] = A2AClient(
+                    httpx_client=self.httpx_clients[registry_url],
+                    url=registry_url
                 )
 
                 # Emit registry addition event
@@ -315,10 +322,14 @@ class A2ARegistryClient:
             try:
                 await client.send_message(request)
                 is_healthy = True
-            except Exception:
-                # If we get an error, check if it's just because health endpoint
-                # doesn't accept messages - that's still healthy
-                is_healthy = True  # Assume healthy if we can connect
+            except Exception as e:
+                # Only consider healthy if it's a method not allowed error (health endpoint exists but rejects messages)
+                # Connectivity issues or other errors should mark as unhealthy
+                error_msg = str(e).lower()
+                if "method not allowed" in error_msg or "405" in error_msg:
+                    is_healthy = True  # Health endpoint exists but doesn't accept messages
+                else:
+                    is_healthy = False  # Real connectivity or server issue
 
             # Update status tracking
             self.registry_status[registry_url] = {
@@ -920,7 +931,17 @@ class A2ARegistryClient:
                             agent_cards.append(agent_card)
                         except Exception as e:
                             # Log conversion error but continue
-                            _ = e
+                            observability.observe(
+                                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                                level=observability.EventLevel.WARNING,
+                                description="Failed to parse agent card from registry",
+                                data={
+                                    "registry_url": registry_url,
+                                    "agent_name": agent_data.get("name", "unknown"),
+                                    "error": str(e),
+                                    "agent_data": agent_data
+                                }
+                            )
 
             # Emit successful discovery event
             observability.observe(

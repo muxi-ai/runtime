@@ -325,10 +325,8 @@ Analysis Results:
                 else:
                     info_parts.append("  Capabilities: general-purpose")
 
-                # Add agent description if available
-                if agent_description:
-                    info_parts.append(f"  Best for: {agent_description}")
-                elif specialties:
+                # Add "Best for" only when no description exists but specialties do
+                if not agent_description and specialties:
                     # Generic description based on capabilities
                     capability_str = ", ".join(specialties)
                     info_parts.append(f"  Best for: Tasks requiring {capability_str} capabilities")
