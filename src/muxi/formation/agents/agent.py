@@ -3330,7 +3330,20 @@ class Agent:
             # Extract the task from the message
             task_content = ""
             if isinstance(message, dict):
-                task_content = message.get("task", message.get("content", str(message)))
+                # Check if this is an A2A protocol message with parts
+                if "parts" in message:
+                    # Extract only the text content from TextPart, ignore DataPart metadata
+                    text_parts = []
+                    for part in message.get("parts", []):
+                        if isinstance(part, dict) and part.get("type") == "TextPart":
+                            text_parts.append(part.get("text", ""))
+                    task_content = " ".join(text_parts).strip()
+
+                    # If no text parts found, fall back to looking for task/content
+                    if not task_content:
+                        task_content = message.get("task", message.get("content", str(message)))
+                else:
+                    task_content = message.get("task", message.get("content", str(message)))
             else:
                 task_content = str(message)
 
