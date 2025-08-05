@@ -192,6 +192,8 @@ class A2AServiceSchema(BaseServiceSchema):
 
     # Security configuration
     require_auth: bool = Field(default=False, description="Require authentication for A2A requests")
+    auth_mode: Optional[str] = Field(default="none", description="Authentication mode (none, api_key, bearer, basic)")
+    shared_key: Optional[str] = Field(default=None, description="Shared key for inbound authentication")
     allowed_origins: Optional[List[str]] = Field(
         default=None, description="Allowed origins for CORS"
     )

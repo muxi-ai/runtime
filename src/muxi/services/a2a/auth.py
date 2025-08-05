@@ -36,7 +36,7 @@ class AuthType(str, Enum):
     """Supported authentication types for A2A communication"""
 
     NONE = "none"
-    API_KEY = "apiKey"
+    API_KEY = "api_key"  # Support snake_case for consistency
     BEARER = "bearer"
     BASIC = "basic"
     OAUTH2 = "oauth2"
@@ -574,11 +574,16 @@ class A2AAuthManager:
 
                 # Process credentials based on auth type
                 if auth_type == AuthType.API_KEY:
-                    api_key = auth_config.get("api_key")
+                    # Use "key" field according to schema specification
+                    api_key = auth_config.get("key")
+                    api_key_header = auth_config.get("header", "X-API-Key")  # Default header
                     if api_key:
                         api_key = await self.secrets_manager.interpolate_secrets(api_key)
                         if api_key:
-                            self.add_credentials(service_id, auth_type, {"api_key": api_key})
+                            self.add_credentials(service_id, auth_type, {
+                                "api_key": api_key,
+                                "api_key_header": api_key_header
+                            })
 
                 elif auth_type == AuthType.BEARER:
                     token = auth_config.get("token")

@@ -68,6 +68,7 @@ class A2AServer:
         host: str = "0.0.0.0",
         trusted_endpoints: Optional[List[str]] = None,
         auth_mode: str = "none",
+        shared_key: Optional[str] = None,
         formation_name: str = "default",
     ):
         """
@@ -79,6 +80,7 @@ class A2AServer:
             host: Host address to bind to
             trusted_endpoints: List of trusted endpoint addresses for security
             auth_mode: Authentication mode ("none", "api_key", "bearer", etc.)
+            shared_key: Shared key for authentication (if auth_mode requires it)
             formation_name: Name of the formation this server serves
         """
         try:
@@ -87,6 +89,7 @@ class A2AServer:
             self.host = host
             self.trusted_endpoints = trusted_endpoints or []
             self.auth_mode = auth_mode
+            self.shared_key = shared_key
             self.formation_name = formation_name
 
             # Server state
@@ -100,6 +103,13 @@ class A2AServer:
             # Pass SecretsManager from overlord if available
             secrets_manager = getattr(overlord, "secrets_manager", None)
             self.authenticator = A2AInboundAuthenticator(auth_mode, secrets_manager)
+
+            # If we have a shared key, add it to the authenticator
+            if self.shared_key and self.auth_mode in ["bearer", "api_key", "apiKey"]:
+                if self.auth_mode == "bearer":
+                    self.authenticator.bearer_tokens[self.shared_key] = "formation_client"
+                elif self.auth_mode in ["api_key", "apiKey"]:
+                    self.authenticator.api_keys[self.shared_key] = "formation_client"
 
             # Initialize FastAPI app
             self._create_app()
@@ -285,6 +295,32 @@ class A2AServer:
         message_id = f"msg_{generate_nanoid()}"
 
         try:
+            # Validate trusted endpoints if configured
+            if self.trusted_endpoints and http_request:
+                client_host = self._get_client_host(http_request)
+                if client_host not in self.trusted_endpoints:
+                    observability.observe(
+                        event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": agent_id,
+                            "message_id": message_id,
+                            "client_host": client_host,
+                            "trusted_endpoints": self.trusted_endpoints,
+                            "formation": self.formation_name,
+                        },
+                        description="Untrusted client attempted A2A communication",
+                    )
+
+                    from a2a.types import JSONRPCErrorResponse, JSONRPCError
+                    error_response = JSONRPCErrorResponse(
+                        id=request_data.get("id", message_id),
+                        error=JSONRPCError(
+                            code=-32600,  # Invalid Request
+                            message=f"Untrusted client: {client_host}"
+                        ),
+                    )
+                    return error_response.model_dump(mode="json")
             # Parse SDK message from request
             sdk_message_data = None
 
@@ -364,8 +400,16 @@ class A2AServer:
 
             # Authenticate if needed
             if http_request and self.auth_mode != "none":
+                # Extract headers for authentication
+                authorization = http_request.headers.get("authorization")
+                x_api_key = http_request.headers.get("x-api-key")
+                x_signature = http_request.headers.get("x-signature")
+                x_timestamp = http_request.headers.get("x-timestamp")
+
                 authenticated, client_id, auth_error = (
-                    await self.authenticator.authenticate_request(http_request)
+                    await self.authenticator.authenticate_request(
+                        http_request, authorization, x_api_key, x_signature, x_timestamp
+                    )
                 )
                 if not authenticated:
                     return {
@@ -481,10 +525,41 @@ class A2AServer:
         message_id = request.message_id or f"msg_{generate_nanoid()}"
 
         try:
+            # Validate trusted endpoints if configured
+            if self.trusted_endpoints and http_request:
+                client_host = self._get_client_host(http_request)
+                if client_host not in self.trusted_endpoints:
+                    observability.observe(
+                        event_type=observability.SystemEvents.A2A_AUTH_VALIDATION_FAILED,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "agent_id": agent_id,
+                            "message_id": message_id,
+                            "client_host": client_host,
+                            "trusted_endpoints": self.trusted_endpoints,
+                            "formation": self.formation_name,
+                        },
+                        description="Untrusted client attempted A2A communication",
+                    )
+
+                    return LegacyA2AMessageResponse(
+                        status="error",
+                        error=f"Untrusted client: {client_host}",
+                        message_id=message_id,
+                        agent_id=agent_id,
+                    )
             # Authenticate if needed
             if http_request and self.auth_mode != "none":
+                # Extract headers for authentication
+                authorization = http_request.headers.get("authorization")
+                x_api_key = http_request.headers.get("x-api-key")
+                x_signature = http_request.headers.get("x-signature")
+                x_timestamp = http_request.headers.get("x-timestamp")
+
                 authenticated, client_id, auth_error = (
-                    await self.authenticator.authenticate_request(http_request)
+                    await self.authenticator.authenticate_request(
+                        http_request, authorization, x_api_key, x_signature, x_timestamp
+                    )
                 )
                 if not authenticated:
                     return LegacyA2AMessageResponse(
@@ -656,3 +731,30 @@ class A2AServer:
                 return True
             except OSError:
                 return False
+
+    def _get_client_host(self, request: Request) -> str:
+        """
+        Extract client host from request for trusted endpoint validation.
+
+        Checks multiple headers in order of preference:
+        1. X-Forwarded-For (for reverse proxy setups)
+        2. X-Real-IP (for nginx setups)
+        3. request.client.host (direct connection)
+        """
+        # Check for X-Forwarded-For header (most common for proxies)
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            # X-Forwarded-For can contain multiple IPs, take the first (original client)
+            return forwarded_for.split(",")[0].strip()
+
+        # Check for X-Real-IP header (nginx)
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+
+        # Fall back to direct client IP
+        if request.client and request.client.host:
+            return request.client.host
+
+        # Last resort fallback
+        return "unknown"

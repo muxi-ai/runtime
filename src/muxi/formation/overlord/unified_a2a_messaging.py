@@ -57,10 +57,6 @@ class UnifiedA2AMessaging:
 
         # Convert message to A2A protocol format
         a2a_message = self._convert_to_a2a_message(message, source_agent_id, context)
-        print(
-            f"DEBUG UnifiedA2AMessaging: Converted to A2A message with parts: "
-            f"{[p.model_dump() for p in a2a_message.parts]}"
-        )
 
         # Create message send params
         params = MessageSendParams(
@@ -107,11 +103,63 @@ class UnifiedA2AMessaging:
             # Use the timeout parameter passed to this method
             timeout_value = float(timeout) if timeout else 60.0
 
+            # Get authentication headers for outbound requests
+            auth_headers = {}
+            if hasattr(self.overlord, "secrets_manager") and self.overlord.secrets_manager:
+                # Get or create auth manager for this overlord
+                if not hasattr(self.overlord, "_a2a_auth_manager"):
+                    from ...services.a2a.auth import get_auth_manager
+                    self.overlord._a2a_auth_manager = get_auth_manager(self.overlord.secrets_manager)
+                    # Load credentials from formation config
+                    if hasattr(self.overlord, "formation_config"):
+                        await self.overlord._a2a_auth_manager.load_credentials_from_formation_config(
+                            self.overlord.formation_config
+                        )
+
+                auth_manager = self.overlord._a2a_auth_manager
+
+                # Look for matching outbound service configuration
+                outbound_services = self.overlord.formation_config.get("a2a", {}).get(
+                    "outbound", {}
+                ).get("services", [])
+
+                for service in outbound_services:
+                    service_id = service.get("service_id", "")
+                    auth_config = service.get("auth", {})
+                    if auth_config and service_id:
+                        # Try to apply authentication using service_id
+                        auth_type_str = auth_config.get("type", "none")
+                        if auth_type_str != "none":
+                            from ...services.a2a.auth import AuthType
+                            try:
+                                if auth_type_str == "bearer":
+                                    service_auth_type = AuthType.BEARER
+                                elif auth_type_str == "api_key":
+                                    service_auth_type = AuthType.API_KEY
+                                elif auth_type_str == "basic":
+                                    service_auth_type = AuthType.BASIC
+                                else:
+                                    continue
+                                # Try to apply authentication using service_id
+                                success, updated_headers = await auth_manager.apply_authentication(
+                                    service_id, service_auth_type, auth_headers, required=False
+                                )
+                                if success:
+                                    auth_headers = updated_headers
+                                    break  # Use first successful auth config
+                            except Exception:
+                                # Continue to next service if auth fails
+                                continue
+
             # Retry logic for external requests
             for attempt in range(retry_attempts):
                 try:
+                    # Create HTTP client with authentication headers
+                    client_headers = auth_headers.copy() if auth_headers else {}
+
                     async with httpx.AsyncClient(
-                        timeout=httpx.Timeout(timeout_value)
+                        timeout=httpx.Timeout(timeout_value),
+                        headers=client_headers
                     ) as http_client:
                         client = A2AClient(httpx_client=http_client, url=target_agent_url)
 
@@ -166,10 +214,6 @@ class UnifiedA2AMessaging:
         if wait_for_response:
             if isinstance(result, Message):
                 # Convert A2A message back to dict format
-                print(
-                    f"DEBUG UnifiedA2AMessaging: Converting response from "
-                    f"{'external' if self._last_was_external else 'internal'} agent"
-                )
                 converted = self._convert_from_a2a_message(result)
                 return converted
             else:

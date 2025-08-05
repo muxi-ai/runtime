@@ -2130,9 +2130,9 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "api_key" not in auth_config:
+            if "key" not in auth_config:
                 self.result.add_error(
-                    f"A2A service {filename} api_key auth requires 'api_key' field"
+                    f"A2A service {filename} api_key auth requires 'key' field"
                 )
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"A2A service {filename} auth header must be a string")
@@ -2201,8 +2201,8 @@ class FormationValidator:
 
         # Validate type-specific auth requirements
         if auth_type == "api_key":
-            if "api_key" not in auth_config:
-                self.result.add_error(f"{service_identifier} api_key auth requires 'api_key' field")
+            if "key" not in auth_config:
+                self.result.add_error(f"{service_identifier} api_key auth requires 'key' field")
             if "header" in auth_config and not isinstance(auth_config["header"], str):
                 self.result.add_error(f"{service_identifier} auth header must be a string")
 

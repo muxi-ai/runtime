@@ -1010,6 +1010,8 @@ class Formation:
                     require_auth=(
                         self._a2a_config.get("inbound", {}).get("mode", "none") != "none"
                     ),
+                    auth_mode=self._a2a_config.get("inbound", {}).get("mode", "none"),
+                    shared_key=self._a2a_config.get("inbound", {}).get("shared_key"),
                     allowed_origins=self._a2a_config.get("security", {}).get("allowed_origins"),
                     # Map outbound configuration
                     default_timeout_seconds=self._a2a_config.get("outbound", {}).get(

@@ -182,7 +182,8 @@ class A2ACoordinator:
                     overlord=self.overlord,
                     port=self.server_port,
                     host=self.server_host,
-                    auth_mode="none" if not self.require_auth else "apiKey",
+                    auth_mode=self.config.auth_mode if self.config.auth_mode else "none",
+                    shared_key=self.config.shared_key,
                     formation_name=self.overlord.formation_id,
                 )
 

@@ -24,7 +24,7 @@ class InboundAuthType(str, Enum):
     """Supported inbound authentication types"""
 
     NONE = "none"
-    API_KEY = "apiKey"
+    API_KEY = "api_key"  # Support snake_case for consistency
     BEARER = "bearer"
     BASIC = "basic"
     HMAC = "hmac"
