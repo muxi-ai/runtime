@@ -44,6 +44,43 @@ class A2ACoordinator:
         # Apply configuration
         self._apply_configuration()
 
+        # Planning filter will be initialized later when request_analyzer is available
+        self.planning_filter = None
+        self.overlord = overlord
+
+    def initialize_planning_filter(self) -> None:
+        """Initialize planning filter after request_analyzer is available."""
+        if self.planning_filter is not None:
+            return  # Already initialized
+
+        formation_config = getattr(self.overlord, "formation_config", {})
+        filtering_config = formation_config.get("a2a", {}).get("filtering", {})
+
+        # Initialize if filtering is enabled and dependencies are available
+        if filtering_config.get("enabled", False):
+            if (
+                hasattr(self.overlord, "a2a_cache_manager")
+                and self.overlord.a2a_cache_manager
+                and hasattr(self.overlord, "request_analyzer")
+                and self.overlord.request_analyzer
+            ):
+                from ...services.a2a.planning_filter import PlanningAgentFilter
+
+                self.planning_filter = PlanningAgentFilter(self.overlord, filtering_config)
+                print(
+                    f"[A2A] Planning filter initialized with threshold: {filtering_config.get('threshold', 50)}"
+                )
+            else:
+                missing = []
+                if not hasattr(self.overlord, "a2a_cache_manager"):
+                    missing.append("a2a_cache_manager")
+                if not hasattr(self.overlord, "request_analyzer"):
+                    missing.append("request_analyzer")
+                if missing:
+                    print(
+                        f"[A2A] Warning: Filtering enabled but missing dependencies: {', '.join(missing)}"
+                    )
+
     def _apply_configuration(self) -> None:
         """Apply the standardized configuration to internal settings."""
         # Server settings
@@ -618,6 +655,47 @@ class A2ACoordinator:
                 # Log but don't fail if external discovery fails
                 _ = f"Failed to include external agents: {e}"
 
+        return all_agents
+
+    async def get_relevant_agents_for_planning(
+        self, requesting_agent_id: str, task: str, context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Get relevant agents for planning with optional smart filtering.
+
+        Args:
+            requesting_agent_id: ID of agent making the request
+            task: Task description to plan for
+            context: Optional task context
+
+        Returns:
+            Dictionary of relevant agents
+        """
+
+        # Try to initialize planning filter if not already done
+        if self.planning_filter is None:
+            self.initialize_planning_filter()
+
+        # Get all available agents (internal + external)
+        all_agents = await self.get_all_available_agents(requesting_agent_id)
+
+        # Apply filtering if configured
+        if self.planning_filter:
+            # Add 'id' field to match what planning_filter expects
+            agents_list = []
+            for agent_id, agent_info in all_agents.items():
+                agent_with_id = agent_info.copy()
+                agent_with_id["id"] = agent_id  # Add 'id' field
+                agents_list.append(agent_with_id)
+
+            filtered_agents = await self.planning_filter.get_relevant_agents(
+                task=task, all_agents=agents_list, context=context
+            )
+
+            # Convert back to dictionary format
+            return {agent["agent_id"]: agent for agent in filtered_agents}
+
+        # Return all agents if filtering not configured
         return all_agents
 
     async def route_to_agent(

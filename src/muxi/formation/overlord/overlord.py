@@ -380,6 +380,10 @@ class Overlord:
         mcp_config = configured_services.get("mcp_config") if configured_services else None
         self.mcp_coordinator = MCPCoordinator(self, config=mcp_config)
 
+        # Initialize A2A cache manager for filtering support
+        from ...services.a2a.cache_manager import A2ACacheManager
+        self.a2a_cache_manager = A2ACacheManager()
+
         # A2A coordination system with configuration
         a2a_config = configured_services.get("a2a_config") if configured_services else None
         self.a2a_coordinator = A2ACoordinator(self, config=a2a_config)
@@ -569,6 +573,11 @@ class Overlord:
             complexity_threshold=self.workflow_config.complexity_threshold,
             complexity_weights=self.workflow_config.complexity_weights,
         )
+
+        # Initialize planning filter now that request_analyzer is available
+        if hasattr(self, 'a2a_coordinator') and self.a2a_coordinator:
+            self.a2a_coordinator.initialize_planning_filter()
+
         # TaskDecomposer will be initialized after MCP service is available
         self.approval_manager = ApprovalManager()
         # Use ResilientWorkflowExecutor for better error handling
@@ -716,6 +725,7 @@ class Overlord:
         self.external_registry_client: Optional[A2ARegistryClient] = None
         self.inbound_registry_client: Optional[A2ARegistryClient] = None
         self.a2a_server: Optional[A2AServer] = None
+        self.a2a_cache_manager = None  # Initialize A2A cache manager for filtering
         self.mcp_service = MCPService.get_instance()  # Get existing instance
         self.scheduler_service: Optional[SchedulerService] = None
 

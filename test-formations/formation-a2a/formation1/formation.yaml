@@ -77,6 +77,14 @@ mcp:
 # A2A Configuration
 a2a:
   enabled: true                  # Enable Agent-to-Agent communication
+  
+  # Intelligent filtering configuration for planning
+  filtering:
+    enabled: true                # Enable intelligent agent filtering
+    threshold: 2                 # Low threshold to trigger filtering with just 2+ agents
+    always_include_threshold: 0.8  # Agents scoring >= 0.8 always included
+    min_relevance_score: 0.3     # Minimum score for agent inclusion
+    cache_ttl: 1800              # Cache filtered results for 30 minutes
 
   outbound:                      # Outbound A2A communication
     enabled: true                # Enable outbound A2A communication
