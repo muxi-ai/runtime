@@ -688,41 +688,136 @@ response = await overlord.chat(
 ### **Phase 3: Advanced Coordination & Enterprise Features (Days 7-10)**
 
 <details>
-<summary>✅ Day 7: Multi-Agent Coordination & Workflow Integration</summary>
+<summary>🔁 Day 7: Multi-Agent Coordination & SOP Enhancement</summary>
 
-#### Goal: Validate agent orchestration, task decomposition, and A2A communication
+#### Goal: Validate agent orchestration and task decomposition, then enhance with SOP system
 
-**Status: COMPLETED ✅** (100% success rate across all test groups)
-
-### Test Groups
+### ✅ Completed Tests (7A & 7B)
 
 **✅ Day 7A: Workflow Orchestration & Task Decomposition**
-- **Tests**: 10 tests covering workflow orchestration, error handling, and deferred async execution
+- **Tests**: 9 tests covering workflow orchestration, error handling, and resilience integration
 - **Status**: All tests passing with production-ready workflow system
 - **Report**: [tests/reports/7a.md](tests/reports/7a.md)
+- **Key Achievements**: Task decomposition, MCP tool integration, PDF generation, workflow tracking, resilience with user-friendly errors, deferred async execution (approval-aware)
 
-**✅ Day 7B: A2A Communication & Integration**  
-- **Tests**: 3 test groups (7B1: Internal A2A, 7B2: External A2A, 7B3: Intelligent Filtering)
-- **Status**: All tests passing with comprehensive A2A communication
+**✅ Day 7B: A2A Communication & Integration**
+- **Tests**: Multiple test scenarios for internal and external A2A communication
+- **Status**: All tests passing with comprehensive A2A system
 - **Report**: [tests/reports/7b.md](tests/reports/7b.md)
+- **Key Achievements**: Internal A2A within formation, External A2A cross-formation, workflow decomposition with A2A, proper capability-based routing
 
-### Key Achievements
+### Part 1: Base Multi-Agent Coordination Testing
 
-- **Complete Workflow System**: Task decomposition, intelligent routing, resilient execution
-- **A2A Communication**: Internal and external agent communication with registry support
-- **Registry Startup Policies**: Configurable strict/lenient/retry policies for external dependencies
-- **Intelligent Agent Filtering**: Optimized agent selection for large agent pools (10+ agents)
-- **Production-Ready Error Handling**: User-friendly messages with recovery strategies
-- **Observability Migration**: Complete migration from logging to structured observability events
+### ✅ Test Group 7A: Task Decomposition (Current Capabilities)
+```python
+# Test 7A1: Research and Write Task
+formation = Formation.load("formations/multi-specialist.yaml")
+overlord = await formation.start()
 
-### Enhanced Features Delivered
+response = await overlord.chat(
+    "Research renewable energy trends and write a brief report with recommendations"
+)
+# Should involve researcher → analyst → writer coordination
+assert len(response) > 500
+assert "recommendation" in response.lower()
+assert "research" in response.lower()
 
-- **Deferred Async Execution**: Approval-aware async workflows (32 comprehensive tests)
-- **Resilience Integration**: Circuit breaker patterns and fallback strategies
-- **Configuration System**: Pattern-based overrides and custom routing rules
-- **Authentication Standardization**: Updated A2A auth format with backward compatibility
+# Test 7A2: Complex Multi-Step Task
+response = await overlord.chat(
+    "Find the latest Tesla stock price, analyze the trend, and create a trading recommendation"
+)
+# Should coordinate data agent → analysis agent → recommendation agent
+```
 
-**Success Criteria:** ✅ Complete workflow orchestration + A2A communication system ready for production
+### ✅ Test Group 7A10: Deferred Async Execution (Approval-Aware)
+```python
+# Test 7A10: Workflow Approval with Async Safety
+formation = Formation.load("formations/workflow-approval.yaml")
+overlord = await formation.start()
+
+# Complex request that would trigger async AND needs approval
+response = await overlord.chat(
+    "Research AI market trends, analyze competitors, create visualizations, "
+    "write comprehensive report, and create Linear issues for action items",
+    use_async=None  # Let system decide
+)
+# Should remain synchronous for approval flow, not go async prematurely
+assert "approve" in response.lower() or "workflow" in response.lower()
+
+# After approval, can execute asynchronously if appropriate
+response = await overlord.chat("yes", user_id="same_user")
+# Now safe to process asynchronously if time estimate > threshold
+```
+
+### ✅ Test Group 7B: A2A Communication Patterns
+```python
+# Test 7B1: Internal A2A (within formation)
+formation = Formation.load("formations/internal-a2a.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("I need help with Python and also database design")
+# Should trigger agent consultation patterns internally
+
+# Test 7B2: External A2A (cross-formation)
+# Start second formation on different port
+formation2 = Formation.load("formations/external-specialist.yaml")
+overlord2 = await formation2.start()
+
+# Main formation requests help from external specialist
+response = await overlord.chat("I need specialized legal advice about contracts")
+# Should communicate with external legal formation
+```
+
+### 🔧 **IMPLEMENTATION BREAK: SOP System**
+**Implement**: Standard Operating Procedures (SOP) coordinator for enhanced task decomposition
+**PRD**: [prd-sop-system.md](context/prds/prd-sop-system.md)
+**Duration**: 3-5 days
+
+### Part 2: Enhanced Multi-Agent Coordination with SOPs
+
+### Test Group 7C: SOP-Guided Task Decomposition
+```python
+# Test 7C1: Incident Response SOP
+# Create formation with sops/ directory containing incident-response.yaml
+formation = Formation.load("formations/sop-enabled.yaml")
+overlord = await formation.start()
+
+response = await overlord.chat("Production is down, customers are complaining")
+# Should follow SOP: assess → notify → investigate → fix → document
+# Verify proper agent coordination following SOP steps
+
+# Test 7C2: Customer Onboarding SOP
+response = await overlord.chat("New enterprise customer ACME Corp needs onboarding")
+# Should follow customer-onboarding.yaml SOP
+# Agents should be coordinated according to procedural steps
+
+# Test 7C3: No SOP Available
+response = await overlord.chat("Write a haiku about clouds")
+# Should fall back to normal task decomposition
+# No SOP should be loaded for creative tasks
+```
+
+### Test Group 7D: SOP Discovery and Relevance
+```python
+# Test 7D1: Semantic SOP Matching
+formation = Formation.load("formations/multi-sop.yaml")  # Has 10+ SOPs
+overlord = await formation.start()
+
+# Test multilingual semantic matching
+response = await overlord.chat("Seguridad breach detected")  # Spanish
+# Should still find security-incident.yaml SOP
+
+# Test 7D2: Ambiguous Request Resolution
+response = await overlord.chat("Handle the issue with the system")
+# Should identify most relevant SOP based on context
+
+# Test 7D3: SOP Performance
+# Load formation with 50+ SOPs
+start_time = time.time()
+response = await overlord.chat("Deploy new version to production")
+sop_search_time = time.time() - start_time
+assert sop_search_time < 0.1  # SOP search should add <100ms
+```
 
 </details>
 
@@ -1512,7 +1607,7 @@ response = await overlord.chat(
 - **Day 4:** 20+ MCP tests + credential tests pass ✅ (100% success rate, user isolation verified)
 - **Day 5:** 21/22 file generation tests pass ✅ (95.5% success rate, security validation confirmed)
 - **Day 6:** 19/19 knowledge tests pass ✅ (100% success rate across all 5 test groups 6A-6E)
-- **Day 7:** Base: 18 coordination tests pass + A2A verified ✅ | Workflow orchestration + resilience ✅ | Deferred async (32 tests) ✅ | Enhanced: 12 SOP tests (pending)
+- **Day 7:** ✅ 7A: Workflow orchestration (9 tests pass) | ✅ 7B: A2A Communication (all tests pass) | Enhanced: 12 SOP tests (pending)
 - **Day 8:** Base: 10 clarification tests pass | Enhanced: 15 multi-sequence tests pass
 - **Day 9:** 15 thinking tests pass + model detection validated + edge cases handled
 - **Day 10:** 25+ large file tests pass + <3x performance overhead + memory efficient
