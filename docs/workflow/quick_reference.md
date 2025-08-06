@@ -300,6 +300,46 @@ async def test_workflow_integration():
     await formation.stop_overlord()
 ```
 
+## SOP (Standard Operating Procedures)
+
+### Creating an SOP
+```markdown
+# File: formation/sops/code-review.md
+---
+type: sop
+name: Code Review Process
+tags: code, review, pr, quality
+---
+
+## Steps
+1. **Analyze code** [agent:code-reviewer]
+   Review for style and correctness
+   
+2. **Security scan**
+   Check for vulnerabilities
+   
+3. **Generate report** [agent:writer]
+   Create review summary
+```
+
+### SOP Configuration
+```yaml
+overlord:
+  workflow:
+    auto_decomposition: true  # Required for SOPs
+    complexity_threshold: 7.0  # When SOPs trigger
+```
+
+### Testing SOP Matching
+```python
+# Check if SOP would match
+message = "review my code changes"
+if overlord.sop_system:
+    matched_sop = overlord.sop_system.find_relevant_sop(message)
+    if matched_sop:
+        print(f"Would trigger: {matched_sop['name']}")
+```
+
 ## Configuration Examples
 
 ### Research-Heavy Workloads
@@ -349,6 +389,13 @@ overlord:
 - [ ] Test complexity analysis manually
 - [ ] Ensure no explicit agent specified
 - [ ] Check for clarification responses
+
+### SOPs Not Triggering
+- [ ] Verify SOP files in `formation/sops/` directory
+- [ ] Check SOP tags match request keywords
+- [ ] Ensure complexity exceeds threshold
+- [ ] Verify SOP system initialized (check logs)
+- [ ] Test SOP matching with `find_relevant_sop()`
 
 ### Poor Performance
 - [ ] Monitor `max_parallel_tasks` setting

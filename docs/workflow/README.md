@@ -32,12 +32,18 @@ The MUXI Runtime Workflow System provides intelligent task decomposition and mul
    - Troubleshooting tips
    - Best practices
 
-5. **[Workflow Status Endpoints](status_endpoints.md)**
+5. **[SOP System](sop-system.md)** 🆕
+   - Standard Operating Procedures for workflow override
+   - Creating and managing SOPs
+   - Sequential execution and data flow
+   - Examples and best practices
+
+6. **[Workflow Status Endpoints](status_endpoints.md)**
    - API endpoints for workflow monitoring
    - Status tracking and management
    - Integration with external systems
 
-6. **[Deferred Async Execution](deferred_async_execution.md)** 🆕
+7. **[Deferred Async Execution](deferred_async_execution.md)**
    - Approval-aware async decision logic
    - Post-approval async re-evaluation
    - Webhook notifications for background execution
@@ -49,14 +55,16 @@ If you're new to the MUXI Workflow System, we recommend reading the documentatio
 
 1. Start with [Workflow Orchestration](orchestration.md) to understand the overall system
 2. Review [Workflow Quick Reference](quick_reference.md) for practical examples
-3. Explore [Workflow Resilience Integration](resilience_integration.md) to understand error handling
-4. Dive into [Workflow Technical Guide](technical_guide.md) for implementation details
+3. Learn about [SOP System](sop-system.md) for workflow overrides 🆕
+4. Explore [Workflow Resilience Integration](resilience_integration.md) to understand error handling
+5. Dive into [Workflow Technical Guide](technical_guide.md) for implementation details
 
 ## 🔧 Key Features
 
 - **Intelligent Task Decomposition**: Automatically breaks complex requests into manageable tasks
 - **Multi-Agent Coordination**: Routes tasks to specialized agents based on capabilities
 - **Parallel Execution**: Executes independent tasks concurrently for optimal performance
+- **SOP System**: Override default workflows with predefined procedures 🆕
 - **Approval Workflows**: Requires user confirmation for high-stakes operations
 - **Resilience Layer**: Automatic retry, graceful degradation, and user-friendly error messages
 - **Configurable Complexity Analysis**: Multiple methods for determining request complexity
