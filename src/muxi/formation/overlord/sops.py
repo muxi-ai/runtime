@@ -513,22 +513,50 @@ class SOPSystem:
                 self.model = wrapped_model
 
             def embed(self, text: str):
-                """Synchronous single text embedding."""
+                """
+                Synchronous single text embedding.
+
+                Note: This method cannot execute async embedding models when called
+                from within an already running event loop. In such cases, it will
+                raise a RuntimeError. Use embed_async() or generate_embeddings()
+                instead when in an async context.
+
+                Args:
+                    text: Text to generate embedding for
+
+                Returns:
+                    Embedding vector or raises RuntimeError if async execution required
+
+                Raises:
+                    RuntimeError: When async embedding is needed but event loop is already running
+                """
                 # Check if model has sync embed method
                 if hasattr(self.model, 'embed') and not asyncio.iscoroutinefunction(self.model.embed):
                     return self.model.embed(text)
                 else:
-                    # If only async is available, run it synchronously
+                    # If only async is available, try to run it synchronously
                     import asyncio
                     try:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
-                            # Can't run async in running loop, return None
-                            return None
+                            # Can't run async in running loop, raise clear error
+                            raise RuntimeError(
+                                "Cannot execute async embedding model synchronously while event loop is running. "
+                                "Use await embed_async() or await generate_embeddings() instead. "
+                                "This typically happens when calling embed() from async code - "
+                                "switch to the async methods for proper execution."
+                            )
                         else:
                             return loop.run_until_complete(self.embed_async(text))
-                    except Exception:
-                        return None
+                    except RuntimeError as e:
+                        # Re-raise RuntimeError with our message
+                        raise e
+                    except Exception as e:
+                        # Log other exceptions and raise with context
+                        raise RuntimeError(
+                            f"Failed to execute embedding: {str(e)}. "
+                            "Consider using async methods if in async context."
+                        ) from e
 
             async def embed_async(self, text: str):
                 """Asynchronous single text embedding."""
@@ -658,10 +686,26 @@ class SOPSystem:
                 for step in sop['steps']:
                     searchable_text += " " + step.get('text', '')
 
-                # Generate embedding using adapter's consistent interface
-                embedding = embedding_model.embed(searchable_text)
-                if embedding is None:
-                    # If sync failed, skip this SOP
+                # Generate embedding using adapter's async interface since we're in async context
+                try:
+                    # Use batch method for single text (it handles both single and batch)
+                    embeddings = await embedding_model.generate_embeddings([searchable_text])
+                    if not embeddings or len(embeddings) == 0:
+                        # Skip if no embedding generated
+                        continue
+                    embedding = embeddings[0]
+                except Exception as e:
+                    # Log error and skip this SOP
+                    observability.observe(
+                        event_type=observability.ErrorEvents.WARNING,
+                        level=observability.EventLevel.WARNING,
+                        data={
+                            "error": str(e),
+                            "sop_id": sop_id,
+                            "sop_name": sop.get('name', sop_id),
+                        },
+                        description=f"Failed to generate embedding for SOP: {sop_id}"
+                    )
                     continue
 
                 self.embeddings_cache[sop_id] = embedding
