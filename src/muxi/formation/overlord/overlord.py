@@ -84,6 +84,7 @@ import signal
 import sys
 import threading
 import time
+from pathlib import Path
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Union, AsyncGenerator
 import os
@@ -594,6 +595,27 @@ class Overlord:
         # Setup progress tracking
         self.workflow_executor.add_progress_callback(self.progress_tracker.update_workflow_progress)
 
+        # Initialize SOP system only if workflows are enabled
+        self.sop_system = None
+        if self.auto_decomposition:  # Only if workflows are enabled
+            from muxi.formation.overlord.sops import SOPSystem
+
+            # Get formation path from configured services
+            formation_path = self._configured_services.get("formation_path")
+            if formation_path:
+                self.sop_system = SOPSystem(Path(formation_path))
+                if self.sop_system.enabled:
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "service": "sop_system",
+                            "sop_count": len(self.sop_system.sops),
+                            "formation_path": str(formation_path),
+                        },
+                        description=f"SOP system enabled with {len(self.sop_system.sops)} SOPs",
+                    )
+
         # ===================================================================
         # MULTIMODAL INTELLIGENCE - Intelligence concerns
         # ===================================================================
@@ -920,6 +942,33 @@ class Overlord:
         # Load agents from formation configuration
         # Load agents from formation's pre-processed configuration
         await self._load_agents_from_formation()
+
+        # Initialize SOP system indexing if enabled
+        if self.sop_system and self.sop_system.enabled:
+            try:
+                await self.sop_system.initialize_index()
+                observability.observe(
+                    event_type=observability.SystemEvents.SERVICE_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "sop_indexing",
+                        "sop_count": len(self.sop_system.sops),
+                        "indexed": True,
+                    },
+                    description="SOP system indexed for semantic search"
+                )
+            except Exception as e:
+                # Log but don't fail startup if SOP indexing fails
+                observability.observe(
+                    event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "service": "sop_indexing",
+                        "error": str(e),
+                    },
+                    description=f"SOP indexing failed (will retry on first search): {e}"
+                )
+
         # Initialize registry client if external registry is configured
         if self.a2a_coordinator.external_registry_enabled:
             # Get registry URLs from configuration
@@ -5041,24 +5090,137 @@ class Overlord:
                 description=f"Workflow approval decision: {'REQUIRED' if needs_approval else 'NOT REQUIRED'}",
             )
 
-            # Decompose the request into a workflow
-            observability.observe(
-                event_type=observability.ServerEvents.SERVER_STARTED,
-                level=observability.EventLevel.INFO,
-                data={
-                    "service": "task_decomposer",
-                    "has_llm": self.task_decomposer.llm is not None,
-                    "available_agents": list(self.agents.keys()),
-                },
-                description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
-            )
+            # Check for relevant SOPs (only if SOP system exists and is enabled)
+            workflow = None
+            if self.sop_system and self.sop_system.enabled:
+                relevant_sops = await self.sop_system.find_relevant_sops(message, top_k=1)
+                relevant_sop = relevant_sops[0] if relevant_sops else None
 
-            workflow = await self.task_decomposer.decompose_request(
-                request=message,
-                context={"available_agents": list(self.agents.keys())},
-                analysis=analysis,
-                requires_approval=needs_approval,
-            )
+                # Log SOP discovery
+                if relevant_sop:
+                    observability.observe(
+                        observability.ConversationEvents.SOP_MATCHED,
+                        observability.EventLevel.INFO,
+                        {
+                            "sop_id": relevant_sop["id"],
+                            "sop_name": relevant_sop["name"],
+                            "relevance_score": relevant_sop.get("relevance_score", 0),
+                            "mode": relevant_sop.get("mode", "template"),
+                            "message_preview": message[:100],
+                        },
+                        description=f"Matched SOP '{relevant_sop['name']}' for request",
+                    )
+
+                if relevant_sop:
+                    mode = relevant_sop.get("mode", "template")
+
+                    if mode == "template":
+                        # Direct conversion to workflow tasks
+                        from muxi.formation.workflow.workflow import Workflow
+
+                        workflow_tasks = self.sop_system.to_workflow_template(relevant_sop)
+
+                        # Process each task with directives
+                        for task in workflow_tasks:
+                            # Set agent routing from SOP
+                            if task.get("preferred_agent"):
+                                task["agent_id"] = task["preferred_agent"]
+
+                            # Ensure required MCP tools are available
+                            if task.get("required_tools"):
+                                task["mcp_requirements"] = task["required_tools"]
+
+                            # Pre-load file resources
+                            if task.get("resources"):
+                                task["resource_contents"] = {}
+                                for resource in task["resources"]:
+                                    content = await self.sop_system.get_resource_content(
+                                        resource["reference"]
+                                    )
+                                    if content:
+                                        task["resource_contents"][resource["reference"]] = content
+
+                        # Create workflow from template
+                        workflow = Workflow(
+                            tasks=workflow_tasks,
+                            metadata={
+                                "source": "sop",
+                                "sop_id": relevant_sop["id"],
+                                "sop_name": relevant_sop["name"],
+                                "mode": "template",
+                            },
+                        )
+
+                        # Log SOP usage for observability
+                        observability.observe(
+                            observability.ConversationEvents.SOP_EXECUTED,
+                            observability.EventLevel.INFO,
+                            {
+                                "sop_id": relevant_sop["id"],
+                                "sop_name": relevant_sop["name"],
+                                "workflow_id": workflow.id,
+                                "mode": "template",
+                                "agent_directives": sum(
+                                    1 for t in workflow_tasks if t.get("preferred_agent")
+                                ),
+                                "mcp_directives": sum(
+                                    len(t.get("required_tools", [])) for t in workflow_tasks
+                                ),
+                                "resources_loaded": sum(
+                                    len(t.get("resources", [])) for t in workflow_tasks
+                                ),
+                            },
+                            description=f"Executed SOP '{relevant_sop['name']}' in template mode",
+                        )
+
+                    else:  # mode == 'guide'
+                        # Include SOP as guidance for LLM interpretation
+                        sop_guidance = self.sop_system.format_as_guidance(relevant_sop)
+
+                        # Pass to decomposer with SOP context
+                        workflow = await self.task_decomposer.decompose_request(
+                            request=message,
+                            context={
+                                "available_agents": list(self.agents.keys()),
+                                "sop_guidance": sop_guidance,
+                            },
+                            analysis=analysis,
+                            requires_approval=needs_approval,
+                        )
+
+                        # Log guide mode usage
+                        observability.observe(
+                            event_type=observability.ConversationEvents.SOP_EXECUTED,
+                            level=observability.EventLevel.INFO,
+                            data={
+                                "sop_id": relevant_sop["id"],
+                                "sop_name": relevant_sop["name"],
+                                "workflow_id": workflow.id,
+                                "mode": "guide",
+                            },
+                            description=f"Executed SOP '{relevant_sop['name']}' in guide mode",
+                        )
+
+            # Fall back to standard decomposition if no SOP found
+            if workflow is None:
+                # Decompose the request into a workflow
+                observability.observe(
+                    event_type=observability.ServerEvents.SERVER_STARTED,
+                    level=observability.EventLevel.INFO,
+                    data={
+                        "service": "task_decomposer",
+                        "has_llm": self.task_decomposer.llm is not None,
+                        "available_agents": list(self.agents.keys()),
+                    },
+                    description=f"Starting task decomposition (LLM: {self.task_decomposer.llm is not None})",
+                )
+
+                workflow = await self.task_decomposer.decompose_request(
+                    request=message,
+                    context={"available_agents": list(self.agents.keys())},
+                    analysis=analysis,
+                    requires_approval=needs_approval,
+                )
 
             observability.observe(
                 event_type=observability.ServerEvents.SERVER_STARTED,
