@@ -4,6 +4,7 @@ This module provides automated workflow generation from documented procedures,
 enabling consistent execution of complex multi-step operations.
 """
 
+import asyncio
 import hashlib
 import re
 import yaml
@@ -122,11 +123,32 @@ class SOPSystem:
                         if len(parts) >= 3:
                             metadata = yaml.safe_load(parts[1]) or {}
                             content = parts[2].strip()
-                    except yaml.YAMLError:
-                        # Skip files with invalid YAML front matter
+                    except yaml.YAMLError as e:
+                        # Log and skip files with invalid YAML front matter
+                        observability.observe(
+                            event_type=observability.ErrorEvents.WARNING,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "error": str(e),
+                                "file": str(md_file),
+                                "error_type": "yaml_parsing",
+                            },
+                            description=f"Failed to parse YAML front matter in {md_file.name}"
+                        )
                         continue
-                    except Exception:
-                        # Skip files with other parsing errors
+                    except Exception as e:
+                        # Log and skip files with other parsing errors
+                        observability.observe(
+                            event_type=observability.ErrorEvents.WARNING,
+                            level=observability.EventLevel.WARNING,
+                            data={
+                                "error": str(e),
+                                "file": str(md_file),
+                                "error_type": "general_parsing",
+                                "exception_type": type(e).__name__,
+                            },
+                            description=f"Unexpected error parsing {md_file.name}"
+                        )
                         continue
 
                 # Only process if type: sop
@@ -239,32 +261,41 @@ class SOPSystem:
         """
         Hydrate WorkingMemory with cached embeddings on startup.
 
-        - Loads embeddings from pickle cache
+        - Loads embeddings from JSON cache (safer than pickle)
         - Validates against MD5 hashes
         - Cleans up stale entries for removed SOPs
         - Immediately indexes in WorkingMemory if available
         """
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        embeddings_file = self.cache_dir / "embeddings.pkl"
+        embeddings_file = self.cache_dir / "embeddings.json"
+
+        # Also check for old pickle file to migrate
+        old_pickle_file = self.cache_dir / "embeddings.pkl"
 
         # Track which SOPs are still valid
         valid_sop_ids = set(self.sops.keys())
         cached_sop_ids = set()
 
         if embeddings_file.exists():
-            import pickle
+            import json
+            import numpy as np
             try:
-                with open(embeddings_file, 'rb') as f:
-                    cached_data = pickle.load(f)
+                with open(embeddings_file, 'r') as f:
+                    cached_data = json.load(f)
                     cached_sop_ids = set(cached_data.keys())
 
                     # Load embeddings for existing SOPs with matching hashes
                     for sop_id, data in cached_data.items():
                         if sop_id in self.file_hashes:
                             if data['hash'] == self.file_hashes[sop_id]:
-                                self.embeddings_cache[sop_id] = data['embedding']
+                                # Convert list back to numpy array if needed
+                                if isinstance(data['embedding'], list):
+                                    embedding = np.array(data['embedding'])
+                                else:
+                                    embedding = data['embedding']
+                                self.embeddings_cache[sop_id] = embedding
                                 # Try to hydrate WorkingMemory immediately
-                                self._hydrate_working_memory(sop_id, data['embedding'])
+                                self._hydrate_working_memory(sop_id, embedding)
             except Exception as e:
                 # Log cache loading error but continue
                 observability.observe(
@@ -275,6 +306,45 @@ class SOPSystem:
                         "cache_file": str(embeddings_file),
                     },
                     description="Failed to load SOP embeddings cache - will regenerate"
+                )
+        elif old_pickle_file.exists():
+            # Migrate from old pickle format to JSON
+            import pickle
+            try:
+                with open(old_pickle_file, 'rb') as f:
+                    cached_data = pickle.load(f)
+                    # Save in new JSON format
+                    self.embeddings_cache = cached_data
+                    self._save_cached_embeddings()
+                    # Remove old pickle file
+                    old_pickle_file.unlink()
+                    observability.observe(
+                        event_type=observability.SystemEvents.SERVICE_STARTED,
+                        level=observability.EventLevel.INFO,
+                        data={
+                            "old_format": "pickle",
+                            "new_format": "json",
+                            "sop_count": len(cached_data),
+                        },
+                        description="Migrated SOP embeddings cache from pickle to JSON format"
+                    )
+                    # Now process the migrated data
+                    cached_sop_ids = set(cached_data.keys())
+                    for sop_id, data in cached_data.items():
+                        if sop_id in self.file_hashes:
+                            if data['hash'] == self.file_hashes[sop_id]:
+                                self.embeddings_cache[sop_id] = data['embedding']
+                                self._hydrate_working_memory(sop_id, data['embedding'])
+            except Exception as e:
+                # Log migration error but continue
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "error": str(e),
+                        "cache_file": str(old_pickle_file),
+                    },
+                    description="Failed to migrate old pickle cache - will regenerate"
                 )
 
         # Clean up stale cache entries (SOPs that were removed)
@@ -320,20 +390,43 @@ class SOPSystem:
             )
 
     def _save_cached_embeddings(self):
-        """Save embeddings to cache for future use"""
+        """Save embeddings to cache for future use using JSON (safer than pickle)"""
         self.cache_dir.mkdir(parents=True, exist_ok=True)
-        embeddings_file = self.cache_dir / "embeddings.pkl"
+        embeddings_file = self.cache_dir / "embeddings.json"
 
-        import pickle
+        import json
+        import numpy as np
+
         cache_data = {}
         for sop_id, embedding in self.embeddings_cache.items():
+            # Convert numpy arrays to lists for JSON serialization
+            if isinstance(embedding, np.ndarray):
+                embedding_list = embedding.tolist()
+            elif hasattr(embedding, 'tolist'):
+                embedding_list = embedding.tolist()
+            else:
+                embedding_list = list(embedding) if not isinstance(embedding, list) else embedding
+
             cache_data[sop_id] = {
                 'hash': self.file_hashes.get(sop_id),
-                'embedding': embedding
+                'embedding': embedding_list,
+                'version': '1.0'  # Add version for future compatibility
             }
 
-        with open(embeddings_file, 'wb') as f:
-            pickle.dump(cache_data, f)
+        try:
+            with open(embeddings_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+        except Exception as e:
+            # Log save error but continue operation
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "error": str(e),
+                    "cache_file": str(embeddings_file),
+                },
+                description="Failed to save SOP embeddings cache"
+            )
 
     # ========================================================================
     # SERVICE DISCOVERY AND INITIALIZATION
@@ -394,10 +487,73 @@ class SOPSystem:
                 from ...memory import WorkingMemory
                 working_memory = WorkingMemory.get_instance()
                 if working_memory and hasattr(working_memory, 'embedding_model'):
-                    self._embedding_model = working_memory.embedding_model
+                    # Wrap the model in our adapter for consistent interface
+                    self._embedding_model = self._create_embedding_adapter(working_memory.embedding_model)
             except Exception:
                 pass
         return self._embedding_model
+
+    def _create_embedding_adapter(self, model):
+        """
+        Create an adapter that provides a consistent embedding interface.
+
+        This adapter normalizes different embedding model implementations to provide
+        both sync and async methods with consistent behavior.
+
+        Args:
+            model: The underlying embedding model
+
+        Returns:
+            An adapter object with consistent embed() and generate_embeddings() methods
+        """
+        class EmbeddingAdapter:
+            """Adapter to provide consistent embedding interface."""
+
+            def __init__(self, wrapped_model):
+                self.model = wrapped_model
+
+            def embed(self, text: str):
+                """Synchronous single text embedding."""
+                # Check if model has sync embed method
+                if hasattr(self.model, 'embed') and not asyncio.iscoroutinefunction(self.model.embed):
+                    return self.model.embed(text)
+                else:
+                    # If only async is available, run it synchronously
+                    import asyncio
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # Can't run async in running loop, return None
+                            return None
+                        else:
+                            return loop.run_until_complete(self.embed_async(text))
+                    except Exception:
+                        return None
+
+            async def embed_async(self, text: str):
+                """Asynchronous single text embedding."""
+                if hasattr(self.model, 'embed'):
+                    if asyncio.iscoroutinefunction(self.model.embed):
+                        return await self.model.embed(text)
+                    else:
+                        return self.model.embed(text)
+                return None
+
+            async def generate_embeddings(self, texts: List[str]) -> List[Any]:
+                """Asynchronous batch embedding."""
+                # Prefer batch method if available
+                if hasattr(self.model, 'generate_embeddings'):
+                    return await self.model.generate_embeddings(texts)
+                elif hasattr(self.model, 'embed'):
+                    # Fall back to individual embeddings
+                    embeddings = []
+                    for text in texts:
+                        embedding = await self.embed_async(text)
+                        embeddings.append(embedding)
+                    return embeddings
+                return []
+
+        return EmbeddingAdapter(model)
 
     def _get_document_processor(self):
         """Lazily get document processor and chunk manager."""
@@ -414,25 +570,41 @@ class SOPSystem:
         return self._document_processor
 
     def _get_chunk_manager(self):
-        """Get DocumentChunkManager from formation or create one."""
+        """Get DocumentChunkManager from formation or create one using formation's config."""
         try:
             # Try to get from formation's configured services
             from ...formation import Formation
             formation = Formation.get_instance()
+
+            # First try to get existing chunk manager
             if formation and hasattr(formation, '_configured_services'):
                 chunk_manager = formation._configured_services.get('document_chunk_manager')
                 if chunk_manager:
                     return chunk_manager
 
-            # Create our own if not available
-            from ...datatypes.document import DocumentProcessingConfig
-            config = DocumentProcessingConfig({
-                'extraction': {
-                    'chunk_size': 1000,
-                    'overlap': 100,
-                    'strategy': 'adaptive'
-                }
-            })
+            # If not available, try to get the document processing config from formation
+            if formation:
+                # Try to get document processing config from formation
+                if hasattr(formation, '_document_processing_config'):
+                    # Use the formation's document processing configuration
+                    return DocumentChunkManager(document_config=formation._document_processing_config)
+
+                # Try to get from _configured_services as well
+                if hasattr(formation, '_configured_services'):
+                    doc_config = formation._configured_services.get('document_processing_config')
+                    if doc_config:
+                        return DocumentChunkManager(document_config=doc_config)
+
+            # Last resort: Create using the formation's LLM config if available
+            if formation and hasattr(formation, '_llm_config'):
+                from ...formation.config.document_processing import DocumentProcessingConfig
+                # This will extract document settings from llm.models.documents
+                config = DocumentProcessingConfig(formation._llm_config)
+                return DocumentChunkManager(document_config=config)
+
+            # Final fallback: Create with defaults (will use formation defaults internally)
+            from ...formation.config.document_processing import DocumentProcessingConfig
+            config = DocumentProcessingConfig({})
             return DocumentChunkManager(document_config=config)
         except Exception:
             return None
@@ -486,8 +658,12 @@ class SOPSystem:
                 for step in sop['steps']:
                     searchable_text += " " + step.get('text', '')
 
-                # Generate embedding (assumes sync embedding model)
+                # Generate embedding using adapter's consistent interface
                 embedding = embedding_model.embed(searchable_text)
+                if embedding is None:
+                    # If sync failed, skip this SOP
+                    continue
+
                 self.embeddings_cache[sop_id] = embedding
 
                 # Store in FAISS
@@ -520,12 +696,9 @@ class SOPSystem:
 
         # Use WorkingMemory if available
         if working_memory and embedding_model:
-            # Generate embedding for the task description
-            if hasattr(embedding_model, 'generate_embeddings'):
-                embeddings = await embedding_model.generate_embeddings([task_description])
-                query_embedding = embeddings[0] if embeddings else None
-            else:
-                query_embedding = embedding_model.embed(task_description)
+            # Generate embedding for the task description using adapter's consistent interface
+            embeddings = await embedding_model.generate_embeddings([task_description])
+            query_embedding = embeddings[0] if embeddings else None
 
             # Search using WorkingMemory
             results = await working_memory.search(
@@ -590,10 +763,11 @@ class SOPSystem:
         return self.resource_map.get(reference)
 
     async def get_resource_content(
-        self, reference: str
+        self, reference: str,
+        max_file_size_mb: int = 10
     ) -> Optional[str]:
         """
-        Get complete content of referenced file.
+        Get complete content of referenced file with size limits.
 
         When an SOP references a file, it needs the complete content,
         not chunks. The SOP author specifically included this reference
@@ -601,6 +775,7 @@ class SOPSystem:
 
         Args:
             reference: File reference from SOP directive
+            max_file_size_mb: Maximum file size in MB to process (default: 10MB)
 
         Returns:
             Complete file content or None if not found
@@ -609,14 +784,62 @@ class SOPSystem:
         if not file_path:
             return None
 
-        # For text files, just read the complete content
-        if file_path.suffix in ['.md', '.txt', '.yaml', '.yml', '.json']:
-            return file_path.read_text()
+        # Check file size before processing
+        try:
+            file_size_mb = file_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > max_file_size_mb:
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "file": str(file_path),
+                        "file_size_mb": round(file_size_mb, 2),
+                        "max_size_mb": max_file_size_mb,
+                    },
+                    description=(
+                        f"File {file_path.name} exceeds size limit "
+                        f"({file_size_mb:.2f}MB > {max_file_size_mb}MB)"
+                    ),
+                )
+                return f"[File too large: {file_path.name} ({file_size_mb:.2f}MB)]"
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.WARNING,
+                level=observability.EventLevel.WARNING,
+                data={
+                    "file": str(file_path),
+                    "error": str(e),
+                },
+                description=f"Failed to check file size for {file_path.name}"
+            )
+            # Continue processing if we can't check size
 
-        # Use MarkItDown for non-text files (PDFs, Word docs, etc.)
+        # For text files, just read the complete content
+        if file_path.suffix.lower() in ['.md', '.txt', '.yaml', '.yml', '.json', '.csv', '.tsv']:
+            try:
+                return file_path.read_text()
+            except Exception as e:
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "file": str(file_path),
+                        "error": str(e),
+                    },
+                    description=f"Failed to read text file {file_path.name}"
+                )
+                return f"[Unable to read: {file_path.name}]"
+
+        # Handle image files separately - just return a reference
+        if file_path.suffix.lower() in ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.svg', '.webp']:
+            # For images, return a descriptive reference
+            # In the future, we could use vision models to describe the image
+            return f"[Image file: {file_path.name}]"
+
+        # Use MarkItDown for document files (PDFs, Word docs, spreadsheets, presentations)
         document_processor = self._get_document_processor()
         if (document_processor and
-                file_path.suffix.lower() in ['.pdf', '.docx', '.pptx', '.xlsx', '.png', '.jpg', '.jpeg']):
+                file_path.suffix.lower() in ['.pdf', '.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls']):
             try:
                 markitdown = document_processor.get('markitdown')
                 if markitdown:
@@ -633,7 +856,8 @@ class SOPSystem:
                     level=observability.EventLevel.WARNING,
                     data={
                         "file": str(file_path),
-                        "error": str(e)
+                        "error": str(e),
+                        "file_type": file_path.suffix,
                     },
                     description=f"Failed to extract content from {file_path.name}"
                 )
@@ -641,7 +865,7 @@ class SOPSystem:
                 return f"[Unable to extract: {file_path.name}]"
 
         # For unsupported file types, return a reference
-        return f"[Binary file: {file_path.name}]"
+        return f"[Unsupported file type: {file_path.name}]"
 
     # ========================================================================
     # WORKFLOW GENERATION

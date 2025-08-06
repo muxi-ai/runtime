@@ -615,6 +615,21 @@ class Overlord:
                         },
                         description=f"SOP system enabled with {len(self.sop_system.sops)} SOPs",
                     )
+            else:
+                # Warn that SOP system cannot be initialized without formation path
+                observability.observe(
+                    event_type=observability.ErrorEvents.WARNING,
+                    level=observability.EventLevel.WARNING,
+                    data={
+                        "service": "sop_system",
+                        "auto_decomposition": self.auto_decomposition,
+                        "reason": "formation_path_not_configured",
+                    },
+                    description=(
+                        "SOP system could not be initialized: formation_path not configured. "
+                        "SOPs will not be available for workflow generation."
+                    ),
+                )
 
         # ===================================================================
         # MULTIMODAL INTELLIGENCE - Intelligence concerns
@@ -5115,67 +5130,30 @@ class Overlord:
                     mode = relevant_sop.get("mode", "template")
 
                     if mode == "template":
-                        # Direct conversion to workflow tasks
-                        from muxi.formation.workflow.workflow import Workflow
-
-                        workflow_tasks = self.sop_system.to_workflow_template(relevant_sop)
-
-                        # Process each task with directives
-                        for task in workflow_tasks:
-                            # Set agent routing from SOP
-                            if task.get("preferred_agent"):
-                                task["agent_id"] = task["preferred_agent"]
-
-                            # Ensure required MCP tools are available
-                            if task.get("required_tools"):
-                                task["mcp_requirements"] = task["required_tools"]
-
-                            # Pre-load file resources
-                            if task.get("resources"):
-                                task["resource_contents"] = {}
-                                for resource in task["resources"]:
-                                    content = await self.sop_system.get_resource_content(
-                                        resource["reference"]
-                                    )
-                                    if content:
-                                        task["resource_contents"][resource["reference"]] = content
-
-                        # Create workflow from template
-                        workflow = Workflow(
-                            tasks=workflow_tasks,
-                            metadata={
-                                "source": "sop",
-                                "sop_id": relevant_sop["id"],
-                                "sop_name": relevant_sop["name"],
-                                "mode": "template",
-                            },
-                        )
-
-                        # Log SOP usage for observability
-                        observability.observe(
-                            observability.ConversationEvents.SOP_EXECUTED,
-                            observability.EventLevel.INFO,
-                            {
-                                "sop_id": relevant_sop["id"],
-                                "sop_name": relevant_sop["name"],
-                                "workflow_id": workflow.id,
-                                "mode": "template",
-                                "agent_directives": sum(
-                                    1 for t in workflow_tasks if t.get("preferred_agent")
-                                ),
-                                "mcp_directives": sum(
-                                    len(t.get("required_tools", [])) for t in workflow_tasks
-                                ),
-                                "resources_loaded": sum(
-                                    len(t.get("resources", [])) for t in workflow_tasks
-                                ),
-                            },
-                            description=f"Executed SOP '{relevant_sop['name']}' in template mode",
-                        )
+                        # Create workflow from SOP template
+                        workflow = await self._create_workflow_from_sop_template(relevant_sop, message)
 
                     else:  # mode == 'guide'
                         # Include SOP as guidance for LLM interpretation
-                        sop_guidance = self.sop_system.format_as_guidance(relevant_sop)
+                        try:
+                            sop_guidance = self.sop_system.format_as_guidance(relevant_sop)
+                        except Exception as e:
+                            # Log error and use basic guidance
+                            observability.observe(
+                                observability.ErrorEvents.WARNING,
+                                observability.EventLevel.WARNING,
+                                {
+                                    "error": str(e),
+                                    "sop_id": relevant_sop["id"],
+                                    "sop_name": relevant_sop["name"],
+                                },
+                                description=f"Failed to format SOP guidance: {relevant_sop['id']}"
+                            )
+                            # Use basic guidance as fallback
+                            sop_guidance = (
+                                f"Standard Operating Procedure: {relevant_sop.get('name', 'Unknown')}\n"
+                                f"{relevant_sop.get('description', '')}"
+                            )
 
                         # Pass to decomposer with SOP context
                         workflow = await self.task_decomposer.decompose_request(
@@ -5518,6 +5496,111 @@ class Overlord:
                 description="Post-approval time estimation failed, using sync execution",
             )
             return False
+
+    async def _create_workflow_from_sop_template(
+        self,
+        relevant_sop: Dict[str, Any],
+        message: str
+    ) -> Optional[Workflow]:
+        """
+        Create a workflow from an SOP template.
+
+        Converts the SOP into workflow tasks, processes directives,
+        preloads resources, and creates a Workflow object.
+
+        Args:
+            relevant_sop: The SOP dictionary to convert
+            message: The original user message
+
+        Returns:
+            Workflow object or None if conversion fails
+        """
+        from muxi.formation.workflow.workflow import Workflow
+
+        try:
+            workflow_tasks = self.sop_system.to_workflow_template(relevant_sop)
+        except Exception as e:
+            # Log error and return None to fall back to standard decomposition
+            observability.observe(
+                observability.ErrorEvents.WARNING,
+                observability.EventLevel.WARNING,
+                {
+                    "error": str(e),
+                    "sop_id": relevant_sop["id"],
+                    "sop_name": relevant_sop["name"],
+                },
+                description=f"Failed to convert SOP to workflow template: {relevant_sop['id']}"
+            )
+            return None
+
+        # Process each task with directives
+        for task in workflow_tasks:
+            # Set agent routing from SOP
+            if task.get("preferred_agent"):
+                task["agent_id"] = task["preferred_agent"]
+
+            # Ensure required MCP tools are available
+            if task.get("required_tools"):
+                task["mcp_requirements"] = task["required_tools"]
+
+            # Pre-load file resources
+            if task.get("resources"):
+                task["resource_contents"] = {}
+                for resource in task["resources"]:
+                    try:
+                        content = await self.sop_system.get_resource_content(
+                            resource["reference"]
+                        )
+                        if content:
+                            task["resource_contents"][resource["reference"]] = content
+                    except Exception as e:
+                        # Log error but continue with other resources
+                        observability.observe(
+                            observability.ErrorEvents.WARNING,
+                            observability.EventLevel.WARNING,
+                            {
+                                "error": str(e),
+                                "resource": resource["reference"],
+                                "sop_id": relevant_sop["id"],
+                            },
+                            description=f"Failed to load SOP resource: {resource['reference']}"
+                        )
+                        # Continue processing other resources
+
+        # Create workflow from template
+        workflow = Workflow(
+            tasks=workflow_tasks,
+            metadata={
+                "source": "sop",
+                "sop_id": relevant_sop["id"],
+                "sop_name": relevant_sop["name"],
+                "mode": "template",
+            },
+        )
+
+        # Log SOP usage for observability
+        observability.observe(
+            observability.ConversationEvents.SOP_EXECUTED,
+            observability.EventLevel.INFO,
+            {
+                "sop_id": relevant_sop["id"],
+                "sop_name": relevant_sop["name"],
+                "workflow_id": workflow.id,
+                "mode": "template",
+                "agent_directives": sum(
+                    1 for t in workflow_tasks if t.get("preferred_agent")
+                ),
+                "mcp_directives": sum(
+                    len(t.get("required_tools", [])) for t in workflow_tasks
+                ),
+                "resources_loaded": sum(
+                    len(t.get("resources", [])) for t in workflow_tasks
+                ),
+            },
+            description=f"Executed SOP '{relevant_sop['name']}' in template mode",
+        )
+
+        return workflow
 
     async def _execute_workflow_async(
         self,
