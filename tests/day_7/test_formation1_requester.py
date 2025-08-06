@@ -12,6 +12,7 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
 from src.muxi.formation.formation import Formation  # noqa: E402
+from src.muxi.datatypes.exceptions import RegistryConfigurationError  # noqa: E402
 
 
 async def test_external_a2a():
@@ -56,6 +57,16 @@ async def test_external_a2a():
         # Verify Linear issue was created with system info
         assert "linear" in response_text.lower()
 
+    except RegistryConfigurationError as e:
+        # This is a configuration issue, not a test failure
+        # The error message was already printed to stderr by the exception
+        print("\n❌ Configuration Issue: Registry requirements not met")
+        print(f"   Policy: {e.policy}")
+        print(f"   Unreachable registries: {', '.join(e.unreachable_registries)}")
+        print("\n💡 To run this test, either:")
+        print("   1. Start the registry server: python test_a2a_registry.py")
+        print("   2. Change startup_policy to 'lenient' in formation1/formation.yaml")
+        sys.exit(1)
     except Exception as e:
         print(f"\n❌ Error during test: {e}")
         import traceback

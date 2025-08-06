@@ -85,6 +85,7 @@ from ..datatypes.exceptions import (
     OverlordStartupError,
     OverlordStateError,
     DependencyValidationError,
+    RegistryConfigurationError,
     add_error_context,
 )
 
@@ -1020,6 +1021,35 @@ class Formation:
         a2a_config_obj = None
         if self._a2a_config:
             try:
+                # Collect registries from both inbound and outbound
+                all_registries = []
+
+                # Add outbound registries
+                outbound_registries = self._a2a_config.get("outbound", {}).get("registries", [])
+                for reg in outbound_registries:
+                    if isinstance(reg, str):
+                        all_registries.append(reg)
+                    elif isinstance(reg, dict):
+                        all_registries.append(reg)
+
+                # Add inbound registries
+                inbound_registries = self._a2a_config.get("inbound", {}).get("registries", [])
+                for reg in inbound_registries:
+                    if isinstance(reg, str):
+                        all_registries.append(reg)
+                    elif isinstance(reg, dict):
+                        all_registries.append(reg)
+
+                # Get startup policies (prefer outbound, fall back to inbound)
+                startup_policy = (
+                    self._a2a_config.get("outbound", {}).get("startup_policy") or
+                    self._a2a_config.get("inbound", {}).get("startup_policy", "lenient")
+                )
+                retry_timeout = (
+                    self._a2a_config.get("outbound", {}).get("retry_timeout_seconds") or
+                    self._a2a_config.get("inbound", {}).get("retry_timeout_seconds", 30)
+                )
+
                 a2a_config_obj = A2AServiceSchema(
                     enabled=self._a2a_config.get("enabled", True),
                     # Map inbound configuration to server settings
@@ -1028,11 +1058,15 @@ class Formation:
                     server_port=self._a2a_config.get("inbound", {}).get("port", 8181),
                     # Enable external registry if inbound or outbound registries are configured
                     external_registry_enabled=self._is_external_registry_enabled(self._a2a_config),
-                    # Use the primary registry URL from configuration
+                    # Use the primary registry URL from configuration (legacy support)
                     registry_url=self._get_primary_registry_url(self._a2a_config),
                     registration_timeout=self._a2a_config.get("external_registry", {}).get(
                         "timeout", 30.0
                     ),
+                    # New registry configuration
+                    startup_policy=startup_policy,
+                    retry_timeout_seconds=retry_timeout,
+                    registries=all_registries,
                     # Map authentication from inbound.auth configuration
                     require_auth=(
                         self._a2a_config.get("inbound", {}).get("auth", {}).get("type", "none") != "none"
@@ -2324,6 +2358,17 @@ class Formation:
             # No separate service initialization needed here
 
             return self._overlord
+
+        except RegistryConfigurationError as e:
+            # Clean up on failure - registry configuration issue
+            self._is_running = False
+            self._overlord = None
+
+            # Print the user-friendly message
+            print(e.user_message, file=sys.stderr)
+
+            # Re-raise the exception for proper handling upstream
+            raise
 
         except ImportError as e:
             # Clean up on failure - overlord import failed

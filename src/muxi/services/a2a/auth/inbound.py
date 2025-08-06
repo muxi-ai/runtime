@@ -164,7 +164,7 @@ class A2AInboundAuthenticator:
                 return credential_configs
             except json.JSONDecodeError as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.CONFIG_ERROR,
+                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     description=f"Failed to parse A2A_INBOUND_CREDENTIALS: {str(e)}",
                     data={"error": str(e)}
@@ -186,7 +186,7 @@ class A2AInboundAuthenticator:
                     return credential_configs
             except (json.JSONDecodeError, IOError) as e:
                 observability.observe(
-                    event_type=observability.ErrorEvents.CONFIG_ERROR,
+                    event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                     level=observability.EventLevel.WARNING,
                     description=f"Failed to load config from {config_path}: {str(e)}",
                     data={"error": str(e), "config_path": config_path}

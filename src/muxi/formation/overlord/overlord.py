@@ -107,6 +107,7 @@ from .mcp_coordinator import MCPCoordinator
 from .a2a_coordinator import A2ACoordinator
 from ...services.scheduler.service import SchedulerService
 from ..initialization import initialize_artifact_service
+from ...datatypes.exceptions import RegistryConfigurationError
 
 # A2A models imported when needed
 from ...services.secrets.secrets_manager import SecretsManager
@@ -382,6 +383,7 @@ class Overlord:
 
         # Initialize A2A cache manager for filtering support
         from ...services.a2a.cache_manager import A2ACacheManager
+
         self.a2a_cache_manager = A2ACacheManager()
 
         # A2A coordination system with configuration
@@ -433,7 +435,7 @@ class Overlord:
                     if not llm_model:
                         # This should not happen if initialize_llm_config ran successfully
                         observability.observe(
-                            event_type=observability.ErrorEvents.CONFIG_ERROR,
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                             level=observability.EventLevel.WARNING,
                             data={"error": "Text model not found in LLM config"},
                             description="Expected text model in formation config but not found",
@@ -441,7 +443,7 @@ class Overlord:
                 except Exception as e:
                     # Log the error but don't fail - credential resolver can work without LLM
                     observability.observe(
-                        event_type=observability.ErrorEvents.CONFIG_ERROR,
+                        event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                         level=observability.EventLevel.WARNING,
                         data={"error": str(e), "config_type": "llm_config"},
                         description=f"Error extracting text model from config: {str(e)}",
@@ -511,7 +513,7 @@ class Overlord:
                     except (TypeError, AttributeError) as e:
                         # Log error but continue - extraction model is optional
                         observability.observe(
-                            event_type=observability.ErrorEvents.CONFIG_ERROR,
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
                             level=observability.EventLevel.DEBUG,
                             data={"error": str(e), "config_type": "extraction_model"},
                             description=f"Could not extract text model for extraction: {str(e)}",
@@ -575,7 +577,7 @@ class Overlord:
         )
 
         # Initialize planning filter now that request_analyzer is available
-        if hasattr(self, 'a2a_coordinator') and self.a2a_coordinator:
+        if hasattr(self, "a2a_coordinator") and self.a2a_coordinator:
             self.a2a_coordinator.initialize_planning_filter()
 
         # TaskDecomposer will be initialized after MCP service is available
@@ -945,6 +947,86 @@ class Overlord:
                         ),
                     )
 
+                    # Check registry health according to startup policy
+                    if hasattr(self.a2a_coordinator, "config") and self.a2a_coordinator.config:
+                        a2a_config = self.a2a_coordinator.config
+
+                        # Collect all registry configs for policy checking
+                        all_registry_configs = []
+                        for reg in a2a_config.registries:
+                            if hasattr(reg, "__dict__"):
+                                # RegistryConfig object
+                                all_registry_configs.append(
+                                    {
+                                        "url": reg.url,
+                                        "required": reg.required,
+                                        "health_check_timeout_seconds": reg.health_check_timeout_seconds,
+                                    }
+                                )
+                            elif isinstance(reg, dict):
+                                all_registry_configs.append(reg)
+                            else:
+                                # String URL
+                                all_registry_configs.append({"url": str(reg), "required": False})
+
+                        # Check registries with configured policy
+                        should_continue, health_status = (
+                            await self.inbound_registry_client.check_registries_with_policy(
+                                startup_policy=a2a_config.startup_policy,
+                                retry_timeout_seconds=a2a_config.retry_timeout_seconds,
+                                registry_configs=all_registry_configs,
+                            )
+                        )
+
+                        if not should_continue:
+                            # Formation should not start due to registry failures
+                            unreachable_registries = [
+                                url for url, is_healthy in health_status.items() if not is_healthy
+                            ]
+
+                            # Log for observability
+                            observability.observe(
+                                event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                                level=observability.EventLevel.ERROR,
+                                data={
+                                    "startup_policy": a2a_config.startup_policy,
+                                    "health_status": health_status,
+                                    "registry_configs": all_registry_configs,
+                                },
+                                description=(
+                                    f"Formation startup aborted: Required registries are "
+                                    f"unreachable (policy: {a2a_config.startup_policy})"
+                                ),
+                            )
+
+                            # Raise a special exception with user-friendly formatting
+                            raise RegistryConfigurationError(
+                                policy=a2a_config.startup_policy,
+                                unreachable_registries=unreachable_registries,
+                            )
+
+                        # Log health status for monitoring
+                        healthy_count = sum(
+                            1 for is_healthy in health_status.values() if is_healthy
+                        )
+                        unhealthy_count = len(health_status) - healthy_count
+
+                        observability.observe(
+                            event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
+                            level=(
+                                observability.EventLevel.INFO
+                                if healthy_count > 0
+                                else observability.EventLevel.WARNING
+                            ),
+                            data={
+                                "healthy_registries": healthy_count,
+                                "unhealthy_registries": unhealthy_count,
+                                "health_status": health_status,
+                                "startup_policy": a2a_config.startup_policy,
+                            },
+                            description=f"Registry health check complete: {healthy_count}/{len(health_status)} healthy",
+                        )
+
                     # Process pending external agent registrations
                     if (
                         hasattr(self, "pending_external_registrations")
@@ -952,6 +1034,12 @@ class Overlord:
                     ):
                         await self.a2a_coordinator.process_pending_registrations()
 
+                except RuntimeError:
+                    # Re-raise RuntimeError for policy failures
+                    raise
+                except RegistryConfigurationError:
+                    # Re-raise registry configuration errors - these are critical
+                    raise
                 except Exception as e:
                     # Log error but don't fail startup - formation can work without external registry
                     observability.observe(

@@ -291,7 +291,7 @@ class A2ARegistryClient:
         try:
             # Emit health check start event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.DEBUG,
                 description=f"Starting health check for registry (SDK): {registry_url}",
                 data={"registry_url": registry_url, "sdk_enabled": True}
@@ -340,7 +340,7 @@ class A2ARegistryClient:
 
             # Emit health check result event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
                 level=(
                     observability.EventLevel.INFO
                     if is_healthy
@@ -359,7 +359,7 @@ class A2ARegistryClient:
         except Exception as e:
             # Emit health check error event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_FAILED,
                 level=observability.EventLevel.ERROR,
                 description=f"Health check failed for registry (SDK): {registry_url}",
                 data={
@@ -376,6 +376,170 @@ class A2ARegistryClient:
             }
             return False
 
+    async def check_registries_with_policy(
+        self,
+        startup_policy: str = "lenient",
+        retry_timeout_seconds: int = 30,
+        registry_configs: Optional[List[Dict[str, Any]]] = None
+    ) -> tuple[bool, Dict[str, bool]]:
+        """
+        Check registry health according to startup policy.
+
+        Args:
+            startup_policy: "lenient", "strict", or "retry"
+            retry_timeout_seconds: How long to retry for "retry" policy
+            registry_configs: List of registry configurations with required flags
+
+        Returns:
+            Tuple of (should_continue, health_status)
+            - should_continue: Whether formation should start based on policy
+            - health_status: Dict mapping registry URLs to health status
+        """
+        try:
+            # Parse registry configs to find required ones
+            required_registries = set()
+            if registry_configs:
+                for config in registry_configs:
+                    if isinstance(config, dict) and config.get("required", False):
+                        required_registries.add(config.get("url"))
+
+            # Emit startup policy check event
+            observability.observe(
+                event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
+                level=observability.EventLevel.INFO,
+                description=f"Checking registries with {startup_policy} policy",
+                data={
+                    "startup_policy": startup_policy,
+                    "retry_timeout_seconds": retry_timeout_seconds,
+                    "total_registries": len(self.registries),
+                    "required_registries": len(required_registries),
+                    "required_urls": list(required_registries)
+                }
+            )
+
+            if startup_policy == "lenient":
+                # Just check once and continue regardless
+                health_status = await self.health_check_all()
+
+                # Log warnings for unhealthy registries
+                for registry_url, is_healthy in health_status.items():
+                    if not is_healthy:
+                        observability.observe(
+                            event_type=observability.SystemEvents.A2A_REGISTRY_DISCONNECTED,
+                            level=observability.EventLevel.WARNING,
+                            description=f"Registry {registry_url} is unreachable (lenient mode - continuing)",
+                            data={"registry_url": registry_url, "policy": "lenient"}
+                        )
+
+                return (True, health_status)  # Always continue in lenient mode
+
+            elif startup_policy == "strict":
+                # Check once and fail if any required registry is down
+                health_status = await self.health_check_all()
+
+                # In strict mode, treat ALL registries as required unless explicitly marked optional
+                # If no explicit required registries specified, all are required
+                registries_to_check = required_registries if required_registries else set(self.registries)
+
+                # Check if any required registry is down
+                for registry_url in registries_to_check:
+                    if registry_url in health_status and not health_status[registry_url]:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                            level=observability.EventLevel.ERROR,
+                            description=f"Registry {registry_url} is unreachable (strict mode)",
+                            data={
+                                "registry_url": registry_url,
+                                "policy": "strict",
+                                "required": True,
+                                "explicit_required": registry_url in required_registries
+                            }
+                        )
+                        return (False, health_status)  # Fail fast
+
+                # All registries are up
+                return (True, health_status)
+
+            elif startup_policy == "retry":
+                # Retry for specified duration, then apply required flags
+                start_time = time.time()
+                best_health_status = {}
+
+                # In retry mode with no explicit requirements, treat all as required
+                registries_to_check = required_registries if required_registries else set(self.registries)
+
+                while time.time() - start_time < retry_timeout_seconds:
+                    health_status = await self.health_check_all()
+
+                    # Track best results
+                    for url, status in health_status.items():
+                        if status:
+                            best_health_status[url] = True
+
+                    # Check if all required registries are up
+                    all_required_up = True
+                    for registry_url in registries_to_check:
+                        if registry_url in health_status and not health_status[registry_url]:
+                            all_required_up = False
+                            break
+
+                    if all_required_up:
+                        observability.observe(
+                            event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
+                            level=observability.EventLevel.INFO,
+                            description="All required registries are healthy",
+                            data={
+                                "policy": "retry",
+                                "retry_time": time.time() - start_time,
+                                "health_status": health_status
+                            }
+                        )
+                        return (True, health_status)
+
+                    # Wait before retrying
+                    await asyncio.sleep(min(5, retry_timeout_seconds / 6))
+
+                # Timeout reached - check required registries
+                final_health = {**health_status, **best_health_status}
+                for registry_url in registries_to_check:
+                    if registry_url in final_health and not final_health[registry_url]:
+                        observability.observe(
+                            event_type=observability.ErrorEvents.CONFIGURATION_ERROR,
+                            level=observability.EventLevel.ERROR,
+                            description=f"Registry {registry_url} still unreachable after {retry_timeout_seconds}s",
+                            data={
+                                "registry_url": registry_url,
+                                "policy": "retry",
+                                "retry_timeout": retry_timeout_seconds,
+                                "required": True,
+                                "explicit_required": registry_url in required_registries
+                            }
+                        )
+                        return (False, final_health)
+
+                return (True, final_health)
+
+            else:
+                # Unknown policy - default to lenient
+                observability.observe(
+                    event_type=observability.SystemEvents.A2A_REGISTRY_CONNECTED,
+                    level=observability.EventLevel.WARNING,
+                    description=f"Unknown startup policy '{startup_policy}', defaulting to lenient",
+                    data={"policy": startup_policy}
+                )
+                health_status = await self.health_check_all()
+                return (True, health_status)
+
+        except Exception as e:
+            observability.observe(
+                event_type=observability.ErrorEvents.INTERNAL_ERROR,
+                level=observability.EventLevel.ERROR,
+                description=f"Failed to check registries with policy: {str(e)}",
+                data={"error": str(e), "policy": startup_policy}
+            )
+            # On error, fail if strict, continue if lenient/retry
+            return (startup_policy != "strict", {})
+
     async def health_check_all(self) -> Dict[str, bool]:
         """
         Check health of all configured registries using SDK.
@@ -387,7 +551,7 @@ class A2ARegistryClient:
             if not self.registries:
                 # Emit no registries event
                 observability.observe(
-                    event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                    event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                     level=observability.EventLevel.WARNING,
                     description="No registries configured for health check (SDK)",
                     data={"registries_count": 0, "sdk_enabled": True}
@@ -396,7 +560,7 @@ class A2ARegistryClient:
 
             # Emit health check all start event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.INFO,
                 description=f"Starting health check for all {len(self.registries)} registries (SDK)",
                 data={
@@ -418,7 +582,7 @@ class A2ARegistryClient:
 
             # Emit health check all result event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_COMPLETED,
                 level=observability.EventLevel.INFO,
                 description="Health check completed for all registries (SDK)",
                 data={
@@ -1060,7 +1224,7 @@ class A2ARegistryClient:
         try:
             # Emit status request event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.DEBUG,
                 description="Registry status requested (SDK)",
                 data={
@@ -1135,7 +1299,7 @@ class A2ARegistryClient:
 
             # Emit stats request event
             observability.observe(
-                event_type=observability.SystemEvents.A2A_HEALTH_CHECK,
+                event_type=observability.SystemEvents.A2A_HEALTH_CHECK_STARTED,
                 level=observability.EventLevel.DEBUG,
                 description="Registry client stats requested (SDK)",
                 data=stats

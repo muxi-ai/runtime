@@ -77,7 +77,7 @@ mcp:
 # A2A Configuration
 a2a:
   enabled: true                  # Enable Agent-to-Agent communication
-  
+
   # Intelligent filtering configuration for planning
   filtering:
     enabled: true                # Enable intelligent agent filtering
@@ -88,6 +88,7 @@ a2a:
 
   outbound:                      # Outbound A2A communication
     enabled: true                # Enable outbound A2A communication
+    startup_policy: "lenient"    # Continue even if registry is unreachable
     registries:                  # External A2A registries to connect to
       - "http://0.0.0.0:9090"
     default_retry_attempts: 3
