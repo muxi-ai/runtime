@@ -1,0 +1,15 @@
+schema: "1.0.0"
+id: "web-search-mcp"
+description: "Web search using free google search"
+active: true
+
+type: "command"
+
+command: "npx"
+args: ["-y", "brave-search-mcp"]
+timeout_seconds: 60
+
+# Authentication (optional)
+auth:
+  type: "env"
+  BRAVE_API_KEY: "${{ secrets.BRAVE_API_KEY }}"
